@@ -1,6 +1,7 @@
 import typer
 
 from apps.onepiece.dcc.publish import publish
+from apps.onepiece.ingest import app as ingest
 from apps.onepiece.misc.greet import app as greet
 from apps.onepiece.misc.info import app as info
 from apps.onepiece.shotgrid.flow_setup import app as flow_setup
