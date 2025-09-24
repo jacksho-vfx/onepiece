@@ -3,15 +3,16 @@
 from pathlib import Path
 from typing import Literal
 
+import logging
 import subprocess
-import structlog
 
-log = structlog.get_logger(__name__)
+log = logging.getLogger(__name__)
 
-ContextType = Literal["vfx", "prod"]
+ShowType = Literal["vfx", "prod"]
+ContextFolder = Literal["vendor_out", "vendor_in", "client_out", "client_in"]
 
 
-def _resolve_context(show_type: ContextType, direction: Literal["to", "from"]) -> str:
+def _resolve_context(show_type: ShowType, direction: Literal["to", "from"]) -> ContextFolder:
     """
     Determine the context folder from show type and direction.
 
@@ -21,11 +22,10 @@ def _resolve_context(show_type: ContextType, direction: Literal["to", "from"]) -
     """
     if show_type == "vfx":
         return "vendor_out" if direction == "to" else "vendor_in"
-    else:
-        return "client_out" if direction == "to" else "client_in"
+    return "client_out" if direction == "to" else "client_in"
 
 
-def _build_s3_uri(bucket: str, show_code: str, folder: str, context: ContextType) -> str:
+def _build_s3_uri(bucket: str, show_code: str, folder: str, context: ContextFolder) -> str:
     """Return the canonical S3 URI for this show folder."""
     return f"s3://{bucket}/{context}/{show_code}/{folder}/"
 
@@ -35,10 +35,10 @@ def sync_to_bucket(
     show_code: str,
     folder: str,
     local_path: str | Path,
-    show_type: ContextType = "vfx",
+    show_type: ShowType = "vfx",
     delete: bool = False,
     profile: str | None = None,
-):
+) -> None:
     """
     Sync a local folder TO an S3 bucket using `aws s3 sync`.
 
@@ -57,7 +57,12 @@ def sync_to_bucket(
 
     context = _resolve_context(show_type, "to")
     s3_uri = _build_s3_uri(bucket, show_code, folder, context)
-    log.info("aws_s3_sync_to", local=str(local_path), s3=s3_uri, delete=delete)
+    log.info(
+        "aws_s3_sync_to local=%s s3=%s delete=%s",
+        str(local_path),
+        s3_uri,
+        delete,
+    )
 
     cmd = ["aws"]
     if profile:
@@ -74,10 +79,10 @@ def sync_from_bucket(
     show_code: str,
     folder: str,
     local_path: str | Path,
-    show_type: ContextType = "vfx",
+    show_type: ShowType = "vfx",
     delete: bool = False,
     profile: str | None = None,
-):
+) -> None:
     """
     Sync an S3 bucket folder TO a local folder using `aws s3 sync`.
 
@@ -95,7 +100,12 @@ def sync_from_bucket(
     
     context = _resolve_context(show_type, "from")
     s3_uri = _build_s3_uri(bucket, show_code, folder, context)
-    log.info("aws_s3_sync_from", s3=s3_uri, local=str(local_path), delete=delete)
+    log.info(
+        "aws_s3_sync_from s3=%s local=%s delete=%s",
+        s3_uri,
+        str(local_path),
+        delete,
+    )
 
     cmd = ["aws"]
     if profile:

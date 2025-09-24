@@ -47,6 +47,10 @@ python_version = "3.11"
 module = "structlog"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "onepiece.tests.*"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

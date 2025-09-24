@@ -23,8 +23,8 @@ from typing import Optional
 
 import structlog
 
-from .api import ShotGridClient
-from .models import EpisodeData, ProjectData, SceneData, ShotData
+from libraries.shotgrid.api import ShotGridClient
+from libraries.shotgrid.models import EpisodeData, ProjectData, SceneData, ShotData
 
 log = structlog.get_logger(__name__)
 
