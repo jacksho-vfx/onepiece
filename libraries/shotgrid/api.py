@@ -7,8 +7,8 @@ import UPath
 import requests
 import structlog
 
-from .config import load_config
-from .models import (
+from libraries.shotgrid.config import load_config
+from libraries.shotgrid.models import (
     EpisodeData,
     PlaylistData,
     ProjectData,
