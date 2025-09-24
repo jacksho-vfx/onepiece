@@ -1,11 +1,10 @@
-"""
-CLI to display OnePiece environment and configuration info.
-"""
+"""CLI to display OnePiece environment and configuration info."""
 
-import sys
 import os
-import typer
+import sys
+
 import structlog
+import typer
 
 from onepiece.validations.dcc import SupportedDCC
 
@@ -29,7 +28,7 @@ def info():
     """
     typer.echo("=== OnePiece Environment Info ===")
     typer.echo(f"Python version: {sys.version.split()[0]}")
-    typer.echo(f"OnePiece version: 0.1")
+    typer.echo("OnePiece version: 0.1")
     
     sg_url = os.environ.get("SHOTGRID_URL", "Not set")
     typer.echo(f"ShotGrid URL: {sg_url}")
@@ -45,6 +44,6 @@ def info():
         python=sys.version,
         shotgrid_url=sg_url,
         aws_profile=aws_profile,
-        dccs=dccs
+        dccs=dccs,
     )
 

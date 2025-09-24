@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch
 from onepiece.dcc.dcc_client import SupportedDCC, open_scene
 

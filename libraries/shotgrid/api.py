@@ -1,26 +1,20 @@
-"""
-ShotGrid API client for OnePiece
---------------------------------
-* Uses environment variables for credentials
-* structlog for structured logging
-* upath for URL handling
-* Accepts xData models for create operations
-"""
+"""ShotGrid API client helpers used by the legacy library layer."""
+
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import UPath
 import requests
 import structlog
-import UPath
 
 from .config import load_config
 from .models import (
-    ProjectData,
     EpisodeData,
+    PlaylistData,
+    ProjectData,
     SceneData,
     ShotData,
     VersionData,
-    TaskData,
-    PlaylistData,
 )
 
 log = structlog.get_logger(__name__)
@@ -216,8 +210,14 @@ class ShotGridClient:
         return self.sg.get("Version", version_data)
 
     def create_version(self, data: VersionData) -> Dict[str, Any]:
-        return self.sg.create("Version", version_data)
-        
+        attributes = {"code": data.code, **data.extra}
+        relationships: Dict[str, Any] = {}
+        if data.project_id:
+            relationships["project"] = {
+                "data": {"type": "Project", "id": data.project_id}
+            }
+        return self._post(data.entity_type, attributes, relationships or None)
+
     def create_version_with_media(
         self,
         version_data: VersionData,
@@ -226,11 +226,13 @@ class ShotGridClient:
         if not media_path.exists():
             raise FileNotFoundError(f"Media file not found: {media_path}")
 
-        log.info("sg.create_version_with_media",
-                 version=version_data.get("code"),
-                 media=str(media_path))
+        log.info(
+            "sg.create_version_with_media",
+            version=version_data.code,
+            media=str(media_path),
+        )
 
-        version = self.sg.create("Version", version_data)
+        version = self.create_version(version_data)
 
         self.sg.upload(
             entity_type="Version",

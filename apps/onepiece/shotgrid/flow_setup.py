@@ -1,12 +1,37 @@
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+import structlog
 import typer
 from typer import progressbar
-from pathlib import Path
-import structlog
 
 from onepiece.shotgrid.show_setup import setup_single_shot
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Show setup commands for ShotGrid.")
+
+
+def _parse_csv(csv_path: Path) -> list[str]:
+    """Return the list of shot codes defined in ``csv_path``."""
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            raise typer.BadParameter("CSV file must include a header row.")
+
+        column = next(
+            (name for name in reader.fieldnames if name and name.lower() in {"shot", "code", "name"}),
+            None,
+        )
+        if column is None:
+            raise typer.BadParameter("CSV must contain a 'shot', 'code', or 'name' column.")
+
+        shots = [row[column].strip() for row in reader if row.get(column)]
+        if not shots:
+            raise typer.BadParameter("CSV does not contain any shot entries.")
+        return shots
 
 
 @app.command("show-setup")

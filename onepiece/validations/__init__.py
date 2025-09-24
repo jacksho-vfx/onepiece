@@ -1,5 +1,5 @@
 """Validation helpers bundled with OnePiece."""
 
-from . import filesystem, naming
+from . import dcc, filesystem, naming
 
-__all__ = ["filesystem", "naming"]
+__all__ = ["filesystem", "naming", "dcc"]

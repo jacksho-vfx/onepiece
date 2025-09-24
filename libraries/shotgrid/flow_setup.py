@@ -19,11 +19,12 @@ Environment variables for authentication:
 """
 
 import re
-from typing import List, Optional
+from typing import Optional
+
 import structlog
 
 from .api import ShotGridClient
-from .models import ProjectData, EpisodeData, SceneData, ShotData
+from .models import EpisodeData, ProjectData, SceneData, ShotData
 
 log = structlog.get_logger(__name__)
 
@@ -43,17 +44,22 @@ def _parse_shot_code(code: str) -> tuple[str, str, str]:
 # --------------------------------------------------------------------------- #
 # Main Function
 # --------------------------------------------------------------------------- #
-def setup_show(project_name: str, shots: list[str], template_project_id=None):
+def setup_show(
+    project_name: str,
+    shots: list[str],
+    template_project_id: int | None = None,
+    client: ShotGridClient | None = None,
+) -> None:
     """
     Create project, episodes, scenes, and shots in ShotGrid.
     """
-    sg_client = ShotgridClient()
+    sg_client = client or ShotGridClient()
     project = sg_client.get_or_create_project(project_name)
 
     for shot_code in shots:
         episode = sg_client.get_or_create_episode(project["id"], "Main")
-        scene = sg_client.get_or_create_scene(project["id"], episode["id"], "Scene01")
-        shot = sg_client.get_or_create_shot(project["id"], shot_code)
+        _scene = sg_client.get_or_create_scene(project["id"], episode["id"], "Scene01")
+        sg_client.get_or_create_shot(project["id"], shot_code)
         log.info("setup_shot_done", project=project_name, shot=shot_code)
         
 # --------------------------------------------------------------------------- #
@@ -63,7 +69,8 @@ def setup_show(project_name: str, shots: list[str], template_project_id=None):
 def setup_single_shot(
     project_name: str,
     shot_code: str,
-    template_project_id: Optional[int] = None
+    template_project_id: Optional[int] = None,
+    client: ShotGridClient | None = None,
 ) -> dict:
     """
     Create or retrieve the full hierarchy for a single shot:
@@ -79,11 +86,13 @@ def setup_single_shot(
     """
     log.info("setup_single_shot_start", project=project_name, shot=shot_code)
 
+    sg_client = client or ShotGridClient()
+
     try:
         parts = shot_code.split("_")
         if len(parts) != 3:
             raise ValueError(f"Invalid shot code: {shot_code}, expected ep_sc_shot format")
-        episode_code, scene_code, shot_number = parts
+        episode_code, scene_code, _shot_number = parts
     except Exception as e:
         log.error("shot_code_parse_failed", shot_code=shot_code, error=str(e))
         raise
@@ -98,7 +107,7 @@ def setup_single_shot(
     scene = sg_client.get_or_create_scene(scene_data)
 
     shot_data = ShotData(
-        name=shot_code,
+        code=shot_code,
         project_id=project["id"],
         episode_id=episode["id"],
         scene_id=scene["id"]

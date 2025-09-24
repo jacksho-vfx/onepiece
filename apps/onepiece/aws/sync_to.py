@@ -1,6 +1,7 @@
 from pathlib import Path
-import subprocess
+
 import typer
+
 from onepiece.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="Sync to an S3 bucket")
@@ -25,5 +26,5 @@ def sync_to(
         local_path=local_path,
         dry_run=dry_run,
         include=include,
-        exclude=exclude
+        exclude=exclude,
     )
