@@ -17,6 +17,9 @@ dependencies = [
     "av>=12.0"
 ]
 
+[tool.setuptools.packages.find]
+include = ["onepiece", "onepiece.*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
