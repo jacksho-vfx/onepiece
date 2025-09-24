@@ -26,7 +26,7 @@ jobs:
         run: black --check onepiece
 
       - name: Ruff lint
-        run: ruff onepiece
+        run: ruff check onepiece
 
       - name: Mypy type check
         run: mypy onepiece --strict
