@@ -58,7 +58,7 @@ def s5_sync(
         failed=failed,
     )
 
-    print(f"--- S5CMD Sync Summary ---")
+    print("--- S5CMD Sync Summary ---")
     print(f"Total files: {total}")
     print(f"Uploaded:   {uploaded}")
     print(f"Skipped:    {skipped}")

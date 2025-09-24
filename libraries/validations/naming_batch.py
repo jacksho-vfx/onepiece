@@ -1,18 +1,8 @@
 import csv
 from pathlib import Path
 from typing import List, Tuple
-import structlog
 
-from onepiece.validations.naming_conventions import (
-    validate_show_name,
-    validate_episode_name,
-    validate_scene_name,
-    validate_shot,
-    validate_shot_name,
-    validate_asset_name,
-)
-
-log = structlog.get_logger(__name__)
+from onepiece.validations import naming
 
 
 def validate_names_in_csv(csv_path: Path) -> List[Tuple[str, bool, str]]:
@@ -21,7 +11,7 @@ def validate_names_in_csv(csv_path: Path) -> List[Tuple[str, bool, str]]:
     Returns list of (name, valid, reason).
     """
     results: List[Tuple[str, bool, str]] = []
-    with csv_path.open(newline="") as csvfile:
+    with csv_path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         if "name" not in reader.fieldnames:
             raise ValueError("CSV must have a 'name' column.")
@@ -49,11 +39,11 @@ def _validate_single_name(name: str) -> Tuple[bool, str]:
     """
     Core validation for a single name string.
     """
-    if validate_asset_name(name):
+    if naming.validate_asset_name(name):
         return True, "asset"
-    if validate_shot_name(name):
+    if naming.validate_shot_name(name):
         return True, "shot"
     parts = name.split("_")
-    if len(parts) == 1 and validate_show_name(parts[0]):
+    if len(parts) == 1 and naming.validate_show_name(parts[0]):
         return True, "show"
     return False, "invalid pattern"

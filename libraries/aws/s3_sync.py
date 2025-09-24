@@ -1,16 +1,9 @@
-"""
-Standard S3 sync helpers for OnePiece.
-
-Objects are stored in a normal S3 bucket and the transfer is
-executed via the AWS CLI `s3 sync` command.
-
-Example folder layout:
-    s3://<bucket>/<context>/<show_code>/<folder_name>/
-"""
+"""Helpers for mirroring folders with :command:`aws s3 sync`."""
 
 from pathlib import Path
-import subprocess
 from typing import Literal
+
+import subprocess
 import structlog
 
 log = structlog.get_logger(__name__)
@@ -18,7 +11,7 @@ log = structlog.get_logger(__name__)
 ContextType = Literal["vfx", "prod"]
 
 
-def _resolve_context(show_type: ShowType, direction: Literal["to", "from"]) -> str:
+def _resolve_context(show_type: ContextType, direction: Literal["to", "from"]) -> str:
     """
     Determine the context folder from show type and direction.
 
