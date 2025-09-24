@@ -22,7 +22,7 @@ def detect_installed_dccs() -> list[str]:
 
 
 @app.command("info")
-def info():
+def info() -> None:
     """
     Print environment and OnePiece configuration information.
     """

@@ -35,7 +35,9 @@ def _parse_csv(csv_path: Path) -> list[str]:
 
 
 @app.command("show-setup")
-def show_setup_command(csv: Path, project: str, template: str = typer.Option(None)):
+def show_setup_command(
+    csv: Path, project: str, template: str | None = typer.Option(None)
+) -> None:
     """
     Create a ShotGrid project and hierarchy from a CSV of shots.
     """
