@@ -3,10 +3,10 @@
 from pathlib import Path
 from typing import Literal
 
+import logging
 import subprocess
-import structlog
 
-log = structlog.get_logger(__name__)
+log = logging.getLogger(__name__)
 
 ContextType = Literal["vfx", "prod"]
 
