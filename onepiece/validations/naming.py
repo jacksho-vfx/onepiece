@@ -1,5 +1,4 @@
 """Utility functions for validating production naming conventions."""
-from __future__ import annotations
 
 import re
 
