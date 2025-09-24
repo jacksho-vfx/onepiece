@@ -6,10 +6,10 @@ PRE_COMMIT_CONFIG ?= .pre_commit_config.yaml
 
 format:
 	black onepiece
-	ruff --fix onepiece
+	ruff check --fix onepiece
 
 lint:
-	ruff onepiece
+	ruff check onepiece
 
 typecheck:
 	mypy onepiece --strict
