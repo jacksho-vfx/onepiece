@@ -26,9 +26,12 @@ dev = [
     "pytest-mock>=3.12.0",
     "black>=23.9.0",
     "isort>=6.12.0",
-    "ruff<0.5",
+    "ruff>=0.5",
     "mypy>=1.4.0",
 ]
+
+[project.scripts]
+ruff = "onepiece.devtools.ruff_shim:main"
 
 [tool.black]
 line-length = 88

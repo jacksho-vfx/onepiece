@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog  # type: ignore[import-not-found]
+import structlog
 
 from .client import ShotgridClient
 
