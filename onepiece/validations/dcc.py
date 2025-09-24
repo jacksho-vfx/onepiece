@@ -6,7 +6,7 @@ from pathlib import Path
 
 from onepiece.dcc.dcc_client import SupportedDCC
 
-__all__ = ["validate_dcc", "detect_dcc_from_file"]
+__all__ = ["SupportedDCC", "validate_dcc", "detect_dcc_from_file"]
 
 
 _EXTENSION_MAP: dict[str, SupportedDCC] = {
