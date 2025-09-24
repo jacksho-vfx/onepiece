@@ -219,7 +219,9 @@ class MediaIngestService:
         source_normalized = self.source.lower()
         if source_normalized not in {"vendor", "client"}:
             raise ValueError("source must be either 'vendor' or 'client'")
-        return self.vendor_bucket if source_normalized == "vendor" else self.client_bucket
+        return (
+            self.vendor_bucket if source_normalized == "vendor" else self.client_bucket
+        )
 
 
 class Boto3Uploader:
@@ -238,4 +240,3 @@ class Boto3Uploader:
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self._client.upload_file(str(file_path), bucket, key)
-

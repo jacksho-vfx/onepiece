@@ -15,4 +15,3 @@ __all__ = [
     "UploaderProtocol",
     "Boto3Uploader",
 ]
-
