@@ -21,3 +21,20 @@ def test_get_or_create_project_returns_existing(sg_client):
     project = sg_client.get_or_create_project("ExistingShow")
     sg_client._create_project.assert_not_called()
     assert project["id"] == 456
+
+
+def test_register_version_records_entry(tmp_path):
+    client = ShotgridClient()
+    file_path = tmp_path / "SHOW01_ep001_sc01_0001_comp.mov"
+    file_path.write_text("content")
+
+    version = client.register_version(
+        project_name="CoolShow",
+        shot_code="ep001_sc01_0001",
+        file_path=file_path,
+        description="comp",
+    )
+
+    assert version["id"] == 1
+    assert version["code"] == file_path.stem
+    assert client.list_versions()[0]["shot"] == "ep001_sc01_0001"
