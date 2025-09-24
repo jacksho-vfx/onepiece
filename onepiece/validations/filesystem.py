@@ -1,9 +1,9 @@
 """Filesystem validation helpers."""
 
-from pathlib import Path
 import os
 import shutil
-from typing import Iterable
+from pathlib import Path
+from typing import Iterable, TypedDict
 
 __all__ = ["check_paths", "preflight_report"]
 
@@ -24,7 +24,13 @@ def _free_space_in_gb(path: Path) -> float:
         return 0.0
 
 
-def check_paths(paths: Iterable[Path | str]) -> dict[str, dict[str, object]]:
+class PathInfo(TypedDict):
+    exists: bool
+    writable: bool
+    free_space_gb: float
+
+
+def check_paths(paths: Iterable[Path | str]) -> dict[str, PathInfo]:
     """Validate a collection of paths.
 
     Each entry in ``paths`` is expanded to a :class:`Path` and a dictionary is
@@ -32,7 +38,7 @@ def check_paths(paths: Iterable[Path | str]) -> dict[str, dict[str, object]]:
     keys: ``exists``, ``writable`` and ``free_space_gb``.
     """
 
-    results: dict[str, dict[str, object]] = {}
+    results: dict[str, PathInfo] = {}
     for raw_path in paths:
         path = Path(raw_path)
         exists = path.exists()
@@ -40,11 +46,11 @@ def check_paths(paths: Iterable[Path | str]) -> dict[str, dict[str, object]]:
             os.access(path, os.W_OK) if exists else os.access(path.parent, os.W_OK)
         )
         free_space = _free_space_in_gb(path)
-        results[str(path)] = {
-            "exists": exists,
-            "writable": bool(writable),
-            "free_space_gb": free_space,
-        }
+        results[str(path)] = PathInfo(
+            exists=exists,
+            writable=bool(writable),
+            free_space_gb=free_space,
+        )
     return results
 
 
