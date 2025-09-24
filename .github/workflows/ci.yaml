@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -U pip
+          pip install black ruff mypy pytest
+
+      - name: Black check
+        run: black --check onepiece
+
+      - name: Ruff lint
+        run: ruff onepiece
+
+      - name: Mypy type check
+        run: mypy onepiece --strict
+
+      - name: Run tests
+        run: pytest --maxfail=1 --disable-warnings -q
