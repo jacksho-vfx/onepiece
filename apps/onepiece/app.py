@@ -1,5 +1,6 @@
 import typer
 
+from onepiece.apps.onepiece.ingest import app as ingest
 from onepiece.apps.onepiece.misc.greet import app as greet
 from onepiece.apps.onepiece.misc.info import app as info
 from onepiece.apps.onepiece.shotgrid.flow_setup import app as flow_setup
@@ -11,6 +12,7 @@ def handle_onepiece_error(exc: OnePieceError):
 
 app = typer.Typer(help="OnePiece pipeline command line interface")
 
+app.add_typer(ingest, name="ingest")
 app.add_typer(greet)
 app.add_typer(info)
 app.add_typer(flow_setup)
