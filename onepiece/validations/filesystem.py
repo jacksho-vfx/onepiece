@@ -1,5 +1,4 @@
 """Filesystem validation helpers."""
-from __future__ import annotations
 
 from pathlib import Path
 import os
@@ -37,7 +36,9 @@ def check_paths(paths: Iterable[Path | str]) -> dict[str, dict[str, object]]:
     for raw_path in paths:
         path = Path(raw_path)
         exists = path.exists()
-        writable = os.access(path, os.W_OK) if exists else os.access(path.parent, os.W_OK)
+        writable = (
+            os.access(path, os.W_OK) if exists else os.access(path.parent, os.W_OK)
+        )
         free_space = _free_space_in_gb(path)
         results[str(path)] = {
             "exists": exists,

@@ -5,7 +5,6 @@ in would add a large amount of surface area for the tests.  The simplified
 version keeps the public API compatible with the behaviour that the unit tests
 exercise: looking up and creating projects.
 """
-from __future__ import annotations
 
 from collections.abc import MutableMapping
 from dataclasses import dataclass, field

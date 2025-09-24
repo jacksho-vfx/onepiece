@@ -5,11 +5,11 @@ used in both the CLI application and by external tooling.  Only the features
 needed by the tests are implemented which keeps the behaviour easy to reason
 about.
 """
-from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
 import subprocess
+
 __all__ = ["SupportedDCC", "open_scene"]
 
 
