@@ -1,10 +1,10 @@
 import typer
 
-from onepiece.apps.onepiece.dcc.publish import app as publish
-from onepiece.apps.onepiece.ingest import app as ingest
-from onepiece.apps.onepiece.misc.greet import app as greet
-from onepiece.apps.onepiece.misc.info import app as info
-from onepiece.apps.onepiece.shotgrid.flow_setup import app as flow_setup
+from onepiece.dcc.publish import app as publish
+from onepiece.ingest import app as ingest
+from onepiece.misc.greet import app as greet
+from onepiece.misc.info import app as info
+from onepiece.shotgrid.flow_setup import app as flow_setup
 from onepiece.utils.errors import OnePieceError
 
 def handle_onepiece_error(exc: OnePieceError):
