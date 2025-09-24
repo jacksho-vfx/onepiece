@@ -14,7 +14,7 @@ from onepiece.validations.dcc import validate_dcc
 
 
 log = logging.getLogger(__name__)
-
+app = typer.Typer(help="Publish packaged scene outputs.")
 
 def _load_metadata(path: Path) -> dict:
     try:
@@ -36,7 +36,7 @@ def _validate_show_type(show_type: str) -> Literal["vfx", "prod"]:
         raise typer.BadParameter("show-type must be either 'vfx' or 'prod'")
     return lowered  # type: ignore[return-value]
 
-
+@app.command("show-setup")
 def publish(
     dcc: str = typer.Option(..., "--dcc", help="DCC that produced the scene."),
     scene_name: str = typer.Option(
