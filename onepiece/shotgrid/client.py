@@ -8,8 +8,16 @@ exercise: looking up and creating projects.
 
 from collections.abc import MutableMapping
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 __all__ = ["ShotgridClient"]
+
+
+class Project(TypedDict):
+    """Internal structure used to describe a ShotGrid project."""
+
+    id: int
+    name: str
 
 
 @dataclass
@@ -20,12 +28,12 @@ class ProjectStore:
     substitute a different backend in the future.
     """
 
-    _projects: MutableMapping[str, dict[str, object]] = field(default_factory=dict)
+    _projects: MutableMapping[str, Project] = field(default_factory=dict)
 
-    def get(self, name: str) -> dict[str, object] | None:
+    def get(self, name: str) -> Project | None:
         return self._projects.get(name)
 
-    def add(self, project: dict[str, object]) -> dict[str, object]:
+    def add(self, project: Project) -> Project:
         self._projects[project["name"]] = project
         return project
 
@@ -41,18 +49,18 @@ class ShotgridClient:
 
     # The following private helpers are patched in the unit tests so they are
     # intentionally minimal.
-    def _find_project(self, name: str) -> dict[str, object] | None:
+    def _find_project(self, name: str) -> Project | None:
         """Return the project matching *name* if one exists."""
 
         return self._store.get(name)
 
-    def _create_project(self, name: str) -> dict[str, object]:
+    def _create_project(self, name: str) -> Project:
         """Create a new project entry with a predictable payload."""
 
-        project = {"id": self._store.next_id(), "name": name}
+        project: Project = {"id": self._store.next_id(), "name": name}
         return self._store.add(project)
 
-    def get_or_create_project(self, name: str) -> dict[str, object]:
+    def get_or_create_project(self, name: str) -> Project:
         """Fetch the project called *name* or create it if it doesn't exist."""
 
         project = self._find_project(name)

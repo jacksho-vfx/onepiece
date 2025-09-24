@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import structlog
+from typing import Any
+
+import structlog  # type: ignore[import-not-found]
 
 from .client import ShotgridClient
 
-log = structlog.get_logger(__name__)
+log: Any = structlog.get_logger(__name__)
 
 
 def setup_single_shot(

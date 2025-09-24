@@ -46,5 +46,7 @@ def detect_dcc_from_file(file_path: str | Path) -> SupportedDCC:
         return _EXTENSION_MAP[suffix]
     except KeyError as exc:
         supported = ", ".join(sorted(_EXTENSION_MAP))
-        msg = f"Cannot detect DCC from file extension '{suffix}' (supported: {supported})"
+        msg = (
+            f"Cannot detect DCC from file extension '{suffix}' (supported: {supported})"
+        )
         raise ValueError(msg) from exc
