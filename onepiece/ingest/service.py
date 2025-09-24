@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Protocol, Tuple
+from typing import Iterable, List, Protocol, Tuple, cast
 
 from onepiece.shotgrid.client import ShotgridClient
 from onepiece.validations.naming import (
@@ -23,10 +23,10 @@ class _StructuredLogger:
     def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
 
-    def info(self, event: str, **kwargs) -> None:
+    def info(self, event: str, **kwargs: object) -> None:
         self._logger.info("%s %s", event, kwargs)
 
-    def warning(self, event: str, **kwargs) -> None:
+    def warning(self, event: str, **kwargs: object) -> None:
         self._logger.warning("%s %s", event, kwargs)
 
 
@@ -224,19 +224,27 @@ class MediaIngestService:
         )
 
 
+class S3ClientProtocol(Protocol):
+    """Subset of :mod:`boto3`'s S3 client used for uploads."""
+
+    def upload_file(self, Filename: str, Bucket: str, Key: str) -> None:
+        """Upload a local file to S3."""
+
+
 class Boto3Uploader:
     """Concrete uploader that relies on :mod:`boto3` for S3 transfers."""
 
-    def __init__(self, client: object | None = None) -> None:
+    def __init__(self, client: S3ClientProtocol | None = None) -> None:
         if client is None:
             try:
-                import boto3
+                import boto3  # type: ignore[import-not-found]
             except ImportError as exc:  # pragma: no cover - exercised in runtime
                 raise RuntimeError(
                     "boto3 is required for S3 uploads. Install it via 'pip install boto3'."
                 ) from exc
-            client = boto3.client("s3")
-        self._client = client
+            boto3_client = boto3.client("s3")
+            client = cast(S3ClientProtocol, boto3_client)
+        self._client: S3ClientProtocol = client
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self._client.upload_file(str(file_path), bucket, key)
