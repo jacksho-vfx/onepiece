@@ -1,11 +1,11 @@
 import typer
 
-from onepiece.dcc.publish import app as publish
-from onepiece.ingest import app as ingest
-from onepiece.misc.greet import app as greet
-from onepiece.misc.info import app as info
-from onepiece.shotgrid.flow_setup import app as flow_setup
-from onepiece.utils.errors import OnePieceError
+from apps.onepiece.dcc.publish import app as publish
+from apps.onepiece.ingest import app as ingest
+from apps.onepiece.misc.greet import app as greet
+from apps.onepiece.misc.info import app as info
+from apps.onepiece.shotgrid.flow_setup import app as flow_setup
+from apps.onepiece.utils.errors import OnePieceError
 
 def handle_onepiece_error(exc: OnePieceError):
     typer.secho(f"ERROR: {exc}", fg=typer.colors.RED, err=True)
