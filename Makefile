@@ -5,14 +5,14 @@ PRE_COMMIT ?= $(PYTHON) -m pre_commit
 PRE_COMMIT_CONFIG ?= .pre_commit_config.yaml
 
 format:
-	black onepiece
-	ruff --fix onepiece
+black src
+ruff --fix src
 
 lint:
-	ruff onepiece
+ruff src
 
 typecheck:
-	mypy onepiece --strict
+mypy src/onepiece --strict
 
 test:
 	pytest --maxfail=1 --disable-warnings -q
