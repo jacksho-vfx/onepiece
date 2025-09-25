@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import typer
 
-from src.libraries.ingest import Boto3Uploader, MediaIngestService
+from src.libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
 from src.libraries.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid")
@@ -48,6 +48,7 @@ def ingest(
 
     shotgrid = ShotgridClient()
     uploader = _DryRunUploader() if dry_run else Boto3Uploader()
+    uploader = cast(UploaderProtocol, uploader)
 
     service = MediaIngestService(
         project_name=project,
