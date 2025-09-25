@@ -29,16 +29,16 @@ def info() -> None:
     typer.echo("=== OnePiece Environment Info ===")
     typer.echo(f"Python version: {sys.version.split()[0]}")
     typer.echo("OnePiece version: 0.1")
-    
+
     sg_url = os.environ.get("SHOTGRID_URL", "Not set")
     typer.echo(f"ShotGrid URL: {sg_url}")
-    
+
     aws_profile = os.environ.get("AWS_PROFILE", "default")
     typer.echo(f"AWS Profile: {aws_profile}")
-    
+
     dccs = detect_installed_dccs()
     typer.echo(f"Detected DCCs: {', '.join(dccs)}")
-    
+
     log.info(
         "info_report",
         python=sys.version,
@@ -46,4 +46,3 @@ def info() -> None:
         aws_profile=aws_profile,
         dccs=dccs,
     )
-

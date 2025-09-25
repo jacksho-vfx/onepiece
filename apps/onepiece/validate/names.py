@@ -11,13 +11,10 @@ from onepiece.validations.naming import (
 
 app = typer.Typer(help="Validate names")
 
+
 @app.command("names")
 def validate_names(
-    show: str,
-    episode: str,
-    scene: str,
-    shot: str,
-    asset: str | None = None
+    show: str, episode: str, scene: str, shot: str, asset: str | None = None
 ):
     """
     Validate naming conventions for show, episode, scene, shot, and optional asset.

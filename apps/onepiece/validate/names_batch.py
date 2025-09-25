@@ -13,7 +13,9 @@ app = typer.Typer(help="Validatie names in batch.")
 @app.command("names-batch")
 def names_batch(
     csv: Path = typer.Option(None, "--csv", "-c", help="CSV with a 'name' column."),
-    directory: Path = typer.Option(None, "--dir", "-d", help="Directory of files to validate.")
+    directory: Path = typer.Option(
+        None, "--dir", "-d", help="Directory of files to validate."
+    ),
 ):
     """
     Validate show/shot/asset names from a CSV or a directory of files.
@@ -39,5 +41,3 @@ def names_batch(
         raise typer.Exit(code=1)
     else:
         typer.echo("\nAll names are valid.")
-
-

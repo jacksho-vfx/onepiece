@@ -22,11 +22,17 @@ def _parse_csv(csv_path: Path) -> list[str]:
             raise typer.BadParameter("CSV file must include a header row.")
 
         column = next(
-            (name for name in reader.fieldnames if name and name.lower() in {"shot", "code", "name"}),
+            (
+                name
+                for name in reader.fieldnames
+                if name and name.lower() in {"shot", "code", "name"}
+            ),
             None,
         )
         if column is None:
-            raise typer.BadParameter("CSV must contain a 'shot', 'code', or 'name' column.")
+            raise typer.BadParameter(
+                "CSV must contain a 'shot', 'code', or 'name' column."
+            )
 
         shots = [row[column].strip() for row in reader if row.get(column)]
         if not shots:

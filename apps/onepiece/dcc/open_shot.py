@@ -30,9 +30,15 @@ def _resolve_dcc(shot_path: Path, dcc: str | None) -> SupportedDCC:
 @app.command("open-shot")
 def open_shot(
     shot_path: Path = typer.Option(
-        ..., "--shot", "-s", exists=True, file_okay=True, help="Path to the shot scene file"
+        ...,
+        "--shot",
+        "-s",
+        exists=True,
+        file_okay=True,
+        help="Path to the shot scene file",
     ),
-    dcc: str | None = typer.Option(
+    dcc: str
+    | None = typer.Option(
         None,
         "--dcc",
         "-d",

@@ -24,7 +24,9 @@ app = typer.Typer(help="Create version-zero proxies and upload to ShotGrid.")
 def version_zero(
     csv_file: UPath = typer.Argument(..., help="CSV file with shot names."),
     project: str = typer.Option(..., "--project", "-p", help="ShotGrid project name."),
-    media_root: Optional[UPath] = typer.Option(None, "--media-root", help="Root directory for media files."),
+    media_root: Optional[UPath] = typer.Option(
+        None, "--media-root", help="Root directory for media files."
+    ),
     fps: int = typer.Option(24, help="Frames per second for MOV output."),
 ):
     """

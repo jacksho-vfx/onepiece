@@ -1,2 +1,0 @@
-"""Nuke specific DCC helpers."""
-

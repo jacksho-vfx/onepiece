@@ -65,9 +65,8 @@ def publish(
     show_type: str = typer.Option(
         "vfx", "--show-type", help="Show type: 'vfx' (vendor) or 'prod'."
     ),
-    profile: str | None = typer.Option(
-        None, "--profile", help="Optional AWS CLI profile to use."
-    ),
+    profile: str
+    | None = typer.Option(None, "--profile", help="Optional AWS CLI profile to use."),
 ) -> None:
     """Package a scene and publish it to S3."""
 

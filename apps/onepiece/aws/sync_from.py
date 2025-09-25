@@ -2,9 +2,10 @@ from pathlib import Path
 
 import typer
 
-from onepiece.aws.s5_sync import s5_sync
+from onepiece.libraries.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="Sync from an S3 bucket")
+
 
 @app.command("sync-from")
 def sync_from(

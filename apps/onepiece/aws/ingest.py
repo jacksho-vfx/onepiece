@@ -16,7 +16,9 @@ app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid"
 class _DryRunUploader:
     """Uploader implementation that only logs operations."""
 
-    def upload(self, file_path: Path, bucket: str, key: str) -> None:  # pragma: no cover
+    def upload(
+        self, file_path: Path, bucket: str, key: str
+    ) -> None:  # pragma: no cover
         typer.echo(f"[dry-run] Would upload {file_path} -> s3://{bucket}/{key}")
 
 
@@ -24,15 +26,23 @@ class _DryRunUploader:
 def ingest(
     folder: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
     project: str = typer.Option(..., "--project", "-p", help="ShotGrid project name"),
-    show_code: str = typer.Option(..., "--show-code", "-s", help="Show code used in filenames"),
+    show_code: str = typer.Option(
+        ..., "--show-code", "-s", help="Show code used in filenames"
+    ),
     source: Literal["vendor", "client"] = typer.Option(
         "vendor",
         "--source",
         help="Delivery source. Determines whether vendor_in or client_in bucket is used.",
     ),
-    vendor_bucket: str = typer.Option("vendor_in", help="S3 bucket for vendor deliveries"),
-    client_bucket: str = typer.Option("client_in", help="S3 bucket for client deliveries"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Validate without uploading to S3"),
+    vendor_bucket: str = typer.Option(
+        "vendor_in", help="S3 bucket for vendor deliveries"
+    ),
+    client_bucket: str = typer.Option(
+        "client_in", help="S3 bucket for client deliveries"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Validate without uploading to S3"
+    ),
 ) -> None:
     """Validate filenames, copy media to S3, and register Versions in ShotGrid."""
 
@@ -69,4 +79,3 @@ def ingest(
 
     if report.processed_count == 0:
         raise typer.Exit(code=1)
-

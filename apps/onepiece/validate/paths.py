@@ -4,9 +4,12 @@ from onepiece.validations.filesystem import preflight_report
 
 app = typer.Typer(help="Validate filepaths")
 
+
 @app.command("paths")
 def validate_paths(
-    paths: list[Path] = typer.Argument(..., help="Paths to check for existence, writability, and disk space")
+    paths: list[Path] = typer.Argument(
+        ..., help="Paths to check for existence, writability, and disk space"
+    )
 ):
     """
     Validate filesystem paths and print a report.

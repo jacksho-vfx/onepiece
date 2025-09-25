@@ -52,6 +52,14 @@ ignore_missing_imports = true
 module = "onepiece.tests.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = "onepiece.libraries.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "apps.*"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

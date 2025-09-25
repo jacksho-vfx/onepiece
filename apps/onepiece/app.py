@@ -12,6 +12,7 @@ def handle_onepiece_error(exc: OnePieceError) -> None:
     typer.secho(f"ERROR: {exc}", fg=typer.colors.RED, err=True)
     raise typer.Exit(code=exc.exit_code)
 
+
 app = typer.Typer(help="OnePiece pipeline command line interface")
 
 app.add_typer(ingest, name="ingest")
