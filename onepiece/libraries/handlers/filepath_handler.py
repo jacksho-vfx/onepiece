@@ -1,9 +1,9 @@
-"""
-Default local-disk filepath handler for OnePiece.
-"""
-import UPath
+"""Default local-disk filepath handler for OnePiece."""
+
 from typing import Optional
+
 import structlog
+from upath import UPath
 
 from .protocols import FilepathHandlerProtocol
 

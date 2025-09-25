@@ -1,9 +1,8 @@
-"""
-Protocols for OnePiece filesystem handlers.
-"""
+"""Protocols for OnePiece filesystem handlers."""
 
-import UPath
 from typing import Protocol
+
+from upath import UPath
 
 
 class FilepathHandlerProtocol(Protocol):
