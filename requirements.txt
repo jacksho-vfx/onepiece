@@ -2,5 +2,9 @@ black
 ruff
 mypy
 pytest
-typer
+pre-commit
+pydantic
+pydantic-settings
+types-requests
+types-PyYAML
 -e .

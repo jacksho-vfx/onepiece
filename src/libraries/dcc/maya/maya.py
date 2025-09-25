@@ -4,11 +4,35 @@ Maya DCC integration functions for OnePiece
 Requires Maya's Python environment (pymel.core).
 """
 
+from typing import Any, cast, Callable
+
 from upath import UPath
 import structlog
 import pymel.core as pm
 
 log = structlog.get_logger(__name__)
+
+
+_saveFile = cast(Callable[..., None], pm.saveFile)
+_openFile = cast(Callable[..., None], pm.openFile)
+_importFile = cast(Callable[..., None], pm.importFile)
+_exportAll = cast(Callable[..., None], pm.exportAll)
+
+
+def _save(**kwargs: Any) -> None:
+    pm.saveFile(**kwargs)
+
+
+def _open(path: UPath, **kwargs: Any) -> None:
+    pm.openFile(str(path), **kwargs)
+
+
+def _import(path: UPath, **kwargs: Any) -> None:
+    pm.importFile(str(path), **kwargs)
+
+
+def _export_all(path: UPath, **kwargs: Any) -> None:
+    pm.exportAll(str(path), **kwargs)
 
 
 # --------------------------------------------------------------------------- #
@@ -25,7 +49,7 @@ def open_scene(path: UPath) -> None:
         log.error("maya_open_scene_failed", path=str(path))
         raise FileNotFoundError(f"Maya scene not found: {str(path)}")
 
-    pm.openFile(str(path), force=True)  # type: ignore[no-untyped-call]
+    _open(path, force=True)
     log.info("maya_scene_opened", path=str(path))
 
 
@@ -40,7 +64,7 @@ def save_scene(path: UPath) -> None:
         pm.saveAs(str(path))
         log.info("maya_scene_saved_as", path=str(path))
     else:
-        pm.saveFile()  # type: ignore[no-untyped-call]
+        _save(force=True)
         log.info("maya_scene_saved", path="current")
 
 
@@ -58,7 +82,7 @@ def import_asset(path: UPath) -> None:
         log.error("maya_import_asset_failed", path=str(path))
         raise FileNotFoundError(f"Maya asset not found: {str(path)}")
 
-    pm.importFile(str(path), type="mayaAscii" if path.name.endswith(".ma") else "mayaBinary")  # type: ignore[no-untyped-call]
+    _import(path, type="mayaAscii" if path.name.endswith(".ma") else "mayaBinary")
     log.info("maya_asset_imported", path=str(path))
 
 
@@ -72,5 +96,5 @@ def export_scene(path: UPath) -> None:
     if not path:
         raise ValueError("Path must be provided to export Maya scene")
 
-    pm.exportAll(str(path))
+    _export_all(path, force=True, type="mayaAscii")
     log.info("maya_scene_exported", path=str(path))

@@ -120,7 +120,7 @@ def publish_scene(
     bucket: str,
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
-) -> Path:
+) -> UPath:
     """Package a scene's outputs locally and mirror them to S3.
 
     The packaging process is intentionally straightforward – the provided
