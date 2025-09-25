@@ -17,13 +17,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Create venv & install dependencies
+      - name: Create fresh venv & install dependencies
         run: |
+          # Ensure no stale .venv exists
+          rm -rf .venv
           python -m venv .venv
           .venv/bin/pip install -U pip
+          # Install runtime dependencies (if any)
           if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
+          # Install dev dependencies (if any)
           if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
+          # Explicit tools for CI
+          .venv/bin/pip install black ruff mypy pytest pre-commit
+          # Critical libs for typing support
           .venv/bin/pip install pydantic pydantic-settings typer
+          # Stub packages for mypy
           .venv/bin/pip install types-requests types-PyYAML
 
       - name: Black check
