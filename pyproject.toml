@@ -30,9 +30,6 @@ dev = [
     "mypy>=1.4.0",
 ]
 
-[project.scripts]
-ruff = "onepiece.devtools.ruff_shim:main"
-
 [tool.black]
 line-length = 88
 
