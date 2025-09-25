@@ -2,9 +2,7 @@
 Transformations: convert and create proxy media using PyAV.
 """
 
-from pathlib import Path
-
-import UPath
+from upath import UPath
 import av
 import structlog
 
@@ -13,7 +11,7 @@ log = structlog.get_logger(__name__)
 
 def create_1080p_proxy_from_exrs(
     exr_sequence_dir: UPath,
-    output_mov: Path,
+    output_mov: UPath,
     fps: int = 24,
 ) -> UPath:
     """

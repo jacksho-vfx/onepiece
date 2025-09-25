@@ -1,5 +1,4 @@
-from pathlib import Path
-
+from upath import UPath
 import typer
 
 from src.libraries.aws.s5_sync import s5_sync
@@ -12,7 +11,7 @@ def sync_to(
     bucket: str,
     show_code: str,
     folder: str,
-    local_path: Path,
+    local_path: UPath,
     dry_run: bool = False,
     include: list[str] = typer.Option(None, "--include"),
     exclude: list[str] = typer.Option(None, "--exclude"),

@@ -1,13 +1,13 @@
 import subprocess
-from pathlib import Path
 import structlog
 from typing import Optional, List
+from upath import UPath
 
 log = structlog.get_logger(__name__)
 
 
 def s5_sync(
-    source: Path,
+    source: UPath,
     target_bucket: str,
     context: str,
     dry_run: bool = False,

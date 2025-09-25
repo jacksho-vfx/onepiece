@@ -14,6 +14,7 @@ import subprocess
 from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
+from upath import UPath
 from typing import Literal, TypeAlias
 
 import logging
@@ -134,7 +135,7 @@ def publish_scene(
     and tooling.
     """
 
-    package_dir = Path(destination) / scene_name
+    package_dir = UPath(destination) / scene_name
     package_dir.mkdir(parents=True, exist_ok=True)
 
     renders_files = _copy_output(

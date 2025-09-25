@@ -4,7 +4,7 @@ Maya DCC integration functions for OnePiece
 Requires Maya's Python environment (pymel.core).
 """
 
-import UPath
+from upath import UPath
 import structlog
 import pymel.core as pm
 
@@ -29,7 +29,7 @@ def open_scene(path: UPath) -> None:
     log.info("maya_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath = None) -> None:
+def save_scene(path: UPath) -> None:
     """
     Save the current Maya scene.
 
@@ -58,7 +58,7 @@ def import_asset(path: UPath) -> None:
         log.error("maya_import_asset_failed", path=str(path))
         raise FileNotFoundError(f"Maya asset not found: {str(path)}")
 
-    pm.importFile(str(path), type="mayaAscii" if path.endswith(".ma") else "mayaBinary")  # type: ignore[no-untyped-call]
+    pm.importFile(str(path), type="mayaAscii" if path.name.endswith(".ma") else "mayaBinary")  # type: ignore[no-untyped-call]
     log.info("maya_asset_imported", path=str(path))
 
 

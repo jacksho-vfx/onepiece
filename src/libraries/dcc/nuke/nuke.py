@@ -5,7 +5,7 @@ Requires Nuke’s Python environment.
 """
 
 import nuke
-import UPath
+from upath import UPath
 import structlog
 
 log = structlog.get_logger(__name__)
@@ -29,7 +29,7 @@ def open_scene(path: UPath) -> None:
     log.info("nuke_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath = None) -> None:
+def save_scene(path: UPath) -> None:
     """
     Save the current Nuke script.
 

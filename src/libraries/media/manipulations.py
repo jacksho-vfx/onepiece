@@ -2,7 +2,7 @@
 Manipulations: audio conversion and sequence renumbering using PyAV.
 """
 
-import UPath
+from upath import UPath
 import structlog
 import av
 import shutil
