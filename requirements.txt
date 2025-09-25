@@ -1,5 +1,5 @@
 black
-ruff>=0.5
+ruff
 mypy
 pytest
 typer

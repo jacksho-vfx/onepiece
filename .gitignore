@@ -1,8 +1,34 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# Distribution / packaging
 *.egg-info/
 dist/
 build/
+
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Environment variables / secrets
 .env
+.env.*
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Mypy / Ruff / Black caches
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# IDE / Editor configs
+.vscode/
+.idea/

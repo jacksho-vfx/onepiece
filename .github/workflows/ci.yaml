@@ -17,19 +17,34 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Create fresh venv & install dependencies
         run: |
-          pip install -U pip
-          pip install black ruff mypy pytest
+          # Ensure no stale .venv exists
+          rm -rf .venv
+          python -m venv .venv
+          .venv/bin/pip install -U pip
+          # Install runtime dependencies (if any)
+          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
+          # Install dev dependencies (if any)
+          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
+          # Explicit tools for CI
+          .venv/bin/pip install black ruff mypy pytest pre-commit
+          # Critical libs for typing support
+          .venv/bin/pip install pydantic pydantic-settings typer
+          # Stub packages for mypy
+          .venv/bin/pip install types-requests types-PyYAML
 
       - name: Black check
-        run: black --check onepiece
+        run: .venv/bin/black --check src
 
       - name: Ruff lint
-        run: ruff check onepiece
+        run: .venv/bin/ruff check src
 
       - name: Mypy type check
-        run: mypy onepiece --strict
+        run: .venv/bin/mypy src --strict
 
       - name: Run tests
-        run: pytest --maxfail=1 --disable-warnings -q
+        run: .venv/bin/pytest --maxfail=1 --disable-warnings -q
+
+      - name: Pre-commit hooks
+        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
