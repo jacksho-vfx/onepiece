@@ -48,13 +48,13 @@ def ingest(
 
     shotgrid = ShotgridClient()
     uploader = _DryRunUploader() if dry_run else Boto3Uploader()
-    uploader = cast(UploaderProtocol, uploader)
+    typed_uploader: UploaderProtocol = cast(UploaderProtocol, uploader)
 
     service = MediaIngestService(
         project_name=project,
         show_code=show_code,
         source=source,
-        uploader=uploader,
+        uploader=typed_uploader,
         shotgrid=shotgrid,
         vendor_bucket=vendor_bucket,
         client_bucket=client_bucket,
