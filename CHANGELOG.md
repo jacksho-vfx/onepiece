@@ -4,7 +4,7 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ---
 
-## [v0.1] – Initial Release (WIP)
+## [v0.2.0] – Current Release
 
 ### Added / Implemented
 
@@ -88,3 +88,13 @@ All notable changes to the OnePiece pipeline toolkit.
 - Example CSV for `show-setup`.
 - CLI usage examples for AWS and DCC.
 - Developer guide (optional for v0.1).
+
+---
+
+## [v0.1.0] – Initial Release & Setup
+
+- Project scaffolding created.
+- Initial GitHub workflows added.
+- Basic Makefile targets (`format`, `lint`, `typecheck`, `test`, `check`).
+- Repository tooling and environment setup (`.venv`, `.gitignore`, logging, configs).
+- README and Changelog introduced.
