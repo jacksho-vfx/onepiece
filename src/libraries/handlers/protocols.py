@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-import UPath
+from upath import UPath
 
 
 class FilepathHandlerProtocol(Protocol):

@@ -14,6 +14,7 @@ import subprocess
 from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
+from upath import UPath
 from typing import Literal, TypeAlias
 
 import logging
@@ -119,7 +120,7 @@ def publish_scene(
     bucket: str,
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
-) -> Path:
+) -> UPath:
     """Package a scene's outputs locally and mirror them to S3.
 
     The packaging process is intentionally straightforward – the provided
@@ -134,7 +135,7 @@ def publish_scene(
     and tooling.
     """
 
-    package_dir = Path(destination) / scene_name
+    package_dir = UPath(destination) / scene_name
     package_dir.mkdir(parents=True, exist_ok=True)
 
     renders_files = _copy_output(

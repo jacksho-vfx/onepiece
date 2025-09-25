@@ -237,7 +237,7 @@ class Boto3Uploader:
     def __init__(self, client: S3ClientProtocol | None = None) -> None:
         if client is None:
             try:
-                import boto3  # type: ignore[import-not-found]
+                import boto3
             except ImportError as exc:  # pragma: no cover - exercised in runtime
                 raise RuntimeError(
                     "boto3 is required for S3 uploads. Install it via 'pip install boto3'."

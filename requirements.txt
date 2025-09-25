@@ -2,5 +2,16 @@ black
 ruff
 mypy
 pytest
+pre-commit
+pydantic
+pydantic-settings
+types-requests
+types-PyYAML
 typer
+universal-pathlib
+requests
+imageio
+av
+structlog
+typing-extensions
 -e .

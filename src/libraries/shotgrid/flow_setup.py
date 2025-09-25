@@ -21,6 +21,7 @@ Environment variables for authentication:
 from __future__ import annotations
 
 import re
+from typing import Dict, Any
 
 import structlog
 
@@ -47,6 +48,9 @@ def _parse_shot_code(code: str) -> tuple[str, str, str]:
 # --------------------------------------------------------------------------- #
 # Main Function
 # --------------------------------------------------------------------------- #
+JSONDict = Dict[str, Any]
+
+
 def setup_show(
     project_name: str,
     shots: list[str],
@@ -63,17 +67,17 @@ def setup_show(
         episode, scene, shot = _parse_shot_code(shot_code)
         scene_name = "_".join([episode, scene])
         episode_data = EpisodeData(code=episode, project_id=project["id"])
-        episode = sg_client.get_or_create_episode(episode_data)
+        episode_object: JSONDict = sg_client.get_or_create_episode(episode_data)
         scene_data = SceneData(
             code=scene_name,
             project_id=project["id"],
-            episode_id=episode["id"],
+            episode_id=episode_object["id"],
         )
-        scene = sg_client.get_or_create_scene(scene_data)
+        scene_object: JSONDict = sg_client.get_or_create_scene(scene_data)
         shot_data = ShotData(
             code=shot_code,
             project_id=project["id"],
-            scene_id=scene["id"],
+            scene_id=scene_object["id"],
         )
         sg_client.get_or_create_shot(shot_data)
         log.info("setup_shot_done", project=project_name, shot=shot_code)

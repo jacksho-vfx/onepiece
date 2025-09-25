@@ -1,4 +1,4 @@
-import UPath
+from upath import UPath
 import typer
 
 from src.libraries.aws.s5_sync import s5_sync
@@ -20,7 +20,7 @@ def sync_from(
     Sync local folder FROM S3 using s5cmd with optional dry-run and filters.
     """
     s5_sync(
-        target_bucket=local_path / folder,
+        target_bucket=str(local_path / folder),
         source=UPath(bucket),
         context=show_code,
         dry_run=dry_run,

@@ -5,7 +5,7 @@ Usage:
     libraries shotgrid version-zero shots.csv --project CoolShow
 """
 
-import UPath
+from upath import UPath
 import structlog
 import typer
 
