@@ -17,19 +17,23 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Create venv & install dependencies
         run: |
-          pip install -U pip
-          pip install black ruff mypy pytest
+          python -m venv .venv
+          .venv/bin/pip install -U pip
+          .venv/bin/pip install black ruff mypy pytest pre-commit
 
       - name: Black check
-        run: black --check src
+        run: .venv/bin/black --check src
 
       - name: Ruff lint
-        run: ruff check src
+        run: .venv/bin/ruff check src
 
       - name: Mypy type check
-        run: mypy src --strict
+        run: .venv/bin/mypy src --strict
 
       - name: Run tests
-        run: pytest --maxfail=1 --disable-warnings -q
+        run: .venv/bin/pytest --maxfail=1 --disable-warnings -q
+
+      - name: Pre-commit hooks
+        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
