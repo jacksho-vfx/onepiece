@@ -21,7 +21,10 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install -U pip
+          # Core dev tools
           .venv/bin/pip install black ruff mypy pytest pre-commit
+          # Stub packages for mypy
+          .venv/bin/pip install types-requests types-PyYAML
 
       - name: Black check
         run: .venv/bin/black --check src
