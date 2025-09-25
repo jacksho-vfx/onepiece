@@ -23,13 +23,13 @@ jobs:
           pip install black ruff mypy pytest
 
       - name: Black check
-        run: black --check libraries
+        run: black --check src
 
       - name: Ruff lint
-        run: ruff check libraries
+        run: ruff check src
 
       - name: Mypy type check
-        run: mypy libraries --strict
+        run: mypy src --strict
 
       - name: Run tests
         run: pytest --maxfail=1 --disable-warnings -q
