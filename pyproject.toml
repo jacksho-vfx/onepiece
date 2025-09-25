@@ -37,8 +37,8 @@ ruff = "onepiece.devtools.ruff_shim:main"
 line-length = 88
 
 [tool.ruff]
-select = ["E", "F"]
-ignore = ["E501"]
+lint.select = ["E", "F"]
+lint.ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -59,6 +59,18 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = "apps.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "UPath"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "nuke"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "mypy-pymel.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

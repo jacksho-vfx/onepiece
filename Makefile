@@ -1,21 +1,26 @@
 .PHONY: format lint typecheck test precommit install-precommit check
 
-PYTHON ?= python3
+VENV := .venv/bin
+PYTHON ?= $(VENV)/python
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 PRE_COMMIT_CONFIG ?= .pre_commit_config.yaml
 
+setup:
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r requirements.txt
+
 format:
-	black onepiece
-	ruff check --fix onepiece
+	$(VENV)/black src
+	$(VENV)/ruff check --fix src
 
 lint:
-	ruff check onepiece
+	$(VENV)/ruff check src
 
 typecheck:
-	mypy onepiece --strict
+	$(VENV)/mypy src --strict
 
 test:
-	pytest --maxfail=1 --disable-warnings -q
+	$(VENV)/pytest --maxfail=1 --disable-warnings -q
 
 precommit:
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure --config $(PRE_COMMIT_CONFIG)

@@ -1,0 +1,81 @@
+"""CLI entry point for ingesting vendor and client deliveries."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+import typer
+
+from src.libraries.ingest import Boto3Uploader, MediaIngestService
+from src.libraries.shotgrid.client import ShotgridClient
+
+app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid")
+
+
+class _DryRunUploader:
+    """Uploader implementation that only logs operations."""
+
+    def upload(
+        self, file_path: Path, bucket: str, key: str
+    ) -> None:  # pragma: no cover
+        typer.echo(f"[dry-run] Would upload {file_path} -> s3://{bucket}/{key}")
+
+
+@app.command()
+def ingest(
+    folder: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    project: str = typer.Option(..., "--project", "-p", help="ShotGrid project name"),
+    show_code: str = typer.Option(
+        ..., "--show-code", "-s", help="Show code used in filenames"
+    ),
+    source: Literal["vendor", "client"] = typer.Option(
+        "vendor",
+        "--source",
+        help="Delivery source. Determines whether vendor_in or client_in bucket is used.",
+    ),
+    vendor_bucket: str = typer.Option(
+        "vendor_in", help="S3 bucket for vendor deliveries"
+    ),
+    client_bucket: str = typer.Option(
+        "client_in", help="S3 bucket for client deliveries"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Validate without uploading to S3"
+    ),
+) -> None:
+    """Validate filenames, copy media to S3, and register Versions in ShotGrid."""
+
+    shotgrid = ShotgridClient()
+    uploader = _DryRunUploader() if dry_run else Boto3Uploader()
+
+    service = MediaIngestService(
+        project_name=project,
+        show_code=show_code,
+        source=source,
+        uploader=uploader,
+        shotgrid=shotgrid,
+        vendor_bucket=vendor_bucket,
+        client_bucket=client_bucket,
+        dry_run=dry_run,
+    )
+
+    report = service.ingest_folder(folder)
+
+    for processed in report.processed:
+        typer.echo(
+            f"Uploaded {processed.path.name} -> s3://{processed.bucket}/{processed.key}"
+        )
+
+    if report.invalid:
+        typer.echo("\nSkipped files:")
+        for path, reason in report.invalid:
+            typer.echo(f"- {path.name}: {reason}")
+
+    typer.echo(
+        f"\nIngest complete: {report.processed_count} processed, "
+        f"{report.invalid_count} skipped"
+    )
+
+    if report.processed_count == 0:
+        raise typer.Exit(code=1)
