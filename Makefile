@@ -31,6 +31,9 @@ install-dev:
 	$(PIP) install black ruff mypy pytest pre-commit
 	$(PIP) install pydantic pydantic-settings typer
 	$(PIP) install types-requests types-PyYAML
+	$(PIP) install universal-pathlib
+	$(PIP) install requests types-requests
+
 
 precommit:
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure --config $(PRE_COMMIT_CONFIG)
