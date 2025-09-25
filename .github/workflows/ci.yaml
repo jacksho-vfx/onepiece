@@ -21,9 +21,9 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install -U pip
-          # Core dev tools
-          .venv/bin/pip install black ruff mypy pytest pre-commit
-          # Stub packages for mypy
+          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
+          .venv/bin/pip install pydantic pydantic-settings typer
           .venv/bin/pip install types-requests types-PyYAML
 
       - name: Black check
