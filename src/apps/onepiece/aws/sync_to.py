@@ -13,8 +13,8 @@ def sync_to(
     folder: str,
     local_path: UPath,
     dry_run: bool = False,
-    include: list[str] = typer.Option(None, "--include"),
-    exclude: list[str] = typer.Option(None, "--exclude"),
+    include: list[str] | None = typer.Option(None, "--include"),
+    exclude: list[str] | None = typer.Option(None, "--exclude"),
 ) -> None:
     """
     Sync local folder TO S3 using s5cmd with optional dry-run and filters.
