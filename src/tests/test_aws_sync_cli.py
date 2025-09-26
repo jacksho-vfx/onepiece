@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _pytest.monkeypatch import MonkeyPatch
 from upath import UPath
 
 from src.apps.onepiece.aws.sync_from import sync_from as sync_from_command
 from src.apps.onepiece.aws.sync_to import sync_to as sync_to_command
 
 
-def test_sync_from_cli_invokes_sync_helper(monkeypatch, tmp_path) -> None:
+def test_sync_from_cli_invokes_sync_helper(
+    monkeypatch: MonkeyPatch, tmp_path: UPath
+) -> None:
     called: dict[str, object] = {}
 
     def fake_sync_from_bucket(
@@ -58,7 +61,9 @@ def test_sync_from_cli_invokes_sync_helper(monkeypatch, tmp_path) -> None:
     }
 
 
-def test_sync_to_cli_invokes_sync_helper(monkeypatch, tmp_path) -> None:
+def test_sync_to_cli_invokes_sync_helper(
+    monkeypatch: MonkeyPatch, tmp_path: UPath
+) -> None:
     called: dict[str, object] = {}
 
     def fake_sync_to_bucket(
