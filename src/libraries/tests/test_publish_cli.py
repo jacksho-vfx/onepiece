@@ -3,7 +3,6 @@ from typing import Any, TypedDict
 from typer.testing import CliRunner
 
 
-
 runner = CliRunner()
 
 
