@@ -3,6 +3,11 @@
 import os
 import sys
 
+try:  # Python 3.8+
+    from importlib import metadata
+except ImportError:  # pragma: no cover - Python <3.8 fallback
+    import importlib_metadata as metadata  # type: ignore
+
 import structlog
 import typer
 
@@ -27,11 +32,23 @@ def info() -> None:
     Print environment and OnePiece configuration information.
     """
     typer.echo("=== OnePiece Environment Info ===")
-    typer.echo(f"Python version: {sys.version.split()[0]}")
-    typer.echo("OnePiece version: 0.1")
+    python_version = sys.version.split()[0]
+    typer.echo(f"Python version: {python_version}")
 
-    sg_url = os.environ.get("SHOTGRID_URL", "Not set")
+    try:
+        onepiece_version = metadata.version("onepiece")
+    except metadata.PackageNotFoundError:  # pragma: no cover - not installed
+        onepiece_version = "Unknown"
+    typer.echo(f"OnePiece version: {onepiece_version}")
+
+    sg_url = os.environ.get("ONEPIECE_SHOTGRID_URL", "Not set")
     typer.echo(f"ShotGrid URL: {sg_url}")
+
+    sg_script = os.environ.get("ONEPIECE_SHOTGRID_SCRIPT", "Not set")
+    typer.echo(f"ShotGrid Script: {sg_script}")
+
+    sg_key = os.environ.get("ONEPIECE_SHOTGRID_KEY", "Not set")
+    typer.echo(f"ShotGrid Key: {sg_key}")
 
     aws_profile = os.environ.get("AWS_PROFILE", "default")
     typer.echo(f"AWS Profile: {aws_profile}")
@@ -41,8 +58,11 @@ def info() -> None:
 
     log.info(
         "info_report",
-        python=sys.version,
+        python=python_version,
+        onepiece_version=onepiece_version,
         shotgrid_url=sg_url,
+        shotgrid_script=sg_script,
+        shotgrid_key=sg_key,
         aws_profile=aws_profile,
         dccs=dccs,
     )
