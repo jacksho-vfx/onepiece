@@ -1,6 +1,6 @@
 """Utilities for ingesting incoming media deliveries."""
 
-from .service import (
+from libraries.ingest.service import (
     MediaIngestService,
     MediaInfo,
     IngestReport,

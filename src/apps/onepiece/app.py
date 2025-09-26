@@ -1,13 +1,13 @@
 import typer
 
-from src.apps.onepiece.aws import app as aws
-from src.apps.onepiece.dcc.publish import publish
-from src.apps.onepiece.ingest import app as ingest
-from src.apps.onepiece.misc.greet import app as greet
-from src.apps.onepiece.misc.info import app as info
-from src.apps.onepiece.shotgrid.flow_setup import app as flow_setup
-from src.apps.onepiece.validate import app as validate
-from src.apps.onepiece.utils.errors import OnePieceError
+from apps.onepiece.aws import app as aws
+from apps.onepiece.dcc.publish import publish
+from apps.onepiece.ingest import app as ingest
+from apps.onepiece.misc.greet import app as greet
+from apps.onepiece.misc.info import app as info
+from apps.onepiece.shotgrid.flow_setup import app as flow_setup
+from apps.onepiece.validate import app as validate
+from apps.onepiece.utils.errors import OnePieceError
 
 
 def handle_onepiece_error(exc: OnePieceError) -> None:

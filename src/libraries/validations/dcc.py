@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.libraries.dcc.dcc_client import SupportedDCC
+from libraries.dcc.dcc_client import SupportedDCC
 
 __all__ = ["SupportedDCC", "validate_dcc", "detect_dcc_from_file"]
 

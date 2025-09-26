@@ -7,7 +7,7 @@ import structlog
 import typer
 from typer import progressbar
 
-from src.libraries.shotgrid.show_setup import setup_single_shot
+from libraries.shotgrid.show_setup import setup_single_shot
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Show setup commands for ShotGrid.")

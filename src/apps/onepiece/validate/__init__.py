@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typer
 
-from .names import validate_names
-from .names_batch import names_batch
-from .paths import validate_paths
+from apps.onepiece.validate.names import validate_names
+from apps.onepiece.validate.names_batch import names_batch
+from apps.onepiece.validate.paths import validate_paths
 
 app = typer.Typer(name="validate", help="Validation commands for names and paths")
 

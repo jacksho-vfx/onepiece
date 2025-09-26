@@ -7,9 +7,9 @@ from typing import List, Optional
 import typer
 from upath import UPath
 
-from .ingest import ingest as ingest_command
-from .sync_from import sync_from as sync_from_command
-from .sync_to import sync_to as sync_to_command
+from apps.onepiece.aws.ingest import ingest as ingest_command
+from apps.onepiece.aws.sync_from import sync_from as sync_from_command
+from apps.onepiece.aws.sync_to import sync_to as sync_to_command
 
 app = typer.Typer(name="aws", help="AWS and S3 integration commands")
 

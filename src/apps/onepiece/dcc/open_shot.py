@@ -5,8 +5,8 @@ from pathlib import Path
 import structlog
 import typer
 
-from src.libraries.dcc.dcc_client import SupportedDCC, open_scene
-from src.libraries.validations.dcc import detect_dcc_from_file, validate_dcc
+from libraries.dcc.dcc_client import SupportedDCC, open_scene
+from libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
 
 log = structlog.get_logger(__name__)

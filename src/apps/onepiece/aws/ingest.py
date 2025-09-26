@@ -7,8 +7,8 @@ from typing import Literal, cast
 
 import typer
 
-from src.libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
-from src.libraries.shotgrid.client import ShotgridClient
+from libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
+from libraries.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid")
 

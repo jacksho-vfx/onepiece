@@ -6,7 +6,7 @@ from typing import Any
 
 import structlog
 
-from src.libraries.shotgrid.client import ShotgridClient
+from libraries.shotgrid.client import ShotgridClient
 
 log: Any = structlog.get_logger(__name__)
 

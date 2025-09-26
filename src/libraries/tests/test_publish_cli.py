@@ -5,8 +5,8 @@ from typing import Any, TypedDict
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
-from src.apps.onepiece.app import app
-from src.libraries.dcc.dcc_client import SupportedDCC
+from apps.onepiece.app import app
+from libraries.dcc.dcc_client import SupportedDCC
 
 
 runner = CliRunner()
@@ -43,7 +43,7 @@ def test_publish_cli_invokes_publish(monkeypatch: MonkeyPatch, tmp_path: Path) -
         return Path("/tmp/package")
 
     monkeypatch.setattr(
-        "src.apps.onepiece.dcc.publish.publish_scene", fake_publish_scene
+        "apps.onepiece.dcc.publish.publish_scene", fake_publish_scene
     )
 
     result = runner.invoke(

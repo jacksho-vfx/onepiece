@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 from typing import List, Tuple
 
-from src.libraries.validations import naming
+from libraries.validations import naming
 
 
 def validate_names_in_csv(csv_path: Path) -> List[Tuple[str, bool, str]]:

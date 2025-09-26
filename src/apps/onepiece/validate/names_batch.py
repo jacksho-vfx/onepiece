@@ -1,7 +1,7 @@
 import typer
 from pathlib import Path
 import structlog
-from src.libraries.validations.naming_batch import (
+from libraries.validations.naming_batch import (
     validate_names_in_csv,
     validate_names_in_dir,
 )
