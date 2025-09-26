@@ -9,7 +9,7 @@ from typing import Literal, cast, Any
 import structlog
 import typer
 
-from src.libraries.dcc.dcc_client import JSONValue, SupportedDCC, publish_scene
+from src.libraries.dcc.dcc_client import JSONValue, publish_scene
 from src.libraries.validations.dcc import validate_dcc
 
 

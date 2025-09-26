@@ -6,7 +6,7 @@ from typing import Any
 import structlog
 import typer
 
-from src.libraries.dcc.dcc_client import SupportedDCC, open_scene
+from src.libraries.dcc.dcc_client import open_scene
 from src.libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
 
