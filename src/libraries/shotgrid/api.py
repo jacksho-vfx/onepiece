@@ -240,7 +240,53 @@ class ShotGridClient:
 
         version = self.create_version(version_data)
 
+        self.upload_media(version["type"], version["id"], media_path)
+
         return version
+
+    def upload_media(
+        self,
+        entity_type: str,
+        entity_id: int,
+        media_path: Path,
+        upload_type: str = "sg_uploaded_movie",
+    ) -> Any:
+        if not media_path.exists():
+            raise FileNotFoundError(f"Media file not found: {media_path}")
+
+        url = (
+            self.base_url
+            / "api"
+            / "v1"
+            / f"entity/{entity_type.lower()}s/{entity_id}/_upload"
+        )
+
+        with media_path.open("rb") as fp:
+            files = {"file": (media_path.name, fp, "application/octet-stream")}
+            params = {"upload_type": upload_type}
+            response = self._session.post(str(url), files=files, params=params)
+
+        if not response.ok:
+            log.error(
+                "sg.upload_media_failed",
+                entity_type=entity_type,
+                entity_id=entity_id,
+                media=str(media_path),
+                status=response.status_code,
+                text=response.text,
+            )
+            raise ShotGridError(
+                f"Upload media failed for {entity_type} {entity_id}: {response.text}"
+            )
+
+        log.info(
+            "sg.upload_media_success",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            media=str(media_path),
+        )
+
+        return response.json()
 
     def get_or_create_version(self, version_data: VersionData) -> Any:
         version = self.get_version(version_data)
