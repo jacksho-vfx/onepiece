@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -23,19 +22,21 @@ jobs:
           rm -rf .venv
           python -m venv .venv
           .venv/bin/pip install -U pip
-          .venv/bin/pip install -r requirements.txt
+          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
+          .venv/bin/pip install .[dev]
 
-      - name: Black check
-        run: .venv/bin/black --check src
+      - name: Format check (Black + Ruff)
+        run: make format-check
 
-      - name: Ruff lint
-        run: .venv/bin/ruff check src
+      - name: Lint check
+        run: make lint
 
-      - name: Mypy type check
-        run: .venv/bin/mypy src --strict
+      - name: Type check
+        run: make typecheck
 
       - name: Run tests
-        run: .venv/bin/pytest --maxfail=1 --disable-warnings -q
+        run: make test
 
       - name: Pre-commit hooks
         run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
