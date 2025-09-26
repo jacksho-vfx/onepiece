@@ -18,6 +18,8 @@ from libraries.shotgrid.models import (
     VersionData,
 )
 
+from src.libraries.shotgrid.models import TaskData
+
 log = structlog.get_logger(__name__)
 
 
@@ -260,15 +262,11 @@ class ShotGridClient:
 
     def create_task(
         self,
-        project_name: str,
-        entity_type: str,
-        entity_id: int,
-        name: str,
+        data: TaskData,
         step_name: str,
     ) -> Any:
-        pid = self.get_project_id_by_name(project_name)
-        if not pid:
-            raise ValueError(f"Project '{project_name}' not found.")
+        if not data.project_id:
+            raise ValueError("Project not provided.")
 
         step = self._get_single(
             "Step",
@@ -277,7 +275,13 @@ class ShotGridClient:
         )
         if not step:
             raise ValueError(f"Step '{step_name}' not found.")
-        return self.create_task(project_name, "Task", entity_id, name, step_name)
+        attributes = {"code": data.code, **data.extra}
+        relationships: Dict[str, Any] = {}
+        if data.project_id:
+            relationships["project"] = {
+                "data": {"type": "Project", "id": data.project_id}
+            }
+        return self._post("Task", attributes, relationships or None)
 
     # ------------------------------------------------------------------ #
     # Playlists

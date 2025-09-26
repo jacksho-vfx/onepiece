@@ -58,7 +58,7 @@ class ShotData(SGxBase):
 
 class TaskData(SGxBase):
     entity_type: str = "Task"
-    content: Optional[str] = None
+    code: Optional[str] = None
     project_id: Optional[int] = None
     entity_id: Optional[int] = None
     related_entity_type: Optional[str] = None
