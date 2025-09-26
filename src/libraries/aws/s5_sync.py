@@ -67,7 +67,9 @@ def s5_sync(
     if result.returncode != 0:
         error_output = result.stderr.strip() if result.stderr else ""
         error_details = (
-            f": {error_output}" if error_output else ". No additional error output from s5cmd."
+            f": {error_output}"
+            if error_output
+            else ". No additional error output from s5cmd."
         )
         raise RuntimeError(
             f"s5cmd sync failed with exit code {result.returncode}{error_details}"
