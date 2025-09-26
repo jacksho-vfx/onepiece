@@ -1,4 +1,3 @@
-
 from upath import UPath
 import typer
 
