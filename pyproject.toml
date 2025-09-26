@@ -17,6 +17,9 @@ dependencies = [
     "av>=12.0"
 ]
 
+[project.scripts]
+onepiece = "src.apps.onepiece.__main__:main"
+
 [tool.setuptools.packages.find]
 include = ["onepiece", "onepiece.*"]
 
