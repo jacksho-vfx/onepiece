@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Protocol, Tuple, cast
 
-from src.libraries.shotgrid.client import ShotgridClient
-from src.libraries.validations.naming import (
+from libraries.shotgrid.client import ShotgridClient
+from libraries.validations.naming import (
     validate_episode_name,
     validate_scene_name,
     validate_shot,

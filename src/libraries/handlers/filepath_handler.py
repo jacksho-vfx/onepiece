@@ -5,7 +5,7 @@ from typing import Optional
 import structlog
 from upath import UPath
 
-from .protocols import FilepathHandlerProtocol
+from src.libraries.handlers.protocols import FilepathHandlerProtocol
 
 log = structlog.get_logger(__name__)
 

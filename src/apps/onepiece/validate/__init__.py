@@ -1,12 +1,10 @@
 """Top-level Typer application exposing validation helpers."""
 
-from __future__ import annotations
-
 import typer
 
-from .names import validate_names
-from .names_batch import names_batch
-from .paths import validate_paths
+from src.apps.onepiece.validate.names import validate_names
+from src.apps.onepiece.validate.names_batch import names_batch
+from src.apps.onepiece.validate.paths import validate_paths
 
 app = typer.Typer(name="validate", help="Validation commands for names and paths")
 

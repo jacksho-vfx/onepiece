@@ -19,7 +19,7 @@ from typing import Literal, TypeAlias
 
 import logging
 
-from src.libraries.aws.s5_sync import s5_sync
+from libraries.aws.s5_sync import s5_sync
 
 __all__ = ["SupportedDCC", "open_scene", "publish_scene"]
 

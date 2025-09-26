@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from src.libraries.validations import filesystem
-from src.libraries.validations import naming
+from libraries.validations import filesystem
+from libraries.validations import naming
 
 
 # ---------- Filesystem ----------

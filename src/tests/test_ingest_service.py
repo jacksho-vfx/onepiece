@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.libraries.ingest.service import MediaIngestService, parse_media_filename
-from src.libraries.shotgrid.client import ShotgridClient
+from libraries.ingest.service import MediaIngestService, parse_media_filename
+from libraries.shotgrid.client import ShotgridClient
 
 
 class DummyUploader:

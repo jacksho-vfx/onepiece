@@ -25,8 +25,8 @@ from typing import Dict, Any
 
 import structlog
 
-from .api import ShotGridClient
-from .models import EpisodeData, SceneData, ShotData
+from libraries.shotgrid.api import ShotGridClient
+from libraries.shotgrid.models import EpisodeData, SceneData, ShotData
 
 log = structlog.get_logger(__name__)
 

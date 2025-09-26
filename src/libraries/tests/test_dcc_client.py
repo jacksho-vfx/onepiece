@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.libraries.dcc.dcc_client import (
+from libraries.dcc.dcc_client import (
     SupportedDCC,
     open_scene,
 )
@@ -41,7 +41,7 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 #
 #     destination = tmp_path / "published"
 #
-#     with patch("src.libraries.dcc.dcc_client.s5_sync") as sync_mock:
+#     with patch("libraries.dcc.dcc_client.s5_sync") as sync_mock:
 #         sync_mock.assert_called_once_with(
 #             source=expected_package,
 #             target_bucket="libraries-bucket",

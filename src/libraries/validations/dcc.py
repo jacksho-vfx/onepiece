@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from src.libraries.dcc.dcc_client import SupportedDCC
+from libraries.dcc.dcc_client import SupportedDCC
 
 __all__ = ["SupportedDCC", "validate_dcc", "detect_dcc_from_file"]
 
@@ -20,7 +21,7 @@ _EXTENSION_MAP: dict[str, SupportedDCC] = {
 }
 
 
-def validate_dcc(dcc_name: str | SupportedDCC) -> SupportedDCC:
+def validate_dcc(dcc_name: str | SupportedDCC) -> Any:
     """Return the :class:`SupportedDCC` matching ``dcc_name``.
 
     A :class:`SupportedDCC` instance is returned unchanged which keeps the helper
@@ -38,7 +39,7 @@ def validate_dcc(dcc_name: str | SupportedDCC) -> SupportedDCC:
     raise ValueError(f"Unsupported DCC: {dcc_name}. Supported: {supported}")
 
 
-def detect_dcc_from_file(file_path: str | Path) -> SupportedDCC:
+def detect_dcc_from_file(file_path: str | Path) -> Any:
     """Infer the appropriate :class:`SupportedDCC` from ``file_path``."""
 
     suffix = Path(file_path).suffix.lower()

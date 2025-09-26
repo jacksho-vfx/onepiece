@@ -18,10 +18,20 @@ dependencies = [
 ]
 
 [project.scripts]
-onepiece = "src.apps.onepiece.__main__:main"
+onepiece = "apps.onepiece.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["onepiece", "onepiece.*"]
+where = ["src"]
+include = [
+    "apps.onepiece",
+    "apps.onepiece.*",
+    "libraries",
+    "libraries.*",
+]
+exclude = [
+    "libraries.tests",
+    "libraries.tests.*",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -73,5 +83,5 @@ module = "mypy-pymel.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
+pythonpath = ["src"]
+testpaths = ["src/tests"]
