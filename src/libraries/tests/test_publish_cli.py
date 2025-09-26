@@ -42,9 +42,7 @@ def test_publish_cli_invokes_publish(monkeypatch: MonkeyPatch, tmp_path: Path) -
         called["kwargs"] = kwargs
         return Path("/tmp/package")
 
-    monkeypatch.setattr(
-        "apps.onepiece.dcc.publish.publish_scene", fake_publish_scene
-    )
+    monkeypatch.setattr("apps.onepiece.dcc.publish.publish_scene", fake_publish_scene)
 
     result = runner.invoke(
         app,

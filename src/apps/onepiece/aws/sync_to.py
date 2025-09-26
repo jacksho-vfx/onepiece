@@ -1,7 +1,7 @@
 from upath import UPath
 import typer
 
-from libraries.aws.s5_sync import s5_sync
+from src.libraries.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="Sync to an S3 bucket")
 

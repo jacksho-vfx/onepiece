@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, cast, Any
 
 import structlog
 import typer
 
-from libraries.dcc.dcc_client import JSONValue, SupportedDCC, publish_scene
-from libraries.validations.dcc import validate_dcc
+from src.libraries.dcc.dcc_client import JSONValue, SupportedDCC, publish_scene
+from src.libraries.validations.dcc import validate_dcc
 
 
 log = structlog.get_logger(__name__)
@@ -26,7 +26,7 @@ def _load_metadata(path: Path) -> dict[str, JSONValue]:
     return cast(dict[str, JSONValue], data)
 
 
-def _resolve_dcc(dcc_name: str) -> SupportedDCC:
+def _resolve_dcc(dcc_name: str) -> Any:
     try:
         return validate_dcc(dcc_name)
     except ValueError as exc:  # pragma: no cover - surfaced to CLI.

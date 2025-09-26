@@ -1,19 +1,20 @@
 """CLI command to open a scene file in the appropriate DCC."""
 
 from pathlib import Path
+from typing import Any
 
 import structlog
 import typer
 
-from libraries.dcc.dcc_client import SupportedDCC, open_scene
-from libraries.validations.dcc import detect_dcc_from_file, validate_dcc
+from src.libraries.dcc.dcc_client import SupportedDCC, open_scene
+from src.libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Open scenes in a supported DCC application.")
 
 
-def _resolve_dcc(shot_path: Path, dcc: str | None) -> SupportedDCC:
+def _resolve_dcc(shot_path: Path, dcc: str | None) -> Any:
     """Return the :class:`SupportedDCC` for ``shot_path``.
 
     The caller may provide a ``dcc`` name explicitly.  When omitted the value is

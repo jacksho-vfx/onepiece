@@ -1,6 +1,6 @@
 """Console entry point for the OnePiece CLI application."""
 
-from apps.onepiece.app import app
+from src.apps.onepiece.app import app
 
 
 def main() -> None:

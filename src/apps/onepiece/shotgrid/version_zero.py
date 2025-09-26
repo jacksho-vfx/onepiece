@@ -9,11 +9,11 @@ from upath import UPath
 import structlog
 import typer
 
-from libraries.handlers.filepath_handler import FilepathHandler
-from libraries.media.transformations import create_1080p_proxy_from_exrs
-from libraries.shotgrid.api import ShotGridClient
-from libraries.shotgrid.models import VersionData
-from libraries.validations.csv_validations import validate_shots_csv
+from src.libraries.handlers.filepath_handler import FilepathHandler
+from src.libraries.media.transformations import create_1080p_proxy_from_exrs
+from src.libraries.shotgrid.api import ShotGridClient
+from src.libraries.shotgrid.models import VersionData
+from src.libraries.validations.csv_validations import validate_shots_csv
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Create version-zero proxies and upload to ShotGrid.")

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from libraries.shotgrid.client import ShotgridClient
+from src.libraries.shotgrid.client import ShotgridClient
 
 
 @pytest.fixture
