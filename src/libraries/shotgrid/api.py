@@ -9,8 +9,8 @@ from upath import UPath
 import requests
 import structlog
 
-from libraries.shotgrid.config import load_config
-from libraries.shotgrid.models import (
+from src.libraries.shotgrid.config import load_config
+from src.libraries.shotgrid.models import (
     EpisodeData,
     PlaylistData,
     SceneData,
