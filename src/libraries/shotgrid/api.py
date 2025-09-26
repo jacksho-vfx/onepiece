@@ -9,8 +9,8 @@ from upath import UPath
 import requests
 import structlog
 
-from libraries.shotgrid.config import load_config
-from libraries.shotgrid.models import (
+from src.libraries.shotgrid.config import load_config
+from src.libraries.shotgrid.models import (
     EpisodeData,
     PlaylistData,
     SceneData,
@@ -261,7 +261,6 @@ class ShotGridClient:
     def create_task(
         self,
         project_name: str,
-        entity_type: str,
         entity_id: int,
         name: str,
         step_name: str,
