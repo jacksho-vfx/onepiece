@@ -74,6 +74,24 @@ export ONEPIECE_SHOTGRID_KEY="<script-key>"
 
 You can verify the configuration with `onepiece info`.
 
+#### Bulk ShotGrid helpers
+
+The lightweight in-memory ShotGrid client that ships with the toolkit now
+supports production-ready features for dealing with large deliveries:
+
+- **Bulk operations** – create, update, or delete batches of entities with a
+  single call.  The helpers automatically fan-out into the minimal number of API
+  requests and share the same retry policy used by the rest of the client.
+- **Resilient retries** – transient failures trigger exponential backoff with
+  jitter and actionable log messages so that operators understand what happened
+  and when the next attempt will fire.
+- **Hierarchy templates** – declare entity trees (episodes, scenes, shots, …)
+  once and apply them to new projects in a single command.  This drastically
+  reduces the time it takes to bootstrap a show.
+
+See ``libraries.shotgrid.client`` for usage examples and the accompanying unit
+tests for end-to-end demonstrations of the new capabilities.
+
 ### AWS
 
 The AWS commands leverage the standard AWS CLI configuration. Configure credentials via `aws configure`, or specify a profile when running commands:
