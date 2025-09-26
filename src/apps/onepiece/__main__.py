@@ -1,6 +1,13 @@
-"""Module entrypoint for :mod:`apps.libraries`."""
+"""Console entry point for the OnePiece CLI application."""
 
 from src.apps.onepiece.app import app
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Invoke the root Typer application."""
+
     app()
+
+
+if __name__ == "__main__":
+    main()
