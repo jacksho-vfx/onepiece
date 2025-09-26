@@ -19,6 +19,9 @@ def sync_to(
     """
     Sync local folder TO S3 using s5cmd with optional dry-run and filters.
     """
+    include = include or []
+    exclude = exclude or []
+
     s5_sync(
         target_bucket=bucket,
         source=local_path / folder,
