@@ -27,7 +27,7 @@ jobs:
           .venv/bin/pip install .[dev]
 
       - name: Format check (Black + Ruff)
-        run: make format-check
+        run: make check-format
 
       - name: Lint check
         run: make lint
