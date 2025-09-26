@@ -10,6 +10,10 @@ setup:
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements.txt
 
+check-format:
+	$(VENV)/black --check src
+	$(VENV)/ruff check src
+
 format:
 	$(VENV)/black src
 	$(VENV)/ruff check --fix src
