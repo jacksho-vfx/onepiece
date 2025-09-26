@@ -1,7 +1,7 @@
 """Helpers for mirroring folders with :command:`aws s3 sync`."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence
 
 import logging
 import subprocess
@@ -42,6 +42,9 @@ def sync_to_bucket(
     show_type: ShowType = "vfx",
     delete: bool = False,
     profile: str | None = None,
+    include: Sequence[str] | None = None,
+    exclude: Sequence[str] | None = None,
+    dry_run: bool = False,
 ) -> None:
     """
     Sync a local folder TO an S3 bucket using `aws s3 sync`.
@@ -54,6 +57,9 @@ def sync_to_bucket(
         show_type: 'vfx' or 'prod' (default: vfx).
         delete: If True, delete remote files not present locally.
         profile: Optional named AWS CLI profile.
+        include: Optional glob patterns to include.
+        exclude: Optional glob patterns to exclude.
+        dry_run: If True, output operations without executing them.
     """
     local_path = Path(local_path)
     if not local_path.exists():
@@ -72,6 +78,12 @@ def sync_to_bucket(
     if profile:
         cmd.extend(["--profile", profile])
     cmd += ["s3", "sync", str(local_path), s3_uri]
+    for pattern in exclude or []:
+        cmd.extend(["--exclude", pattern])
+    for pattern in include or []:
+        cmd.extend(["--include", pattern])
+    if dry_run:
+        cmd.append("--dryrun")
     if delete:
         cmd.append("--delete")
 
@@ -86,6 +98,9 @@ def sync_from_bucket(
     show_type: ShowType = "vfx",
     delete: bool = False,
     profile: str | None = None,
+    include: Sequence[str] | None = None,
+    exclude: Sequence[str] | None = None,
+    dry_run: bool = False,
 ) -> None:
     """
     Sync an S3 bucket folder TO a local folder using `aws s3 sync`.
@@ -98,6 +113,9 @@ def sync_from_bucket(
         show_type: 'vfx' or 'prod' (default: vfx).
         delete: If True, delete local files not present in S3.
         profile: Optional named AWS CLI profile.
+        include: Optional glob patterns to include.
+        exclude: Optional glob patterns to exclude.
+        dry_run: If True, output operations without executing them.
     """
     local_path = Path(local_path)
     local_path.mkdir(parents=True, exist_ok=True)
@@ -115,6 +133,12 @@ def sync_from_bucket(
     if profile:
         cmd.extend(["--profile", profile])
     cmd += ["s3", "sync", s3_uri, str(local_path)]
+    for pattern in exclude or []:
+        cmd.extend(["--exclude", pattern])
+    for pattern in include or []:
+        cmd.extend(["--include", pattern])
+    if dry_run:
+        cmd.append("--dryrun")
     if delete:
         cmd.append("--delete")
 

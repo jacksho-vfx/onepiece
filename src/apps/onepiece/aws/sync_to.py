@@ -1,7 +1,7 @@
 from upath import UPath
 import typer
 
-from src.libraries.aws.s5_sync import s5_sync
+from src.libraries.aws.s3_sync import sync_to_bucket
 
 app = typer.Typer(help="Sync to an S3 bucket")
 
@@ -17,16 +17,17 @@ def sync_to(
     exclude: list[str] | None = typer.Option(None, "--exclude"),
 ) -> None:
     """
-    Sync local folder TO S3 using s5cmd with optional dry-run and filters.
+    Sync a local folder TO S3 using the AWS CLI with optional dry-run and filters.
     """
-    include = include or []
-    exclude = exclude or []
+    include_patterns = list(include or [])
+    exclude_patterns = list(exclude or [])
 
-    s5_sync(
-        target_bucket=bucket,
-        source=local_path / folder,
-        context=show_code,
+    sync_to_bucket(
+        bucket=bucket,
+        show_code=show_code,
+        folder=folder,
+        local_path=local_path / folder,
+        include=include_patterns,
+        exclude=exclude_patterns,
         dry_run=dry_run,
-        include=include,
-        exclude=exclude,
     )
