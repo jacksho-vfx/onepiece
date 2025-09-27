@@ -1,0 +1,12 @@
+entity_type,name,parent_type,parent_name,code
+Project,Demo Project,,,DEMO
+Episode,ep01,Project,Demo Project,DEMO-EP01
+Sequence,seq010,Episode,ep01,DEMO-EP01-SEQ010
+Shot,sh010,Sequence,seq010,DEMO-EP01-SEQ010-SH010
+Shot,sh020,Sequence,seq010,DEMO-EP01-SEQ010-SH020
+Shot,sh030,Sequence,seq010,DEMO-EP01-SEQ010-SH030
+Asset,chr_sparrow,Project,Demo Project,CHR-SPARROW
+Task,lighting,Shot,sh010,lighting
+Task,comp,Shot,sh010,comp
+Task,animation,Shot,sh020,animation
+Task,modeling,Asset,chr_sparrow,modeling

@@ -26,6 +26,16 @@ Once installed, the CLI exposes a number of subcommands:
 
 Use `onepiece COMMAND --help` to inspect options for any command.
 
+### Onboarding resources
+
+If you are new to the toolkit, start with the dedicated onboarding material bundled in this repository:
+
+- [Developer guide](docs/developer_guide.md) – workspace setup, repository structure, and the day-to-day development workflow.
+- [CLI walkthroughs](docs/cli_walkthroughs.md) – step-by-step command sequences that rely on the sample manifests under `docs/examples/`.
+- [Example assets](docs/examples/) – CSV manifests that you can plug into ingest, publish, and ShotGrid helpers while practising the CLI.
+
+These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
+
 ## Requirements
 
 - Python 3.9 or newer

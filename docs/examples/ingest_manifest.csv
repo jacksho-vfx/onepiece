@@ -1,0 +1,4 @@
+bucket_path,local_folder,expected_size_bytes,checksum
+shows/demo/plates/seq010/sh010/main/v001/frame_####.exr,plates/seq010/sh010/main/v001,104857600,md5:0123456789abcdef0123456789abcdef
+shows/demo/plates/seq020/sh030/main/v003/frame_####.exr,plates/seq020/sh030/main/v003,157286400,md5:fedcba9876543210fedcba9876543210
+shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,5242880,md5:11223344556677881122334455667788

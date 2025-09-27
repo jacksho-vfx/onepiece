@@ -1,0 +1,103 @@
+# Developer guide
+
+This guide describes how to set up a local development environment for OnePiece, explains how the repository is organised, and captures the day-to-day workflow for contributing changes.
+
+## Prerequisites
+
+- Python 3.9 or newer.
+- Git and a GitHub account with access to the project.
+- Access credentials for the services you plan to exercise locally (AWS, ShotGrid, etc.).
+
+Optional tooling that streamlines development:
+
+- [uv](https://github.com/astral-sh/uv) or [pipx](https://pipx.pypa.io/stable/) for managing virtual environments.
+- Docker for validating integrations that depend on external services.
+
+## Repository layout
+
+```
+onepiece/
+├── src/
+│   ├── apps/                # Typer-based CLI entry points and command groups
+│   ├── libraries/           # Reusable business logic shared by the CLI commands
+│   └── tests/               # Unit tests, fixtures, and sample data
+├── docs/                    # Onboarding guides, walkthroughs, and sample assets
+├── requirements.txt         # Production dependency lock for workstation installs
+├── pyproject.toml           # Project metadata and optional dependency groups
+└── README.md                # High-level overview and quick-start instructions
+```
+
+## Bootstrapping a development environment
+
+1. **Clone the repository** and create a virtual environment:
+
+   ```bash
+   git clone https://github.com/<your-org>/onepiece.git
+   cd onepiece
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. **Install dependencies** in editable mode. The `dev` extra pulls in tools for linting, type-checking, and testing:
+
+   ```bash
+   pip install -e .[dev]
+   ```
+
+3. **Configure service credentials**. Export the environment variables documented in the top-level README under *Configuring integrations*.
+
+4. **Run the verification suite** to ensure your environment is healthy:
+
+   ```bash
+   pytest
+   ruff check src tests
+   mypy
+   ```
+
+   Running these commands before you start coding validates that your interpreter, dependencies, and external integrations are all wired correctly.
+
+## Development workflow
+
+1. **Create a feature branch**:
+
+   ```bash
+   git checkout -b feature/<ticket-or-topic>
+   ```
+
+2. **Write tests and code**. Keep business logic inside `src/libraries` and restrict CLI-specific concerns (argument parsing, console output) to `src/apps`.
+
+3. **Use the in-repo CLI for rapid feedback**. While iterating, run commands directly from the source tree:
+
+   ```bash
+   python -m src.apps.onepiece --help
+   python -m src.apps.onepiece publish --help
+   ```
+
+4. **Adhere to coding standards**. The project leans on Ruff and mypy for style and type safety. Avoid `print` statements in favour of the shared logging utilities inside `src/libraries/logging` and prefer `Path` objects over string paths.
+
+5. **Run the quality suite** before opening a pull request. Continuous integration mirrors the commands listed earlier; matching the same sequence locally prevents surprises.
+
+6. **Document user-facing changes**. Update the README, `CHANGELOG.md`, or create new docs inside `docs/` whenever you add new commands, flags, or workflows.
+
+7. **Open a pull request** summarising your changes, screenshots, and any caveats. Link to relevant tickets and call out breaking changes explicitly.
+
+## Debugging tips
+
+- `onepiece info` is a quick way to confirm that environment variables, DCC discovery, and AWS profiles are configured properly.
+- Tests inside `src/tests` include fixtures that mock AWS and ShotGrid interactions. Import them in new tests to avoid hitting live services.
+- Use the `--dry-run` flags offered by the `aws` and `publish` commands to inspect their behaviour without transferring data.
+
+## Releasing changes
+
+1. Bump the version in `pyproject.toml` following semantic versioning.
+2. Update `CHANGELOG.md` with a summary of noteworthy changes.
+3. Build and publish the package:
+
+   ```bash
+   python -m build
+   twine upload dist/*
+   ```
+
+4. Tag the release in Git and push the tag to the remote repository.
+
+Following this workflow keeps local development predictable and ensures new contributors can ramp up quickly.
