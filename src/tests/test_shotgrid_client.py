@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 
-from libraries.shotgrid.client import (
+from src.libraries.shotgrid.client import (
     EntityStore,
     HierarchyTemplate,
     RetryPolicy,
     ShotgridClient,
     ShotgridOperationError,
     TemplateNode,
+    TEntity,
 )
 
 
@@ -47,11 +49,11 @@ class FlakyStore(EntityStore):
 
     attempts: int = 0
 
-    def add(self, entity_type, entity):  # type: ignore[override]
+    def add(self, entity_type: str, entity: TEntity) -> TEntity:
         self.attempts += 1
         if self.attempts < 2:
             raise RuntimeError("transient failure")
-        return super().add(entity_type, entity)
+        return cast(TEntity, super().add(entity_type, entity))
 
 
 def test_bulk_create_retries_transient_failures() -> None:
@@ -91,4 +93,3 @@ def test_apply_hierarchy_template_creates_all_nodes() -> None:
     assert {node["code"] for node in result["Episode"]} == {"ep001"}
     assert {node["code"] for node in result["Scene"]} == {"sc001", "sc002"}
     assert all(node["project_id"] == project["id"] for node in result["Scene"])
-
