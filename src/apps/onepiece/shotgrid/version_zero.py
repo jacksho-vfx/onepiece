@@ -12,7 +12,12 @@ import typer
 from src.libraries.handlers.filepath_handler import FilepathHandler
 from src.libraries.media.transformations import create_1080p_proxy_from_exrs
 from src.libraries.shotgrid.api import ShotGridClient
-from src.libraries.shotgrid.models import VersionData, TaskData
+from src.libraries.shotgrid.models import (
+    PipelineStep,
+    TaskCode,
+    TaskData,
+    VersionData,
+)
 from src.libraries.validations.csv_validations import validate_shots_csv
 
 log = structlog.get_logger(__name__)
@@ -71,17 +76,17 @@ def version_zero(
             log.warning("shot_not_found_in_sg", shot=shot_name)
             continue
 
-        task = sg.get_task(shot_entity["id"], task_name="Shot Proxy")
+        task = sg.get_task(shot_entity["id"], task_name=TaskCode.SHOT_PROXY)
         if not task:
             task_data = TaskData(
-                code="Shot Proxy",
+                code=TaskCode.SHOT_PROXY,
                 project_id=project_id,
                 entity_id=shot_entity["id"],
                 related_entity_type=shot_entity["related_entity_type"],
             )
             sg.create_task(
                 data=task_data,
-                step_name="Comp",
+                step=PipelineStep.COMP,
             )
 
         version_code = f"{shot_name}_V000"

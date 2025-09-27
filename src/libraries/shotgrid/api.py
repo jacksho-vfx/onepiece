@@ -18,7 +18,7 @@ from src.libraries.shotgrid.models import (
     VersionData,
 )
 
-from src.libraries.shotgrid.models import TaskData
+from src.libraries.shotgrid.models import PipelineStep, TaskCode, TaskData
 
 log = structlog.get_logger(__name__)
 
@@ -299,29 +299,35 @@ class ShotGridClient:
     # ------------------------------------------------------------------ #
     # Tasks
     # ------------------------------------------------------------------ #
-    def get_task(self, entity_id: int, task_name: str) -> Any:
+    def get_task(self, entity_id: int, task_name: TaskCode | str) -> Any:
+        task_value = task_name.value if isinstance(task_name, TaskCode) else task_name
         return self._get_single(
             "Task",
-            [{"entity": {"type": "Shot", "id": entity_id}}, {"content": task_name}],
+            [{"entity": {"type": "Shot", "id": entity_id}}, {"content": task_value}],
             "id,content,step",
         )
 
     def create_task(
         self,
         data: TaskData,
-        step_name: str,
+        step: PipelineStep | str,
     ) -> Any:
         if not data.project_id:
             raise ValueError("Project not provided.")
 
-        step = self._get_single(
+        step_name = step.value if isinstance(step, PipelineStep) else step
+        step_record = self._get_single(
             "Step",
             [{"code": step_name}],
             "id,code",
         )
-        if not step:
+        if not step_record:
             raise ValueError(f"Step '{step_name}' not found.")
-        attributes = {"code": data.code, **data.extra}
+        attributes = {**data.extra}
+        if data.code:
+            attributes["code"] = (
+                data.code.value if isinstance(data.code, TaskCode) else data.code
+            )
         relationships: Dict[str, Any] = {}
         if data.project_id:
             relationships["project"] = {
