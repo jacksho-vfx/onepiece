@@ -89,8 +89,58 @@ supports production-ready features for dealing with large deliveries:
   once and apply them to new projects in a single command.  This drastically
   reduces the time it takes to bootstrap a show.
 
-See ``libraries.shotgrid.client`` for usage examples and the accompanying unit
-tests for end-to-end demonstrations of the new capabilities.
+Bulk helpers automatically fan-out large iterables into batches so you can send
+hundreds of entities per call without overwhelming the API. Retries employ an
+exponential backoff schedule with jitter, and the logger reports both pending
+retries and exhausted attempts so operators always know what happened.
+
+```python
+from src.libraries.shotgrid.client import (
+    HierarchyTemplate,
+    ShotgridClient,
+    TemplateNode,
+)
+
+client = ShotgridClient(batch_size=100)
+
+# Create entities in batches with actionable logging if something fails.
+assets = client.bulk_create_entities(
+    "Asset",
+    [{"code": f"PROP_{index:03d}", "description": "Library asset"} for index in range(250)],
+)
+
+# Apply reusable hierarchy templates with context driven attributes.
+template = HierarchyTemplate(
+    name="Episode",
+    roots=(
+        TemplateNode(
+            "Sequence",
+            attributes={"code": "{show_code}_SQ{sequence:02d}"},
+            context_updates={
+                "sequence_code": lambda ctx: ctx["entity"]["code"],
+            },
+            children=(
+                TemplateNode(
+                    "Shot",
+                    attributes={
+                        "code": "{sequence_code}_SH{shot:03d}",
+                        "description": lambda ctx: f"Shot {ctx['shot']}",
+                    },
+                ),
+            ),
+        ),
+    ),
+)
+
+client.apply_hierarchy_template(
+    "My Animated Show",
+    template,
+    context={"show_code": "SHOW", "sequence": 10, "shot": 42},
+)
+```
+
+See ``libraries.shotgrid.client`` for additional usage examples and the
+accompanying unit tests for end-to-end demonstrations of the new capabilities.
 
 ### AWS
 

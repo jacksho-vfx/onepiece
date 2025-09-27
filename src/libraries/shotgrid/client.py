@@ -5,12 +5,13 @@ while keeping tests fast and deterministic.
 """
 
 import logging
+import random
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterable, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Sequence, TypedDict, cast, TypeVar
+from typing import Any, Mapping, Optional, TypedDict, cast, TypeVar
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ __all__ = [
     "ShotgridClient",
     "ShotgridOperationError",
     "TemplateNode",
+    "TemplateValue",
     "EntityPayload",
     "Project",
     "Version",
@@ -66,6 +68,8 @@ class Version(TypedDict):
 
 
 TEntity = TypeVar("TEntity", bound=EntityPayload)
+T = TypeVar("T")
+TemplateValue = Any | Callable[[dict[str, Any]], Any]
 
 # ---------------------------------------------------------------------------
 # Errors and retry config
@@ -181,8 +185,9 @@ class TemplateNode:
     """Describe an entity and its children used in hierarchy templates."""
 
     entity_type: str
-    attributes: dict[str, Any]
+    attributes: Mapping[str, TemplateValue]
     children: Sequence["TemplateNode"] = ()
+    context_updates: Mapping[str, TemplateValue] | None = None
 
     def expand(self) -> list["TemplateNode"]:
         nodes = [self]
@@ -197,6 +202,13 @@ class HierarchyTemplate:
 
     name: str
     roots: Sequence[TemplateNode]
+
+
+class _SafeFormatDict(dict[str, Any]):
+    """`str.format_map` helper that leaves unknown keys untouched."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
 
     def expand(self) -> list[TemplateNode]:
         nodes: list[TemplateNode] = []
@@ -218,10 +230,14 @@ class ShotgridClient:
         store: EntityStore | None = None,
         retry_policy: RetryPolicy | None = None,
         sleep: Callable[[float], None] | None = None,
+        batch_size: int = 50,
     ) -> None:
         self._store = store or EntityStore()
         self._retry_policy = retry_policy or RetryPolicy()
         self._sleep = sleep or time.sleep
+        if batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+        self._batch_size = batch_size
 
     # Project helpers --------------------------------------------------
 
@@ -252,29 +268,34 @@ class ShotgridClient:
             try:
                 return func(*args, **kwargs)
             except Exception as exc:  # noqa: BLE001
-                last_exc = exc
                 attempts += 1
+                last_exc = exc
+                func_name = getattr(func, "__name__", str(func))
                 if attempts >= self._retry_policy.max_attempts:
+                    message = (
+                        "Operation %s failed after %s attempts. Last error: %r"
+                        % (func_name, attempts, last_exc)
+                    )
                     log.error(
                         "shotgrid.retry_exhausted function=%s attempts=%s error=%s",
-                        getattr(func, "__name__", str(func)),
+                        func_name,
                         attempts,
                         last_exc,
                     )
-                    raise ShotgridOperationError(str(exc)) from exc
+                    raise ShotgridOperationError(message) from exc
 
+                wait_no_jitter = min(delay, self._retry_policy.max_delay)
+                wait_time = wait_no_jitter + random.uniform(0.0, self._retry_policy.jitter)
                 log.warning(
-                    "shotgrid.retry function=%s attempts=%s delay=%.3f error=%s",
-                    getattr(func, "__name__", str(func)),
+                    "shotgrid.retry_pending function=%s attempt=%s/%s wait=%.3f error=%s",
+                    func_name,
                     attempts,
-                    delay,
+                    self._retry_policy.max_attempts,
+                    wait_time,
                     last_exc,
                 )
-                self._sleep(delay)
-                delay = (
-                    min(delay * 2, self._retry_policy.max_delay)
-                    + self._retry_policy.jitter
-                )
+                self._sleep(wait_time)
+                delay = min(delay * 2, self._retry_policy.max_delay)
         assert False, "Retry loop should either return or raise"
 
     # Bulk helpers -----------------------------------------------------
@@ -285,20 +306,67 @@ class ShotgridClient:
             raise ValueError("entity_type must be provided")
         return normalized
 
+    def _iter_batches(self, items: Iterable[T], batch_size: int | None = None) -> Iterator[list[T]]:
+        size = batch_size or self._batch_size
+        batch: list[T] = []
+        for item in items:
+            batch.append(item)
+            if len(batch) >= size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
+
+    def _render_template_value(self, value: TemplateValue, *, context: dict[str, Any]) -> Any:
+        if callable(value):
+            return value(context)
+        if isinstance(value, str):
+            try:
+                return value.format_map(_SafeFormatDict(context))
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError(
+                    f"Failed to render template value {value!r}: {exc}"
+                ) from exc
+        return value
+
+    def _render_template_mapping(
+        self, mapping: Mapping[str, TemplateValue], *, context: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            key: self._render_template_value(value, context=context)
+            for key, value in mapping.items()
+        }
+
     def bulk_create_entities(
         self, entity_type: str, payloads: Iterable[dict[str, Any]]
     ) -> list[EntityPayload]:
         etype = self._resolve_entity_type(entity_type)
         created: list[EntityPayload] = []
 
-        def _create_single(payload: dict[str, Any]) -> EntityPayload:
-            next_id = self._store.next_id(etype)
-            base: EntityPayload = {"id": next_id, "type": etype}
-            base.update(cast(EntityPayload, payload))
-            return self._store.add(etype, base)
+        def _create_batch(batch: Sequence[dict[str, Any]]) -> list[EntityPayload]:
+            start_id = self._store.next_id(etype)
+            staged: list[EntityPayload] = []
+            for index, payload in enumerate(batch):
+                entity_payload: EntityPayload = {"id": start_id + index, "type": etype}
+                entity_payload.update(cast(EntityPayload, payload))
+                staged.append(entity_payload)
 
-        for payload in payloads:
-            created.append(self._execute_with_retry(_create_single, payload))
+            created_batch: list[EntityPayload] = []
+            try:
+                for entity in staged:
+                    created_batch.append(self._store.add(etype, entity))
+            except Exception:
+                for entity in created_batch:
+                    self._store.delete(etype, entity["id"])
+                raise
+            log.debug(
+                "shotgrid.bulk_create entity_type=%s size=%s", etype, len(created_batch)
+            )
+            return created_batch
+
+        for chunk in self._iter_batches(payloads):
+            batch = tuple(dict(payload) for payload in chunk)
+            created.extend(self._execute_with_retry(_create_batch, batch))
         return created
 
     def bulk_update_entities(
@@ -307,25 +375,57 @@ class ShotgridClient:
         etype = self._resolve_entity_type(entity_type)
         updated: list[EntityPayload] = []
 
-        def _update_single(update: dict[str, Any]) -> EntityPayload:
-            if "id" not in update:
-                raise ValueError("update payload must contain an 'id' field")
-            update_copy = dict(update)
-            entity_id = int(update_copy.pop("id"))
-            return self._store.update(etype, entity_id, update_copy)
+        def _update_batch(batch: Sequence[dict[str, Any]]) -> list[EntityPayload]:
+            updated_batch: list[EntityPayload] = []
+            originals: list[tuple[int, EntityPayload]] = []
+            try:
+                for item in batch:
+                    if "id" not in item:
+                        raise ValueError("update payload must contain an 'id' field")
+                    update_copy = dict(item)
+                    entity_id = int(update_copy.pop("id"))
+                    original = self._store.get(etype, entity_id)
+                    if original is not None:
+                        originals.append((entity_id, cast(EntityPayload, dict(original))))
+                    updated_batch.append(self._store.update(etype, entity_id, update_copy))
+            except Exception:
+                for entity_id, previous in reversed(originals):
+                    previous_copy = dict(previous)
+                    previous_copy.pop("id", None)
+                    self._store.update(etype, entity_id, previous_copy)
+                raise
+            log.debug(
+                "shotgrid.bulk_update entity_type=%s size=%s", etype, len(updated_batch)
+            )
+            return updated_batch
 
-        for payload in updates:
-            updated.append(self._execute_with_retry(_update_single, payload))
+        for chunk in self._iter_batches(updates):
+            batch = tuple(dict(payload) for payload in chunk)
+            updated.extend(self._execute_with_retry(_update_batch, batch))
         return updated
 
     def bulk_delete_entities(self, entity_type: str, entity_ids: Iterable[int]) -> None:
         etype = self._resolve_entity_type(entity_type)
 
-        def _delete_single(entity_id: int) -> None:
-            self._store.delete(etype, entity_id)
+        def _delete_batch(batch: Sequence[int]) -> None:
+            deleted: list[EntityPayload] = []
+            try:
+                for entity_id in batch:
+                    entity = self._store.get(etype, entity_id)
+                    if entity is not None:
+                        deleted.append(cast(EntityPayload, dict(entity)))
+                    self._store.delete(etype, entity_id)
+            except Exception:
+                for entity in deleted:
+                    self._store.add(etype, entity)
+                raise
+            log.debug(
+                "shotgrid.bulk_delete entity_type=%s size=%s", etype, len(batch)
+            )
 
-        for entity_id in entity_ids:
-            self._execute_with_retry(_delete_single, int(entity_id))
+        for chunk in self._iter_batches(int(entity_id) for entity_id in entity_ids):
+            batch = tuple(chunk)
+            self._execute_with_retry(_delete_batch, batch)
 
     # Hierarchy templates ----------------------------------------------
 
@@ -338,14 +438,39 @@ class ShotgridClient:
     ) -> dict[str, list[EntityPayload]]:
         project = self.get_or_create_project(project_name)
         results: dict[str, list[EntityPayload]] = defaultdict(list)
-        context = context or {}
+        base_context: dict[str, Any] = {"project": project}
+        if context:
+            base_context.update(context)
 
-        for node in template.expand():
-            attrs = {**node.attributes, **context}
-            if "project_id" not in attrs:
-                attrs["project_id"] = project["id"]
-            created = self.bulk_create_entities(node.entity_type, [attrs])[0]
+        def _apply_node(
+            node: TemplateNode,
+            parent: EntityPayload | None,
+            active_context: dict[str, Any],
+        ) -> None:
+            render_context = dict(active_context)
+            render_context["parent"] = parent
+            attributes = self._render_template_mapping(
+                node.attributes, context=render_context
+            )
+            if "project_id" not in attributes:
+                attributes["project_id"] = project["id"]
+            created = self.bulk_create_entities(node.entity_type, [attributes])[0]
             results[node.entity_type].append(created)
+
+            child_context = dict(render_context)
+            child_context["entity"] = created
+            if node.context_updates:
+                child_context.update(
+                    self._render_template_mapping(
+                        node.context_updates, context=dict(child_context)
+                    )
+                )
+
+            for child in node.children:
+                _apply_node(child, created, child_context)
+
+        for root in template.roots:
+            _apply_node(root, None, dict(base_context))
 
         return results
 
