@@ -34,7 +34,9 @@ def test_bulk_create_entities_batches(monkeypatch: pytest.MonkeyPatch) -> None:
     batch_sizes: list[int] = []
     original_execute = client._execute_with_retry
 
-    def recorder(func: Callable[..., object], *args: object, **kwargs: object) -> object:
+    def recorder(
+        func: Callable[..., object], *args: object, **kwargs: object
+    ) -> object:
         if args:
             batch_sizes.append(len(args[0]))  # type: ignore[arg-type]
         return original_execute(func, *args, **kwargs)
@@ -51,12 +53,16 @@ def test_bulk_create_entities_batches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_bulk_update_entities_batches(monkeypatch: pytest.MonkeyPatch) -> None:
     client = ShotgridClient(batch_size=2)
-    created = client.bulk_create_entities("Asset", [{"code": f"Asset_{index}"} for index in range(4)])
+    created = client.bulk_create_entities(
+        "Asset", [{"code": f"Asset_{index}"} for index in range(4)]
+    )
 
     batch_sizes: list[int] = []
     original_execute = client._execute_with_retry
 
-    def recorder(func: Callable[..., object], *args: object, **kwargs: object) -> object:
+    def recorder(
+        func: Callable[..., object], *args: object, **kwargs: object
+    ) -> object:
         if args:
             batch_sizes.append(len(args[0]))  # type: ignore[arg-type]
         return original_execute(func, *args, **kwargs)
@@ -70,18 +76,27 @@ def test_bulk_update_entities_batches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     updated = client.bulk_update_entities("Asset", updates)
 
-    assert [entry["description"] for entry in updated] == ["Updated 0", "Updated 1", "Updated 2", "Updated 3"]
+    assert [entry["description"] for entry in updated] == [
+        "Updated 0",
+        "Updated 1",
+        "Updated 2",
+        "Updated 3",
+    ]
     assert batch_sizes == [2, 2]
 
 
 def test_bulk_delete_entities_batches(monkeypatch: pytest.MonkeyPatch) -> None:
     client = ShotgridClient(batch_size=2)
-    created = client.bulk_create_entities("Asset", [{"code": f"Asset_{index}"} for index in range(4)])
+    created = client.bulk_create_entities(
+        "Asset", [{"code": f"Asset_{index}"} for index in range(4)]
+    )
 
     batch_sizes: list[int] = []
     original_execute = client._execute_with_retry
 
-    def recorder(func: Callable[..., object], *args: object, **kwargs: object) -> object:
+    def recorder(
+        func: Callable[..., object], *args: object, **kwargs: object
+    ) -> object:
         if args:
             batch_sizes.append(len(args[0]))  # type: ignore[arg-type]
         return original_execute(func, *args, **kwargs)
@@ -138,7 +153,9 @@ def test_execute_with_retry_backoff(caplog: pytest.LogCaptureFixture) -> None:
 
     client = ShotgridClient(
         sleep=capture_sleep,
-        retry_policy=RetryPolicy(max_attempts=4, base_delay=0.1, max_delay=0.2, jitter=0.0),
+        retry_policy=RetryPolicy(
+            max_attempts=4, base_delay=0.1, max_delay=0.2, jitter=0.0
+        ),
     )
 
     attempts = {"count": 0}
@@ -157,10 +174,14 @@ def test_execute_with_retry_backoff(caplog: pytest.LogCaptureFixture) -> None:
     assert any("shotgrid.retry_pending" in record.message for record in caplog.records)
 
 
-def test_execute_with_retry_raises_actionable_error(caplog: pytest.LogCaptureFixture) -> None:
+def test_execute_with_retry_raises_actionable_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     client = ShotgridClient(
         sleep=lambda _duration: None,
-        retry_policy=RetryPolicy(max_attempts=2, base_delay=0.01, max_delay=0.01, jitter=0.0),
+        retry_policy=RetryPolicy(
+            max_attempts=2, base_delay=0.01, max_delay=0.01, jitter=0.0
+        ),
     )
 
     def fail() -> None:
@@ -173,7 +194,9 @@ def test_execute_with_retry_raises_actionable_error(caplog: pytest.LogCaptureFix
     message = str(excinfo.value)
     assert "Operation fail failed after 2 attempts" in message
     assert "RuntimeError('nope')" in message
-    assert any("shotgrid.retry_exhausted" in record.message for record in caplog.records)
+    assert any(
+        "shotgrid.retry_exhausted" in record.message for record in caplog.records
+    )
 
 
 def test_apply_hierarchy_template_supports_contextual_values() -> None:

@@ -210,12 +210,6 @@ class _SafeFormatDict(dict[str, Any]):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
 
-    def expand(self) -> list[TemplateNode]:
-        nodes: list[TemplateNode] = []
-        for root in self.roots:
-            nodes.extend(root.expand())
-        return nodes
-
 
 # ---------------------------------------------------------------------------
 # Client
@@ -285,7 +279,9 @@ class ShotgridClient:
                     raise ShotgridOperationError(message) from exc
 
                 wait_no_jitter = min(delay, self._retry_policy.max_delay)
-                wait_time = wait_no_jitter + random.uniform(0.0, self._retry_policy.jitter)
+                wait_time = wait_no_jitter + random.uniform(
+                    0.0, self._retry_policy.jitter
+                )
                 log.warning(
                     "shotgrid.retry_pending function=%s attempt=%s/%s wait=%.3f error=%s",
                     func_name,
@@ -306,7 +302,9 @@ class ShotgridClient:
             raise ValueError("entity_type must be provided")
         return normalized
 
-    def _iter_batches(self, items: Iterable[T], batch_size: int | None = None) -> Iterator[list[T]]:
+    def _iter_batches(
+        self, items: Iterable[T], batch_size: int | None = None
+    ) -> Iterator[list[T]]:
         size = batch_size or self._batch_size
         batch: list[T] = []
         for item in items:
@@ -317,7 +315,9 @@ class ShotgridClient:
         if batch:
             yield batch
 
-    def _render_template_value(self, value: TemplateValue, *, context: dict[str, Any]) -> Any:
+    def _render_template_value(
+        self, value: TemplateValue, *, context: dict[str, Any]
+    ) -> Any:
         if callable(value):
             return value(context)
         if isinstance(value, str):
@@ -386,8 +386,12 @@ class ShotgridClient:
                     entity_id = int(update_copy.pop("id"))
                     original = self._store.get(etype, entity_id)
                     if original is not None:
-                        originals.append((entity_id, cast(EntityPayload, dict(original))))
-                    updated_batch.append(self._store.update(etype, entity_id, update_copy))
+                        originals.append(
+                            (entity_id, cast(EntityPayload, dict(original)))
+                        )
+                    updated_batch.append(
+                        self._store.update(etype, entity_id, update_copy)
+                    )
             except Exception:
                 for entity_id, previous in reversed(originals):
                     previous_copy = dict(previous)
@@ -419,9 +423,7 @@ class ShotgridClient:
                 for entity in deleted:
                     self._store.add(etype, entity)
                 raise
-            log.debug(
-                "shotgrid.bulk_delete entity_type=%s size=%s", etype, len(batch)
-            )
+            log.debug("shotgrid.bulk_delete entity_type=%s size=%s", etype, len(batch))
 
         for chunk in self._iter_batches(int(entity_id) for entity_id in entity_ids):
             batch = tuple(chunk)
