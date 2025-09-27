@@ -1,0 +1,10 @@
+key,value
+scene,seq010_sh010_lighting_v002
+shot,seq010_sh010
+sequence,seq010
+show,DEMO
+frame_range,1001-1100
+render_layer,beauty
+version,2
+artist,Robin Devops
+notes,"QA dry run for onboarding"
