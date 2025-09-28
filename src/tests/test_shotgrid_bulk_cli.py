@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
 from src.apps.onepiece.shotgrid import delivery as shotgrid_cli
@@ -18,15 +20,18 @@ class StubShotgridClient:
         self.updated: list[tuple[str, list[dict[str, object]]]] = []
         self.deleted: list[tuple[str, list[int]]] = []
 
-    def bulk_create_entities(self, entity_type: str, payloads: list[dict[str, object]]):
+    def bulk_create_entities(
+        self, entity_type: str, payloads: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
         payload_list = list(payloads)
         self.created.append((entity_type, payload_list))
         return [
-            {"id": index + 1, **payload}
-            for index, payload in enumerate(payload_list)
+            {"id": index + 1, **payload} for index, payload in enumerate(payload_list)
         ]
 
-    def bulk_update_entities(self, entity_type: str, payloads: list[dict[str, object]]):
+    def bulk_update_entities(
+        self, entity_type: str, payloads: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
         payload_list = list(payloads)
         self.updated.append((entity_type, payload_list))
         return payload_list
@@ -45,13 +50,15 @@ def _write_json(tmp_path: Path, name: str, data: object) -> Path:
     return file_path
 
 
-def _parse_summary(output: str) -> dict[str, object]:
+def _parse_summary(output: str) -> Any:
     start = output.find("{")
     assert start != -1, output
     return json.loads(output[start:])
 
 
-def test_bulk_playlists_create_uses_payload_file(monkeypatch, tmp_path: Path) -> None:
+def test_bulk_playlists_create_uses_payload_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     stub = StubShotgridClient()
     monkeypatch.setattr(shotgrid_cli, "ShotgridClient", lambda: stub)
 
@@ -86,7 +93,9 @@ def test_bulk_playlists_create_uses_payload_file(monkeypatch, tmp_path: Path) ->
     ]
 
 
-def test_bulk_versions_update_uses_payload_file(monkeypatch, tmp_path: Path) -> None:
+def test_bulk_versions_update_uses_payload_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     stub = StubShotgridClient()
     monkeypatch.setattr(shotgrid_cli, "ShotgridClient", lambda: stub)
 
@@ -109,12 +118,10 @@ def test_bulk_versions_update_uses_payload_file(monkeypatch, tmp_path: Path) -> 
     assert summary["entity"] == "Version"
     assert summary["requested"] == 1
     assert summary["succeeded"] == 1
-    assert stub.updated == [
-        ("Version", [{"id": 101, "description": "Updated notes"}])
-    ]
+    assert stub.updated == [("Version", [{"id": 101, "description": "Updated notes"}])]
 
 
-def test_bulk_playlists_delete_accepts_ids(monkeypatch) -> None:
+def test_bulk_playlists_delete_accepts_ids(monkeypatch: MonkeyPatch) -> None:
     stub = StubShotgridClient()
     monkeypatch.setattr(shotgrid_cli, "ShotgridClient", lambda: stub)
 
@@ -131,7 +138,9 @@ def test_bulk_playlists_delete_accepts_ids(monkeypatch) -> None:
     assert stub.deleted == [("Playlist", [5, 9])]
 
 
-def test_bulk_versions_delete_accepts_input_file(monkeypatch, tmp_path: Path) -> None:
+def test_bulk_versions_delete_accepts_input_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     stub = StubShotgridClient()
     monkeypatch.setattr(shotgrid_cli, "ShotgridClient", lambda: stub)
 

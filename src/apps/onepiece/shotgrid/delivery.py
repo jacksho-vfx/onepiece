@@ -55,9 +55,7 @@ def _load_json_array(path: Path) -> list[Any]:
         ) from exc
 
     if not isinstance(payload, list):
-        raise OnePieceValidationError(
-            f"Input file '{path}' must contain a JSON array."
-        )
+        raise OnePieceValidationError(f"Input file '{path}' must contain a JSON array.")
 
     return payload
 
@@ -96,7 +94,9 @@ def _resolve_entity_ids(
     return resolved
 
 
-def _require_input(operation: BulkOperation, input_path: Path | None, label: str) -> Path:
+def _require_input(
+    operation: BulkOperation, input_path: Path | None, label: str
+) -> Path:
     if input_path is None:
         raise OnePieceValidationError(
             f"--input is required when running '{operation.value}' for {label}."
@@ -195,9 +195,7 @@ def bulk_playlists_command(
         None,
         "--id",
         "-d",
-        help=(
-            "Playlist IDs to delete. Repeat the option to supply multiple IDs."
-        ),
+        help=("Playlist IDs to delete. Repeat the option to supply multiple IDs."),
         show_default=False,
     ),
 ) -> None:
@@ -309,9 +307,7 @@ def bulk_versions_command(
         None,
         "--id",
         "-d",
-        help=(
-            "Version IDs to delete. Repeat the option to supply multiple IDs."
-        ),
+        help=("Version IDs to delete. Repeat the option to supply multiple IDs."),
         show_default=False,
     ),
 ) -> None:
