@@ -23,6 +23,7 @@ Once installed, the CLI exposes a number of subcommands:
 - `onepiece publish ...` &mdash; Packages scene renders, previews, and metadata and pushes them to S3 (see the detailed options below).
 - `onepiece ingest` and `onepiece aws ...` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
 - `onepiece validate ...` &mdash; Runs validation suites for ingest/publish workflows.
+- `onepiece shotgrid package-playlist` &mdash; Bundles playlist media for client/vendor deliveries with MediaShuttle-ready folder structures.
 
 Use `onepiece COMMAND --help` to inspect options for any command.
 
@@ -35,6 +36,12 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 - [Example assets](docs/examples/) – CSV manifests that you can plug into ingest, publish, and ShotGrid helpers while practising the CLI.
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
+
+## What's new in v0.3.0
+
+- **Resilient ShotGrid operations** – The in-memory client now batches create/update/delete calls with retry logic and exposes playlist packaging workflows for MediaShuttle deliveries via `onepiece shotgrid package-playlist`.
+- **Actionable S3 sync summaries** – The `onepiece aws sync-to` and `sync-from` commands emit totals for uploaded, skipped, and failed files and raise clear errors when `s5cmd` exits unsuccessfully.
+- **Expanded onboarding docs** – A dedicated developer guide, CLI walkthroughs, and reusable CSV manifests under `docs/examples/` provide structured practice scenarios for new contributors.
 
 ## Requirements
 
@@ -98,9 +105,12 @@ supports production-ready features for dealing with large deliveries:
 - **Hierarchy templates** – declare entity trees (episodes, scenes, shots, …)
   once and apply them to new projects in a single command.  This drastically
   reduces the time it takes to bootstrap a show.
+- **Playlist deliveries** – package playlists with `onepiece shotgrid package-playlist`
+  to generate MediaShuttle-ready folders for client or vendor review sessions.
 
-See ``libraries.shotgrid.client`` for usage examples and the accompanying unit
-tests for end-to-end demonstrations of the new capabilities.
+See ``libraries.shotgrid.client`` and ``libraries.shotgrid.playlist_delivery``
+for usage examples and the accompanying unit tests for end-to-end
+demonstrations of the new capabilities.
 
 ### AWS
 
@@ -113,7 +123,8 @@ onepiece aws sync-from --bucket my-bucket --show-code SHOW --folder plates --loc
 `sync-from` mirrors the S5 `s5cmd sync` argument order: the S3 bucket/show-code
 path is treated as the source and `local_path/folder` is the destination. This
 ensures downloads populate the requested local directory without constructing an
-S3-style path for the target.
+S3-style path for the target. After each transfer, the CLI prints a summary of
+uploaded, skipped, and failed files so operators can quickly audit the run.
 
 ## Working with the CLI
 
