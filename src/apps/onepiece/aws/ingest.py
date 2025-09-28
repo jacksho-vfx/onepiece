@@ -7,6 +7,7 @@ from typing import Literal, cast
 
 import typer
 
+from src.apps.onepiece.utils.errors import OnePieceValidationError
 from src.libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
 from src.libraries.shotgrid.client import ShotgridClient
 
@@ -79,4 +80,6 @@ def ingest(
     )
 
     if report.processed_count == 0:
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            "No files were ingested. Provide media that passes validation."
+        )

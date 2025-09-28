@@ -1,4 +1,6 @@
 import typer
+
+from src.apps.onepiece.utils.errors import OnePieceValidationError
 from src.libraries.validations.naming import (
     validate_show_name,
     validate_episode_name,
@@ -49,5 +51,7 @@ def validate_names(
             all_ok = False
 
     if not all_ok:
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            "One or more provided names are invalid. Review the details above."
+        )
     typer.echo("All names are valid.")

@@ -1,6 +1,8 @@
 import typer
 from pathlib import Path
 import structlog
+
+from src.apps.onepiece.utils.errors import OnePieceValidationError
 from src.libraries.validations.naming_batch import (
     validate_names_in_csv,
     validate_names_in_dir,
@@ -21,8 +23,9 @@ def names_batch(
     Validate show/shot/asset names from a CSV or a directory of files.
     """
     if not csv and not directory:
-        typer.echo("Provide either --csv or --dir", err=True)
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            "Provide either --csv with a 'name' column or --dir to validate filenames."
+        )
 
     if csv:
         results = validate_names_in_csv(csv)
@@ -37,7 +40,8 @@ def names_batch(
         typer.echo(f"{name}: {status}")
 
     if invalid:
-        typer.echo(f"\n{len(invalid)} invalid name(s) found.", err=True)
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            f"{len(invalid)} invalid name(s) found. Review the details above."
+        )
     else:
         typer.echo("\nAll names are valid.")
