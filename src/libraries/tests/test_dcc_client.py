@@ -2,8 +2,10 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from libraries.dcc.dcc_client import (
+    DCC_ASSET_REQUIREMENTS,
     SupportedDCC,
     open_scene,
+    verify_dcc_dependencies,
 )
 
 
@@ -21,6 +23,45 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
     file_path = Path("/tmp/test_scene.mb")
     open_scene(SupportedDCC.MAYA, file_path)
     mock_run.assert_called_once_with(["Maya", str(file_path)], check=True)
+
+
+def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.NUKE,
+        package,
+        plugin_inventory=["CaraVR"],
+    )
+
+    assert report.plugins.missing == frozenset({"OCIO"})
+    missing_assets = {path.relative_to(package) for path in report.assets.missing}
+    expected_assets = {
+        Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]
+    }
+    assert missing_assets == expected_assets
+    assert report.is_valid is False
+
+
+def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]:
+        target = package / asset
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("payload")
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.NUKE,
+        package,
+        plugin_inventory=["CaraVR", "OCIO"],
+    )
+
+    assert report.plugins.missing == frozenset()
+    assert report.assets.missing == tuple()
+    assert report.is_valid is True
 
 
 # def test_publish_scene(tmp_path: Path) -> None:
