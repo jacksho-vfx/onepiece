@@ -24,6 +24,7 @@ __all__ = [
     "EntityPayload",
     "Project",
     "Version",
+    "Playlist",
 ]
 
 
@@ -44,6 +45,8 @@ class EntityPayload(TypedDict, total=False):
     shot: str
     path: str
     description: str
+    playlist_name: str
+    version_ids: list[int]
 
 
 class Project(TypedDict):
@@ -63,6 +66,18 @@ class Version(TypedDict):
     shot: str
     path: str
     description: str
+
+
+class Playlist(TypedDict):
+    """Internal representation of a ShotGrid Playlist."""
+
+    id: int
+    type: str
+    name: str
+    playlist_name: str
+    project: str
+    project_id: int
+    version_ids: list[int]
 
 
 TEntity = TypeVar("TEntity", bound=EntityPayload)
@@ -382,3 +397,74 @@ class ShotgridClient:
 
     def list_versions(self) -> list[Version]:
         return [cast(Version, v) for v in self._store.list("Version")]
+
+    def get_version_by_id(self, version_id: int) -> Version | None:
+        """Return a version registered with the in-memory store."""
+
+        payload = self._store.get("Version", int(version_id))
+        return cast(Version | None, payload)
+
+    # Playlist helpers -------------------------------------------------
+
+    def _playlist_key(self, project_name: str, playlist_name: str) -> str:
+        if not project_name:
+            raise ValueError("project_name must be provided")
+        if not playlist_name:
+            raise ValueError("playlist_name must be provided")
+        return f"{project_name}::{playlist_name}"
+
+    def register_playlist(
+        self,
+        project_name: str,
+        playlist_name: str,
+        version_ids: Sequence[int],
+    ) -> Playlist:
+        """Register a playlist referencing existing versions."""
+
+        project = self.get_or_create_project(project_name)
+
+        missing_versions = [
+            version_id
+            for version_id in version_ids
+            if self.get_version_by_id(int(version_id)) is None
+        ]
+        if missing_versions:
+            missing = ", ".join(str(vid) for vid in missing_versions)
+            raise ValueError(f"Unknown version ids in playlist: {missing}")
+
+        key = self._playlist_key(project["name"], playlist_name)
+
+        def _register() -> Playlist:
+            payload: EntityPayload = {
+                "id": self._store.next_id("Playlist"),
+                "type": "Playlist",
+                "name": key,
+                "playlist_name": playlist_name,
+                "project": project["name"],
+                "project_id": project["id"],
+                "version_ids": [int(v) for v in version_ids],
+            }
+            return cast(Playlist, self._store.add("Playlist", payload))
+
+        return cast(Playlist, self._execute_with_retry(_register))
+
+    def get_playlist(self, project_name: str, playlist_name: str) -> Playlist | None:
+        """Retrieve a registered playlist."""
+
+        key = self._playlist_key(project_name, playlist_name)
+        playlist = self._store.get_by_unique_key("Playlist", key)
+        return cast(Playlist | None, playlist)
+
+    def list_playlists(self, project_name: str | None = None) -> list[Playlist]:
+        """Return playlists, optionally filtered by project name."""
+
+        playlists = [
+            cast(Playlist, playlist) for playlist in self._store.list("Playlist")
+        ]
+        if project_name is None:
+            return playlists
+        return [
+            playlist
+            for playlist in playlists
+            if playlist.get("project") == project_name
+        ]
