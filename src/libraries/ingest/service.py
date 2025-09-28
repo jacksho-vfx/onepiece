@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Protocol, Tuple, cast
+from typing import Callable, Iterable, List, Protocol, Tuple, cast
 
 from libraries.shotgrid.client import ShotgridClient
 from libraries.validations.naming import (
@@ -148,7 +148,12 @@ class MediaIngestService:
     client_bucket: str = "client_in"
     dry_run: bool = False
 
-    def ingest_folder(self, folder: Path, recursive: bool = True) -> IngestReport:
+    def ingest_folder(
+        self,
+        folder: Path,
+        recursive: bool = True,
+        progress_callback: Callable[[Path, str], None] | None = None,
+    ) -> IngestReport:
         """Ingest all media files from *folder* and return a summary report."""
 
         if not folder.exists() or not folder.is_dir():
@@ -165,11 +170,16 @@ class MediaIngestService:
             if not path.is_file():
                 continue
 
+            def _notify(status: str) -> None:
+                if progress_callback is not None:
+                    progress_callback(path, status)
+
             try:
                 media_info = parse_media_filename(path.name)
             except FilenameValidationError as exc:
                 log.warning("ingest.invalid_filename", file=str(path), reason=str(exc))
                 report.invalid.append((path, str(exc)))
+                _notify("skipped")
                 continue
 
             if media_info.show_code != self.show_code:
@@ -179,6 +189,7 @@ class MediaIngestService:
                 )
                 log.warning("ingest.mismatched_show", file=str(path), reason=reason)
                 report.invalid.append((path, reason))
+                _notify("skipped")
                 continue
 
             bucket = self._resolve_bucket()
@@ -212,6 +223,7 @@ class MediaIngestService:
             report.processed.append(
                 IngestedMedia(path=path, bucket=bucket, key=key, media_info=media_info)
             )
+            _notify("uploaded")
 
         return report
 

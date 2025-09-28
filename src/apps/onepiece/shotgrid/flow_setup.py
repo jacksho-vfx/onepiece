@@ -5,9 +5,9 @@ from pathlib import Path
 
 import structlog
 import typer
-from typer import progressbar
 
 from src.libraries.shotgrid.show_setup import setup_single_shot
+from src.apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Show setup commands for ShotGrid.")
@@ -48,12 +48,29 @@ def show_setup_command(
     Create a ShotGrid project and hierarchy from a CSV of shots.
     """
     shots = _parse_csv(csv)
-    typer.echo(f"Creating {len(shots)} shots for project '{project}' ...")
+    total_shots = len(shots)
+    typer.echo(f"Creating {total_shots} shots for project '{project}' ...")
 
-    with progressbar(shots, label="Creating shots") as bar:
-        for shot in bar:
+    failures = 0
+    with progress_tracker(
+        "ShotGrid Show Setup",
+        total=total_shots,
+        task_description="Provisioning shots",
+    ) as progress:
+        for shot in shots:
             try:
                 setup_single_shot(project, shot, template)
+                progress.advance(description=f"Created {shot}")
             except Exception as exc:
+                failures += 1
+                progress.advance(description=f"Failed {shot}")
                 log.error("shot_creation_failed", shot=shot, error=str(exc))
                 typer.secho(f"Failed to create shot {shot}: {exc}", fg=typer.colors.RED)
+
+        created = total_shots - failures
+        if failures:
+            progress.succeed(
+                f"Created {created} of {total_shots} shots. {failures} failed."
+            )
+        else:
+            progress.succeed(f"Created {total_shots} shots for project '{project}'.")
