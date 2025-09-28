@@ -1,15 +1,24 @@
 import subprocess
 import structlog
-from typing import Optional, List
+from typing import Optional, List, Union
 from upath import UPath
 
 log = structlog.get_logger(__name__)
 
 
+PathLike = Union[UPath, str]
+
+
+def _normalise_path(path: PathLike) -> str:
+    path_str = str(path)
+    if path_str.endswith("/"):
+        return path_str
+    return f"{path_str.rstrip('/')}/"
+
+
 def s5_sync(
-    source: UPath,
-    target_bucket: str,
-    context: str,
+    source: PathLike,
+    destination: PathLike,
     dry_run: bool = False,
     include: Optional[List[str]] = None,
     exclude: Optional[List[str]] = None,
@@ -31,9 +40,9 @@ def s5_sync(
     if dry_run:
         cmd.append("--dry-run")
 
-    source_str = str(source)
-    target_str = f"s3://{target_bucket}/{context}/"
-    cmd += [source_str, target_str]
+    source_str = _normalise_path(source)
+    destination_str = _normalise_path(destination)
+    cmd += [source_str, destination_str]
 
     log.info("running_s5cmd", command=" ".join(cmd))
 

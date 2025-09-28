@@ -110,6 +110,11 @@ The AWS commands leverage the standard AWS CLI configuration. Configure credenti
 onepiece aws sync-from --bucket my-bucket --show-code SHOW --folder plates --local-path /data/plates --profile studio-prod
 ```
 
+`sync-from` mirrors the S5 `s5cmd sync` argument order: the S3 bucket/show-code
+path is treated as the source and `local_path/folder` is the destination. This
+ensures downloads populate the requested local directory without constructing an
+S3-style path for the target.
+
 ## Working with the CLI
 
 ### Publishing DCC packages

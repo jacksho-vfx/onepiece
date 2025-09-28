@@ -166,8 +166,7 @@ def publish_scene(
 
     s5_sync(
         source=package_dir,
-        target_bucket=bucket,
-        context=scene_name,
+        destination=f"s3://{bucket}/{scene_name}",
         dry_run=False,
         include=None,
         exclude=None,
