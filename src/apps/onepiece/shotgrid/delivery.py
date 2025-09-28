@@ -50,9 +50,7 @@ def package_playlist_command(
 
     normalized_recipient = recipient.lower()
     if normalized_recipient not in {"client", "vendor"}:
-        raise OnePieceValidationError(
-            "Recipient must be either 'client' or 'vendor'."
-        )
+        raise OnePieceValidationError("Recipient must be either 'client' or 'vendor'.")
 
     sg_client = ShotgridClient()
     package_destination = UPath(destination).expanduser()

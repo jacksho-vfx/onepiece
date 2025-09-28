@@ -29,7 +29,7 @@ class OnePieceError(Exception):
         self.message = message
         if exit_code is None:
             exit_code = type(self).exit_code
-        self.exit_code = int(exit_code)
+        self.exit_code = ExitCode(exit_code)
 
     def __str__(self) -> str:  # pragma: no cover - exercised through Typer.
         return self.message
