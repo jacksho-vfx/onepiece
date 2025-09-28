@@ -22,10 +22,11 @@ def sync_to(
     include = include or []
     exclude = exclude or []
 
+    destination = f"s3://{bucket}/{show_code}"
+
     s5_sync(
-        target_bucket=bucket,
         source=local_path / folder,
-        context=show_code,
+        destination=destination,
         dry_run=dry_run,
         include=include,
         exclude=exclude,

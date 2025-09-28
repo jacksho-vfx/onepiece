@@ -23,7 +23,7 @@ def test_s5_sync_raises_for_non_zero_return_code(mock_run: Any) -> None:
     )
 
     with pytest.raises(RuntimeError) as excinfo:
-        s5_sync(UPath("/local/path"), "bucket", "context")
+        s5_sync(UPath("/local/path"), "s3://bucket/context")
 
     error_message = str(excinfo.value)
     assert "exit code 2" in error_message
@@ -39,6 +39,52 @@ def test_s5_sync_raises_for_non_zero_without_stderr(mock_run: Any) -> None:
     )
 
     with pytest.raises(RuntimeError) as excinfo:
-        s5_sync(UPath("/local/path"), "bucket", "context")
+        s5_sync(UPath("/local/path"), "s3://bucket/context")
 
     assert "No additional error output" in str(excinfo.value)
+
+
+@patch("libraries.aws.s5_sync.subprocess.run")
+def test_s5_sync_upload_command_order(mock_run: Any) -> None:
+    mock_run.return_value = DummyCompletedProcess(returncode=0, stdout="upload file\n")
+
+    s5_sync(
+        source=UPath("/local/path"),
+        destination="s3://bucket/context",
+        include=["*.exr"],
+        exclude=["*.tmp"],
+    )
+
+    expected_cmd = [
+        "s5cmd",
+        "sync",
+        "--include",
+        "*.exr",
+        "--exclude",
+        "*.tmp",
+        "/local/path/",
+        "s3://bucket/context/",
+    ]
+
+    assert mock_run.call_args.args[0] == expected_cmd
+
+
+@patch("libraries.aws.s5_sync.subprocess.run")
+def test_s5_sync_download_command_order(mock_run: Any) -> None:
+    mock_run.return_value = DummyCompletedProcess(
+        returncode=0, stdout="download file\n"
+    )
+
+    s5_sync(
+        source="s3://bucket/context",
+        destination=UPath("/local/path"),
+    )
+
+    expected_cmd = [
+        "s5cmd",
+        "sync",
+        "s3://bucket/context/",
+        "/local/path/",
+    ]
+
+    assert mock_run.call_args.args[0] == expected_cmd
