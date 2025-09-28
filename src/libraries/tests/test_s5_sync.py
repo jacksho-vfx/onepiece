@@ -71,7 +71,9 @@ def test_s5_sync_upload_command_order(mock_run: Any) -> None:
 
 @patch("libraries.aws.s5_sync.subprocess.run")
 def test_s5_sync_download_command_order(mock_run: Any) -> None:
-    mock_run.return_value = DummyCompletedProcess(returncode=0, stdout="download file\n")
+    mock_run.return_value = DummyCompletedProcess(
+        returncode=0, stdout="download file\n"
+    )
 
     s5_sync(
         source="s3://bucket/context",
