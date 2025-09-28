@@ -210,7 +210,9 @@ def verify_dcc_dependencies(
     if plugin_inventory is None:
         available_plugins = _plugins_from_env(dcc, env_mapping)
     else:
-        available_plugins = frozenset(plugin.strip() for plugin in plugin_inventory if plugin.strip())
+        available_plugins = frozenset(
+            plugin.strip() for plugin in plugin_inventory if plugin.strip()
+        )
 
     plugins_required = _normalise_required_plugins(dcc, required_plugins)
     missing_plugins = frozenset(sorted(plugins_required - available_plugins))

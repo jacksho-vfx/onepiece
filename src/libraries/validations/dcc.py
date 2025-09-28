@@ -106,7 +106,9 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
     return frozenset(plugins)
 
 
-def _detect_executable(dcc: SupportedDCC, env: Mapping[str, str]) -> tuple[bool, str | None]:
+def _detect_executable(
+    dcc: SupportedDCC, env: Mapping[str, str]
+) -> tuple[bool, str | None]:
     """Return whether the DCC executable is available and its resolved path."""
 
     path_env = env.get("PATH")

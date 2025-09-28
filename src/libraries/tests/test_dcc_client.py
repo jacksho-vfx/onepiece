@@ -37,7 +37,9 @@ def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
 
     assert report.plugins.missing == frozenset({"OCIO"})
     missing_assets = {path.relative_to(package) for path in report.assets.missing}
-    expected_assets = {Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]}
+    expected_assets = {
+        Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]
+    }
     assert missing_assets == expected_assets
     assert report.is_valid is False
 
