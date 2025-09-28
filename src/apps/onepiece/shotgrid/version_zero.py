@@ -121,8 +121,6 @@ def version_zero(
             successes += 1
             progress.advance(description=f"{status_message} {shot_name}")
 
-        progress.succeed(
-            f"Uploaded {successes} of {total_shots} shots to ShotGrid."
-        )
+        progress.succeed(f"Uploaded {successes} of {total_shots} shots to ShotGrid.")
 
     log.info("version_zero_complete", project=project_name)

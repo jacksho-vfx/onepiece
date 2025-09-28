@@ -73,6 +73,4 @@ def show_setup_command(
                 f"Created {created} of {total_shots} shots. {failures} failed."
             )
         else:
-            progress.succeed(
-                f"Created {total_shots} shots for project '{project}'."
-            )
+            progress.succeed(f"Created {total_shots} shots for project '{project}'.")

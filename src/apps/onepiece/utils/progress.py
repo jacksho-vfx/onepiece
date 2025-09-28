@@ -1,4 +1,5 @@
 """Shared progress reporting utilities for CLI commands."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
