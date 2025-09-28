@@ -4,7 +4,27 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ---
 
-## [v0.2.0] – Current Release
+## [v0.3.0] – Current Release
+
+### Added / Improved
+
+**ShotGrid Client**
+- Added generic bulk create/update/delete helpers with exponential backoff so that large entity batches complete reliably even when the API flakes.  All higher-level helpers now route through the shared retry logic.
+- Introduced hierarchy template application that seeds a project and injects template-provided attributes while fanning out through the new bulk utilities.
+- Expanded review tooling with playlist registration and lookup helpers to keep curated version sets in sync with ShotGrid.
+
+**AWS / S3**
+- The `s5cmd` wrapper now prints transfer summaries that include total, uploaded, skipped, and failed file counts, while surfacing actionable errors when the command exits non-zero.
+- Normalised path handling ensures trailing slashes are preserved for both S3 and local targets, preventing duplicated segments in generated sync commands.
+
+**Documentation**
+- Added a comprehensive developer guide that covers repository layout, workflows, and release procedures.
+- Published CLI walkthroughs with sample CSV manifests that showcase ingest, publish, and ShotGrid bootstrap flows.
+- Bundled reusable example assets under `docs/examples/` for safe sandbox testing.
+
+---
+
+## [v0.2.0] – Previous Release
 
 ### Added / Implemented
 
@@ -62,16 +82,14 @@ All notable changes to the OnePiece pipeline toolkit.
 - Extended DCC environment validation (plugins, GPU details per DCC).
 
 **ShotGrid Client**
-- Bulk operations for versions, playlists, tasks.
-- Retry and error handling for API calls.
-- Optional: template-based hierarchy cloning.
+- Expose playlist and version bulk helpers via dedicated CLI commands.
+- Persist hierarchy templates to disk formats (YAML/JSON) for reuse across shows.
 
 **DCC Client**
 - Direct S3/cloud publishing support.
 - Plugin or asset checks per DCC.
 
 **AWS / s5cmd**
-- Transfer reports (uploaded/skipped/failed).
 - Multipart or resumable uploads for large files.
 - Optional preflight of bucket structure.
 
@@ -83,11 +101,6 @@ All notable changes to the OnePiece pipeline toolkit.
 - CLI tests for main commands (`show-setup`, `upload-version`, `aws sync`, `validate`).
 - Mocking for ShotGrid/S3/DCC environments in CI.
 - Coverage reporting.
-
-**Documentation**
-- Example CSV for `show-setup`.
-- CLI usage examples for AWS and DCC.
-- Developer guide (optional for v0.1).
 
 ---
 

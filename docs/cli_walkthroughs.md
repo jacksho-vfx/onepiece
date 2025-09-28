@@ -129,6 +129,69 @@ onepiece shotgrid apply-hierarchy \
 
 Dropping the `--dry-run` flag will create the entities using the resilient bulk helpers described in the README.
 
+## 5. Package a ShotGrid playlist for delivery
+
+The playlist packaging helpers can be exercised locally with the in-memory
+ShotGrid client. Create a sandbox directory with placeholder media and then run
+the script below to register versions, build a playlist, and generate a
+MediaShuttle-ready package.
+
+1. Create a temporary workspace with a couple of mock movie files:
+
+   ```bash
+   export ONEPIECE_PLAYLIST_ROOT="/tmp/onepiece_playlist_demo"
+   mkdir -p "$ONEPIECE_PLAYLIST_ROOT"
+   printf 'demo-1' > "$ONEPIECE_PLAYLIST_ROOT/seq010_sh010.mov"
+   printf 'demo-2' > "$ONEPIECE_PLAYLIST_ROOT/seq010_sh020.mov"
+   ```
+
+2. Seed the in-memory ShotGrid client and package the playlist:
+
+   ```bash
+   python - <<'PY'
+   from pathlib import Path
+
+   from src.libraries.shotgrid.client import ShotgridClient
+   from src.libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
+
+   root = Path("$ONEPIECE_PLAYLIST_ROOT")
+   client = ShotgridClient()
+
+   version_one = client.register_version(
+       project_name="Demo Project",
+       shot_code="seq010_sh010",
+       file_path=root / "seq010_sh010.mov",
+       description="Client preview",
+   )
+   version_two = client.register_version(
+       project_name="Demo Project",
+       shot_code="seq010_sh020",
+       file_path=root / "seq010_sh020.mov",
+       description="Lighting update",
+   )
+
+   client.register_playlist(
+       project_name="Demo Project",
+       playlist_name="dailies",
+       version_ids=[version_one["id"], version_two["id"]],
+   )
+
+   summary = package_playlist_for_mediashuttle(
+       client,
+       project_name="Demo Project",
+       playlist_name="dailies",
+       destination=root / "delivery",
+       recipient="client",
+   )
+
+   print(f"Package created at: {summary.package_path}")
+   print(f"Manifest entries: {len(summary.manifest['items'])}")
+   PY
+   ```
+
+3. Inspect the generated directory and `manifest.json` file to confirm the
+   playlist structure.
+
 ---
 
 Experimenting with these scenarios builds intuition for how the CLI behaves and gives you realistic command lines to adapt for production.
