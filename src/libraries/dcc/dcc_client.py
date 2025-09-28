@@ -11,17 +11,30 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from upath import UPath
 from typing import Literal, TypeAlias
+from dataclasses import dataclass
 
 import logging
 
 from libraries.aws.s5_sync import s5_sync
 
-__all__ = ["SupportedDCC", "open_scene", "publish_scene"]
+__all__ = [
+    "SupportedDCC",
+    "open_scene",
+    "publish_scene",
+    "verify_dcc_dependencies",
+    "DCCDependencyReport",
+    "DCCPluginStatus",
+    "DCCAssetStatus",
+    "DCC_PLUGIN_REQUIREMENTS",
+    "DCC_GPU_REQUIREMENTS",
+    "DCC_ASSET_REQUIREMENTS",
+]
 
 
 log = logging.getLogger(__name__)
@@ -41,6 +54,66 @@ class SupportedDCC(Enum):
         """Return the executable name associated with the DCC."""
 
         return self.value
+
+
+DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
+    SupportedDCC.NUKE: frozenset({"CaraVR", "OCIO"}),
+    SupportedDCC.MAYA: frozenset({"mtoa", "bifrost"}),
+    SupportedDCC.BLENDER: frozenset({"cycles"}),
+    SupportedDCC.HOUDINI: frozenset({"karma"}),
+    SupportedDCC.MAX: frozenset({"vray"}),
+}
+
+
+DCC_GPU_REQUIREMENTS: dict[SupportedDCC, str] = {
+    SupportedDCC.NUKE: "OpenGL 4.1",
+    SupportedDCC.MAYA: "DirectX 11",
+    SupportedDCC.BLENDER: "OpenGL 4.3",
+    SupportedDCC.HOUDINI: "Vulkan",
+    SupportedDCC.MAX: "DirectX 12",
+}
+
+
+DCC_ASSET_REQUIREMENTS: dict[SupportedDCC, tuple[str, ...]] = {
+    SupportedDCC.NUKE: ("toolsets/init.gizmo", "luts/show_lut.cube"),
+    SupportedDCC.MAYA: ("modules/arnold.mod", "scripts/userSetup.mel"),
+    SupportedDCC.BLENDER: ("config/startup.blend",),
+    SupportedDCC.HOUDINI: ("packages/onepiece.json",),
+    SupportedDCC.MAX: ("plugins/onepiece.dlx",),
+}
+
+
+@dataclass
+class DCCPluginStatus:
+    """Summary of plugin availability for a DCC."""
+
+    required: frozenset[str]
+    available: frozenset[str]
+    missing: frozenset[str]
+
+
+@dataclass
+class DCCAssetStatus:
+    """Summary of asset availability for a packaged scene."""
+
+    required: tuple[Path, ...]
+    present: tuple[Path, ...]
+    missing: tuple[Path, ...]
+
+
+@dataclass
+class DCCDependencyReport:
+    """Aggregate report describing dependency readiness for a DCC package."""
+
+    dcc: SupportedDCC
+    plugins: DCCPluginStatus
+    assets: DCCAssetStatus
+
+    @property
+    def is_valid(self) -> bool:
+        """Return ``True`` when no plugin or asset requirements are missing."""
+
+        return not self.plugins.missing and not self.assets.missing
 
 
 def _build_launch_command(dcc: SupportedDCC, path: Path) -> list[str]:
@@ -70,6 +143,91 @@ def open_scene(dcc: SupportedDCC, file_path: Path | str) -> None:
     path = Path(file_path)
     command = _build_launch_command(dcc, path)
     subprocess.run(command, check=True)
+
+
+def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[str]:
+    """Return available plugins for ``dcc`` based on environment variables."""
+
+    key = f"ONEPIECE_{dcc.name}_PLUGINS"
+    raw_plugins = env.get(key, "")
+    plugins = {item.strip() for item in raw_plugins.split(",") if item.strip()}
+    return frozenset(plugins)
+
+
+def _normalise_required_plugins(
+    dcc: SupportedDCC, extra_plugins: Iterable[str] | None
+) -> frozenset[str]:
+    """Return the set of plugins that must be available for ``dcc``."""
+
+    baseline = set(DCC_PLUGIN_REQUIREMENTS.get(dcc, ()))
+    if extra_plugins:
+        baseline.update(plugin.strip() for plugin in extra_plugins if plugin.strip())
+    return frozenset(sorted(baseline))
+
+
+def _normalise_required_assets(
+    dcc: SupportedDCC, required_assets: Sequence[str] | None
+) -> tuple[str, ...]:
+    """Return the relative asset paths required for ``dcc``."""
+
+    if required_assets is not None:
+        entries = tuple(sorted(str(Path(asset)) for asset in required_assets))
+    else:
+        entries = DCC_ASSET_REQUIREMENTS.get(dcc, ())
+    return entries
+
+
+def _resolve_asset_status(package_root: Path, assets: Sequence[str]) -> DCCAssetStatus:
+    """Return the asset status for ``package_root`` given ``assets``."""
+
+    required_paths = tuple(package_root / asset for asset in assets)
+    present: list[Path] = []
+    missing: list[Path] = []
+    for path in required_paths:
+        if path.exists():
+            present.append(path)
+        else:
+            missing.append(path)
+    return DCCAssetStatus(
+        required=tuple(required_paths),
+        present=tuple(present),
+        missing=tuple(missing),
+    )
+
+
+def verify_dcc_dependencies(
+    dcc: SupportedDCC,
+    package_root: Path,
+    *,
+    plugin_inventory: Iterable[str] | None = None,
+    env: Mapping[str, str] | None = None,
+    required_plugins: Iterable[str] | None = None,
+    required_assets: Sequence[str] | None = None,
+) -> DCCDependencyReport:
+    """Return a dependency report validating packaged assets and plugins."""
+
+    env_mapping = dict(env or os.environ)
+    if plugin_inventory is None:
+        available_plugins = _plugins_from_env(dcc, env_mapping)
+    else:
+        available_plugins = frozenset(plugin.strip() for plugin in plugin_inventory if plugin.strip())
+
+    plugins_required = _normalise_required_plugins(dcc, required_plugins)
+    missing_plugins = frozenset(sorted(plugins_required - available_plugins))
+    plugins_status = DCCPluginStatus(
+        required=plugins_required,
+        available=available_plugins,
+        missing=missing_plugins,
+    )
+
+    asset_entries = _normalise_required_assets(dcc, required_assets)
+    assets_status = _resolve_asset_status(package_root, asset_entries)
+
+    return DCCDependencyReport(
+        dcc=dcc,
+        plugins=plugins_status,
+        assets=assets_status,
+    )
 
 
 def _copy_output(src: Path, dst: Path, *, treat_dst_as_dir: bool = False) -> list[Path]:
