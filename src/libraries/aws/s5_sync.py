@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import subprocess
+from typing import Callable, List, Optional, Union
+
 import structlog
-from typing import Optional, List, Union
 from upath import UPath
 
 log = structlog.get_logger(__name__)
@@ -22,6 +25,7 @@ def s5_sync(
     dry_run: bool = False,
     include: Optional[List[str]] = None,
     exclude: Optional[List[str]] = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> None:
     """
     Sync a folder to/from S3 bucket using s5cmd with dry-run and filters.
@@ -46,11 +50,27 @@ def s5_sync(
 
     log.info("running_s5cmd", command=" ".join(cmd))
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    stdout_lines: list[str] = []
+    if process.stdout is not None:
+        for raw_line in process.stdout:
+            line = raw_line.strip()
+            stdout_lines.append(line)
+            if progress_callback is not None:
+                progress_callback(line)
+        process.stdout.close()
+
+    process.wait()
 
     uploaded = skipped = failed = 0
 
-    for line in result.stdout.splitlines():
+    for line in stdout_lines:
         if "upload" in line.lower():
             uploaded += 1
         elif "skip" in line.lower():
@@ -73,15 +93,18 @@ def s5_sync(
     print(f"Skipped:    {skipped}")
     print(f"Failed:     {failed}")
 
-    if result.returncode != 0:
-        error_output = result.stderr.strip() if result.stderr else ""
+    stderr_output = process.stderr.read().strip() if process.stderr else ""
+    if process.stderr is not None:
+        process.stderr.close()
+
+    if process.returncode != 0:
         error_details = (
-            f": {error_output}"
-            if error_output
+            f": {stderr_output}"
+            if stderr_output
             else ". No additional error output from s5cmd."
         )
         raise RuntimeError(
-            f"s5cmd sync failed with exit code {result.returncode}{error_details}"
+            f"s5cmd sync failed with exit code {process.returncode}{error_details}"
         )
 
     if failed > 0:

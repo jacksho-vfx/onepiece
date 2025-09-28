@@ -1,6 +1,7 @@
 from upath import UPath
 import typer
 
+from src.apps.onepiece.utils.progress import progress_tracker
 from src.libraries.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="Sync to an S3 bucket")
@@ -24,10 +25,33 @@ def sync_to(
 
     destination = f"s3://{bucket}/{show_code}"
 
-    s5_sync(
-        source=local_path / folder,
-        destination=destination,
-        dry_run=dry_run,
-        include=include,
-        exclude=exclude,
-    )
+    with progress_tracker(
+        "S3 Upload",
+        total=1,
+        task_description="Running s5cmd sync",
+    ) as progress:
+        events = 0
+
+        def _on_progress(line: str) -> None:
+            nonlocal events
+            events += 1
+            progress.update_total(events + 1)
+            description = line or "Syncing files"
+            progress.advance(description=description)
+
+        s5_sync(
+            source=local_path / folder,
+            destination=destination,
+            dry_run=dry_run,
+            include=include,
+            exclude=exclude,
+            progress_callback=_on_progress,
+        )
+
+        if events == 0:
+            progress.advance(description="Sync completed")
+
+        progress.update_total(max(events, 1))
+        progress.succeed(
+            f"Synchronized {local_path / folder} → {destination} (dry-run={dry_run!s})."
+        )

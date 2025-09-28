@@ -8,6 +8,7 @@ from typing import Literal, cast
 import typer
 
 from src.apps.onepiece.utils.errors import OnePieceValidationError
+from src.apps.onepiece.utils.progress import progress_tracker
 from src.libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
 from src.libraries.shotgrid.client import ShotgridClient
 
@@ -62,7 +63,27 @@ def ingest(
         dry_run=dry_run,
     )
 
-    report = service.ingest_folder(folder)
+    total_files = sum(1 for path in folder.rglob("*") if path.is_file())
+    status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
+
+    with progress_tracker(
+        "Media Ingest",
+        total=max(total_files, 1),
+        task_description="Validating and uploading media",
+    ) as progress:
+
+        def _on_progress(path: Path, status: str) -> None:
+            verb = status_messages.get(status, status.title())
+            progress.advance(description=f"{verb} {path.name}")
+
+        report = service.ingest_folder(
+            folder,
+            progress_callback=_on_progress,
+        )
+
+        progress.succeed(
+            f"Processed {report.processed_count} file(s); {report.invalid_count} skipped."
+        )
 
     for processed in report.processed:
         typer.echo(
