@@ -9,7 +9,11 @@ import structlog
 import typer
 from upath import UPath
 
-from src.apps.onepiece.utils.errors import OnePieceError
+from src.apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceIOError,
+    OnePieceValidationError,
+)
 from src.libraries.shotgrid.client import ShotgridClient
 from src.libraries.shotgrid.playlist_delivery import (
     Recipient,
@@ -46,7 +50,7 @@ def package_playlist_command(
 
     normalized_recipient = recipient.lower()
     if normalized_recipient not in {"client", "vendor"}:
-        raise OnePieceError("Recipient must be either 'client' or 'vendor'.")
+        raise OnePieceValidationError("Recipient must be either 'client' or 'vendor'.")
 
     sg_client = ShotgridClient()
     package_destination = UPath(destination).expanduser()
@@ -59,14 +63,26 @@ def package_playlist_command(
             destination=package_destination,
             recipient=cast(Recipient, normalized_recipient),
         )
-    except Exception as exc:  # noqa: BLE001
+    except OSError as exc:  # noqa: BLE001 - surfaced to the CLI.
         log.error(
             "package_playlist.failed",
             project=project,
             playlist=playlist,
             error=str(exc),
         )
-        raise OnePieceError(str(exc)) from exc
+        raise OnePieceIOError(
+            f"Failed to write package data to {package_destination}: {exc}"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - surfaced to the CLI.
+        log.error(
+            "package_playlist.failed",
+            project=project,
+            playlist=playlist,
+            error=str(exc),
+        )
+        raise OnePieceExternalServiceError(
+            f"Failed to package playlist '{playlist}' for project '{project}': {exc}"
+        ) from exc
 
     log.info(
         "package_playlist.success",

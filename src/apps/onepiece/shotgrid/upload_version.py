@@ -3,9 +3,14 @@ CLI command for uploading media to a new version in Shotgrid.
 """
 
 from pathlib import Path
-import typer
-import structlog
 
+import structlog
+import typer
+
+from src.apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 from src.libraries.shotgrid.api import ShotGridClient
 from src.libraries.shotgrid.models import VersionData
 
@@ -30,15 +35,15 @@ def upload(
 
     project = sg_client.get_project(project_name)
     if not project:
-        typer.echo(f"Project '{project_name}' not found.", err=True)
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            f"Project '{project_name}' not found. Verify the project name and try again."
+        )
 
     shot = sg_client.get_shot(project["code"], shot_name)
     if not shot:
-        typer.echo(
-            f"Shot '{shot_name}' not found in project '{project_name}'.", err=True
+        raise OnePieceValidationError(
+            f"Shot '{shot_name}' not found in project '{project_name}'."
         )
-        raise typer.Exit(code=1)
 
     try:
         version_name = f"{shot_name}_V00)"
@@ -55,8 +60,7 @@ def upload(
             shot=shot_name,
             file=str(file_path),
         )
-    except Exception as e:
-        typer.echo(f"Failed to upload version: {e}", err=True)
+    except Exception as e:  # noqa: BLE001 - surfaced to the CLI.
         log.error(
             "upload_version_fail",
             project=project_name,
@@ -64,4 +68,6 @@ def upload(
             file=str(file_path),
             error=str(e),
         )
-        raise typer.Exit(code=1)
+        raise OnePieceExternalServiceError(
+            f"Failed to upload version for shot '{shot_name}': {e}"
+        ) from e

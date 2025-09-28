@@ -1,5 +1,8 @@
 from pathlib import Path
+
 import typer
+
+from src.apps.onepiece.utils.errors import OnePieceValidationError
 from src.libraries.validations.filesystem import preflight_report
 
 app = typer.Typer(help="Validate filepaths")
@@ -17,4 +20,6 @@ def validate_paths(
     """
     ok = preflight_report(paths)
     if not ok:
-        raise typer.Exit(code=1)
+        raise OnePieceValidationError(
+            "One or more paths failed the validation checks above."
+        )

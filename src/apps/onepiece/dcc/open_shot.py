@@ -6,6 +6,7 @@ from typing import Any
 import structlog
 import typer
 
+from src.apps.onepiece.utils.errors import OnePieceExternalServiceError
 from src.libraries.dcc.dcc_client import open_scene
 from src.libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
@@ -59,5 +60,6 @@ def open_shot(
             shot=str(shot_path),
             error=str(exc),
         )
-        typer.echo(f"Failed to open shot: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        raise OnePieceExternalServiceError(
+            f"Failed to open {shot_path} in {dcc_enum.value}: {exc}"
+        ) from exc
