@@ -78,10 +78,8 @@ def test_deliver_packages_versions_and_uploads(
         assert "SHOW_EP01_SC001_SH010_COMP_v003.mov" in names
         assert "manifest.json" in names
         manifest_data = json.loads(archive.read("manifest.json"))
-        assert (
-            manifest_data[0]["delivery_path"] == "SHOW_EP01_SC001_SH010_COMP_v003.mov"
-        )
-        assert manifest_data[0]["source_path"] == str(source)
+        assert manifest_data["delivery_path"] == "SHOW_EP01_SC001_SH010_COMP_v003.mov"
+        assert manifest_data["source_path"] == str(source)
 
     assert stub_client.requested == ("One Piece", None)
     assert sync_calls
