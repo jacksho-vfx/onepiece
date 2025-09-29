@@ -26,6 +26,8 @@ where = ["src"]
 include = [
     "apps.onepiece",
     "apps.onepiece.*",
+    "onepiece",
+    "onepiece.*",
     "libraries",
     "libraries.*",
 ]
