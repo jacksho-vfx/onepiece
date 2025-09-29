@@ -81,7 +81,8 @@ def reconcile(
 ) -> None:
     """Entry point executed by the Typer CLI."""
 
-    scope = scope.lower()
+    if scope not in ("shots", "assets", "versions"):
+        raise ValueError(f"Invalid scope: {scope}")
     log.info(
         "reconcile.start",
         project=project,

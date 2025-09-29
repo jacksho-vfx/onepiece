@@ -42,7 +42,9 @@ def collect_shots(
     return sorted(shots)
 
 
-def _normalise_versions(records: Iterable[Record], *, field: str = "version") -> Dict[str, List[str]]:
+def _normalise_versions(
+    records: Iterable[Record], *, field: str = "version"
+) -> Dict[str, List[str]]:
     index = defaultdict(list)
     for record in records:
         shot = record.get("shot")
@@ -67,7 +69,6 @@ def compare_datasets(
 ) -> List[Record]:
     """Return a list describing discrepancies between datasets."""
 
-    sg_index = _build_index(shotgrid)
     fs_index = _build_index(filesystem)
     s3_index = _build_index(s3 or [])
 
@@ -77,14 +78,15 @@ def compare_datasets(
     fs_versions = _normalise_versions(filesystem)
     s3_versions = _normalise_versions(s3 or [])
 
-    shot_list = list(shots) if shots is not None else collect_shots(shotgrid, filesystem, s3)
+    shot_list = (
+        list(shots) if shots is not None else collect_shots(shotgrid, filesystem, s3)
+    )
 
     mismatches: List[Record] = []
     for shot in shot_list:
         if progress_callback:
             progress_callback(1)
 
-        sg_records = sg_index.get(shot, [])
         fs_records = fs_index.get(shot, [])
         s3_records = s3_index.get(shot, [])
 
@@ -120,7 +122,7 @@ def compare_datasets(
                     "type": "orphan_in_fs",
                     "shot": shot,
                     "found": orphan_version,
-                    "path": path,
+                    "path": path or "",
                     "source": "filesystem",
                 }
             )
@@ -133,7 +135,7 @@ def compare_datasets(
                         "type": "orphan_in_s3",
                         "shot": shot,
                         "found": orphan_version,
-                        "key": key,
+                        "key": key or "",
                         "source": "s3",
                     }
                 )

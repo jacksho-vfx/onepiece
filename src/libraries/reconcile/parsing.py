@@ -68,7 +68,9 @@ def extract_entity(parts: Iterable[str], scope: str) -> Optional[str]:
     return None
 
 
-def extract_from_path(path: PurePath, scope: str) -> tuple[Optional[str], Optional[str]]:
+def extract_from_path(
+    path: PurePath, scope: str
+) -> tuple[Optional[str], Optional[str]]:
     """Extract entity and version identifiers from a filesystem path."""
 
     parts = list(path.parts)

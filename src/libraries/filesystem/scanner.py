@@ -12,7 +12,9 @@ from libraries.reconcile.parsing import extract_from_path
 log = structlog.get_logger(__name__)
 
 
-def scan_project_files(project_root: Path | str, scope: str = "shots") -> List[Dict[str, str]]:
+def scan_project_files(
+    project_root: Path | str, scope: str = "shots"
+) -> List[Dict[str, str]]:
     """Return files found under *project_root* with parsed metadata.
 
     Each returned dictionary contains ``shot`` (or asset name), ``version``, and

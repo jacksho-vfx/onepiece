@@ -1,9 +1,7 @@
 """Helpers to enumerate S3 objects for reconciliation."""
 
-from __future__ import annotations
-
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import structlog
 
@@ -14,9 +12,9 @@ log = structlog.get_logger(__name__)
 S3_BUCKET_ENV = "ONEPIECE_S3_BUCKET"
 
 
-def _ensure_boto3():
+def _ensure_boto3() -> Any:
     try:
-        import boto3  # type: ignore
+        import boto3
     except ImportError as exc:  # pragma: no cover - exercised in failure scenarios
         raise RuntimeError("boto3 is required to scan S3") from exc
     return boto3
@@ -37,7 +35,7 @@ def scan_s3_context(
         raise RuntimeError("S3 bucket not configured. Set ONEPIECE_S3_BUCKET.")
 
     boto3 = _ensure_boto3()
-    client = s3_client or boto3.client("s3")
+    client: Any = s3_client or boto3.client("s3")
     prefix = f"{context}/{project_name}/"
 
     paginator = client.get_paginator("list_objects_v2")

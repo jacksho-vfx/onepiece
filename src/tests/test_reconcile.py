@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -27,7 +28,9 @@ class DummyShotGridClient:
         return self._versions
 
 
-def _patch_clients(monkeypatch: pytest.MonkeyPatch, versions: list[dict[str, object]]) -> None:
+def _patch_clients(
+    monkeypatch: pytest.MonkeyPatch, versions: list[dict[str, object]]
+) -> None:
     client = DummyShotGridClient(versions)
     monkeypatch.setattr(
         "apps.onepiece.reconcile.ShotGridClient.from_env",
@@ -37,19 +40,32 @@ def _patch_clients(monkeypatch: pytest.MonkeyPatch, versions: list[dict[str, obj
 
 def test_reconcile_all_consistent(monkeypatch: pytest.MonkeyPatch) -> None:
     sg_versions = [
-        {"shot": "ep101_sc01_0010", "version_number": 1, "file_path": "/a", "status": "rev"}
+        {
+            "shot": "ep101_sc01_0010",
+            "version_number": 1,
+            "file_path": "/a",
+            "status": "rev",
+        }
     ]
     _patch_clients(monkeypatch, sg_versions)
     monkeypatch.setattr(
         "apps.onepiece.reconcile.scan_project_files",
         lambda root, scope: [
-            {"shot": "ep101_sc01_0010", "version": "v001", "path": str(root / "file.mov")}
+            {
+                "shot": "ep101_sc01_0010",
+                "version": "v001",
+                "path": str(root / "file.mov"),
+            }
         ],
     )
     monkeypatch.setattr(
         "apps.onepiece.reconcile.scan_s3_context",
         lambda project, context, scope: [
-            {"shot": "ep101_sc01_0010", "version": "v001", "key": f"{context}/{project}/file.mov"}
+            {
+                "shot": "ep101_sc01_0010",
+                "version": "v001",
+                "key": f"{context}/{project}/file.mov",
+            }
         ],
     )
 
@@ -63,18 +79,31 @@ def test_reconcile_all_consistent(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "All sources are consistent" in result.stdout
 
 
-def test_reconcile_reports_mismatches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_reconcile_reports_mismatches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     sg_versions = [
-        {"shot": "ep101_sc01_0010", "version_number": 2, "file_path": "/a", "status": "rev"}
+        {
+            "shot": "ep101_sc01_0010",
+            "version_number": 2,
+            "file_path": "/a",
+            "status": "rev",
+        }
     ]
     _patch_clients(monkeypatch, sg_versions)
     monkeypatch.setattr(
         "apps.onepiece.reconcile.scan_project_files",
         lambda root, scope: [
-            {"shot": "ep101_sc01_0010", "version": "v001", "path": str(root / "file.mov")}
+            {
+                "shot": "ep101_sc01_0010",
+                "version": "v001",
+                "path": str(root / "file.mov"),
+            }
         ],
     )
-    monkeypatch.setattr("apps.onepiece.reconcile.scan_s3_context", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "apps.onepiece.reconcile.scan_s3_context", lambda *args, **kwargs: []
+    )
 
     csv_path = tmp_path / "report.csv"
     json_path = tmp_path / "report.json"
@@ -107,7 +136,7 @@ def test_reconcile_reports_mismatches(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 def test_reconcile_shotgrid_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _raise(*_args, **_kwargs):
+    def _raise(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(

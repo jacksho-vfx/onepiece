@@ -223,7 +223,11 @@ class ShotGridClient:
             return []
 
         project_id = project.get("id")
-        filters = [{"project": project_id}] if project_id is not None else [{"project": project_name}]
+        filters = (
+            [{"project": project_id}]
+            if project_id is not None
+            else [{"project": project_name}]
+        )
         fields = ",".join(
             [
                 "code",
@@ -241,7 +245,11 @@ class ShotGridClient:
             attributes = record.get("attributes", {})
             relationships = record.get("relationships", {})
             entity_data = relationships.get("entity", {}).get("data", {})
-            shot_name = entity_data.get("name") or entity_data.get("code") or attributes.get("code")
+            shot_name = (
+                entity_data.get("name")
+                or entity_data.get("code")
+                or attributes.get("code")
+            )
             versions.append(
                 {
                     "shot": shot_name,
