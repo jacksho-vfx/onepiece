@@ -1,9 +1,6 @@
-"""
-CLI: Create a 'version zero' MOV proxy for each shot and upload to ShotGrid.
+"""CLI: Create a 'version zero' MOV proxy for each shot and upload to ShotGrid."""
 
-Usage:
-    libraries shotgrid version-zero shots.csv --project CoolShow
-"""
+from pathlib import Path
 
 from upath import UPath
 import structlog
@@ -27,7 +24,7 @@ app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 @app.command(name="version-zero", no_args_is_help=True)
 def version_zero(
-    csv_file: UPath = typer.Argument(..., help="CSV file with shot names."),
+    csv_file: Path = typer.Argument(..., help="CSV file with shot names."),
     project_name: str = typer.Option(
         ..., "--project-name", "-p", help="ShotGrid project name."
     ),
@@ -39,7 +36,8 @@ def version_zero(
     2. Create a 1080p MOV proxy.
     3. Upload as Version zero (<shot>_V000) under the task 'Shot Proxy'.
     """
-    shot_names = validate_shots_csv(csv_file)
+    csv_path = UPath(csv_file)
+    shot_names = validate_shots_csv(csv_path)
     log.info("starting_version_zero", shots=len(shot_names), project=project_name)
 
     handler = FilepathHandler()
