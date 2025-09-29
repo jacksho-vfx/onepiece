@@ -404,6 +404,28 @@ class ShotgridClient:
         payload = self._store.get("Version", int(version_id))
         return cast(Version | None, payload)
 
+    def get_approved_versions(
+        self, project_name: str, episodes: list[str] | None = None
+    ) -> list[dict[str, object]]:
+        """Return approved versions filtered by project and optional episodes."""
+
+        approved: list[dict[str, object]] = []
+        for version in self.list_versions():
+            if version.get("project") != project_name:
+                continue
+            shot_code = version.get("shot", "")
+            if episodes and not any(ep in str(shot_code) for ep in episodes):
+                continue
+            approved.append(
+                {
+                    "shot": shot_code,
+                    "version": version.get("code", 0),
+                    "file_path": version.get("path", ""),
+                    "status": "apr",
+                }
+            )
+        return approved
+
     # Playlist helpers -------------------------------------------------
 
     def _playlist_key(self, project_name: str, playlist_name: str) -> str:

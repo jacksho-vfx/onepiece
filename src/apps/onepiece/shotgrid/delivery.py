@@ -1,7 +1,5 @@
 """CLI helpers for ShotGrid playlist deliveries and bulk utilities."""
 
-from __future__ import annotations
-
 import json
 from enum import Enum
 from pathlib import Path

@@ -15,6 +15,8 @@ from src.libraries.validations.dcc import validate_dcc
 
 log = structlog.get_logger(__name__)
 
+app = typer.Typer(help="DCC Publish CLI.")
+
 
 def _load_metadata(path: Path) -> dict[str, JSONValue]:
     try:
@@ -40,6 +42,7 @@ def _validate_show_type(show_type: str) -> Literal["vfx", "prod"]:
     return lowered  # type: ignore[return-value]
 
 
+@app.command("publish")
 def publish(
     dcc: str = typer.Option(..., "--dcc", help="DCC that produced the scene."),
     scene_name: str = typer.Option(
