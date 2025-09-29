@@ -214,6 +214,60 @@ class ShotGridClient:
     # ------------------------------------------------------------------ #
     # Versions
     # ------------------------------------------------------------------ #
+    def get_versions_for_project(self, project_name: str) -> List[Dict[str, Any]]:
+        """Return version summaries for the specified project."""
+
+        project = self.get_project(project_name)
+        if not project:
+            log.warning("sg.project_not_found", project=project_name)
+            return []
+
+        project_id = project.get("id")
+        filters = (
+            [{"project": project_id}]
+            if project_id is not None
+            else [{"project": project_name}]
+        )
+        fields = ",".join(
+            [
+                "code",
+                "version_number",
+                "sg_status_list",
+                "sg_path_to_movie",
+                "sg_uploaded_movie",
+                "entity",
+            ]
+        )
+        records = self._get("Version", filters, fields)
+
+        versions: List[Dict[str, Any]] = []
+        for record in records:
+            attributes = record.get("attributes", {})
+            relationships = record.get("relationships", {})
+            entity_data = relationships.get("entity", {}).get("data", {})
+            shot_name = (
+                entity_data.get("name")
+                or entity_data.get("code")
+                or attributes.get("code")
+            )
+            versions.append(
+                {
+                    "shot": shot_name,
+                    "version_number": attributes.get("version_number"),
+                    "file_path": attributes.get("sg_path_to_movie")
+                    or attributes.get("sg_uploaded_movie"),
+                    "status": attributes.get("sg_status_list"),
+                    "code": attributes.get("code"),
+                }
+            )
+
+        log.info(
+            "sg.get_versions_for_project",
+            project=project_name,
+            count=len(versions),
+        )
+        return versions
+
     def get_version(self, version_data: VersionData) -> Any:
         return self.get_version(version_data)
 
