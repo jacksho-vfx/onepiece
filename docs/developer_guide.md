@@ -90,7 +90,7 @@ onepiece/
 ## Releasing changes
 
 1. Bump the version in `pyproject.toml` following semantic versioning.
-2. Update `CHANGELOG.md` with a summary of noteworthy changes.
+2. Update `CHANGELOG.md`, the README, and any other user-facing docs with a summary of noteworthy changes.
 3. Build and publish the package:
 
    ```bash

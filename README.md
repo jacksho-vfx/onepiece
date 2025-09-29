@@ -37,11 +37,11 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.3.0
+## What's new in v0.4.0
 
-- **Resilient ShotGrid operations** – The in-memory client now batches create/update/delete calls with retry logic and exposes playlist packaging workflows for MediaShuttle deliveries via `onepiece shotgrid package-playlist`.
-- **Actionable S3 sync summaries** – The `onepiece aws sync-to` and `sync-from` commands emit totals for uploaded, skipped, and failed files and raise clear errors when `s5cmd` exits unsuccessfully.
-- **Expanded onboarding docs** – A dedicated developer guide, CLI walkthroughs, and reusable CSV manifests under `docs/examples/` provide structured practice scenarios for new contributors.
+- **Aligned release metadata** – Version strings in the package configuration and CLI modules now consistently report v0.4.0 so `onepiece --version` mirrors the published build.
+- **Refreshed release notes** – The changelog highlights the current release and preserves a clear history for earlier milestones, making it easier to communicate updates to stakeholders.
+- **Documentation polish** – The README and changelog now spotlight the latest workflows and onboarding pointers for new contributors.
 
 ## Requirements
 
