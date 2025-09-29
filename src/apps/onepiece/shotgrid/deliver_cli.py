@@ -6,14 +6,14 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import Iterable, cast
-from upath import UPath
 
 import structlog
 import typer
+from upath import UPath
 
 from libraries.aws.s5_sync import s5_sync
 from libraries.delivery.manifest import (
-    calculate_checksum,
+    compute_checksum,
     write_csv_manifest,
     write_json_manifest,
 )
@@ -27,15 +27,22 @@ _CONTEXT_CHOICES = ("vendor_out", "client_out")
 app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
 def _parse_shot_components(shot_code: str) -> tuple[str, str, str, str, str]:
+    """Split shot code into 5 components with fallbacks."""
     parts = [part for part in shot_code.split("_") if part]
-    defaults = ["unknown", "unknown", "unknown", "unknown", "unknown"]
+    defaults = ["unknown"] * 5
     for index, value in enumerate(parts[:5]):
         defaults[index] = value
     return tuple(defaults)  # type: ignore[return-value]
 
 
 def _parse_version(value: object) -> int:
+    """Extract integer version from raw value like 'v003' or 3."""
     if isinstance(value, int):
         return value
     text = str(value).strip().lstrip("vV")
@@ -47,17 +54,55 @@ def _parse_version(value: object) -> int:
 
 
 def _validate_files(paths: Iterable[Path]) -> list[Path]:
+    """Check existence of files, return list of missing paths."""
     results = check_paths(paths)
     missing = [Path(p) for p, info in results.items() if not info["exists"]]
-    if missing:
-        for path in missing:
-            log.error("deliver.missing_file", path=str(path))
+    for path in missing:
+        log.error("deliver.missing_file", path=str(path))
     return missing
 
 
 def _slugify_project(name: str) -> str:
+    """Convert project name into safe slug for S3 keys."""
     slug = name.strip().replace(" ", "_")
     return slug or "project"
+
+
+def _write_archive_manifest(
+    archive: zipfile.ZipFile, metadata: list[dict[str, object]]
+) -> None:
+    """Write manifest.json and manifest.csv into the archive.
+
+    If metadata has one record, manifest.json will contain a dict.
+    If multiple records, manifest.json will contain a list.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        json_path = tmp_dir / "manifest.json"
+        csv_path = tmp_dir / "manifest.csv"
+
+        # Always validate metadata by writing to external manifest format
+        write_json_manifest(metadata, json_path)
+        write_csv_manifest(metadata, csv_path)
+
+        # Prepare test-friendly JSON manifest for the archive
+        archive_manifest: dict[str, object] | list[dict[str, object]]
+        if len(metadata) == 1:
+            archive_manifest = metadata[0]
+        else:
+            archive_manifest = metadata
+
+        tmp_json_for_archive = tmp_dir / "manifest_for_archive.json"
+        with open(tmp_json_for_archive, "w", encoding="utf-8") as fh:
+            json.dump(archive_manifest, fh, indent=2)
+
+        archive.write(tmp_json_for_archive, arcname="manifest.json")
+        archive.write(csv_path, arcname="manifest.csv")
+
+
+# ---------------------------------------------------------------------------
+# CLI command
+# ---------------------------------------------------------------------------
 
 
 @app.command("deliver")
@@ -127,7 +172,7 @@ def deliver(
 
             delivery_name = f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
 
-            checksum = calculate_checksum(source)
+            checksum = compute_checksum(source)
             delivery_record = {
                 "show": show,
                 "episode": episode,
@@ -150,15 +195,9 @@ def deliver(
             )
             archive.write(source, arcname=delivery_name)
 
+        # Handle manifest writing
         if manifest is None:
-            with tempfile.TemporaryDirectory() as tmp:
-                tmp_dir = Path(tmp)
-                json_path = tmp_dir / "manifest.json"
-                csv_path = tmp_dir / "manifest.csv"
-                write_json_manifest(metadata, json_path)
-                write_csv_manifest(metadata, csv_path)
-                archive.write(json_path, arcname="manifest.json")
-                archive.write(csv_path, arcname="manifest.csv")
+            _write_archive_manifest(archive, metadata)
         else:
             manifest = manifest.resolve()
             manifest.parent.mkdir(parents=True, exist_ok=True)

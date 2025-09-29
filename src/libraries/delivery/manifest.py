@@ -6,7 +6,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
-from typing import Iterable, Mapping, MutableMapping
+from typing import Iterable, Mapping, MutableMapping, cast
 
 import structlog
 
@@ -37,7 +37,9 @@ __all__ = [
 ]
 
 
-def compute_checksum(file_path: str | Path, algorithm: str = "md5", *, chunk_size: int = 65536) -> str:
+def compute_checksum(
+    file_path: str | Path, algorithm: str = "md5", *, chunk_size: int = 65536
+) -> str:
     """Return the checksum for *file_path* using the requested *algorithm*."""
 
     path = Path(file_path)
@@ -62,11 +64,14 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _normalise_entry(entry: Mapping[str, object], index: int) -> MutableMapping[str, object]:
+def _normalise_entry(
+    entry: Mapping[str, object], index: int
+) -> MutableMapping[str, object]:
     missing = [field for field in _REQUIRED_FIELDS if field not in entry]
     if missing:
         raise ValueError(
-            "Manifest entry %s is missing required fields: %s" % (index, ", ".join(missing))
+            "Manifest entry %s is missing required fields: %s"
+            % (index, ", ".join(missing))
         )
 
     normalised: MutableMapping[str, object] = {}
@@ -74,7 +79,7 @@ def _normalise_entry(entry: Mapping[str, object], index: int) -> MutableMapping[
         value = entry[field]
         if field == "version":
             try:
-                normalised[field] = int(value)  # type: ignore[arg-type]
+                normalised[field] = int(cast(str | int, value))
             except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
                 raise ValueError(
                     f"Manifest entry {index} has an invalid version: {value!r}"
@@ -86,21 +91,27 @@ def _normalise_entry(entry: Mapping[str, object], index: int) -> MutableMapping[
 
     checksum = entry.get("checksum")
     if checksum:
-        normalised["checksum"] = checksum if isinstance(checksum, str) else str(checksum)
+        normalised["checksum"] = (
+            checksum if isinstance(checksum, str) else str(checksum)
+        )
     else:
         normalised["checksum"] = compute_checksum(normalised["source_path"])  # type: ignore[arg-type]
 
     return normalised
 
 
-def _prepare_entries(entries: Iterable[Mapping[str, object]]) -> list[MutableMapping[str, object]]:
+def _prepare_entries(
+    entries: Iterable[Mapping[str, object]]
+) -> list[MutableMapping[str, object]]:
     prepared: list[MutableMapping[str, object]] = []
     for index, entry in enumerate(entries):
         prepared.append(_normalise_entry(entry, index))
     return prepared
 
 
-def get_manifest_data(entries: Iterable[Mapping[str, object]]) -> dict[str, list[MutableMapping[str, object]]]:
+def get_manifest_data(
+    entries: Iterable[Mapping[str, object]]
+) -> dict[str, list[MutableMapping[str, object]]]:
     """Return manifest data with checksums ready for serialisation."""
 
     prepared = _prepare_entries(entries)
