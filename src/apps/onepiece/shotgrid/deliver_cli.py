@@ -24,7 +24,7 @@ log = structlog.get_logger(__name__)
 
 _CONTEXT_CHOICES = ("vendor_out", "client_out")
 
-app = typer.Typer(help="Delivery CLI.")
+app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 
 def _parse_shot_components(shot_code: str) -> tuple[str, str, str, str, str]:

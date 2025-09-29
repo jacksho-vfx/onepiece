@@ -22,7 +22,7 @@ from libraries.validations.csv_validations import validate_shots_csv
 from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(help="Create version-zero proxies and upload to ShotGrid.")
+app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 
 @app.command(name="version-zero", no_args_is_help=True)

@@ -12,7 +12,7 @@ from libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(help="Open scenes in a supported DCC application.")
+app = typer.Typer(name="dcc", help="DCC CLI commands.")
 
 
 def _resolve_dcc(shot_path: Path, dcc: str | None) -> Any:

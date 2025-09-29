@@ -10,7 +10,7 @@ from libraries.shotgrid.show_setup import setup_single_shot
 from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(help="Show setup commands for ShotGrid.")
+app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 
 def _parse_csv(csv_path: Path) -> list[str]:

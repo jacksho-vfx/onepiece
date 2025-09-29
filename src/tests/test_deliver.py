@@ -9,7 +9,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
 from apps.onepiece import app as onepiece_app
-from apps.onepiece.cli import deliver_cli
+from apps.onepiece.shotgrid import deliver_cli
 
 runner = CliRunner()
 
@@ -27,7 +27,7 @@ class StubShotgridClient:
 
 
 def _invoke_cli(args: list[str]) -> Any:
-    return runner.invoke(onepiece_app.app, ["deliver", *args])
+    return runner.invoke(onepiece_app.app, ["shotgrid", "deliver", *args])
 
 
 def test_deliver_packages_versions_and_uploads(

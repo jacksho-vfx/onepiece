@@ -10,7 +10,7 @@ from apps.onepiece.utils.progress import progress_tracker
 from libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
 from libraries.shotgrid.client import ShotgridClient
 
-app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid")
+app = typer.Typer(name="aws", help="AWS and S3 integration commands")
 
 
 class _DryRunUploader:

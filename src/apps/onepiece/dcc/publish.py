@@ -15,7 +15,7 @@ from libraries.validations.dcc import validate_dcc
 
 log = structlog.get_logger(__name__)
 
-app = typer.Typer(help="DCC Publish CLI.")
+app = typer.Typer(name="dcc", help="DCC CLI commands.")
 
 
 def _load_metadata(path: Path) -> dict[str, JSONValue]:

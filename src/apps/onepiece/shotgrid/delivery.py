@@ -22,7 +22,7 @@ from libraries.shotgrid.playlist_delivery import (
 
 log = structlog.get_logger(__name__)
 
-app = typer.Typer(help="ShotGrid utilities.")
+app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 
 class BulkOperation(str, Enum):
