@@ -1,6 +1,7 @@
 import typer
 
 from src.apps.onepiece.aws import app as aws
+from src.apps.onepiece.cli.deliver_cli import deliver
 from src.apps.onepiece.dcc.publish import publish
 from src.apps.onepiece.ingest import app as ingest
 from src.apps.onepiece.misc.greet import app as greet
@@ -26,6 +27,7 @@ app.add_typer(shotgrid_delivery, name="shotgrid")
 app.add_typer(aws)
 app.add_typer(validate)
 app.command("publish")(publish)
+app.command("deliver")(deliver)
 
 if hasattr(app, "exception_handler"):
     app.exception_handler(OnePieceError)(handle_onepiece_error)
