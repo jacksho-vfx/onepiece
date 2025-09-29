@@ -1,9 +1,9 @@
 import typer
 
 from src.apps.onepiece.aws import app as aws
-from src.apps.onepiece.cli.deliver_cli import deliver
-from src.apps.onepiece.dcc.publish import publish
-from src.apps.onepiece.ingest import app as ingest
+from src.apps.onepiece.cli.deliver_cli import app as deliver
+from src.apps.onepiece.dcc.publish import app as publish
+from src.apps.onepiece.aws.ingest import app as ingest
 from src.apps.onepiece.misc.greet import app as greet
 from src.apps.onepiece.misc.info import app as info
 from src.apps.onepiece.shotgrid.delivery import app as shotgrid_delivery
@@ -19,15 +19,15 @@ def handle_onepiece_error(exc: OnePieceError) -> None:
 
 app = typer.Typer(help="OnePiece pipeline command line interface")
 
-app.add_typer(ingest, name="ingest")
+app.add_typer(ingest)
 app.add_typer(greet)
 app.add_typer(info)
 app.add_typer(flow_setup)
-app.add_typer(shotgrid_delivery, name="shotgrid")
+app.add_typer(shotgrid_delivery)
 app.add_typer(aws)
 app.add_typer(validate)
-app.command("publish")(publish)
-app.command("deliver")(deliver)
+app.add_typer(publish)
+app.add_typer(deliver)
 
 if hasattr(app, "exception_handler"):
     app.exception_handler(OnePieceError)(handle_onepiece_error)

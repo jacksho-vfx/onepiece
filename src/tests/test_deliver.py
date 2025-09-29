@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
 from src.apps.onepiece import app as onepiece_app
@@ -29,7 +30,9 @@ def _invoke_cli(args: list[str]) -> Any:
     return runner.invoke(onepiece_app.app, ["deliver", *args])
 
 
-def test_deliver_packages_versions_and_uploads(monkeypatch, tmp_path: Path) -> None:
+def test_deliver_packages_versions_and_uploads(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     source = tmp_path / "source.mov"
     source.write_bytes(b"frame data")
 
@@ -75,7 +78,9 @@ def test_deliver_packages_versions_and_uploads(monkeypatch, tmp_path: Path) -> N
         assert "SHOW_EP01_SC001_SH010_COMP_v003.mov" in names
         assert "manifest.json" in names
         manifest_data = json.loads(archive.read("manifest.json"))
-        assert manifest_data[0]["delivery_path"] == "SHOW_EP01_SC001_SH010_COMP_v003.mov"
+        assert (
+            manifest_data[0]["delivery_path"] == "SHOW_EP01_SC001_SH010_COMP_v003.mov"
+        )
         assert manifest_data[0]["source_path"] == str(source)
 
     assert stub_client.requested == ("One Piece", None)
@@ -84,7 +89,9 @@ def test_deliver_packages_versions_and_uploads(monkeypatch, tmp_path: Path) -> N
     assert sync_calls[0][1] == "s3://vendor_out/One_Piece"
 
 
-def test_deliver_exits_with_missing_files(monkeypatch, tmp_path: Path) -> None:
+def test_deliver_exits_with_missing_files(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     missing = tmp_path / "missing.mov"
     versions = [
         {
@@ -115,7 +122,9 @@ def test_deliver_exits_with_missing_files(monkeypatch, tmp_path: Path) -> None:
     assert not output.exists()
 
 
-def test_deliver_writes_external_manifest(monkeypatch, tmp_path: Path) -> None:
+def test_deliver_writes_external_manifest(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     source = tmp_path / "clip.mov"
     source.write_bytes(b"frames")
 

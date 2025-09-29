@@ -1,13 +1,12 @@
 """Deliver approved ShotGrid versions with OnePiece packaging rules."""
 
-from __future__ import annotations
-
 import json
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
+from upath import UPath
 
 import structlog
 import typer
@@ -24,6 +23,8 @@ from src.libraries.validations.filesystem import check_paths
 log = structlog.get_logger(__name__)
 
 _CONTEXT_CHOICES = ("vendor_out", "client_out")
+
+app = typer.Typer(help="Delivery CLI.")
 
 
 def _parse_shot_components(shot_code: str) -> tuple[str, str, str, str, str]:
@@ -59,6 +60,7 @@ def _slugify_project(name: str) -> str:
     return slug or "project"
 
 
+@app.command("deliver")
 def deliver(
     *,
     project: str = typer.Option(..., "--project", help="ShotGrid project name"),
@@ -99,7 +101,7 @@ def deliver(
         typer.echo("No approved versions found for delivery.")
         return
 
-    source_paths = [Path(item["file_path"]) for item in approved]
+    source_paths = [Path(cast(str, item["file_path"])) for item in approved]
     missing = _validate_files(source_paths)
     if missing:
         raise typer.Exit(code=1)
@@ -109,22 +111,21 @@ def deliver(
 
     metadata: list[dict[str, object]] = []
 
-    with typer.progressbar(approved, label="Preparing delivery") as progress, zipfile.ZipFile(
-        output, "w", compression=zipfile.ZIP_DEFLATED
-    ) as archive:
+    with (
+        typer.progressbar(approved, label="Preparing delivery") as progress,
+        zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive,
+    ):
         for record in progress:
             shot_code = record.get("shot", "unknown")
             version_value = record.get("version", 0)
-            source = Path(record.get("file_path", ""))
+            source = Path(cast(str, record.get("file_path", "")))
             status = record.get("status", "")
 
             show, episode, scene, shot, asset = _parse_shot_components(str(shot_code))
             version_number = _parse_version(version_value)
             extension = source.suffix or ""
 
-            delivery_name = (
-                f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
-            )
+            delivery_name = f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
 
             checksum = calculate_checksum(source)
             delivery_record = {
@@ -178,11 +179,14 @@ def deliver(
         if manifest.suffix:
             external_manifest_files = [manifest, manifest.with_suffix(".csv")]
         else:
-            external_manifest_files = [manifest / "manifest.json", manifest / "manifest.csv"]
+            external_manifest_files = [
+                manifest / "manifest.json",
+                manifest / "manifest.csv",
+            ]
         upload_paths.extend(external_manifest_files)
 
     with tempfile.TemporaryDirectory() as sync_tmp:
-        sync_dir = Path(sync_tmp)
+        sync_dir = UPath(sync_tmp)
         for path in upload_paths:
             target = sync_dir / path.name
             shutil.copy2(path, target)

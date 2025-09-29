@@ -1,7 +1,5 @@
 """CLI entry point for ingesting vendor and client deliveries."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Literal, cast
 
@@ -24,7 +22,7 @@ class _DryRunUploader:
         typer.echo(f"[dry-run] Would upload {file_path} -> s3://{bucket}/{key}")
 
 
-@app.command()
+@app.command("ingest")
 def ingest(
     folder: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
     project: str = typer.Option(..., "--project", "-p", help="ShotGrid project name"),
