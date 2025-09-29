@@ -1,12 +1,11 @@
 """Default local-disk filepath handler for OnePiece."""
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 import structlog
 from upath import UPath
 
-if TYPE_CHECKING:
-    from libraries.handlers.filepath_handler import FilepathHandlerProtocol
+from libraries.handlers.protocols import FilepathHandlerProtocol
 
 log = structlog.get_logger(__name__)
 
