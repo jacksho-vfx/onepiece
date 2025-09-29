@@ -4,7 +4,20 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ---
 
-## [v0.3.0] – Current Release
+## [v0.4.0] – Current Release
+
+### Added / Improved
+
+**Release Management**
+- Bumped all version metadata to v0.4.0 so the CLI, library modules, and packaging configuration report the same release number.
+
+**Documentation**
+- Refreshed the README highlights for v0.4.0 and clarified the current/previous release history.
+- Tidied the changelog to keep earlier milestones intact while spotlighting the latest release.
+
+---
+
+## [v0.3.0] – Previous Release
 
 ### Added / Improved
 
