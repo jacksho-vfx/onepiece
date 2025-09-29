@@ -2,6 +2,8 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
+> **Latest release: v0.5.0.** This update delivers a ShotGrid-driven client delivery pipeline, progress-enabled ingest workflows, and reusable CLI progress helpers for new commands.
+
 ## Quick start
 
 ```bash
@@ -21,9 +23,13 @@ Once installed, the CLI exposes a number of subcommands:
 - `onepiece info` &mdash; Prints information about the current environment, detected DCCs, and ShotGrid/AWS configuration hints.
 - `onepiece greet NAME` &mdash; A smoke-test command to confirm the CLI is wired up.
 - `onepiece publish ...` &mdash; Packages scene renders, previews, and metadata and pushes them to S3 (see the detailed options below).
+- `onepiece dcc open-shot` &mdash; Launches a scene file in the matching DCC, automatically inferring the application from the file extension when not supplied explicitly.
 - `onepiece ingest` and `onepiece aws ...` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
+- `onepiece aws ingest` &mdash; Validates vendor/client deliveries, registers Versions in ShotGrid, and uploads media with detailed progress feedback.
 - `onepiece validate ...` &mdash; Runs validation suites for ingest/publish workflows.
 - `onepiece shotgrid package-playlist` &mdash; Bundles playlist media for client/vendor deliveries with MediaShuttle-ready folder structures.
+- `onepiece shotgrid show-setup` &mdash; Seeds a project hierarchy from a CSV manifest while tracking progress shot-by-shot.
+- `onepiece shotgrid deliver` &mdash; Builds MediaShuttle-ready ZIP archives from approved ShotGrid versions, writes manifests, and synchronises the package to S3.
 
 Use `onepiece COMMAND --help` to inspect options for any command.
 
@@ -37,11 +43,11 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.4.0
+## What's new in v0.5.0
 
-- **Aligned release metadata** – Version strings in the package configuration and CLI modules now consistently report v0.4.0 so `onepiece --version` mirrors the published build.
-- **Refreshed release notes** – The changelog highlights the current release and preserves a clear history for earlier milestones, making it easier to communicate updates to stakeholders.
-- **Documentation polish** – The README and changelog now spotlight the latest workflows and onboarding pointers for new contributors.
+- **ShotGrid delivery pipeline** – `onepiece shotgrid deliver` fetches approved Versions, validates local media, builds an archive with JSON/CSV manifests, and syncs the payload to the correct S3 context.
+- **Progress-aware ingest flows** – `onepiece aws ingest` and the ShotGrid show setup helper share a reusable Rich-powered progress tracker so operators can monitor long-running tasks in real time.
+- **Streamlined DCC access** – `onepiece dcc open-shot` opens scenes directly from the CLI and automatically selects the appropriate DCC when you omit the `--dcc` flag.
 
 ## Requirements
 
@@ -110,7 +116,9 @@ supports production-ready features for dealing with large deliveries:
 
 See ``libraries.shotgrid.client`` and ``libraries.shotgrid.playlist_delivery``
 for usage examples and the accompanying unit tests for end-to-end
-demonstrations of the new capabilities.
+demonstrations of the new capabilities. The delivery command
+(``onepiece shotgrid deliver``) complements these helpers by packaging approved
+Versions, writing manifests, and synchronising the results to S3.
 
 ### AWS
 
@@ -148,9 +156,60 @@ onepiece publish \
 
 The command validates the target DCC, loads metadata from JSON, and reports the final package path once complete.
 
+### Opening scenes from the CLI
+
+Use `onepiece dcc open-shot` to launch a local scene file in the appropriate
+DCC. Provide `--dcc` to force a specific application or omit it to let the
+command infer the right tool from the file extension:
+
+```bash
+onepiece dcc open-shot --shot /projects/show/sequences/seq010/shot010/lighting_v002.nk
+```
+
+The CLI reports success once the DCC has been triggered and logs actionable
+errors when it cannot locate or open the requested file.
+
+### Delivering approved ShotGrid versions
+
+Package client-ready deliveries straight from ShotGrid approvals using the
+`deliver` subcommand:
+
+```bash
+onepiece shotgrid deliver \
+  --project "Frost Giant" \
+  --episodes EP01 EP02 \
+  --context vendor_out \
+  --output /tmp/frost_giant_vendor_out.zip \
+  --manifest /tmp/frost_giant_vendor_out_manifest
+```
+
+The command validates each approved Version, adds the media to a ZIP archive,
+writes JSON/CSV manifests, and uploads the results to the requested S3
+context. When you supply `--manifest` the manifest files are also persisted to
+disk for downstream automation.
+
 ### AWS synchronisation helpers
 
 `onepiece aws sync-from` and `onepiece aws sync-to` wrap the data movers that mirror folders between local storage and S3. Both commands accept `--include/--exclude` globs and a `--dry-run` flag for auditing transfers.
+
+### Media ingest workflow
+
+The ingest command validates deliveries and registers the associated Versions in
+ShotGrid before copying media to S3. Progress updates surface in the terminal so
+operators can follow along as each file is processed:
+
+```bash
+onepiece aws ingest \
+  /deliveries/vendor_drop_2024_02_14 \
+  --project "Frost Giant" \
+  --show-code FG \
+  --source vendor \
+  --vendor-bucket vendor_in \
+  --client-bucket client_in
+```
+
+Invalid files are reported at the end of the run alongside a summary of skipped
+and uploaded media.
 
 ### Inspecting your environment
 

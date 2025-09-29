@@ -4,7 +4,41 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ---
 
-## [v0.4.0] – Current Release
+## [Unreleased]
+
+_No changes yet._
+
+---
+
+## [v0.5.0] – Current Release
+
+### Added / Improved
+
+**ShotGrid Delivery**
+- Introduced a `onepiece shotgrid deliver` workflow that assembles approved
+  versions into MediaShuttle-ready ZIP archives, emits JSON/CSV manifests, and
+  syncs the payload to the appropriate S3 context.
+
+**Media Ingest**
+- Refreshed `onepiece aws ingest` with rich progress feedback shared with other
+  long-running commands so operators can monitor validation and upload activity
+  in real time.
+
+**DCC Utilities**
+- Added `onepiece dcc open-shot` for opening scene files directly from the CLI
+  with automatic DCC detection based on the file extension.
+
+**Developer Experience**
+- Exposed a reusable progress tracker for CLI commands, helping new utilities
+  present consistent status messages and success/failure reporting.
+
+**Documentation**
+- Expanded the README and developer guide to cover the new delivery, ingest,
+  and DCC helpers alongside guidance on integrating the shared progress tools.
+
+---
+
+## [v0.4.0] – Previous Release
 
 ### Added / Improved
 

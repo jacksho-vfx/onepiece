@@ -73,13 +73,19 @@ onepiece/
    python -m src.apps.onepiece publish --help
    ```
 
-4. **Adhere to coding standards**. The project leans on Ruff and mypy for style and type safety. Avoid `print` statements in favour of the shared logging utilities inside `src/libraries/logging` and prefer `Path` objects over string paths.
+4. **Adhere to coding standards**. The project leans on Ruff and mypy for style and type safety. Avoid `print` statements in favour of the shared logging utilities inside `src/libraries/logging` and prefer `Path` objects over string paths. When authoring new CLI commands, use the shared progress helpers described below so user-facing tools behave consistently.
 
 5. **Run the quality suite** before opening a pull request. Continuous integration mirrors the commands listed earlier; matching the same sequence locally prevents surprises.
 
 6. **Document user-facing changes**. Update the README, `CHANGELOG.md`, or create new docs inside `docs/` whenever you add new commands, flags, or workflows.
 
 7. **Open a pull request** summarising your changes, screenshots, and any caveats. Link to relevant tickets and call out breaking changes explicitly.
+
+## CLI utilities and UX guidelines
+
+- **Progress reporting** – The Rich-powered progress tracker defined in `apps/onepiece/utils/progress.py` provides a consistent way to surface progress bars, success/failure banners, and task descriptions. Use it for long-running operations such as ingest, project setup, or delivery packaging.
+- **ShotGrid workflows** – High-level commands such as `onepiece shotgrid show-setup` and `onepiece shotgrid deliver` wrap the lower-level client helpers. When extending these flows, reuse the convenience functions in `libraries/shotgrid` to stay aligned with existing retry logic and manifest generation.
+- **DCC helpers** – Utilities under `apps/onepiece/dcc/` (for example `open_shot.py`) demonstrate the preferred pattern for validating input, mapping to `SupportedDCC` enums, and surfacing actionable CLI errors. Follow the same structure when introducing new DCC-facing commands.
 
 ## Debugging tips
 
