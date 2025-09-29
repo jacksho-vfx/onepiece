@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast, Callable, Any
+
 import typer
 
 
@@ -13,6 +15,7 @@ def _merge_sub_apps(*sub_apps: typer.Typer) -> None:
 
     for sub_app in sub_apps:
         for command in sub_app.registered_commands:
+            callback = cast(Callable[..., Any], command.callback)
             app.command(
                 name=command.name,
                 cls=command.cls,
@@ -26,7 +29,7 @@ def _merge_sub_apps(*sub_apps: typer.Typer) -> None:
                 no_args_is_help=command.no_args_is_help,
                 add_help_option=command.add_help_option,
                 options_metavar=command.options_metavar,
-            )(command.callback)
+            )(callback)
 
 
 def _register_commands() -> None:
