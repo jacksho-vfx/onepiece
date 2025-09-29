@@ -9,8 +9,8 @@ from typing import Literal, cast, Any
 import structlog
 import typer
 
-from src.libraries.dcc.dcc_client import JSONValue, publish_scene
-from src.libraries.validations.dcc import validate_dcc
+from libraries.dcc.dcc_client import JSONValue, publish_scene
+from libraries.validations.dcc import validate_dcc
 
 
 log = structlog.get_logger(__name__)

@@ -9,17 +9,17 @@ from upath import UPath
 import structlog
 import typer
 
-from src.libraries.handlers.filepath_handler import FilepathHandler
-from src.libraries.media.transformations import create_1080p_proxy_from_exrs
-from src.libraries.shotgrid.api import ShotGridClient
-from src.libraries.shotgrid.models import (
+from libraries.handlers.filepath_handler import FilepathHandler
+from libraries.media.transformations import create_1080p_proxy_from_exrs
+from libraries.shotgrid.api import ShotGridClient
+from libraries.shotgrid.models import (
     PipelineStep,
     TaskCode,
     TaskData,
     VersionData,
 )
-from src.libraries.validations.csv_validations import validate_shots_csv
-from src.apps.onepiece.utils.progress import progress_tracker
+from libraries.validations.csv_validations import validate_shots_csv
+from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Create version-zero proxies and upload to ShotGrid.")

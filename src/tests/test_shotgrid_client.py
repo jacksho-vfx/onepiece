@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from src.libraries.shotgrid.client import (
+from libraries.shotgrid.client import (
     EntityStore,
     HierarchyTemplate,
     RetryPolicy,
@@ -44,7 +44,7 @@ def test_bulk_create_update_delete_entities() -> None:
 
 
 @dataclass
-class FlakyStore(EntityStore):
+class FlakyStore(EntityStore):  # type: ignore[misc]
     """Entity store that fails the first ``add`` invocation."""
 
     attempts: int = 0

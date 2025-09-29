@@ -5,10 +5,10 @@ from typing import Literal, cast
 
 import typer
 
-from src.apps.onepiece.utils.errors import OnePieceValidationError
-from src.apps.onepiece.utils.progress import progress_tracker
-from src.libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
-from src.libraries.shotgrid.client import ShotgridClient
+from apps.onepiece.utils.errors import OnePieceValidationError
+from apps.onepiece.utils.progress import progress_tracker
+from libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
+from libraries.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="Ingest incoming media and register Versions in ShotGrid")
 

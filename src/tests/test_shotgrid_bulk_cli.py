@@ -9,7 +9,7 @@ from typing import Any
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
-from src.apps.onepiece.shotgrid import delivery as shotgrid_cli
+from apps.onepiece.shotgrid import delivery as shotgrid_cli
 
 
 class StubShotgridClient:

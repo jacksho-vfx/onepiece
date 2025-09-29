@@ -8,8 +8,8 @@ from typing import Any
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
-from src.apps.onepiece import app as onepiece_app
-from src.apps.onepiece.cli import deliver_cli
+from apps.onepiece import app as onepiece_app
+from apps.onepiece.cli import deliver_cli
 
 runner = CliRunner()
 

@@ -6,9 +6,9 @@ from typing import Any
 import structlog
 import typer
 
-from src.apps.onepiece.utils.errors import OnePieceExternalServiceError
-from src.libraries.dcc.dcc_client import open_scene
-from src.libraries.validations.dcc import detect_dcc_from_file, validate_dcc
+from apps.onepiece.utils.errors import OnePieceExternalServiceError
+from libraries.dcc.dcc_client import open_scene
+from libraries.validations.dcc import detect_dcc_from_file, validate_dcc
 
 
 log = structlog.get_logger(__name__)

@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from src.apps.onepiece.app import app
+from apps.onepiece.app import app
 
 runner = CliRunner()
 

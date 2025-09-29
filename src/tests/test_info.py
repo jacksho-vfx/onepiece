@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from src.apps.onepiece.misc import info as info_module
+from apps.onepiece.misc import info as info_module
 
 
 def test_info_masks_shotgrid_key(

@@ -9,8 +9,8 @@ from upath import UPath
 import requests
 import structlog
 
-from src.libraries.shotgrid.config import load_config
-from src.libraries.shotgrid.models import (
+from libraries.shotgrid.config import load_config
+from libraries.shotgrid.models import (
     EpisodeData,
     PlaylistData,
     SceneData,
@@ -18,7 +18,7 @@ from src.libraries.shotgrid.models import (
     VersionData,
 )
 
-from src.libraries.shotgrid.models import PipelineStep, TaskCode, TaskData
+from libraries.shotgrid.models import PipelineStep, TaskCode, TaskData
 
 log = structlog.get_logger(__name__)
 

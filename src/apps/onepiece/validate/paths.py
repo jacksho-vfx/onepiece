@@ -2,8 +2,8 @@ from pathlib import Path
 
 import typer
 
-from src.apps.onepiece.utils.errors import OnePieceValidationError
-from src.libraries.validations.filesystem import preflight_report
+from apps.onepiece.utils.errors import OnePieceValidationError
+from libraries.validations.filesystem import preflight_report
 
 app = typer.Typer(help="Validate filepaths")
 

@@ -1,11 +1,12 @@
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 from upath import UPath
 
-from src.libraries.shotgrid.client import ShotgridClient
-from src.libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
+from libraries.shotgrid.client import ShotgridClient
+from libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
 
 
 @pytest.fixture()
@@ -17,7 +18,7 @@ def _create_version(
     sg_client: ShotgridClient, project: str, shot: str, path: UPath
 ) -> int:
     version = sg_client.register_version(project, shot, path)
-    return version["id"]
+    return cast(int, version["id"])
 
 
 def test_package_playlist_for_mediashuttle(

@@ -11,14 +11,14 @@ from upath import UPath
 import structlog
 import typer
 
-from src.libraries.aws.s5_sync import s5_sync
-from src.libraries.delivery.manifest import (
+from libraries.aws.s5_sync import s5_sync
+from libraries.delivery.manifest import (
     calculate_checksum,
     write_csv_manifest,
     write_json_manifest,
 )
-from src.libraries.shotgrid.client import ShotgridClient
-from src.libraries.validations.filesystem import check_paths
+from libraries.shotgrid.client import ShotgridClient
+from libraries.validations.filesystem import check_paths
 
 log = structlog.get_logger(__name__)
 

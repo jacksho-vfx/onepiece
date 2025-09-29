@@ -9,13 +9,13 @@ import structlog
 import typer
 from upath import UPath
 
-from src.apps.onepiece.utils.errors import (
+from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceIOError,
     OnePieceValidationError,
 )
-from src.libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
-from src.libraries.shotgrid.playlist_delivery import (
+from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
+from libraries.shotgrid.playlist_delivery import (
     Recipient,
     package_playlist_for_mediashuttle,
 )

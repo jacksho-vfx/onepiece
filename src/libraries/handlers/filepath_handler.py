@@ -1,16 +1,17 @@
 """Default local-disk filepath handler for OnePiece."""
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import structlog
 from upath import UPath
 
-from src.libraries.handlers.protocols import FilepathHandlerProtocol
+if TYPE_CHECKING:
+    from libraries.handlers.filepath_handler import FilepathHandlerProtocol
 
 log = structlog.get_logger(__name__)
 
 
-class FilepathHandler(FilepathHandlerProtocol):
+class FilepathHandler(FilepathHandlerProtocol):  # type: ignore[misc]
     """
     Simple filesystem handler that builds paths under a configurable root.
 

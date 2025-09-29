@@ -11,7 +11,7 @@ except ImportError:  # pragma: no cover - Python <3.8 fallback
 import structlog
 import typer
 
-from src.libraries.validations.dcc import SupportedDCC
+from libraries.validations.dcc import SupportedDCC
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Display environment and configuration info")

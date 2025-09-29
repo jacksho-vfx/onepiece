@@ -7,12 +7,12 @@ from pathlib import Path
 import structlog
 import typer
 
-from src.apps.onepiece.utils.errors import (
+from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-from src.libraries.shotgrid.api import ShotGridClient
-from src.libraries.shotgrid.models import VersionData
+from libraries.shotgrid.api import ShotGridClient
+from libraries.shotgrid.models import VersionData
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="ShotGrid related commands")
