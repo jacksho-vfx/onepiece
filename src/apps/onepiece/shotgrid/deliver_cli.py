@@ -175,9 +175,7 @@ def deliver(
                 version_number = _parse_version(version_value)
                 extension = source.suffix or ""
 
-                delivery_name = (
-                    f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
-                )
+                delivery_name = f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
 
                 checksum = compute_checksum(source)
                 delivery_record = {
@@ -269,9 +267,7 @@ def deliver(
                 upload_progress.advance(description="Sync completed")
 
             upload_progress.update_total(max(events, 1))
-            upload_progress.succeed(
-                f"Uploaded delivery assets to {destination}."
-            )
+            upload_progress.succeed(f"Uploaded delivery assets to {destination}.")
 
     if external_manifest_files:
         typer.echo(
