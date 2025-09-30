@@ -2,6 +2,8 @@
 Manipulations: audio conversion and sequence renumbering using PyAV.
 """
 
+from pathlib import Path
+
 from upath import UPath
 import structlog
 import av
@@ -39,7 +41,7 @@ def convert_audio_to_mono(input_audio: UPath, output_audio: UPath) -> UPath:
 
 
 def renumber_sequence(
-    input_dir: UPath,
+    input_dir: Path,
     pattern: str = "frame.%04d.exr",
     start_number: int = 1001,
 ) -> None:

@@ -9,7 +9,6 @@ from typing import Iterable, cast
 
 import structlog
 import typer
-from upath import UPath
 
 from libraries.aws.s5_sync import s5_sync
 from libraries.delivery.manifest import (
@@ -225,7 +224,7 @@ def deliver(
         upload_paths.extend(external_manifest_files)
 
     with tempfile.TemporaryDirectory() as sync_tmp:
-        sync_dir = UPath(sync_tmp)
+        sync_dir = Path(sync_tmp)
         for path in upload_paths:
             target = sync_dir / path.name
             shutil.copy2(path, target)

@@ -101,7 +101,7 @@ def _normalise_entry(
 
 
 def _prepare_entries(
-    entries: Iterable[Mapping[str, object]]
+    entries: Iterable[Mapping[str, object]],
 ) -> list[MutableMapping[str, object]]:
     prepared: list[MutableMapping[str, object]] = []
     for index, entry in enumerate(entries):
@@ -110,7 +110,7 @@ def _prepare_entries(
 
 
 def get_manifest_data(
-    entries: Iterable[Mapping[str, object]]
+    entries: Iterable[Mapping[str, object]],
 ) -> dict[str, list[MutableMapping[str, object]]]:
     """Return manifest data with checksums ready for serialisation."""
 
