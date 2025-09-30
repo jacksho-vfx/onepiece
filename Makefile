@@ -4,7 +4,7 @@ VENV := .venv/bin
 PYTHON ?= $(VENV)/python
 PIP ?= .venv/bin/pip
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
-PRE_COMMIT_CONFIG ?= .pre_commit_config.yaml
+PRE_COMMIT_CONFIG ?= .pre-commit-config.yaml
 
 setup:
 	$(PYTHON) -m pip install --upgrade pip

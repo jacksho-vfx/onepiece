@@ -6,8 +6,6 @@ needed by the tests are implemented which keeps the behaviour easy to reason
 about.
 """
 
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess
@@ -15,7 +13,6 @@ import os
 from collections.abc import Iterable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
-from upath import UPath
 from typing import Literal, TypeAlias
 from dataclasses import dataclass
 
@@ -245,8 +242,6 @@ def _copy_output(src: Path, dst: Path, *, treat_dst_as_dir: bool = False) -> lis
     if treat_dst_as_dir or (dst.exists() and dst.is_dir()):
         target = dst / src.name
     else:
-        # If the destination does not exist we still want to honour the
-        # directory intent when ``dst`` looks like a folder path.
         if dst.suffix == "":
             target = dst / src.name
 
@@ -280,7 +275,7 @@ def publish_scene(
     bucket: str,
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
-) -> UPath:
+) -> Path:
     """Package a scene's outputs locally and mirror them to S3.
 
     The packaging process is intentionally straightforward – the provided
@@ -295,7 +290,7 @@ def publish_scene(
     and tooling.
     """
 
-    package_dir = UPath(destination) / scene_name
+    package_dir = destination / scene_name
     package_dir.mkdir(parents=True, exist_ok=True)
 
     renders_files = _copy_output(

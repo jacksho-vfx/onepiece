@@ -33,7 +33,7 @@ def _patch_clients(
 ) -> None:
     client = DummyShotGridClient(versions)
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.ShotGridClient.from_env",
+        "apps.onepiece.validate.reconcile.ShotGridClient.from_env",
         classmethod(lambda cls: client),
     )
 
@@ -49,7 +49,7 @@ def test_reconcile_all_consistent(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     _patch_clients(monkeypatch, sg_versions)
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.scan_project_files",
+        "apps.onepiece.validate.reconcile.scan_project_files",
         lambda root, scope: [
             {
                 "shot": "ep101_sc01_0010",
@@ -59,7 +59,7 @@ def test_reconcile_all_consistent(monkeypatch: pytest.MonkeyPatch) -> None:
         ],
     )
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.scan_s3_context",
+        "apps.onepiece.validate.reconcile.scan_s3_context",
         lambda project, context, scope: [
             {
                 "shot": "ep101_sc01_0010",
@@ -71,7 +71,7 @@ def test_reconcile_all_consistent(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = runner.invoke(
         app,
-        ["reconcile", "--project", "Example", "--context", "vendor_in"],
+        ["validate", "reconcile", "--project", "Example", "--context", "vendor_in"],
         catch_exceptions=False,
     )
 
@@ -92,7 +92,7 @@ def test_reconcile_reports_mismatches(
     ]
     _patch_clients(monkeypatch, sg_versions)
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.scan_project_files",
+        "apps.onepiece.validate.reconcile.scan_project_files",
         lambda root, scope: [
             {
                 "shot": "ep101_sc01_0010",
@@ -102,7 +102,7 @@ def test_reconcile_reports_mismatches(
         ],
     )
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.scan_s3_context", lambda *args, **kwargs: []
+        "apps.onepiece.validate.reconcile.scan_s3_context", lambda *args, **kwargs: []
     )
 
     csv_path = tmp_path / "report.csv"
@@ -111,6 +111,7 @@ def test_reconcile_reports_mismatches(
     result = runner.invoke(
         app,
         [
+            "validate",
             "reconcile",
             "--project",
             "Example",
@@ -140,13 +141,13 @@ def test_reconcile_shotgrid_failure(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(
-        "apps.onepiece.reconcile.ShotGridClient.from_env",
+        "apps.onepiece.validate.reconcile.ShotGridClient.from_env",
         classmethod(lambda cls: SimpleNamespace(get_versions_for_project=_raise)),
     )
 
     result = runner.invoke(
         app,
-        ["reconcile", "--project", "Example"],
+        ["validate", "reconcile", "--project", "Example"],
         catch_exceptions=False,
     )
 

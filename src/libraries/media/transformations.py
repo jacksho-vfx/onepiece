@@ -35,7 +35,7 @@ def create_1080p_proxy_from_exrs(
     stream.pix_fmt = "yuv420p"
 
     for frame_path in pattern:
-        img = iio.imread(frame_path)
+        img = iio.imread(str(frame_path))
         frame = av.VideoFrame.from_ndarray(img, format="rgb24")
         frame = frame.reformat(width=1920, height=1080)
         packet = stream.encode(frame)
@@ -70,7 +70,7 @@ def convert_mov_to_exrs(
         if frame_number % int(video_stream.rate * (1 / fps)) == 0:
             img = frame.to_ndarray(format="rgb24")
             out_path = output_dir / f"frame.{frame_number:04d}.exr"
-            iio.imwrite(out_path, img)
+            iio.imwrite(str(out_path), img)
         frame_number += 1
 
     container.close()

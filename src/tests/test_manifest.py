@@ -93,7 +93,7 @@ def test_write_csv_manifest_creates_file(
 
 
 def test_get_manifest_data_returns_expected_structure(
-    sample_entries: tuple[list[dict[str, object]], Path]
+    sample_entries: tuple[list[dict[str, object]], Path],
 ) -> None:
     entries, source = sample_entries
     data = manifest.get_manifest_data(entries)
