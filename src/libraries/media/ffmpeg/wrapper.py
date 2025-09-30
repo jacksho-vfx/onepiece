@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Any
 
 __all__ = [
     "BurnInMetadata",
@@ -66,7 +66,7 @@ def run_ffmpeg_concat(
     *,
     codec: str,
     burnins: Sequence[BurnInMetadata] | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[Any]:
     """Execute ffmpeg to concatenate clips into a single movie."""
 
     command = [

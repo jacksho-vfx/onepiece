@@ -36,6 +36,8 @@ ScopeOption = typer.Option(
     show_default=True,
 )
 
+app = typer.Typer(name="validate", help="Validate pipeline.")
+
 
 def _resolve_project_root(project: str) -> Path:
     base = Path(os.environ.get(PROJECT_ROOT_ENV, DEFAULT_PROJECTS_ROOT))
@@ -60,6 +62,7 @@ def _write_json_report(path: Path, rows: list[dict[str, str]]) -> None:
         json.dump(rows, fh, indent=2)
 
 
+@app.command("reconcile")
 def reconcile(
     project: str = typer.Option(..., "--project", help="ShotGrid project name"),
     scope: ScopeLiteral = ScopeOption,

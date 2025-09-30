@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, cast
 
 import structlog
 import typer
@@ -67,7 +67,9 @@ def get_shotgrid_client() -> ShotGridClient:
     return ShotGridClient()
 
 
-def _resolve_project_filters(client: ShotGridClient, project_name: str) -> list[dict[str, object]]:
+def _resolve_project_filters(
+    client: ShotGridClient, project_name: str
+) -> list[dict[str, object]]:
     project = client.get_project(project_name)
     if not project:
         log.warning("dailies.project_not_found", project=project_name)
@@ -132,7 +134,9 @@ def _extract_duration(attributes: dict[str, object]) -> float | None:
     frame_rate = attributes.get("sg_uploaded_movie_frame_rate")
     try:
         if frame_count and frame_rate:
-            return float(frame_count) / float(frame_rate)
+            return float(cast(str | float | int, frame_count)) / float(
+                cast(str | float | int, frame_rate)
+            )
     except (TypeError, ZeroDivisionError, ValueError):  # pragma: no cover - defensive
         return None
     return None
@@ -163,9 +167,13 @@ def _build_clip(record: dict[str, object]) -> DailiesClip | None:
     )
 
 
-def _fetch_versions(client: ShotGridClient, filters: list[dict[str, object]]) -> list[DailiesClip]:
+def _fetch_versions(
+    client: ShotGridClient, filters: list[dict[str, object]]
+) -> list[DailiesClip]:
     log.debug("dailies.fetch_versions", filters=json.dumps(filters))
-    records = client._get("Version", filters, VERSION_FIELDS)  # noqa: SLF001 - private API
+    records = client._get(
+        "Version", filters, VERSION_FIELDS
+    )  # noqa: SLF001 - private API
     clips: list[DailiesClip] = []
     for record in records:
         clip = _build_clip(record)
@@ -192,12 +200,14 @@ def fetch_playlist_versions(
         )
         return []
 
-    relationships = playlist.get("relationships", {}) if isinstance(playlist, dict) else {}
+    relationships = (
+        playlist.get("relationships", {}) if isinstance(playlist, dict) else {}
+    )
     versions = []
     if isinstance(relationships, dict):
         data = relationships.get("versions", {})
         if isinstance(data, dict):
-            versions = data.get("data", [])  # type: ignore[assignment]
+            versions = data.get("data", [])
     version_ids: list[int] = []
     for entry in versions or []:
         if isinstance(entry, dict) and entry.get("id") is not None:
@@ -321,7 +331,9 @@ def create_dailies(
 
     if not clips:
         log.warning("dailies.no_versions", project=project, playlist=playlist)
-        typer.secho("No versions found for the requested parameters.", fg=typer.colors.YELLOW)
+        typer.secho(
+            "No versions found for the requested parameters.", fg=typer.colors.YELLOW
+        )
         raise typer.Exit(code=1)
 
     with typer.progressbar(clips, label="Processing versions") as progress:
@@ -336,15 +348,16 @@ def create_dailies(
         raise typer.Exit(code=1) from exc
     except subprocess.CalledProcessError as exc:
         log.error("dailies.ffmpeg_failed", returncode=exc.returncode, stderr=exc.stderr)
-        typer.secho("FFmpeg failed to render the dailies output.", fg=typer.colors.RED, err=True)
+        typer.secho(
+            "FFmpeg failed to render the dailies output.", fg=typer.colors.RED, err=True
+        )
         raise typer.Exit(code=2) from exc
 
     manifest_path = write_manifest(output, processed, codec=codec)
     total_duration = _summarize_duration(processed)
 
     typer.echo(
-        f"Compiled {len(processed)} clips "
-        f"({total_duration:.2f}s) into {output}"
+        f"Compiled {len(processed)} clips " f"({total_duration:.2f}s) into {output}"
     )
     typer.echo(f"Manifest: {manifest_path}")
 

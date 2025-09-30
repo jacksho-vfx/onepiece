@@ -30,7 +30,9 @@ def sample_clip(tmp_path: Path) -> DailiesClip:
     )
 
 
-def test_dailies_playlist_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_clip: DailiesClip) -> None:
+def test_dailies_playlist_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_clip: DailiesClip
+) -> None:
     output = tmp_path / "dailies.mov"
     manifest_path = output.with_name(f"{output.name}.manifest.json")
 
@@ -42,7 +44,9 @@ def test_dailies_playlist_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
     recorded: dict[str, Any] = {}
 
-    def _fake_run_ffmpeg(concat_file: Path, render_path: Path, *, codec: str, burnins: Any) -> subprocess.CompletedProcess:
+    def _fake_run_ffmpeg(
+        concat_file: Path, render_path: Path, *, codec: str, burnins: Any
+    ) -> subprocess.CompletedProcess[Any]:
         recorded["concat_file"] = concat_file
         recorded["render_path"] = render_path
         recorded["codec"] = codec
@@ -112,7 +116,9 @@ def test_dailies_no_versions(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert not output.exists()
 
 
-def test_dailies_ffmpeg_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_clip: DailiesClip) -> None:
+def test_dailies_ffmpeg_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_clip: DailiesClip
+) -> None:
     output = tmp_path / "dailies.mov"
 
     monkeypatch.setattr("onepiece.review.dailies.get_shotgrid_client", lambda: object())
@@ -121,7 +127,7 @@ def test_dailies_ffmpeg_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
         lambda client, project: [sample_clip],
     )
 
-    def _raise_ffmpeg(*_: Any, **__: Any) -> subprocess.CompletedProcess:
+    def _raise_ffmpeg(*_: Any, **__: Any) -> subprocess.CompletedProcess[Any]:
         raise subprocess.CalledProcessError(1, ["ffmpeg"], stderr="boom")
 
     monkeypatch.setattr(

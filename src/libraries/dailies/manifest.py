@@ -6,14 +6,16 @@ import datetime as _dt
 import json
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, TypeVar
 
 __all__ = ["write_manifest"]
+
+TDataclass = TypeVar("TDataclass")
 
 
 def _clip_to_mapping(clip: Any) -> Mapping[str, Any]:
     if is_dataclass(clip):
-        return asdict(clip)
+        return asdict(clip)  # type: ignore[arg-type]
     if isinstance(clip, Mapping):
         return clip
     return {
@@ -41,5 +43,7 @@ def write_manifest(
         "generated_at": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
         "clips": [dict(_clip_to_mapping(clip)) for clip in clips],
     }
-    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
     return manifest_path
