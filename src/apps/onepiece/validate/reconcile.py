@@ -12,6 +12,7 @@ from typing import Literal, Optional
 import structlog
 import typer
 
+from apps.onepiece.utils.progress import progress_tracker
 from libraries.aws.scanner import scan_s3_context
 from libraries.filesystem.scanner import scan_project_files
 from libraries.reconcile.comparator import (
@@ -121,13 +122,35 @@ def reconcile(
             raise typer.Exit(code=2) from exc
 
     shots = collect_shots(sg_versions, fs_versions, s3_versions)
-    with typer.progressbar(length=len(shots), label="Reconciling") as progress:
+    total_shots = len(shots)
+
+    with progress_tracker(
+        "Reconcile Project Data",
+        total=max(total_shots, 1),
+        task_description="Comparing sources",
+    ) as reconcile_progress:
+        processed = 0
+
+        def _on_progress(step: int) -> None:
+            nonlocal processed
+            processed += step
+            description = (
+                f"Compared {processed}/{total_shots} shots"
+                if total_shots
+                else "Reconciling"
+            )
+            reconcile_progress.advance(step=step, description=description)
+
         mismatches = compare_datasets(
             sg_versions,
             fs_versions,
             s3_versions,
             shots=shots,
-            progress_callback=progress.update,
+            progress_callback=_on_progress,
+        )
+
+        reconcile_progress.succeed(
+            f"Compared {total_shots} shot(s) across ShotGrid, filesystem, and S3."
         )
 
     totals = Counter(mismatch["type"] for mismatch in mismatches)

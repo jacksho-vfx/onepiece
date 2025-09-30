@@ -2,6 +2,8 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
+> **New in v0.6.0:** Long-running scenarios now surface the shared `progress_tracker` overlay so you can watch packaging, reconciliation, and S3 synchronisation progress without leaving the terminal.
+
 ## 1. Validate a workstation environment
 
 1. Export temporary environment variables (replace the values with your sandbox credentials):

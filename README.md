@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest release: v0.5.0.** This update delivers a ShotGrid-driven client delivery pipeline, progress-enabled ingest workflows, and reusable CLI progress helpers for new commands.
+> **Latest release: v0.6.0.** This release standardises the Rich-powered progress tracker across delivery and validation CLIs, surfaces S3 sync feedback, and refreshes the documentation for the upgraded workflow.
 
 ## Quick start
 
@@ -43,11 +43,11 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.5.0
+## What's new in v0.6.0
 
-- **ShotGrid delivery pipeline** – `onepiece shotgrid deliver` fetches approved Versions, validates local media, builds an archive with JSON/CSV manifests, and syncs the payload to the correct S3 context.
-- **Progress-aware ingest flows** – `onepiece aws ingest` and the ShotGrid show setup helper share a reusable Rich-powered progress tracker so operators can monitor long-running tasks in real time.
-- **Streamlined DCC access** – `onepiece dcc open-shot` opens scenes directly from the CLI and automatically selects the appropriate DCC when you omit the `--dcc` flag.
+- **Unified CLI progress feedback** – `onepiece shotgrid deliver` and `onepiece validate reconcile` now share the Rich-powered progress tracker so that packaging, reconciliation, and S3 uploads all report consistent status updates.
+- **Delivery workflow polish** – ShotGrid deliveries display per-version packaging progress, emit success summaries through the shared tracker, and surface `s5cmd` transfer output so operators can monitor uploads without leaving the terminal.
+- **Release alignment** – All distributable packages and documentation now advertise v0.6.0 so the CLI, Python modules, and published guides remain in sync.
 
 ## Requirements
 
