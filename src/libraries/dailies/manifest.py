@@ -13,9 +13,9 @@ __all__ = ["write_manifest"]
 TDataclass = TypeVar("TDataclass")
 
 
-def _clip_to_mapping(clip: Any) -> Mapping[str, Any]:
+def _clip_to_mapping(clip: Any) -> Any:
     if is_dataclass(clip):
-        return asdict(clip)  # type: ignore[arg-type]
+        return asdict(clip)  # type: ignore[call-overload]
     if isinstance(clip, Mapping):
         return clip
     return {
