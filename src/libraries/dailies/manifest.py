@@ -1,21 +1,26 @@
 """Helpers for writing dailies manifest files."""
 
-from __future__ import annotations
-
 import datetime as _dt
 import json
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, TypeVar
+from typing import Any, Iterable, Mapping, TypeGuard, cast, Protocol
 
 __all__ = ["write_manifest"]
 
-TDataclass = TypeVar("TDataclass")
+
+class DataclassInstance(Protocol):
+    __dataclass_fields__: dict[str, Any]
 
 
-def _clip_to_mapping(clip: Any) -> Any:
-    if is_dataclass(clip):
-        return asdict(clip)  # type: ignore[call-overload]
+def _is_dataclass_instance(obj: Any) -> TypeGuard[DataclassInstance]:
+    """Narrow Any to DataclassInstance for mypy."""
+    return is_dataclass(obj) and not isinstance(obj, type)
+
+
+def _clip_to_mapping(clip: Any) -> Mapping[str, Any]:
+    if _is_dataclass_instance(clip):
+        return asdict(cast(Any, clip))
     if isinstance(clip, Mapping):
         return clip
     return {
