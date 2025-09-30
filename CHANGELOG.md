@@ -10,7 +10,22 @@ _No changes yet._
 
 ---
 
-## [v0.5.0] – Current Release
+## [v0.6.0] – Current Release
+
+### Added / Improved
+
+**CLI Progress Tracking**
+- Adopted the shared `progress_tracker` helper in the ShotGrid delivery and validation CLIs so long-running packaging and reconciliation jobs surface consistent Rich progress output.
+
+**ShotGrid Delivery**
+- Replaced the legacy Typer progress bar with detailed per-version packaging updates and wired S3 synchronisation into the tracker so operators can follow `s5cmd` activity without switching panes.
+
+**Release Management**
+- Bumped project metadata, README highlights, and supporting docs to advertise v0.6.0, keeping published guidance aligned with the packaged code.
+
+---
+
+## [v0.5.0] – Previous Release
 
 ### Added / Improved
 

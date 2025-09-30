@@ -10,6 +10,7 @@ from typing import Iterable, cast
 import structlog
 import typer
 
+from apps.onepiece.utils.progress import progress_tracker
 from libraries.aws.s5_sync import s5_sync
 from libraries.delivery.manifest import (
     compute_checksum,
@@ -154,60 +155,72 @@ def deliver(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     metadata: list[dict[str, object]] = []
+    total_versions = len(approved)
 
-    with (
-        typer.progressbar(approved, label="Preparing delivery") as progress,
-        zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive,
-    ):
-        for record in progress:
-            shot_code = record.get("shot", "unknown")
-            version_value = record.get("version", 0)
-            source = Path(cast(str, record.get("file_path", "")))
-            status = record.get("status", "")
+    with progress_tracker(
+        "ShotGrid Delivery Packaging",
+        total=max(total_versions, 1),
+        task_description="Collecting approved media",
+    ) as packaging_progress:
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for record in approved:
+                shot_code = record.get("shot", "unknown")
+                version_value = record.get("version", 0)
+                source = Path(cast(str, record.get("file_path", "")))
+                status = record.get("status", "")
 
-            show, episode, scene, shot, asset = _parse_shot_components(str(shot_code))
-            version_number = _parse_version(version_value)
-            extension = source.suffix or ""
+                show, episode, scene, shot, asset = _parse_shot_components(
+                    str(shot_code)
+                )
+                version_number = _parse_version(version_value)
+                extension = source.suffix or ""
 
-            delivery_name = f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
+                delivery_name = (
+                    f"{show}_{episode}_{scene}_{shot}_{asset}_v{version_number:03}{extension}"
+                )
 
-            checksum = compute_checksum(source)
-            delivery_record = {
-                "show": show,
-                "episode": episode,
-                "scene": scene,
-                "shot": shot,
-                "asset": asset,
-                "version": version_number,
-                "source_path": str(source),
-                "delivery_path": delivery_name,
-                "status": status,
-                "checksum": checksum,
-            }
-            metadata.append(delivery_record)
+                checksum = compute_checksum(source)
+                delivery_record = {
+                    "show": show,
+                    "episode": episode,
+                    "scene": scene,
+                    "shot": shot,
+                    "asset": asset,
+                    "version": version_number,
+                    "source_path": str(source),
+                    "delivery_path": delivery_name,
+                    "status": status,
+                    "checksum": checksum,
+                }
+                metadata.append(delivery_record)
 
-            log.info(
-                "deliver.add_to_archive",
-                source=str(source),
-                delivery_name=delivery_name,
-                checksum=checksum,
-            )
-            archive.write(source, arcname=delivery_name)
+                log.info(
+                    "deliver.add_to_archive",
+                    source=str(source),
+                    delivery_name=delivery_name,
+                    checksum=checksum,
+                )
+                archive.write(source, arcname=delivery_name)
+                packaging_progress.advance(description=f"Queued {delivery_name}")
 
-        # Handle manifest writing
-        if manifest is None:
-            _write_archive_manifest(archive, metadata)
-        else:
-            manifest = manifest.resolve()
-            manifest.parent.mkdir(parents=True, exist_ok=True)
-            if manifest.suffix:
-                json_path = manifest
-                csv_path = manifest.with_suffix(".csv")
+            # Handle manifest writing while the archive is open
+            if manifest is None:
+                _write_archive_manifest(archive, metadata)
             else:
-                json_path = manifest / "manifest.json"
-                csv_path = manifest / "manifest.csv"
-            write_json_manifest(metadata, json_path)
-            write_csv_manifest(metadata, csv_path)
+                manifest = manifest.resolve()
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                if manifest.suffix:
+                    json_path = manifest
+                    csv_path = manifest.with_suffix(".csv")
+                else:
+                    json_path = manifest / "manifest.json"
+                    csv_path = manifest / "manifest.csv"
+                write_json_manifest(metadata, json_path)
+                write_csv_manifest(metadata, csv_path)
+
+        packaging_progress.succeed(
+            f"Packaged {total_versions} version(s) for delivery."
+        )
 
     log.info("deliver.archive_created", path=str(output), files=len(metadata))
 
@@ -235,7 +248,30 @@ def deliver(
             destination=destination,
             files=[p.name for p in upload_paths],
         )
-        s5_sync(sync_dir, destination)
+
+        with progress_tracker(
+            "S3 Delivery Upload",
+            total=1,
+            task_description="Running s5cmd sync",
+        ) as upload_progress:
+            events = 0
+
+            def _on_progress(line: str) -> None:
+                nonlocal events
+                events += 1
+                upload_progress.update_total(events + 1)
+                description = line if line else "Syncing files"
+                upload_progress.advance(description=description)
+
+            s5_sync(sync_dir, destination, progress_callback=_on_progress)
+
+            if events == 0:
+                upload_progress.advance(description="Sync completed")
+
+            upload_progress.update_total(max(events, 1))
+            upload_progress.succeed(
+                f"Uploaded delivery assets to {destination}."
+            )
 
     if external_manifest_files:
         typer.echo(
