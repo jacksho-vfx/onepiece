@@ -24,7 +24,7 @@ log = structlog.get_logger(__name__)
 
 _CONTEXT_CHOICES = ("vendor_out", "client_out")
 
-app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
+app = typer.Typer(help="Shotgrid related commands.")
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ from libraries.shotgrid.api import ShotGridClient
 from libraries.shotgrid.models import VersionData
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
+app = typer.Typer(help="Shotgrid related commands.")
 
 
 @app.command("upload-version")

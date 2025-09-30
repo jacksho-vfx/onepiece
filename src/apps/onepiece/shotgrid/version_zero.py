@@ -19,7 +19,7 @@ from libraries.validations.csv_validations import validate_shots_csv
 from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
+app = typer.Typer(help="Shotgrid related commands.")
 
 
 @app.command(name="version-zero", no_args_is_help=True)
@@ -31,10 +31,7 @@ def version_zero(
     fps: int = typer.Option(24, help="Frames per second for MOV output."),
 ) -> None:
     """
-    For each shot in the CSV:
-    1. Find the EXR sequence via the filepath handler.
-    2. Create a 1080p MOV proxy.
-    3. Upload as Version zero (<shot>_V000) under the task 'Shot Proxy'.
+    Create a 'version zero' MOV proxy for each shot and upload to ShotGrid.
     """
     csv_path = UPath(csv_file)
     shot_names = validate_shots_csv(csv_path)

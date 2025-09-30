@@ -1,7 +1,5 @@
 """CLI command for publishing packaged scene outputs."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Literal, cast, Any
@@ -15,7 +13,7 @@ from libraries.validations.dcc import validate_dcc
 
 log = structlog.get_logger(__name__)
 
-app = typer.Typer(name="dcc", help="DCC CLI commands.")
+app = typer.Typer(help="DCC CLI commands.")
 
 
 def _load_metadata(path: Path) -> dict[str, JSONValue]:
