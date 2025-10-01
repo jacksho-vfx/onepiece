@@ -13,9 +13,8 @@ from importlib import import_module
 import yaml
 from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
 
-import yaml
 
-from libraries.shotgrid.client import EntityPayload, HierarchyTemplate, ShotgridClient
+from libraries.shotgrid.client import EntityPayload
 
 shotgrid_cli = import_module("apps.onepiece.shotgrid.package_playlist")
 templates_cli = import_module("apps.onepiece.shotgrid.templates")
