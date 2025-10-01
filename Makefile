@@ -12,11 +12,9 @@ setup:
 
 check-format:
 	$(VENV)/black --check src
-	$(VENV)/ruff check src
 
 format:
 	$(VENV)/black src
-	$(VENV)/ruff check --fix src
 
 lint:
 	$(VENV)/ruff check src

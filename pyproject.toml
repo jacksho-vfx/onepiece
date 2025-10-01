@@ -41,10 +41,6 @@ exclude = []
 [tool.black]
 line-length = 88
 
-[tool.ruff]
-lint.select = ["E", "F"]
-lint.ignore = ["E501"]
-
 [tool.mypy]
 python_version = "3.11"
 mypy_path = ["typings"]

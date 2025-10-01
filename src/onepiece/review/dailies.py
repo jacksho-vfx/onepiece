@@ -356,9 +356,7 @@ def create_dailies(
     manifest_path = write_manifest(output, processed, codec=codec)
     total_duration = _summarize_duration(processed)
 
-    typer.echo(
-        f"Compiled {len(processed)} clips " f"({total_duration:.2f}s) into {output}"
-    )
+    typer.echo(f"Compiled {len(processed)} clips ({total_duration:.2f}s) into {output}")
     typer.echo(f"Manifest: {manifest_path}")
 
     log.info(
