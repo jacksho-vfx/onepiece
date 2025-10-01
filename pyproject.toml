@@ -29,10 +29,7 @@ include = [
     "libraries",
     "libraries.*",
 ]
-exclude = [
-    "libraries.tests",
-    "libraries.tests.*",
-]
+exclude = []
 
 [project.optional-dependencies]
 dev = [

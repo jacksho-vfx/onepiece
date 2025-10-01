@@ -1,9 +1,8 @@
 """Tests for the expanded :mod:`libraries.shotgrid.client` helpers."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,6 +15,31 @@ from libraries.shotgrid.client import (
     TemplateNode,
     TEntity,
 )
+
+
+@pytest.fixture
+def sg_client() -> ShotgridClient:
+    return ShotgridClient()
+
+
+def test_get_or_create_project_creates_new(sg_client: ShotgridClient) -> None:
+    sg_client._find_project = MagicMock(return_value=None)
+    sg_client._create_project = MagicMock(return_value={"id": 123, "name": "TestShow"})
+
+    project = sg_client.get_or_create_project("TestShow")
+    sg_client._create_project.assert_called_once_with("TestShow")
+    assert project["name"] == "TestShow"
+
+
+def test_get_or_create_project_returns_existing(sg_client: ShotgridClient) -> None:
+    sg_client._find_project = MagicMock(
+        return_value={"id": 456, "name": "ExistingShow"}
+    )
+    sg_client._create_project = MagicMock()
+
+    project = sg_client.get_or_create_project("ExistingShow")
+    sg_client._create_project.assert_not_called()
+    assert project["id"] == 456
 
 
 def test_bulk_create_update_delete_entities() -> None:

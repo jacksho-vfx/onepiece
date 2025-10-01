@@ -1,3 +1,5 @@
+"""Tests for playlist packaging workflows."""
+
 import json
 from pathlib import Path
 from typing import cast
