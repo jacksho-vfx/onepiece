@@ -12,7 +12,7 @@ app = typer.Typer(help="Validate filepaths")
 def validate_paths(
     paths: list[Path] = typer.Argument(
         ..., help="Paths to check for existence, writability, and disk space"
-    )
+    ),
 ) -> None:
     """
     Validate filesystem paths and print a report.

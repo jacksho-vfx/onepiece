@@ -23,20 +23,14 @@ def _format_plugins(plugins: PluginValidation) -> str:
     required = ", ".join(sorted(plugins.required)) or "None"
     available = ", ".join(sorted(plugins.available)) or "None"
     missing = ", ".join(sorted(plugins.missing)) or "None"
-    return (
-        f"required: {required}\n"
-        f"    available: {available}\n"
-        f"    missing: {missing}"
-    )
+    return f"required: {required}\n    available: {available}\n    missing: {missing}"
 
 
 def _format_gpu(gpu: GPUValidation) -> str:
     required = gpu.required or "None"
     detected = gpu.detected or "Not detected"
     status = "meets" if gpu.meets_requirement else "missing"
-    return (
-        f"required: {required}\n" f"    detected: {detected}\n" f"    status: {status}"
-    )
+    return f"required: {required}\n    detected: {detected}\n    status: {status}"
 
 
 def _render_report(report: DCCEnvironmentReport) -> None:
