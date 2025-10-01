@@ -10,7 +10,28 @@ _No changes yet._
 
 ---
 
-## [v0.6.0] – Current Release
+## [v0.7.0] – Current Release
+
+### Added / Improved
+
+**ShotGrid Bulk Operations**
+- Added a shared JSON/YAML loader that powers the bulk playlist and version
+  Typer commands so automation payloads can be expressed in either format.
+- Mirrored the structured input handling used by `deliver.py` to keep
+  workflows consistent across the ShotGrid CLI surface.
+
+**Hierarchy Templates**
+- Implemented template serialisation/deserialisation in the ShotGrid client and
+  exposed `onepiece shotgrid templates save` / `apply` commands for capturing
+  and replaying hierarchies from disk.
+
+**Quality**
+- Expanded the ShotGrid bulk CLI tests to cover YAML inputs and the new
+  template persistence flows, ensuring regressions surface before release.
+
+---
+
+## [v0.6.0] – Previous Release
 
 ### Added / Improved
 

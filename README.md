@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest release: v0.6.0.** This release standardises the Rich-powered progress tracker across delivery and validation CLIs, surfaces S3 sync feedback, and refreshes the documentation for the upgraded workflow.
+> **Latest release: v0.7.0.** This release unlocks JSON/YAML payloads for the ShotGrid bulk helpers and adds CLI entry points for saving and replaying hierarchy templates straight from disk.
 
 ## Quick start
 
@@ -43,11 +43,11 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.6.0
+## What's new in v0.7.0
 
-- **Unified CLI progress feedback** – `onepiece shotgrid deliver` and `onepiece validate reconcile` now share the Rich-powered progress tracker so that packaging, reconciliation, and S3 uploads all report consistent status updates.
-- **Delivery workflow polish** – ShotGrid deliveries display per-version packaging progress, emit success summaries through the shared tracker, and surface `s5cmd` transfer output so operators can monitor uploads without leaving the terminal.
-- **Release alignment** – All distributable packages and documentation now advertise v0.6.0 so the CLI, Python modules, and published guides remain in sync.
+- **Structured bulk payloads** – `onepiece shotgrid bulk-playlists` and `onepiece shotgrid bulk-versions` now accept playlists and versions described in either JSON or YAML. The commands share a dedicated loader that mirrors the behaviour of `deliver.py`, keeping automation inputs consistent across the ShotGrid toolchain.
+- **Template persistence commands** – New `onepiece shotgrid templates save` and `onepiece shotgrid templates apply` entry points serialise hierarchy templates to disk and replay them later. Templates round-trip to JSON or YAML with helpful validation errors when the payload does not match the expected structure.
+- **Test coverage** – Expanded CLI tests exercise the new loaders, YAML flows, and template persistence to ensure regressions are caught before shipping.
 
 ## Requirements
 
@@ -109,8 +109,9 @@ supports production-ready features for dealing with large deliveries:
   jitter and actionable log messages so that operators understand what happened
   and when the next attempt will fire.
 - **Hierarchy templates** – declare entity trees (episodes, scenes, shots, …)
-  once and apply them to new projects in a single command.  This drastically
-  reduces the time it takes to bootstrap a show.
+  once and apply them to new projects in a single command. Persist templates to
+  JSON or YAML with `onepiece shotgrid templates save` and replay them later
+  with `onepiece shotgrid templates apply` to bootstrap new shows quickly.
 - **Playlist deliveries** – package playlists with `onepiece shotgrid package-playlist`
   to generate MediaShuttle-ready folders for client or vendor review sessions.
 

@@ -14,6 +14,7 @@ from apps.onepiece.utils.errors import (
     OnePieceIOError,
     OnePieceValidationError,
 )
+from ._inputs import load_structured_array
 from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
 from libraries.shotgrid.playlist_delivery import (
     Recipient,
@@ -33,33 +34,8 @@ class BulkOperation(str, Enum):
     DELETE = "delete"
 
 
-def _load_json_array(path: Path) -> list[Any]:
-    try:
-        raw = path.read_text()
-    except OSError as exc:  # noqa: BLE001 - surfaced to CLI
-        log.error("shotgrid.bulk.read_failed", path=str(path), error=str(exc))
-        raise OnePieceIOError(f"Failed to read input file '{path}': {exc}") from exc
-
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:  # noqa: F401 - re-raised below
-        log.error(
-            "shotgrid.bulk.invalid_json",
-            path=str(path),
-            error=str(exc),
-        )
-        raise OnePieceValidationError(
-            f"Input file '{path}' must contain valid JSON: {exc}"
-        ) from exc
-
-    if not isinstance(payload, list):
-        raise OnePieceValidationError(f"Input file '{path}' must contain a JSON array.")
-
-    return payload
-
-
 def _load_entity_payloads(path: Path, entity_label: str) -> list[dict[str, Any]]:
-    data = _load_json_array(path)
+    data = load_structured_array(path)
     payloads: list[dict[str, Any]] = []
     for index, item in enumerate(data):
         if not isinstance(item, dict):
@@ -82,7 +58,7 @@ def _resolve_entity_ids(
         )
 
     resolved: list[int] = []
-    for index, item in enumerate(_load_json_array(input_path)):
+    for index, item in enumerate(load_structured_array(input_path)):
         try:
             resolved.append(int(item))
         except (TypeError, ValueError) as exc:
