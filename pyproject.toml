@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onepiece"
-version = "0.6.0"
+version = "0.7.0"
 description = "Open-source pipeline CLI toolkit"
 authors = [{name="Jack Shortiss", email="jdshortiss@hotmail.com"}]
 readme = "README.md"

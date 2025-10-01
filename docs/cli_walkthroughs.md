@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in v0.6.0:** Long-running scenarios now surface the shared `progress_tracker` overlay so you can watch packaging, reconciliation, and S3 synchronisation progress without leaving the terminal.
+> **New in v0.7.0:** Bulk playlist/version helpers consume JSON or YAML payloads, and templates can be saved/applied straight from disk via dedicated CLI commands.
 
 ## 1. Validate a workstation environment
 
