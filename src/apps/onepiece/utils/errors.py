@@ -1,7 +1,5 @@
 """Utility types for consistent CLI error handling."""
 
-from __future__ import annotations
-
 from enum import IntEnum
 
 
