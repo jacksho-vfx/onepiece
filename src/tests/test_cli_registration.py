@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
@@ -9,19 +11,15 @@ runner = CliRunner()
 
 
 def extract_command_names(help_output: str) -> list[str]:
-    commands: list[str] = []
-    in_commands = False
+    commands = []
     for line in help_output.splitlines():
-        if "Commands" in line:
-            in_commands = True
+        plain = re.match(r"^\s+(\w+)\s{2,}", line)
+        if plain:
+            commands.append(plain.group(1))
             continue
-        if in_commands:
-            if line.startswith("╰") or not line.strip():
-                break
-            if line.startswith("│"):
-                # Each command is listed as: "│ <name>   <description> │"
-                command = line.strip("│ ").split()[0]
-                commands.append(command)
+        rich = re.match(r"^\s*│\s+(\w+)\s+", line)
+        if rich:
+            commands.append(rich.group(1))
     return commands
 
 
