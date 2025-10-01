@@ -1,10 +1,15 @@
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import json
+import pytest
+
 from libraries.dcc.dcc_client import (
     DCC_ASSET_REQUIREMENTS,
+    DCCDependencyReport,
     SupportedDCC,
     open_scene,
+    publish_scene,
     verify_dcc_dependencies,
 )
 
@@ -62,6 +67,103 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
     assert report.plugins.missing == frozenset()
     assert report.assets.missing == tuple()
     assert report.is_valid is True
+
+
+def _create_publish_inputs(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, dict[str, str], Path]:
+    renders = tmp_path / "renders"
+    renders.mkdir()
+    render_file = renders / "beauty.exr"
+    render_file.write_text("beauty")
+
+    previews = tmp_path / "previews"
+    previews.mkdir()
+    preview_file = previews / "preview.jpg"
+    preview_file.write_text("preview")
+
+    otio = tmp_path / "edit.otio"
+    otio.write_text("otio data")
+
+    metadata: dict[str, str] = {"shot": "010"}
+
+    destination = tmp_path / "published"
+
+    return renders, previews, otio, metadata, destination
+
+
+@patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_supports_direct_upload(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    callbacks: list[DCCDependencyReport] = []
+
+    def callback(report: DCCDependencyReport) -> None:
+        callbacks.append(report)
+
+    package_path = publish_scene(
+        SupportedDCC.NUKE,
+        scene_name="ep01_sh010",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        direct_s3_path="s3://custom/path",
+        dependency_callback=callback,
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+    )
+
+    expected_package = destination / "ep01_sh010"
+    assert package_path == expected_package
+    assert callbacks and callbacks[0].is_valid
+
+    sync_mock.assert_called_once_with(
+        source=expected_package,
+        destination="s3://custom/path",
+        dry_run=False,
+        include=None,
+        exclude=None,
+    )
+
+    metadata_path = expected_package / "metadata.json"
+    assert json.loads(metadata_path.read_text()) == metadata
+
+
+@patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_dependency_failure_blocks_upload(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        publish_scene(
+            SupportedDCC.NUKE,
+            scene_name="ep01_sh020",
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata,
+            destination=destination,
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            plugin_inventory=["CaraVR"],
+            required_plugins=["OCIO"],
+            required_assets=("renders/beauty.exr", "missing/asset.txt"),
+        )
+
+    message = str(excinfo.value)
+    assert "missing plugins: OCIO" in message
+    assert "missing assets: missing/asset.txt" in message
+    sync_mock.assert_not_called()
 
 
 # def test_publish_scene(tmp_path: Path) -> None:
