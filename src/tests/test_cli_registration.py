@@ -13,13 +13,13 @@ runner = CliRunner()
 def extract_command_names(help_output: str) -> list[str]:
     commands = []
     for line in help_output.splitlines():
-        plain = re.match(r"^\s+(\w+)\s{2,}", line)
-        if plain:
-            commands.append(plain.group(1))
+        m = re.match(r"^\s*│\s+(\w+)\s+", line)
+        if m:
+            commands.append(m.group(1))
             continue
-        rich = re.match(r"^\s*│\s+(\w+)\s+", line)
-        if rich:
-            commands.append(rich.group(1))
+        m = re.match(r"^\s+(\w+)\s{2,}", line)
+        if m:
+            commands.append(m.group(1))
     return commands
 
 
