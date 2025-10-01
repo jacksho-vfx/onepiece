@@ -7,7 +7,13 @@ from typing import Literal, cast, Any
 import structlog
 import typer
 
-from libraries.dcc.dcc_client import JSONValue, publish_scene
+from libraries.dcc.dcc_client import (
+    DCCAssetStatus,
+    DCCDependencyReport,
+    DCCPluginStatus,
+    JSONValue,
+    publish_scene,
+)
 from libraries.validations.dcc import validate_dcc
 
 
@@ -40,6 +46,37 @@ def _validate_show_type(show_type: str) -> Literal["vfx", "prod"]:
     return lowered  # type: ignore[return-value]
 
 
+def _validate_direct_upload_path(path: str | None) -> str | None:
+    if path is None:
+        return None
+    if not path.startswith("s3://"):
+        raise typer.BadParameter("direct-upload-path must start with 's3://'")
+    return path
+
+
+def _format_dependency_summary(report: DCCDependencyReport) -> str:
+    def _join_plugins(status: DCCPluginStatus, attribute: str) -> str:
+        value = getattr(status, attribute)
+        return ", ".join(sorted(value)) if value else "None"
+
+    def _join_assets(status: DCCAssetStatus, attribute: str) -> str:
+        entries = getattr(status, attribute)
+        if not entries:
+            return "None"
+        return ", ".join(sorted(str(item)) for item in entries)
+
+    lines = [
+        f"Dependency summary for {report.dcc.value}",
+        f"  Plugins required: {_join_plugins(report.plugins, 'required')}",
+        f"  Plugins available: {_join_plugins(report.plugins, 'available')}",
+        f"  Plugins missing: {_join_plugins(report.plugins, 'missing')}",
+        f"  Assets required: {_join_assets(report.assets, 'required')}",
+        f"  Assets present: {_join_assets(report.assets, 'present')}",
+        f"  Assets missing: {_join_assets(report.assets, 'missing')}",
+    ]
+    return "\n".join(lines)
+
+
 @app.command("publish")
 def publish(
     dcc: str = typer.Option(..., "--dcc", help="DCC that produced the scene."),
@@ -69,12 +106,29 @@ def publish(
     profile: str | None = typer.Option(
         None, "--profile", help="Optional AWS CLI profile to use."
     ),
+    direct_upload_path: str | None = typer.Option(
+        None,
+        "--direct-upload-path",
+        help="Optional full S3 path for direct uploads.",
+        callback=_validate_direct_upload_path,
+    ),
+    dependency_summary: bool = typer.Option(
+        False,
+        "--dependency-summary/--no-dependency-summary",
+        help="Print dependency validation summary after publishing.",
+    ),
 ) -> None:
     """Package a scene and publish it to S3."""
 
     resolved_dcc = _resolve_dcc(dcc)
     resolved_show_type = _validate_show_type(show_type)
     metadata_dict = _load_metadata(metadata)
+
+    report: DCCDependencyReport | None = None
+
+    def capture_report(dependency_report: DCCDependencyReport) -> None:
+        nonlocal report
+        report = dependency_report
 
     package_path = publish_scene(
         resolved_dcc,
@@ -87,7 +141,12 @@ def publish(
         bucket=bucket,
         show_code=show_code,
         show_type=resolved_show_type,
+        direct_s3_path=direct_upload_path,
+        dependency_callback=capture_report if dependency_summary else None,
     )
 
     log.info("cli_publish_completed", package=str(package_path))
     typer.echo(f"Published package created at {package_path}")
+
+    if dependency_summary and report is not None:
+        typer.echo(_format_dependency_summary(report))
