@@ -35,16 +35,16 @@ def _format_gpu(gpu: GPUValidation) -> str:
     detected = gpu.detected or "Not detected"
     status = "meets" if gpu.meets_requirement else "missing"
     return (
-        f"required: {required}\n"
-        f"    detected: {detected}\n"
-        f"    status: {status}"
+        f"required: {required}\n" f"    detected: {detected}\n" f"    status: {status}"
     )
 
 
 def _render_report(report: DCCEnvironmentReport) -> None:
     header_colour = typer.colors.GREEN if report.installed else typer.colors.YELLOW
     typer.secho(f"{report.dcc.value}", fg=header_colour, bold=True)
-    typer.secho(f"  Installed : {'yes' if report.installed else 'no'}", fg=header_colour)
+    typer.secho(
+        f"  Installed : {'yes' if report.installed else 'no'}", fg=header_colour
+    )
     typer.secho(
         f"  Executable: {report.executable or 'Not found in PATH'}",
         fg=typer.colors.BLUE if report.executable else typer.colors.YELLOW,
@@ -56,7 +56,11 @@ def _render_report(report: DCCEnvironmentReport) -> None:
 
 
 def _has_failures(report: DCCEnvironmentReport) -> bool:
-    return (not report.installed) or bool(report.plugins.missing) or (not report.gpu.meets_requirement)
+    return (
+        (not report.installed)
+        or bool(report.plugins.missing)
+        or (not report.gpu.meets_requirement)
+    )
 
 
 def render_dcc_environment(
@@ -75,7 +79,9 @@ def render_dcc_environment(
     else:
         targets = list(SupportedDCC)
 
-    log.info("validate.dcc_environment.start", targets=[entry.value for entry in targets])
+    log.info(
+        "validate.dcc_environment.start", targets=[entry.value for entry in targets]
+    )
 
     failures = False
     for entry in targets:
@@ -110,4 +116,3 @@ def render_dcc_environment(
 
 
 __all__ = ["render_dcc_environment"]
-

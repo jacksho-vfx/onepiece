@@ -30,7 +30,9 @@ def names_batch(
 
     if csv:
         results = validate_names_in_csv(csv)
-        typer.secho(f"Validated {len(results)} names from CSV {csv}", fg=typer.colors.CYAN)
+        typer.secho(
+            f"Validated {len(results)} names from CSV {csv}", fg=typer.colors.CYAN
+        )
     else:
         results = validate_names_in_dir(directory)
         typer.secho(

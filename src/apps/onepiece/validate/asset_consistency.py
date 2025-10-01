@@ -32,7 +32,9 @@ def _load_manifest(manifest_path: Path) -> Dict[str, List[str]]:
         ) from exc
 
     if not isinstance(payload, dict):
-        raise OnePieceValidationError("Manifest must be a JSON object mapping names to versions")
+        raise OnePieceValidationError(
+            "Manifest must be a JSON object mapping names to versions"
+        )
 
     normalised: Dict[str, List[str]] = {}
     for key, value in payload.items():
@@ -64,7 +66,10 @@ def _render_s3_report(report: S3ParityReport) -> None:
     if report.unexpected:
         _render_unexpected(report.unexpected)
     if report.is_clean:
-        typer.secho("S3 parity verified – all expected versions are present.", fg=typer.colors.GREEN)
+        typer.secho(
+            "S3 parity verified – all expected versions are present.",
+            fg=typer.colors.GREEN,
+        )
 
 
 def asset_consistency(
@@ -111,12 +116,19 @@ def asset_consistency(
             failures = True
             _render_missing("Versions missing locally:", missing_local)
         else:
-            typer.secho("Local parity verified – all expected versions are present.", fg=typer.colors.GREEN)
+            typer.secho(
+                "Local parity verified – all expected versions are present.",
+                fg=typer.colors.GREEN,
+            )
 
     if project is None and context is not None:
-        raise OnePieceValidationError("--project must be provided when --context is set.")
+        raise OnePieceValidationError(
+            "--project must be provided when --context is set."
+        )
     if context is None and project is not None:
-        raise OnePieceValidationError("--context must be provided when --project is set.")
+        raise OnePieceValidationError(
+            "--context must be provided when --project is set."
+        )
 
     if project and context:
         s3_report = check_shot_versions_s3(data, project, context, scope=scope_value)
@@ -150,4 +162,3 @@ def asset_consistency(
 
 
 __all__ = ["asset_consistency"]
-

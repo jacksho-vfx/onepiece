@@ -151,9 +151,7 @@ def check_dcc_environment(
     installed, executable = _detect_executable(dcc, env_mapping)
 
     if plugin_inventory is not None:
-        available_plugins = frozenset(
-            sorted(plugin_inventory.get(dcc, frozenset()))
-        )
+        available_plugins = frozenset(sorted(plugin_inventory.get(dcc, frozenset())))
     else:
         available_plugins = _plugins_from_env(dcc, env_mapping)
     required_plugins = frozenset(sorted(DCC_PLUGIN_REQUIREMENTS.get(dcc, ())))

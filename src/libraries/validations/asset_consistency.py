@@ -37,7 +37,7 @@ def _normalise_version(value: str) -> str:
 
 
 def _build_expected_manifest(
-    shot_versions: Mapping[str, Sequence[str]]
+    shot_versions: Mapping[str, Sequence[str]],
 ) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
     """Return lookup tables for expected entities and their versions."""
 
@@ -131,7 +131,8 @@ def check_shot_versions_s3(
         available_versions = s3_versions.get(normalised_shot, set())
 
         missing_versions = sorted(
-            versions_lookup[version] for version in expected_versions - available_versions
+            versions_lookup[version]
+            for version in expected_versions - available_versions
         )
         if missing_versions:
             missing[expected_display[normalised_shot]] = missing_versions

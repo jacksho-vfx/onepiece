@@ -90,7 +90,9 @@ def test_dcc_environment_cli_flags_failures(mock_check: MagicMock) -> None:
             available=frozenset(),
             missing=frozenset({"mtoa"}),
         ),
-        gpu=GPUValidation(required="DirectX 11", detected=None, meets_requirement=False),
+        gpu=GPUValidation(
+            required="DirectX 11", detected=None, meets_requirement=False
+        ),
     )
 
     runner = CliRunner()
