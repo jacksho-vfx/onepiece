@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from typer.testing import CliRunner
@@ -12,6 +12,9 @@ from typer.testing import CliRunner
 from importlib import import_module
 import yaml
 from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
+
+
+from libraries.shotgrid.client import EntityPayload
 
 shotgrid_cli = import_module("apps.onepiece.shotgrid.package_playlist")
 templates_cli = import_module("apps.onepiece.shotgrid.templates")
@@ -50,23 +53,23 @@ class TemplateStubShotgridClient(ShotgridClient):  # type: ignore[misc]
     """Extension of the in-memory client that records template interactions."""
 
     def __init__(self) -> None:
-        super().__init__(sleep=lambda _: None)
+        self._client: ShotgridClient = ShotgridClient(sleep=lambda _: None)
         self.deserialized: list[HierarchyTemplate] = []
         self.saved_paths: list[Path] = []
         self.loaded_paths: list[Path] = []
         self.applied: list[tuple[str, HierarchyTemplate, dict[str, Any]]] = []
 
     def deserialize_hierarchy_template(self, data: dict[str, Any]) -> HierarchyTemplate:
-        template = super().deserialize_hierarchy_template(data)
+        template = self._client.deserialize_hierarchy_template(data)
         self.deserialized.append(template)
         return template
 
     def save_hierarchy_template(self, template: HierarchyTemplate, path: Path) -> None:
         self.saved_paths.append(path)
-        super().save_hierarchy_template(template, path)
+        self._client.save_hierarchy_template(template, path)
 
     def load_hierarchy_template(self, path: Path) -> HierarchyTemplate:
-        template = super().load_hierarchy_template(path)
+        template = self._client.load_hierarchy_template(path)
         self.loaded_paths.append(path)
         return template
 
@@ -76,9 +79,12 @@ class TemplateStubShotgridClient(ShotgridClient):  # type: ignore[misc]
         template: HierarchyTemplate,
         *,
         context: dict[str, Any] | None = None,
-    ) -> Any:
-        result = super().apply_hierarchy_template(
-            project_name, template, context=context
+    ) -> dict[str, list[EntityPayload]]:
+        result = cast(
+            dict[str, list[EntityPayload]],
+            self._client.apply_hierarchy_template(
+                project_name, template, context=context
+            ),
         )
         self.applied.append((project_name, template, dict(context or {})))
         return result
