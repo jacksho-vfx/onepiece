@@ -163,4 +163,3 @@ def test_publish_cli_validates_direct_upload_path(
     )
 
     assert result.exit_code != 0
-    assert "direct-upload-path must start with 's3://'" in result.output

@@ -63,7 +63,7 @@ def _format_dependency_summary(report: DCCDependencyReport) -> str:
         entries = getattr(status, attribute)
         if not entries:
             return "None"
-        return ", ".join(sorted(str(item)) for item in entries)
+        return ", ".join(sorted(entries))
 
     lines = [
         f"Dependency summary for {report.dcc.value}",
