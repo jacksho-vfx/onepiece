@@ -69,7 +69,9 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
     assert report.is_valid is True
 
 
-def _create_publish_inputs(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str], Path]:
+def _create_publish_inputs(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, dict[str, str], Path]:
     renders = tmp_path / "renders"
     renders.mkdir()
     render_file = renders / "beauty.exr"

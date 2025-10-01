@@ -264,9 +264,7 @@ JSONPrimitive: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 
 
-def _format_dependency_error(
-    report: DCCDependencyReport, package_dir: Path
-) -> str:
+def _format_dependency_error(report: DCCDependencyReport, package_dir: Path) -> str:
     """Return a human friendly error message for ``report``."""
 
     problems: list[str] = []

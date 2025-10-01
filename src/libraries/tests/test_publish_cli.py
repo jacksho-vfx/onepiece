@@ -130,7 +130,9 @@ def test_publish_cli_validates_direct_upload_path(
     destination.mkdir()
 
     module = importlib.import_module("apps.onepiece.dcc.publish")
-    monkeypatch.setattr(module, "publish_scene", lambda *args, **kwargs: Path("/tmp/package"))
+    monkeypatch.setattr(
+        module, "publish_scene", lambda *args, **kwargs: Path("/tmp/package")
+    )
 
     result = runner.invoke(
         app,
