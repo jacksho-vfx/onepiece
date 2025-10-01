@@ -10,6 +10,8 @@ import pytest
 from typer.testing import CliRunner
 
 from importlib import import_module
+import yaml
+from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
 
 import yaml
 
@@ -48,8 +50,8 @@ class StubShotgridClient:
         self.deleted.append((entity_type, ids))
 
 
-class TemplateStubShotgridClient:
-    """Wrapper around ``ShotgridClient`` that records template interactions."""
+class TemplateStubShotgridClient(ShotgridClient):  # type: ignore[misc]
+    """Extension of the in-memory client that records template interactions."""
 
     def __init__(self) -> None:
         self._client: ShotgridClient = ShotgridClient(sleep=lambda _: None)

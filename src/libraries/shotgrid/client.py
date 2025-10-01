@@ -7,11 +7,12 @@ while keeping tests fast and deterministic.
 import json
 import logging
 import time
+import yaml
 from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, TypedDict, TypeVar, cast
+from typing import Any, cast, Mapping, Optional, Sequence, TypedDict, TypeVar
 
 log = logging.getLogger(__name__)
 
@@ -315,10 +316,6 @@ class ShotgridClient:
         try:
             with path.open("w", encoding="utf-8") as handle:
                 if format_name == "yaml":
-                    try:
-                        import yaml
-                    except Exception as exc:  # noqa: BLE001 - surfaced upstream
-                        raise ValueError("YAML support is not available.") from exc
                     yaml.safe_dump(dict(payload), handle, sort_keys=True)
                 else:
                     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -343,10 +340,6 @@ class ShotgridClient:
         for format_name in formats:
             try:
                 if format_name == "yaml":
-                    try:
-                        import yaml
-                    except Exception as exc:  # noqa: BLE001 - fallback to next
-                        raise ValueError("YAML support is not available.") from exc
                     payload = yaml.safe_load(raw)
                 else:
                     payload = json.loads(raw)

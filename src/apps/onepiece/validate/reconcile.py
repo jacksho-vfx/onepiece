@@ -1,7 +1,5 @@
 """Typer command to reconcile ShotGrid, filesystem, and S3 state."""
 
-from __future__ import annotations
-
 import csv
 import json
 import os

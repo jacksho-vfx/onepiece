@@ -51,7 +51,7 @@ These resources provide a safe sandbox to explore the command surface before poi
 
 ## Requirements
 
-- Python 3.9 or newer
+- Python 3.11 or newer
 - Access to the required DCC tools on the machine running the CLI
 - Credentials for any external integrations you plan to use (e.g. AWS profiles, ShotGrid API scripts)
 

@@ -10,7 +10,7 @@ import json
 import shutil
 import subprocess
 import os
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from typing import Literal, TypeAlias
@@ -264,6 +264,33 @@ JSONPrimitive: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 
 
+def _format_dependency_error(report: DCCDependencyReport, package_dir: Path) -> str:
+    """Return a human friendly error message for ``report``."""
+
+    problems: list[str] = []
+
+    if report.plugins.missing:
+        missing_plugins = ", ".join(sorted(report.plugins.missing))
+        problems.append(f"missing plugins: {missing_plugins}")
+
+    if report.assets.missing:
+        missing_assets: list[str] = []
+        for path in report.assets.missing:
+            try:
+                missing_assets.append(str(path.relative_to(package_dir)))
+            except ValueError:  # pragma: no cover - defensive fallback
+                missing_assets.append(str(path))
+        problems.append(f"missing assets: {', '.join(missing_assets)}")
+
+    if not problems:
+        problems.append("unresolved dependency issues")
+
+    return (
+        "Dependency validation failed; resolve the following before publishing: "
+        + "; ".join(problems)
+    )
+
+
 def publish_scene(
     dcc: SupportedDCC,
     scene_name: str,
@@ -275,6 +302,13 @@ def publish_scene(
     bucket: str,
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
+    *,
+    direct_s3_path: str | None = None,
+    dependency_callback: Callable[[DCCDependencyReport], None] | None = None,
+    plugin_inventory: Iterable[str] | None = None,
+    env: Mapping[str, str] | None = None,
+    required_plugins: Iterable[str] | None = None,
+    required_assets: Sequence[str] | None = None,
 ) -> Path:
     """Package a scene's outputs locally and mirror them to S3.
 
@@ -310,18 +344,43 @@ def publish_scene(
         thumbs_dir.mkdir(exist_ok=True)
         shutil.copy2(thumbnail_candidate, thumbs_dir / thumbnail_candidate.name)
 
+    report = verify_dcc_dependencies(
+        dcc,
+        package_dir,
+        plugin_inventory=plugin_inventory,
+        env=env,
+        required_plugins=required_plugins,
+        required_assets=required_assets,
+    )
+
+    if dependency_callback is not None:
+        dependency_callback(report)
+
+    if not report.is_valid:
+        message = _format_dependency_error(report, package_dir)
+        log.error(
+            "publish_scene_dependency_failure dcc=%s package=%s message=%s",
+            dcc.value,
+            str(package_dir),
+            message,
+        )
+        raise RuntimeError(message)
+
+    destination_path = direct_s3_path or f"s3://{bucket}/{scene_name}"
+
     log.info(
-        "publish_scene_packaged dcc=%s package=%s bucket=%s show_code=%s show_type=%s",
+        "publish_scene_packaged dcc=%s package=%s bucket=%s show_code=%s show_type=%s destination=%s",
         dcc.value,
         str(package_dir),
         bucket,
         show_code,
         show_type,
+        destination_path,
     )
 
     s5_sync(
         source=package_dir,
-        destination=f"s3://{bucket}/{scene_name}",
+        destination=destination_path,
         dry_run=False,
         include=None,
         exclude=None,

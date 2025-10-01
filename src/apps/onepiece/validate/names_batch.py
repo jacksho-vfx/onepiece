@@ -4,12 +4,13 @@ import structlog
 
 from apps.onepiece.utils.errors import OnePieceValidationError
 from libraries.validations.naming_batch import (
+    NameValidationResult,
     validate_names_in_csv,
     validate_names_in_dir,
 )
 
 log = structlog.get_logger(__name__)
-app = typer.Typer(help="Validatie names in batch.")
+app = typer.Typer(help="Validate names in batch.")
 
 
 @app.command("names-batch")
@@ -29,19 +30,37 @@ def names_batch(
 
     if csv:
         results = validate_names_in_csv(csv)
-        typer.echo(f"Validated {len(results)} names from CSV {csv}")
+        typer.secho(
+            f"Validated {len(results)} names from CSV {csv}", fg=typer.colors.CYAN
+        )
     else:
         results = validate_names_in_dir(directory)
-        typer.echo(f"Validated {len(results)} filenames in directory {directory}")
+        typer.secho(
+            f"Validated {len(results)} filenames in directory {directory}",
+            fg=typer.colors.CYAN,
+        )
 
-    invalid = [r for r in results if not r[1]]
-    for name, valid, reason in results:
-        status = "OK" if valid else f"FAIL ({reason})"
-        typer.echo(f"{name}: {status}")
+    invalid = [result for result in results if not result.valid]
+    for result in results:
+        _render_result(result)
 
     if invalid:
+        log.warning(
+            "validate.names_batch.invalid",
+            invalid=[result.name for result in invalid],
+            count=len(invalid),
+        )
         raise OnePieceValidationError(
             f"{len(invalid)} invalid name(s) found. Review the details above."
         )
-    else:
-        typer.echo("\nAll names are valid.")
+
+    typer.secho("\nAll names are valid.", fg=typer.colors.GREEN)
+    log.info("validate.names_batch.success", count=len(results))
+
+
+def _render_result(result: NameValidationResult) -> None:
+    colour = typer.colors.GREEN if result.valid else typer.colors.RED
+    status = "VALID" if result.valid else "INVALID"
+    typer.secho(f"- {result.name}", fg=colour)
+    typer.echo(f"    status : {status}")
+    typer.echo(f"    schema : {result.detail}")
