@@ -6,7 +6,6 @@ repos:
     rev: 24.8.0
     hooks:
       - id: black
-        language_version: python3.11
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.8
@@ -14,13 +13,11 @@ repos:
       - id: ruff
       - id: ruff-format
         stages: [manual]
-        language_version: python3.11
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.1
     hooks:
       - id: mypy
-        language_version: python3.11
         additional_dependencies:
           - pydantic>=2.0
           - pydantic-settings
