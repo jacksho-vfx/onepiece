@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in v0.7.0:** Bulk playlist/version helpers consume JSON or YAML payloads, and templates can be saved/applied straight from disk via dedicated CLI commands.
+> **New in v0.8.0:** The CLI now ships with common DCC client scaffolding, letting you exercise metadata export and validation flows without requiring the actual DCC applications.
 
 ## 1. Validate a workstation environment
 

@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest release: v0.7.0.** This release unlocks JSON/YAML payloads for the ShotGrid bulk helpers and adds CLI entry points for saving and replaying hierarchy templates straight from disk.
+> **Latest release: v0.8.0.** This release introduces common DCC client scaffolding with structured logging, metadata export helpers, and stub implementations that can be exercised in tests without the real applications present.
 
 ## Quick start
 
@@ -43,11 +43,11 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.7.0
+## What's new in v0.8.0
 
-- **Structured bulk payloads** – `onepiece shotgrid bulk-playlists` and `onepiece shotgrid bulk-versions` now accept playlists and versions described in either JSON or YAML. The commands share a dedicated loader that mirrors the behaviour of `deliver.py`, keeping automation inputs consistent across the ShotGrid toolchain.
-- **Template persistence commands** – New `onepiece shotgrid templates save` and `onepiece shotgrid templates apply` entry points serialise hierarchy templates to disk and replay them later. Templates round-trip to JSON or YAML with helpful validation errors when the payload does not match the expected structure.
-- **Test coverage** – Expanded CLI tests exercise the new loaders, YAML flows, and template persistence to ensure regressions are caught before shipping.
+- **Common DCC client scaffolding** – The new `BaseDCCClient` establishes a shared API surface for DCC helpers with structured logging, sensible stub return values, and JSON metadata export so downstream tooling can be exercised without an actual DCC session.
+- **Application-specific stubs** – Lightweight clients for Maya, Nuke, Houdini, Blender, and 3ds Max inherit from the shared base, exposing consistent enums and placeholder behaviour that teams can gradually replace with production integrations.
+- **Quality** – Focused unit tests cover the new DCC scaffolding, ensuring metadata generation, identifier derivation, and plugin reporting work the same across all application stubs.
 
 ## Requirements
 
