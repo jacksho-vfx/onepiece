@@ -25,7 +25,6 @@ app.add_typer(review)
 
 app.add_typer(shotgrid)
 app.add_typer(validate)
-app.add_typer(dcc)
 app.add_typer(reconcile)
 
 if hasattr(app, "exception_handler"):
