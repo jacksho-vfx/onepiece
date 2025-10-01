@@ -76,6 +76,12 @@ class PluginValidation:
     available: frozenset[str]
     missing: frozenset[str]
 
+    @property
+    def is_satisfied(self) -> bool:
+        """Return ``True`` when all required plugins are available."""
+
+        return not self.missing
+
 
 @dataclass
 class GPUValidation:
@@ -84,6 +90,12 @@ class GPUValidation:
     required: str | None
     detected: str | None
     meets_requirement: bool
+
+    @property
+    def is_detected(self) -> bool:
+        """Return ``True`` when a GPU description was detected."""
+
+        return self.detected is not None
 
 
 @dataclass
@@ -103,7 +115,7 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
     key = f"ONEPIECE_{dcc.name}_PLUGINS"
     raw_plugins = env.get(key, "")
     plugins = {part.strip() for part in raw_plugins.split(",") if part.strip()}
-    return frozenset(plugins)
+    return frozenset(sorted(plugins))
 
 
 def _detect_executable(
@@ -139,10 +151,12 @@ def check_dcc_environment(
     installed, executable = _detect_executable(dcc, env_mapping)
 
     if plugin_inventory is not None:
-        available_plugins = plugin_inventory.get(dcc, frozenset())
+        available_plugins = frozenset(
+            sorted(plugin_inventory.get(dcc, frozenset()))
+        )
     else:
         available_plugins = _plugins_from_env(dcc, env_mapping)
-    required_plugins = frozenset(DCC_PLUGIN_REQUIREMENTS.get(dcc, ()))
+    required_plugins = frozenset(sorted(DCC_PLUGIN_REQUIREMENTS.get(dcc, ())))
     missing_plugins = frozenset(sorted(required_plugins - available_plugins))
     plugin_result = PluginValidation(
         required=required_plugins,
