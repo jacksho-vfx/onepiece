@@ -28,7 +28,9 @@ CLIENT_CLASSES = {
 
 
 @pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
-def test_get_current_scene_not_implemented(dcc: DCC, client_cls: type[BaseDCCClient]) -> None:
+def test_get_current_scene_not_implemented(
+    dcc: DCC, client_cls: type[BaseDCCClient]
+) -> None:
     client = client_cls()
     with pytest.raises(NotImplementedError):
         client.get_current_scene()
@@ -69,7 +71,9 @@ def test_export_metadata_creates_json(
     assert output.exists()
     file_metadata = json.loads(output.read_text())
     assert metadata == file_metadata
-    assert set(metadata).issuperset({"scene_path", "scene_file", "identifier", "user", "date"})
+    assert set(metadata).issuperset(
+        {"scene_path", "scene_file", "identifier", "user", "date"}
+    )
 
 
 @pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
@@ -88,4 +92,3 @@ def test_validate_scene_returns_placeholder(
     client = client_cls()
     issues = client.validate_scene()
     assert issues == [f"{dcc.value} validation not implemented"]
-

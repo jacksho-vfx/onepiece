@@ -61,7 +61,9 @@ class BaseDCCClient:
         """
 
         self._log.info("dcc.get_current_scene")
-        raise NotImplementedError(f"{self.dcc.value} scene inspection is not implemented")
+        raise NotImplementedError(
+            f"{self.dcc.value} scene inspection is not implemented"
+        )
 
     def get_selected_nodes(self) -> list[str]:
         """Return a list of selected node identifiers.
@@ -192,4 +194,3 @@ class MaxClient(BaseDCCClient):
 
     def __init__(self) -> None:
         super().__init__(dcc=DCC.MAX)
-
