@@ -7,6 +7,7 @@ while keeping tests fast and deterministic.
 import json
 import logging
 import time
+import yaml
 from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
@@ -275,8 +276,7 @@ class HierarchyTemplate:
             raise ValueError("Hierarchy template 'roots' must be a sequence.")
 
         roots = tuple(
-            TemplateNode.from_dict(cast(Mapping[str, Any], node))
-            for node in roots_data
+            TemplateNode.from_dict(cast(Mapping[str, Any], node)) for node in roots_data
         )
 
         return HierarchyTemplate(name=name, roots=roots)
@@ -316,10 +316,6 @@ class ShotgridClient:
         try:
             with path.open("w", encoding="utf-8") as handle:
                 if format_name == "yaml":
-                    try:
-                        import yaml  # type: ignore[import-not-found]
-                    except Exception as exc:  # noqa: BLE001 - surfaced upstream
-                        raise ValueError("YAML support is not available.") from exc
                     yaml.safe_dump(dict(payload), handle, sort_keys=True)
                 else:
                     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -344,10 +340,6 @@ class ShotgridClient:
         for format_name in formats:
             try:
                 if format_name == "yaml":
-                    try:
-                        import yaml  # type: ignore[import-not-found]
-                    except Exception as exc:  # noqa: BLE001 - fallback to next
-                        raise ValueError("YAML support is not available.") from exc
                     payload = yaml.safe_load(raw)
                 else:
                     payload = json.loads(raw)
@@ -364,10 +356,14 @@ class ShotgridClient:
             raise last_error
         raise ValueError("Hierarchy template file is empty.")
 
-    def serialize_hierarchy_template(self, template: HierarchyTemplate) -> dict[str, Any]:
+    def serialize_hierarchy_template(
+        self, template: HierarchyTemplate
+    ) -> dict[str, Any]:
         return template.to_dict()
 
-    def deserialize_hierarchy_template(self, data: Mapping[str, Any]) -> HierarchyTemplate:
+    def deserialize_hierarchy_template(
+        self, data: Mapping[str, Any]
+    ) -> HierarchyTemplate:
         return HierarchyTemplate.from_dict(data)
 
     def save_hierarchy_template(self, template: HierarchyTemplate, path: Path) -> None:

@@ -10,11 +10,11 @@ import pytest
 from typer.testing import CliRunner
 
 from importlib import import_module
+import yaml
+from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
 
 shotgrid_cli = import_module("apps.onepiece.shotgrid.package_playlist")
 templates_cli = import_module("apps.onepiece.shotgrid.templates")
-import yaml
-from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
 
 
 class StubShotgridClient:
@@ -46,7 +46,7 @@ class StubShotgridClient:
         self.deleted.append((entity_type, ids))
 
 
-class TemplateStubShotgridClient(ShotgridClient):
+class TemplateStubShotgridClient(ShotgridClient):  # type: ignore[misc]
     """Extension of the in-memory client that records template interactions."""
 
     def __init__(self) -> None:
@@ -76,7 +76,7 @@ class TemplateStubShotgridClient(ShotgridClient):
         template: HierarchyTemplate,
         *,
         context: dict[str, Any] | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> Any:
         result = super().apply_hierarchy_template(
             project_name, template, context=context
         )
