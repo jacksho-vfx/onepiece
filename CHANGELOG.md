@@ -10,7 +10,25 @@ _No changes yet._
 
 ---
 
-## [v0.7.0] – Current Release
+## [v0.8.0] – Current Release
+
+### Added / Improved
+
+**Common DCC client scaffolding**
+- Introduced a shared `BaseDCCClient` with structured logging, placeholder
+  behaviour, and JSON metadata export so downstream tooling can be exercised
+  without requiring a running DCC application.
+- Added dedicated stubs for Maya, Nuke, Houdini, Blender, and 3ds Max that
+  inherit from the shared base and expose consistent enums for downstream
+  helpers.
+
+**Quality**
+- Expanded the automated test suite with coverage for the new DCC scaffolding,
+  validating metadata templates, identifier derivation, and plugin reporting.
+
+---
+
+## [v0.7.0] – Previous Release
 
 ### Added / Improved
 
