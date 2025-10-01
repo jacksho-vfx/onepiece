@@ -4,13 +4,15 @@ This in-memory implementation mirrors the ergonomics of the real ShotGrid API
 while keeping tests fast and deterministic.
 """
 
+import json
 import logging
 import time
+import yaml
 from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Sequence, TypedDict, cast, TypeVar
+from typing import Any, cast, Mapping, Optional, Sequence, TypedDict, TypeVar
 
 log = logging.getLogger(__name__)
 
@@ -205,6 +207,41 @@ class TemplateNode:
             nodes.extend(child.expand())
         return nodes
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "entity_type": self.entity_type,
+            "attributes": dict(self.attributes),
+            "children": [child.to_dict() for child in self.children],
+        }
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any]) -> "TemplateNode":
+        if not isinstance(data, Mapping):
+            raise ValueError("Template node must be a mapping of attributes.")
+
+        entity_type = data.get("entity_type")
+        if not isinstance(entity_type, str) or not entity_type:
+            raise ValueError("Template node must define an 'entity_type'.")
+
+        attributes = data.get("attributes", {})
+        if not isinstance(attributes, Mapping):
+            raise ValueError("Template node 'attributes' must be a mapping.")
+
+        children_data = data.get("children", [])
+        if not isinstance(children_data, Sequence):
+            raise ValueError("Template node 'children' must be a sequence.")
+
+        children = tuple(
+            TemplateNode.from_dict(cast(Mapping[str, Any], child))
+            for child in children_data
+        )
+
+        return TemplateNode(
+            entity_type=entity_type,
+            attributes=dict(attributes),
+            children=children,
+        )
+
 
 @dataclass(frozen=True)
 class HierarchyTemplate:
@@ -218,6 +255,31 @@ class HierarchyTemplate:
         for root in self.roots:
             nodes.extend(root.expand())
         return nodes
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "roots": [node.to_dict() for node in self.roots],
+        }
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any]) -> "HierarchyTemplate":
+        if not isinstance(data, Mapping):
+            raise ValueError("Hierarchy template definition must be a mapping.")
+
+        name = data.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("Hierarchy template must include a non-empty 'name'.")
+
+        roots_data = data.get("roots", [])
+        if not isinstance(roots_data, Sequence):
+            raise ValueError("Hierarchy template 'roots' must be a sequence.")
+
+        roots = tuple(
+            TemplateNode.from_dict(cast(Mapping[str, Any], node)) for node in roots_data
+        )
+
+        return HierarchyTemplate(name=name, roots=roots)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +299,82 @@ class ShotgridClient:
         self._store = store or EntityStore()
         self._retry_policy = retry_policy or RetryPolicy()
         self._sleep = sleep or time.sleep
+
+    # Template serialization helpers ---------------------------------
+
+    @staticmethod
+    def _template_format(path: Path) -> str:
+        suffix = path.suffix.lower()
+        if suffix in {".yaml", ".yml"}:
+            return "yaml"
+        return "json"
+
+    @staticmethod
+    def _dump_template_payload(path: Path, payload: Mapping[str, Any]) -> None:
+        format_name = ShotgridClient._template_format(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with path.open("w", encoding="utf-8") as handle:
+                if format_name == "yaml":
+                    yaml.safe_dump(dict(payload), handle, sort_keys=True)
+                else:
+                    json.dump(payload, handle, indent=2, sort_keys=True)
+        except OSError:
+            raise
+
+    @staticmethod
+    def _load_template_payload(path: Path) -> Mapping[str, Any]:
+        format_hint = ShotgridClient._template_format(path)
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            raise
+
+        formats = [format_hint]
+        if format_hint == "yaml":
+            formats.append("json")
+        else:
+            formats.append("yaml")
+
+        last_error: ValueError | None = None
+        for format_name in formats:
+            try:
+                if format_name == "yaml":
+                    payload = yaml.safe_load(raw)
+                else:
+                    payload = json.loads(raw)
+            except Exception as exc:  # noqa: BLE001 - capture for diagnostics
+                last_error = ValueError(str(exc))
+                continue
+
+            if not isinstance(payload, Mapping):
+                raise ValueError("Hierarchy template file must contain an object.")
+
+            return cast(Mapping[str, Any], payload)
+
+        if last_error is not None:
+            raise last_error
+        raise ValueError("Hierarchy template file is empty.")
+
+    def serialize_hierarchy_template(
+        self, template: HierarchyTemplate
+    ) -> dict[str, Any]:
+        return template.to_dict()
+
+    def deserialize_hierarchy_template(
+        self, data: Mapping[str, Any]
+    ) -> HierarchyTemplate:
+        return HierarchyTemplate.from_dict(data)
+
+    def save_hierarchy_template(self, template: HierarchyTemplate, path: Path) -> None:
+        payload = self.serialize_hierarchy_template(template)
+        target = path.expanduser()
+        self._dump_template_payload(target, payload)
+
+    def load_hierarchy_template(self, path: Path) -> HierarchyTemplate:
+        source = path.expanduser()
+        payload = self._load_template_payload(source)
+        return self.deserialize_hierarchy_template(payload)
 
     # Project helpers --------------------------------------------------
 
