@@ -17,7 +17,9 @@ from apps.onepiece.render import submit as submit_module
 runner = CliRunner()
 
 
-def _capture_logger(log_events: list[tuple[str, str, dict[str, Any]]]) -> SimpleNamespace:
+def _capture_logger(
+    log_events: list[tuple[str, str, dict[str, Any]]]
+) -> SimpleNamespace:
     def _info(event: str, **kwargs: Any) -> None:
         log_events.append(("info", event, kwargs))
 

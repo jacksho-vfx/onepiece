@@ -1,17 +1,16 @@
 """Render submission CLI command."""
 
-from __future__ import annotations
-
 import getpass
 from pathlib import Path
-from typing import Callable, Final
+from typing import Final
 
 import click
 import structlog
 import typer
 
 from libraries.render import deadline, mock, opencue, tractor
-from libraries.render.base import RenderSubmissionError, SubmissionResult
+from libraries.render.base import RenderSubmissionError
+from libraries.render.models import RenderAdapter
 
 log = structlog.get_logger(__name__)
 
@@ -20,9 +19,7 @@ app = typer.Typer(name="render", help="Render farm submission commands.")
 DCC_CHOICES: Final[tuple[str, ...]] = ("maya", "nuke", "houdini", "blender", "max")
 FARM_CHOICES: Final[tuple[str, ...]] = ("deadline", "tractor", "opencue", "mock")
 
-SubmitFunc = Callable[[str, str, str, str, int, str], SubmissionResult]
-
-FARM_ADAPTERS: Final[dict[str, SubmitFunc]] = {
+FARM_ADAPTERS: Final[dict[str, RenderAdapter]] = {
     "deadline": deadline.submit_job,
     "tractor": tractor.submit_job,
     "opencue": opencue.submit_job,
@@ -30,7 +27,7 @@ FARM_ADAPTERS: Final[dict[str, SubmitFunc]] = {
 }
 
 
-def _get_adapter(farm: str) -> SubmitFunc:
+def _get_adapter(farm: str) -> RenderAdapter:
     adapter = FARM_ADAPTERS.get(farm)
     if adapter is None:
         raise RenderSubmissionError(f"Unknown render farm '{farm}'.")
@@ -41,10 +38,14 @@ def _get_adapter(farm: str) -> SubmitFunc:
 def submit(
     *,
     dcc: str = typer.Option(
-        ..., "--dcc", help="Which DCC generated the render.",
+        ...,
+        "--dcc",
+        help="Which DCC generated the render.",
         click_type=click.Choice(DCC_CHOICES, case_sensitive=False),
     ),
-    scene: Path = typer.Option(..., "--scene", help="Path to the scene file to render."),
+    scene: Path = typer.Option(
+        ..., "--scene", help="Path to the scene file to render."
+    ),
     frames: str = typer.Option(
         "1-100",
         "--frames",
@@ -81,7 +82,7 @@ def submit(
         user=resolved_user,
     )
 
-    adapter = _get_adapter(farm)
+    adapter: RenderAdapter = _get_adapter(farm)
 
     try:
         result = adapter(

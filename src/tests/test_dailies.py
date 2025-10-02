@@ -11,7 +11,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
-from onepiece.review.dailies import DailiesClip
+from libraries.review.dailies import DailiesClip
 
 runner = CliRunner()
 
