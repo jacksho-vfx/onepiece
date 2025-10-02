@@ -43,7 +43,7 @@ line-length = 88
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = ["typings"]
+mypy_path = ["src"]
 
 [[tool.mypy.overrides]]
 module = "structlog"
