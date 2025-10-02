@@ -1,7 +1,5 @@
 """SMTP email notification backend."""
 
-from __future__ import annotations
-
 import os
 import smtplib
 from email.message import EmailMessage
@@ -75,8 +73,9 @@ class EmailNotifier(Notifier):
         try:
             client.starttls()
         except (smtplib.SMTPException, OSError):
-            # If STARTTLS is not supported we proceed without upgrading the connection.
-            log.debug("notify.email.starttls_unavailable", host=self.host, port=self.port)
+            log.debug(
+                "notify.email.starttls_unavailable", host=self.host, port=self.port
+            )
 
         if self.user and self.password:
             client.login(self.user, self.password)

@@ -1,7 +1,5 @@
 """Slack notification backend."""
 
-from __future__ import annotations
-
 import os
 from typing import Sequence
 
@@ -16,7 +14,9 @@ log = structlog.get_logger(__name__)
 class SlackNotifier(Notifier):
     """Send notifications to Slack via an incoming webhook."""
 
-    def __init__(self, webhook_url: str | None = None, *, timeout: float = 10.0) -> None:
+    def __init__(
+        self, webhook_url: str | None = None, *, timeout: float = 10.0
+    ) -> None:
         self.webhook_url = webhook_url or os.environ.get("ONEPIECE_SLACK_WEBHOOK", "")
         self.timeout = timeout
 

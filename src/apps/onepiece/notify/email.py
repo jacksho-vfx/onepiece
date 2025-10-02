@@ -44,7 +44,9 @@ def send_email_notification(
     )
 
     notifier = get_notifier(notifier_type)
-    success = notifier.send(subject=subject, message=message, recipients=parsed_recipients)
+    success = notifier.send(
+        subject=subject, message=message, recipients=parsed_recipients
+    )
 
     if success:
         log.info(
