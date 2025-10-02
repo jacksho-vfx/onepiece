@@ -1,14 +1,12 @@
 """FastAPI dashboard exposing aggregated project status information."""
 
-from __future__ import annotations
-
 import os
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, Awaitable
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from libraries.delivery.manifest import get_manifest_data
 from libraries.reconcile import comparator
@@ -21,7 +19,7 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _parse_datetime(value: Any) -> str | None:
+def _parse_datetime(value: Any) -> Any:
     """Return an ISO 8601 timestamp for *value* if possible."""
 
     if value is None:
@@ -39,7 +37,6 @@ def _parse_datetime(value: Any) -> str | None:
         text = value.strip()
         if not text:
             return None
-        # If the string is already ISO formatted, keep it as-is.
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except ValueError:
@@ -108,29 +105,40 @@ class ShotGridService:
         self._fetcher = version_fetcher
 
     def _fetch_versions(self) -> list[Mapping[str, Any]]:
+        """
+        Fetch versions from the configured client or fetcher.
+        Supports three strategies:
+        - self._fetcher callback
+        - client.list_versions()
+        - client.get_versions_for_project(name)
+        """
         if self._fetcher is not None:
-            return list(self._fetcher(self._client))
+            fetcher: Callable[[Any], Sequence[Mapping[str, Any]]] = self._fetcher
+            return list(fetcher(self._client))
 
         if hasattr(self._client, "list_versions"):
-            versions = self._client.list_versions()
-            return [dict(item) for item in versions]
+            versions_raw: Any = getattr(self._client, "list_versions")()
+            if isinstance(versions_raw, Sequence):
+                return [dict(item) for item in versions_raw]
+            return []
 
-        project_names = set(self._configured_projects)
-        versions: list[Mapping[str, Any]] = []
+        project_names: set[str] = set(self._configured_projects)
+        all_versions: list[Mapping[str, Any]] = []
         if project_names and hasattr(self._client, "get_versions_for_project"):
             fetch = getattr(self._client, "get_versions_for_project")
             for name in project_names:
                 try:
-                    results = fetch(name)
-                except Exception as exc:  # pragma: no cover - defensive
+                    results: Any = fetch(name)
+                except Exception as exc:  # pragma: no cover
                     logger.warning(
                         "dashboard.fetch_versions_failed",
                         project=name,
                         error=str(exc),
                     )
                     continue
-                versions.extend(dict(item) for item in results)
-        return versions
+                if isinstance(results, Sequence):
+                    all_versions.extend(dict(item) for item in results)
+        return all_versions
 
     def _project_names(self, versions: Iterable[Mapping[str, Any]]) -> set[str]:
         names = {str(v.get("project")) for v in versions if v.get("project")}
@@ -153,26 +161,20 @@ class ShotGridService:
 
     def project_summary(self, project_name: str) -> dict[str, Any]:
         versions = [
-            v
-            for v in self._fetch_versions()
-            if str(v.get("project")) == project_name
+            v for v in self._fetch_versions() if str(v.get("project")) == project_name
         ]
 
         if not versions and project_name not in self._configured_projects:
             raise KeyError(project_name)
 
         episodes = {
-            episode
-            for record in versions
-            if (episode := _extract_episode(record))
+            episode for record in versions if (episode := _extract_episode(record))
         }
-        shots = {
-            str(record.get("shot"))
-            for record in versions
-            if record.get("shot")
-        }
+        shots = {str(record.get("shot")) for record in versions if record.get("shot")}
         approved = sum(
-            1 for record in versions if _is_status(record.get("status"), ("apr", "approved"))
+            1
+            for record in versions
+            if _is_status(record.get("status"), ("apr", "approved"))
         )
         published = [
             record
@@ -255,7 +257,9 @@ class ReconcileService:
 class DeliveryProvider:
     """Provide delivery metadata for dashboard views."""
 
-    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]:  # pragma: no cover
+    def list_deliveries(
+        self, project_name: str
+    ) -> Sequence[Mapping[str, Any]]:  # pragma: no cover
         return []
 
 
@@ -293,7 +297,7 @@ def get_shotgrid_client() -> Any:  # pragma: no cover - runtime wiring
     try:
         from libraries.shotgrid.client import ShotgridClient
     except ImportError:  # pragma: no cover - fallback if optional dependency missing
-        ShotgridClient = None  # type: ignore[misc, assignment]
+        ShotgridClient = None
 
     if ShotgridClient is None:
         raise RuntimeError("ShotgridClient is not available")
@@ -322,7 +326,9 @@ app = FastAPI(title="OnePiece Dashboard", version="1.0.0")
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next: Callable[[Request], Any]) -> Any:
+async def log_requests(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     logger.info(
         "dashboard.request.start",
         method=request.method,

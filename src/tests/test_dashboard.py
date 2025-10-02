@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any, Sequence, Protocol, Mapping, Generator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -17,7 +17,19 @@ class DummyShotgridClient:
         return self._versions
 
 
-class DummyReconcileProvider(dashboard.ReconcileDataProvider):
+class ReconcileDataProvider(Protocol):
+    """Return reconciliation datasets used for mismatch detection."""
+
+    def load(self) -> dict[str, Any]: ...
+
+
+class DeliveryProvider(Protocol):
+    """Provide delivery metadata for dashboard views."""
+
+    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]: ...
+
+
+class DummyReconcileProvider(ReconcileDataProvider):
     def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
 
@@ -25,7 +37,7 @@ class DummyReconcileProvider(dashboard.ReconcileDataProvider):
         return self._payload
 
 
-class DummyDeliveryProvider(dashboard.DeliveryProvider):
+class DummyDeliveryProvider(DeliveryProvider):
     def __init__(self, deliveries: Sequence[dict[str, Any]]) -> None:
         self._deliveries = list(deliveries)
 
@@ -38,7 +50,7 @@ class DummyDeliveryProvider(dashboard.DeliveryProvider):
 
 
 @pytest.fixture(autouse=True)
-def _clear_overrides() -> None:
+def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
     yield
     dashboard.app.dependency_overrides.clear()
@@ -101,7 +113,7 @@ async def test_status_endpoint_aggregates_counts() -> None:
 
 @pytest.mark.anyio("asyncio")
 async def test_project_detail_returns_summary() -> None:
-    versions = [
+    versions: list[dict[str, Any]] = [
         {
             "project": "alpha",
             "shot": "EP01_SC001_SH0010",
@@ -245,4 +257,4 @@ async def test_landing_page_returns_html() -> None:
 
     assert response.status_code == 200
     assert "OnePiece Production Dashboard" in response.text
-    assert "href=\"/status\"" in response.text
+    assert 'href="/status"' in response.text
