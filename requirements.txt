@@ -1,5 +1,7 @@
 av
 black
+fastapi
+httpx
 imageio
 mypy
 pre-commit

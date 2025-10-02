@@ -14,6 +14,8 @@ dependencies = [
     "typer>=0.19.2",
     "tqdm>=4.66.1",
     "structlog>=23.3.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
     "av>=12.0",
     "rich>=13.7.0",
     "click>=8.3.0",
@@ -27,12 +29,15 @@ dependencies = [
 
 [project.scripts]
 onepiece = "apps.onepiece.__main__:main"
+trafalgar = "apps.trafalgar.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
     "apps.onepiece",
     "apps.onepiece.*",
+    "apps.trafalgar",
+    "apps.trafalgar.*",
     "libraries",
     "libraries.*",
 ]
