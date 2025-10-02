@@ -1,7 +1,5 @@
 """Generate daily review QuickTimes from ShotGrid Versions."""
 
-from __future__ import annotations
-
 import datetime as _dt
 import json
 import subprocess
