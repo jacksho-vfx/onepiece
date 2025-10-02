@@ -6,6 +6,7 @@ from apps.onepiece.shotgrid import app as shotgrid
 from apps.onepiece.misc.info import app as info
 from libraries.review import app as review
 from apps.onepiece.render import app as render
+from apps.onepiece.notify import app as notify
 from apps.onepiece.validate import app as validate
 from apps.onepiece.utils.errors import OnePieceError
 from apps.onepiece.validate.reconcile import app as reconcile
@@ -24,6 +25,7 @@ app.add_typer(aws)
 app.add_typer(dcc)
 app.add_typer(review)
 app.add_typer(render)
+app.add_typer(notify)
 
 app.add_typer(shotgrid)
 app.add_typer(validate)
