@@ -21,10 +21,18 @@ _No changes yet._
 - Added dedicated stubs for Maya, Nuke, Houdini, Blender, and 3ds Max that
   inherit from the shared base and expose consistent enums for downstream
   helpers.
+- Documented how to exercise the new DCC scaffolding locally so teams can
+  validate metadata export flows without connecting to production systems.
 
 **Quality**
 - Expanded the automated test suite with coverage for the new DCC scaffolding,
   validating metadata templates, identifier derivation, and plugin reporting.
+
+### Changed
+
+- Raised the minimum supported Python version to 3.11 to mirror the packaging
+  metadata and ensure type-checking features used by the new scaffolding are
+  available at runtime.
 
 ---
 
