@@ -194,6 +194,35 @@ MediaShuttle-ready package.
 3. Inspect the generated directory and `manifest.json` file to confirm the
    playlist structure.
 
+## 6. Exercise the DCC scaffolding stubs
+
+The v0.8.0 release introduces lightweight DCC clients that expose a shared API
+surface without requiring Maya, Nuke, Houdini, Blender, or 3ds Max to be
+installed. Use the snippet below to export placeholder metadata and inspect the
+generated JSON payload:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+from libraries.dcc.client import BlenderClient
+from libraries.dcc.enums import DCC
+
+export_path = Path("/tmp/onepiece_dcc/metadata.json")
+client = BlenderClient(dcc=DCC.BLENDER)
+metadata = client.export_metadata(export_path)
+
+print(f"Metadata written to: {export_path}")
+print(metadata)
+PY
+```
+
+The stub logs each action, writes a JSON template to the destination, and
+returns a dictionary that mirrors the file content. Replace `BlenderClient` with
+another client from `libraries.dcc.client` to rehearse the workflow for other
+applications. When you are ready to wire up a real integration, override the
+stub methods with application-specific logic and keep the CLI commands intact.
+
 ---
 
 Experimenting with these scenarios builds intuition for how the CLI behaves and gives you realistic command lines to adapt for production.
