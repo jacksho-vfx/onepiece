@@ -29,12 +29,15 @@ dependencies = [
 
 [project.scripts]
 onepiece = "apps.onepiece.__main__:main"
+trafalgar = "apps.trafalgar.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
     "apps.onepiece",
     "apps.onepiece.*",
+    "apps.trafalgar",
+    "apps.trafalgar.*",
     "libraries",
     "libraries.*",
 ]
