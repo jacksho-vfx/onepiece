@@ -1,7 +1,5 @@
 """Tests for the dailies CLI command."""
 
-from __future__ import annotations
-
 import json
 import subprocess
 from pathlib import Path
@@ -36,9 +34,11 @@ def test_dailies_playlist_success(
     output = tmp_path / "dailies.mov"
     manifest_path = output.with_name(f"{output.name}.manifest.json")
 
-    monkeypatch.setattr("onepiece.review.dailies.get_shotgrid_client", lambda: object())
     monkeypatch.setattr(
-        "onepiece.review.dailies.fetch_playlist_versions",
+        "libraries.review.dailies.get_shotgrid_client", lambda: object()
+    )
+    monkeypatch.setattr(
+        "libraries.review.dailies.fetch_playlist_versions",
         lambda client, project, playlist: [sample_clip],
     )
 
@@ -55,7 +55,7 @@ def test_dailies_playlist_success(
         return subprocess.CompletedProcess(["ffmpeg"], 0)
 
     monkeypatch.setattr(
-        "onepiece.review.dailies.run_ffmpeg_concat",
+        "libraries.review.dailies.run_ffmpeg_concat",
         _fake_run_ffmpeg,
     )
 
@@ -93,9 +93,11 @@ def test_dailies_playlist_success(
 def test_dailies_no_versions(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     output = tmp_path / "dailies.mov"
 
-    monkeypatch.setattr("onepiece.review.dailies.get_shotgrid_client", lambda: object())
     monkeypatch.setattr(
-        "onepiece.review.dailies.fetch_today_approved_versions",
+        "libraries.review.dailies.get_shotgrid_client", lambda: object()
+    )
+    monkeypatch.setattr(
+        "libraries.review.dailies.fetch_today_approved_versions",
         lambda client, project: [],
     )
 
@@ -121,9 +123,11 @@ def test_dailies_ffmpeg_failure(
 ) -> None:
     output = tmp_path / "dailies.mov"
 
-    monkeypatch.setattr("onepiece.review.dailies.get_shotgrid_client", lambda: object())
     monkeypatch.setattr(
-        "onepiece.review.dailies.fetch_today_approved_versions",
+        "libraries.review.dailies.get_shotgrid_client", lambda: object()
+    )
+    monkeypatch.setattr(
+        "libraries.review.dailies.fetch_today_approved_versions",
         lambda client, project: [sample_clip],
     )
 
@@ -131,7 +135,7 @@ def test_dailies_ffmpeg_failure(
         raise subprocess.CalledProcessError(1, ["ffmpeg"], stderr="boom")
 
     monkeypatch.setattr(
-        "onepiece.review.dailies.run_ffmpeg_concat",
+        "libraries.review.dailies.run_ffmpeg_concat",
         _raise_ffmpeg,
     )
 
