@@ -1,6 +1,8 @@
 """FastAPI dashboard exposing aggregated project status information."""
 
+import json
 import os
+import textwrap
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Sequence, Awaitable
 
@@ -346,32 +348,158 @@ async def log_requests(
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page() -> HTMLResponse:
-    html = """
-    <!DOCTYPE html>
-    <html lang=\"en\">
-      <head>
-        <meta charset=\"utf-8\" />
-        <title>OnePiece Dashboard</title>
-        <style>
-          body { font-family: sans-serif; margin: 2rem; }
-          h1 { color: #222; }
-          ul { list-style: none; padding: 0; }
-          li { margin-bottom: 0.5rem; }
-          a { color: #0070f3; text-decoration: none; }
-          a:hover { text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <h1>OnePiece Production Dashboard</h1>
-        <p>Select a section:</p>
-        <ul>
-          <li><a href=\"/status\">Project status overview</a></li>
-          <li><a href=\"/errors\">Reconciliation mismatches</a></li>
-          <li><a href=\"/deliveries/example\">Example project deliveries</a></li>
-        </ul>
-      </body>
-    </html>
-    """
+    known_projects = sorted(_load_known_projects())
+    example_project = known_projects[0] if known_projects else None
+
+    if example_project:
+        review_links = (
+            f"          <li><a href=\"/review/projects/{example_project}/playlists\">Review playlists for {example_project}</a></li>\n"
+            f"          <li><a href=\"/review/projects/{example_project}/playlists/{{{{playlist}}}}\">Playlist detail endpoint</a></li>\n"
+        )
+        playlist_preview_template = textwrap.dedent(
+            """
+            <section class=\"review-section\">
+              <h2>Latest review playlists for <span class=\"project-name\">__PROJECT__</span></h2>
+              <p>The table below is populated from the playlist review API.</p>
+              <table id=\"playlist-summary\" class=\"playlist-table\">
+                <thead>
+                  <tr>
+                    <th>Playlist</th>
+                    <th>Clips</th>
+                    <th>Shots</th>
+                    <th>Total duration (s)</th>
+                  </tr>
+                </thead>
+                <tbody id=\"playlist-summary-body\">
+                  <tr class=\"placeholder\"><td colspan=\"4\">Loading playlists…</td></tr>
+                </tbody>
+              </table>
+              <p id=\"playlist-summary-empty\" class=\"hidden\">No playlists were returned for this project.</p>
+            </section>
+            <script>
+              (function() {
+                const project = __PROJECT_JSON__;
+                const body = document.getElementById("playlist-summary-body");
+                const empty = document.getElementById("playlist-summary-empty");
+                if (!body) {
+                  return;
+                }
+                fetch('/review/projects/' + encodeURIComponent(project) + '/playlists').then(function(response) {
+                  if (!response.ok) {
+                    throw new Error('Request failed');
+                  }
+                  return response.json();
+                }).then(function(data) {
+                  while (body.firstChild) {
+                    body.removeChild(body.firstChild);
+                  }
+                  const playlists = (data && Array.isArray(data.playlists)) ? data.playlists : [];
+                  if (!playlists.length) {
+                    if (empty) {
+                      empty.classList.remove('hidden');
+                    }
+                    return;
+                  }
+                  playlists.forEach(function(entry) {
+                    const row = document.createElement('tr');
+                    const nameCell = document.createElement('td');
+                    const link = document.createElement('a');
+                    link.href = '/review/projects/' + encodeURIComponent(project) + '/playlists/' + encodeURIComponent(entry.name);
+                    link.textContent = entry.name;
+                    nameCell.appendChild(link);
+                    row.appendChild(nameCell);
+
+                    const clipsCell = document.createElement('td');
+                    clipsCell.textContent = entry.clips ?? '0';
+                    row.appendChild(clipsCell);
+
+                    const shotsCell = document.createElement('td');
+                    shotsCell.textContent = entry.shots ?? '0';
+                    row.appendChild(shotsCell);
+
+                    const durationCell = document.createElement('td');
+                    const duration = typeof entry.duration_seconds === 'number' ? entry.duration_seconds.toFixed(2) : '0.00';
+                    durationCell.textContent = duration;
+                    row.appendChild(durationCell);
+
+                    body.appendChild(row);
+                  });
+                }).catch(function(error) {
+                  while (body.firstChild) {
+                    body.removeChild(body.firstChild);
+                  }
+                  const row = document.createElement('tr');
+                  const cell = document.createElement('td');
+                  cell.colSpan = 4;
+                  cell.textContent = 'Unable to load playlist data: ' + error.message;
+                  row.appendChild(cell);
+                  body.appendChild(row);
+                });
+              })();
+            </script>
+            """
+        )
+        playlist_preview = (
+            playlist_preview_template
+            .replace("__PROJECT__", example_project)
+            .replace("__PROJECT_JSON__", json.dumps(example_project))
+        )
+    else:
+        review_links = (
+            "          <li><code>/review/projects/&lt;project&gt;/playlists</code></li>\n"
+            "          <li><code>/review/projects/&lt;project&gt;/playlists/&lt;name&gt;</code></li>\n"
+        )
+        playlist_preview = textwrap.dedent(
+            """
+            <section class=\"review-section\">
+              <h2>Review playlists</h2>
+              <p>Configure the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to preview playlist summaries directly on this dashboard.</p>
+            </section>
+            """
+        )
+
+    html_template = textwrap.dedent(
+        """
+        <!DOCTYPE html>
+        <html lang=\"en\">
+          <head>
+            <meta charset=\"utf-8\" />
+            <title>OnePiece Dashboard</title>
+            <style>
+              body { font-family: sans-serif; margin: 2rem; }
+              h1 { color: #222; }
+              ul { list-style: none; padding: 0; }
+              li { margin-bottom: 0.5rem; }
+              a { color: #0070f3; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              .review-section { margin-top: 2rem; }
+              .playlist-table { border-collapse: collapse; width: 100%; max-width: 48rem; }
+              .playlist-table th, .playlist-table td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+              .playlist-table th { background-color: #f6f8fa; }
+              .playlist-table .placeholder td { text-align: center; font-style: italic; color: #666; }
+              .hidden { display: none; }
+            </style>
+          </head>
+          <body>
+            <h1>OnePiece Production Dashboard</h1>
+            <p>Select a section:</p>
+            <ul>
+              <li><a href=\"/status\">Project status overview</a></li>
+              <li><a href=\"/errors\">Reconciliation mismatches</a></li>
+              <li><a href=\"/deliveries/example\">Example project deliveries</a></li>
+        __REVIEW_LINKS__
+            </ul>
+        __PLAYLIST_PREVIEW__
+          </body>
+        </html>
+        """
+    )
+
+    html = (
+        html_template
+        .replace("__REVIEW_LINKS__", review_links)
+        .replace("__PLAYLIST_PREVIEW__", playlist_preview.strip())
+    )
     return HTMLResponse(content=html)
 
 
