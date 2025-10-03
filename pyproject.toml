@@ -19,6 +19,7 @@ dependencies = [
     "av>=12.0",
     "rich>=13.7.0",
     "click>=8.3.0",
+    "uvicorn>=0.30.0",
     "pytest>=8.0.0",
     "pytest-mock>=3.12.0",
     "black==24.8.0",
