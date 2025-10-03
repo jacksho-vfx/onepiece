@@ -17,4 +17,5 @@ types-requests
 typer
 typing-extensions
 universal-pathlib
+uvicorn
 -e .
