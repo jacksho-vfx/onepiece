@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence, cast
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence, cast, Dict
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -109,6 +109,11 @@ async def log_requests(
     return response
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "OnePiece Ingest API is running"}
+
+
 @app.get("/runs")
 async def list_runs(
     limit: int = Query(20, ge=1, le=100),
@@ -128,3 +133,8 @@ async def get_run(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return JSONResponse(content=payload)
+
+
+@app.get("/health")
+def health_check() -> Dict[str, str]:
+    return {"status": "ok"}
