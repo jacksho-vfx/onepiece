@@ -59,7 +59,7 @@ def dashboard(
     typer.echo(f"Starting OnePiece dashboard on http://{host}:{port}")
     uvicorn = _load_uvicorn()
     uvicorn.run(
-        "trafalgar.web.dashboard:app",
+        "apps.trafalgar.web.dashboard:app",
         host=host,
         port=port,
         reload=reload,
@@ -73,7 +73,7 @@ def _serve_ingest(*, host: str, port: int, reload: bool, log_level: str) -> None
     typer.echo(f"Starting OnePiece ingest API on http://{host}:{port}")
     uvicorn = _load_uvicorn()
     uvicorn.run(
-        "trafalgar.web.ingest:app",
+        "apps.trafalgar.web.ingest:app",
         host=host,
         port=port,
         reload=reload,

@@ -32,7 +32,7 @@ def test_dashboard_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) ->
 
     assert result.exit_code == 0
     uvicorn_mock.run.assert_called_once_with(
-        "trafalgar.web.dashboard:app",
+        "apps.trafalgar.web.dashboard:app",
         host="0.0.0.0",
         port=9000,
         reload=False,
@@ -59,7 +59,7 @@ def test_ingest_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -> No
 
     assert result.exit_code == 0
     uvicorn_mock.run.assert_called_once_with(
-        "trafalgar.web.ingest:app",
+        "apps.trafalgar.web.ingest:app",
         host="0.0.0.0",
         port=9100,
         reload=False,
@@ -67,7 +67,9 @@ def test_ingest_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -> No
     )
 
 
-def test_web_ingest_command_is_still_supported(mocker: pytest_mock.MockerFixture) -> None:
+def test_web_ingest_command_is_still_supported(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
     uvicorn_mock = SimpleNamespace(run=Mock())
     mocker.patch("apps.trafalgar.app._load_uvicorn", return_value=uvicorn_mock)
 
@@ -87,7 +89,7 @@ def test_web_ingest_command_is_still_supported(mocker: pytest_mock.MockerFixture
 
     assert result.exit_code == 0
     uvicorn_mock.run.assert_called_once_with(
-        "trafalgar.web.ingest:app",
+        "apps.trafalgar.web.ingest:app",
         host="0.0.0.0",
         port=9200,
         reload=False,
