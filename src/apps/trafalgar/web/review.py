@@ -31,8 +31,12 @@ def _extract_playlist_name(record: Mapping[str, Any]) -> str | None:
         record.get("code"),
     )
 
-    attributes = record.get("attributes") if isinstance(record.get("attributes"), Mapping) else None
-    attribute_candidates = ()
+    attributes = (
+        record.get("attributes")
+        if isinstance(record.get("attributes"), Mapping)
+        else None
+    )
+    attribute_candidates = (None, None, None)
     if isinstance(attributes, Mapping):
         attribute_candidates = (
             attributes.get("playlist_name"),
@@ -64,9 +68,9 @@ def _list_project_playlists(client: Any, project_name: str) -> list[str]:
 
     if hasattr(client, "list_playlists"):
         try:
-            raw = client.list_playlists(project_name)  # type: ignore[call-arg]
+            raw = client.list_playlists(project_name)
         except TypeError:
-            raw = client.list_playlists()  # type: ignore[misc]
+            raw = client.list_playlists()
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "review.list_playlists.failed",
@@ -81,7 +85,9 @@ def _list_project_playlists(client: Any, project_name: str) -> list[str]:
             if isinstance(record, Mapping)
         ]
         result = sorted(_unique([name for name in names if name]))
-        logger.info("review.list_playlists.complete", project=project_name, count=len(result))
+        logger.info(
+            "review.list_playlists.complete", project=project_name, count=len(result)
+        )
         return result
 
     filters: list[dict[str, Any]] = []
@@ -103,7 +109,9 @@ def _list_project_playlists(client: Any, project_name: str) -> list[str]:
     try:
         records = client._get("Playlist", filters, "id,name,code")  # noqa: SLF001
     except ShotGridError as exc:
-        logger.error("review.list_playlists.shotgrid_error", project=project_name, error=str(exc))
+        logger.error(
+            "review.list_playlists.shotgrid_error", project=project_name, error=str(exc)
+        )
         raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(
@@ -119,7 +127,9 @@ def _list_project_playlists(client: Any, project_name: str) -> list[str]:
         if isinstance(record, Mapping)
     ]
     result = sorted(_unique([name for name in names if name]))
-    logger.info("review.list_playlists.complete", project=project_name, count=len(result))
+    logger.info(
+        "review.list_playlists.complete", project=project_name, count=len(result)
+    )
     return result
 
 
@@ -156,7 +166,9 @@ def list_playlists(
     try:
         playlists = _list_project_playlists(client, project_name)
     except ShotGridError as exc:
-        raise HTTPException(status_code=502, detail=f"ShotGrid query failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"ShotGrid query failed: {exc}"
+        ) from exc
 
     payload: list[dict[str, Any]] = []
     for name in playlists:
@@ -189,7 +201,9 @@ def playlist_detail(
     try:
         available = _list_project_playlists(client, project_name)
     except ShotGridError as exc:
-        raise HTTPException(status_code=502, detail=f"ShotGrid query failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"ShotGrid query failed: {exc}"
+        ) from exc
 
     if playlist_name not in available:
         raise HTTPException(status_code=404, detail="Playlist not found")
@@ -213,4 +227,3 @@ def playlist_detail(
         "clips": [_clip_to_dict(clip) for clip in clips],
     }
     return JSONResponse(content=response)
-

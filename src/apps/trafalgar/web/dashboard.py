@@ -353,8 +353,8 @@ async def landing_page() -> HTMLResponse:
 
     if example_project:
         review_links = (
-            f"          <li><a href=\"/review/projects/{example_project}/playlists\">Review playlists for {example_project}</a></li>\n"
-            f"          <li><a href=\"/review/projects/{example_project}/playlists/{{{{playlist}}}}\">Playlist detail endpoint</a></li>\n"
+            f'          <li><a href="/review/projects/{example_project}/playlists">Review playlists for {example_project}</a></li>\n'
+            f'          <li><a href="/review/projects/{example_project}/playlists/{{{{playlist}}}}">Playlist detail endpoint</a></li>\n'
         )
         playlist_preview_template = textwrap.dedent(
             """
@@ -439,11 +439,9 @@ async def landing_page() -> HTMLResponse:
             </script>
             """
         )
-        playlist_preview = (
-            playlist_preview_template
-            .replace("__PROJECT__", example_project)
-            .replace("__PROJECT_JSON__", json.dumps(example_project))
-        )
+        playlist_preview = playlist_preview_template.replace(
+            "__PROJECT__", example_project
+        ).replace("__PROJECT_JSON__", json.dumps(example_project))
     else:
         review_links = (
             "          <li><code>/review/projects/&lt;project&gt;/playlists</code></li>\n"
@@ -495,10 +493,8 @@ async def landing_page() -> HTMLResponse:
         """
     )
 
-    html = (
-        html_template
-        .replace("__REVIEW_LINKS__", review_links)
-        .replace("__PLAYLIST_PREVIEW__", playlist_preview.strip())
+    html = html_template.replace("__REVIEW_LINKS__", review_links).replace(
+        "__PLAYLIST_PREVIEW__", playlist_preview.strip()
     )
     return HTMLResponse(content=html)
 
