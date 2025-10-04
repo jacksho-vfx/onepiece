@@ -1,7 +1,5 @@
 """Typer CLI entry points for the Trafalgar dashboard services."""
 
-from __future__ import annotations
-
 from importlib import import_module
 from typing import Any
 
@@ -12,6 +10,7 @@ DEFAULT_PORT = 8000
 
 app = typer.Typer(name="trafalgar", help="Operations for the Trafalgar dashboard.")
 web_app = typer.Typer(name="web", help="Web interface helpers.")
+ingest_app = typer.Typer(name="ingest", help="Ingestion helper application.")
 
 
 def _load_uvicorn() -> Any:

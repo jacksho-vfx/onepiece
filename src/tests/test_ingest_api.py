@@ -5,21 +5,27 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from apps.trafalgar.web import ingest
+from apps.trafalgar.web.ingest import (
+    app,
+    IngestRunProvider,
+    get_ingest_run_service,
+    IngestRunService,
+)
 from libraries.ingest.registry import IngestRunRecord
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
 
 
-class DummyIngestProvider(ingest.IngestRunProvider):
+class DummyIngestProvider(IngestRunProvider):  # type: ignore[misc]
     def __init__(self, records: list[IngestRunRecord]):
+        super().__init__()
         self._records = records
 
-    def load_recent_runs(self, limit: int | None = None):  # type: ignore[override]
+    def load_recent_runs(self, limit: int | None = None) -> list[IngestRunRecord]:
         if limit is None:
             return list(self._records)
         return list(self._records)[:limit]
 
-    def get_run(self, run_id: str):  # type: ignore[override]
+    def get_run(self, run_id: str) -> IngestRunRecord:
         for record in self._records:
             if record.run_id == run_id:
                 return record
@@ -44,7 +50,10 @@ def _make_record(run_id: str = "abc123") -> IngestRunRecord:
             )
         ],
         invalid=[
-            (Path("/mnt/incoming/invalid_file.mov"), "Descriptor must be provided in the filename")
+            (
+                Path("/mnt/incoming/invalid_file.mov"),
+                "Descriptor must be provided in the filename",
+            )
         ],
     )
     return IngestRunRecord(
@@ -55,11 +64,10 @@ def _make_record(run_id: str = "abc123") -> IngestRunRecord:
     )
 
 
-def test_list_runs_serialises_registry_records():
+def test_list_runs_serialises_registry_records() -> None:
     provider = DummyIngestProvider([_make_record()])
-    service = ingest.IngestRunService(provider=provider)
-    app = ingest.app
-    app.dependency_overrides[ingest.get_ingest_run_service] = lambda: service
+    service = IngestRunService(provider=provider)
+    app.dependency_overrides[get_ingest_run_service] = lambda: service
     client = TestClient(app)
 
     response = client.get("/runs")
@@ -74,11 +82,10 @@ def test_list_runs_serialises_registry_records():
     app.dependency_overrides.clear()
 
 
-def test_get_run_returns_404_for_missing_record():
+def test_get_run_returns_404_for_missing_record() -> None:
     provider = DummyIngestProvider([])
-    service = ingest.IngestRunService(provider=provider)
-    app = ingest.app
-    app.dependency_overrides[ingest.get_ingest_run_service] = lambda: service
+    service = IngestRunService(provider=provider)
+    app.dependency_overrides[get_ingest_run_service] = lambda: service
     client = TestClient(app)
 
     response = client.get("/runs/not-here")
@@ -86,4 +93,3 @@ def test_get_run_returns_404_for_missing_record():
     assert response.status_code == 404
 
     app.dependency_overrides.clear()
-

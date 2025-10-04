@@ -1,12 +1,10 @@
 """FastAPI application exposing ingest run summaries for Trafalgar."""
 
-from __future__ import annotations
-
-import logging
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence, cast
 
+import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
@@ -14,7 +12,7 @@ from starlette.responses import Response
 from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
-logger = logging.getLogger(__name__)
+logger = structlog.getLogger(__name__)
 
 
 def _serialise_media(media: IngestedMedia) -> Mapping[str, Any]:
@@ -60,7 +58,7 @@ class IngestRunProvider:
         self._registry = registry or IngestRunRegistry()
 
     def load_recent_runs(self, limit: int | None = None) -> Sequence[IngestRunRecord]:
-        return self._registry.load_recent(limit)
+        return cast(Sequence[IngestRunRecord], self._registry.load_recent(limit))
 
     def get_run(self, run_id: str) -> IngestRunRecord | None:
         return self._registry.get(run_id)
@@ -130,4 +128,3 @@ async def get_run(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return JSONResponse(content=payload)
-

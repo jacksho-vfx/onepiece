@@ -1,19 +1,17 @@
 """Persistence helpers for ingest run metadata shared across interfaces."""
 
-from __future__ import annotations
-
 import json
-import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, List, Mapping, cast
 
+import structlog
+
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
 
-logger = logging.getLogger(__name__)
-
+logger = structlog.get_logger(__name__)
 
 DEFAULT_REGISTRY_ENV = "ONEPIECE_INGEST_REGISTRY"
 DEFAULT_REGISTRY_PATH = Path("~/.cache/onepiece/ingest_runs.json").expanduser()
@@ -129,7 +127,9 @@ class IngestRunRegistry:
             with self._path.open("r", encoding="utf-8") as fh:
                 payload = json.load(fh)
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("ingest.registry.load_failed", path=str(self._path), error=str(exc))
+            logger.warning(
+                "ingest.registry.load_failed", path=str(self._path), error=str(exc)
+            )
             return []
 
         if isinstance(payload, list):
@@ -140,7 +140,9 @@ class IngestRunRegistry:
             if isinstance(runs, list):
                 return [item for item in runs if isinstance(item, Mapping)]
 
-        logger.warning("ingest.registry.unexpected_payload", payload_type=type(payload).__name__)
+        logger.warning(
+            "ingest.registry.unexpected_payload", payload_type=type(payload).__name__
+        )
         return []
 
     def load_all(self) -> list[IngestRunRecord]:
@@ -178,4 +180,3 @@ class IngestRunRegistry:
             if record.run_id == run_id:
                 return record
         return None
-
