@@ -50,6 +50,7 @@ line-length = 88
 [tool.mypy]
 python_version = "3.11"
 mypy_path = ["src"]
+packages = ["apps", "libraries", "tests"]
 
 [[tool.mypy.overrides]]
 module = "structlog"
