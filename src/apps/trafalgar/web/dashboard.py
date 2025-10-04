@@ -368,6 +368,7 @@ async def landing_page() -> HTMLResponse:
           <li><a href=\"/status\">Project status overview</a></li>
           <li><a href=\"/errors\">Reconciliation mismatches</a></li>
           <li><a href=\"/deliveries/example\">Example project deliveries</a></li>
+          <li><a href=\"http://127.0.0.1:8000/runs\" target=\"_blank\" rel=\"external\">Ingest run summaries API</a></li>
         </ul>
       </body>
     </html>
