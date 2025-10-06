@@ -616,7 +616,9 @@ class DeliveryService:
     @staticmethod
     def _clone_manifest_data(manifest: Mapping[str, Any]) -> dict[str, Any]:
         files = manifest.get("files", [])
-        if isinstance(files, Sequence) and not isinstance(files, (str, bytes, bytearray)):
+        if isinstance(files, Sequence) and not isinstance(
+            files, (str, bytes, bytearray)
+        ):
             cloned_files = [
                 dict(item) if isinstance(item, Mapping) else item for item in files
             ]
@@ -647,7 +649,9 @@ class DeliveryService:
     ) -> dict[str, Any] | None:
         if isinstance(payload, Mapping):
             return DeliveryService._clone_manifest_data(payload)
-        if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+        if isinstance(payload, Sequence) and not isinstance(
+            payload, (str, bytes, bytearray)
+        ):
             files = [
                 dict(item) if isinstance(item, Mapping) else item for item in payload
             ]

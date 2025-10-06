@@ -527,7 +527,9 @@ def test_delivery_service_prefers_provider_manifest_data(
     assert calls == []
 
 
-def test_delivery_service_caches_recomputed_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_delivery_service_caches_recomputed_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[list[Mapping[str, Any]]] = []
 
     def fake_get_manifest_data(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
