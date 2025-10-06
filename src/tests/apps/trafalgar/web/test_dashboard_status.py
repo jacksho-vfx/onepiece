@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Mapping
 
 import pytest
@@ -31,7 +32,7 @@ class StubIngestFacade:
 
 
 @pytest.fixture(autouse=True)
-def clear_overrides() -> None:
+def clear_overrides() -> Iterator[None]:
     dashboard.app.dependency_overrides.clear()
     yield
     dashboard.app.dependency_overrides.clear()

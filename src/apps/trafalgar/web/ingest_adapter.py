@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from .ingest import IngestRunService
 
@@ -77,9 +77,13 @@ class IngestRunDashboardFacade:
         return self._summarise_runs(runs)
 
     def _summarise_runs(self, runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-        successes = [_parse_timestamp(run.get("completed_at")) for run in runs if _is_success(run)]
+        successes = [
+            _parse_timestamp(run.get("completed_at"))
+            for run in runs
+            if _is_success(run)
+        ]
         successes = [timestamp for timestamp in successes if timestamp is not None]
-        last_success = max(successes) if successes else None
+        last_success = max(cast(list[datetime], successes)) if successes else None
 
         failure_streak = 0
         for run in runs:
@@ -103,5 +107,7 @@ class IngestRunDashboardFacade:
         return summary
 
 
-def get_ingest_dashboard_facade() -> IngestRunDashboardFacade:  # pragma: no cover - runtime wiring
+def get_ingest_dashboard_facade() -> (
+    IngestRunDashboardFacade
+):  # pragma: no cover - runtime wiring
     return IngestRunDashboardFacade()
