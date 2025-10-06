@@ -603,7 +603,7 @@ class DeliveryService:
         deliveries = self._provider.list_deliveries(project_name)
         result: list[dict[str, Any]] = []
         for delivery in deliveries:
-            entries = delivery.get("entries", [])
+            entries = delivery.get("entries") or []
             manifest = get_manifest_data(entries)
             result.append(
                 {
