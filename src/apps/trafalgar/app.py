@@ -81,6 +81,20 @@ def _serve_ingest(*, host: str, port: int, reload: bool, log_level: str) -> None
     )
 
 
+def _serve_render(*, host: str, port: int, reload: bool, log_level: str) -> None:
+    """Launch the render submission API using uvicorn."""
+
+    typer.echo(f"Starting OnePiece render API on http://{host}:{port}")
+    uvicorn = _load_uvicorn()
+    uvicorn.run(
+        "apps.trafalgar.web.render:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level=log_level,
+    )
+
+
 @web_app.command("ingest")
 def web_ingest(
     host: str = typer.Option(
@@ -115,6 +129,42 @@ def web_ingest(
     """Launch the ingest API via the web command group."""
 
     _serve_ingest(host=host, port=port, reload=reload, log_level=log_level)
+
+
+@web_app.command("render")
+def web_render(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Host interface to bind the render API server to.",
+        show_default=True,
+    ),
+    port: int = typer.Option(
+        DEFAULT_PORT,
+        "--port",
+        "-p",
+        min=1,
+        max=65535,
+        help="Port to expose the render API on.",
+        show_default=True,
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload/--no-reload",
+        help="Automatically reload when source files change.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        "info",
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+) -> None:
+    """Launch the render submission API via the web command group."""
+
+    _serve_render(host=host, port=port, reload=reload, log_level=log_level)
 
 
 @ingest_app.callback()

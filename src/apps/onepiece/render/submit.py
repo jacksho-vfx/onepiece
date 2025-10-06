@@ -121,6 +121,8 @@ def submit(
     status = result.get("status", "unknown")
     farm_type = result.get("farm_type", farm)
 
+    message = result.get("message")
+
     log.info(
         "render.submit.success",
         dcc=dcc,
@@ -130,9 +132,18 @@ def submit(
         job_id=job_id,
         status=status,
         user=resolved_user,
+        message=message,
     )
+
+    if status == "not_implemented":
+        detail = message or f"{farm_type.title()} adapter is not implemented yet."
+        typer.secho(f"Render adapter response: {detail}", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
 
     typer.secho(
         f"Submitted {dcc} scene '{scene}' to {farm_type} with job ID {job_id} (status: {status}).",
         fg=typer.colors.GREEN,
     )
+
+    if message:
+        typer.secho(message, fg=typer.colors.GREEN)

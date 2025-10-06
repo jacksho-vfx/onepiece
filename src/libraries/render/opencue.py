@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import structlog
 
-from .base import RenderSubmissionError, SubmissionResult
+from .base import SubmissionResult
 
 log = structlog.get_logger(__name__)
 
@@ -19,6 +19,7 @@ def submit_job(
 ) -> SubmissionResult:
     """Log the intent to submit an OpenCue job and raise not implemented."""
 
+    message = "OpenCue adapter is not implemented yet."
     log.info(
         "render.opencue.submit_job",
         scene=scene,
@@ -27,5 +28,11 @@ def submit_job(
         dcc=dcc,
         priority=priority,
         user=user,
+        status="not_implemented",
     )
-    raise RenderSubmissionError("OpenCue adapter is not implemented yet.")
+    return SubmissionResult(
+        job_id="",
+        status="not_implemented",
+        farm_type="opencue",
+        message=message,
+    )
