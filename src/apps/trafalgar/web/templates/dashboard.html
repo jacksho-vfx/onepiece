@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OnePiece Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 2rem;
+        line-height: 1.5;
+      }
+      h1 {
+        color: #1f2933;
+        margin-bottom: 0.5rem;
+      }
+      nav ul {
+        list-style: none;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        margin-bottom: 2rem;
+      }
+      nav a {
+        color: #0b69a3;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      nav a:hover {
+        text-decoration: underline;
+      }
+      section {
+        margin-bottom: 2.5rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        max-width: 64rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+      }
+      th, td {
+        padding: 0.75rem;
+        border: 1px solid #d2d6dc;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background-color: #f4f5f7;
+        font-weight: 700;
+      }
+      tbody tr:nth-child(even) {
+        background-color: #f9fafb;
+      }
+      .placeholder {
+        font-style: italic;
+        color: #52606d;
+      }
+      code {
+        background: #f1f5f9;
+        border-radius: 4px;
+        padding: 0.1rem 0.4rem;
+        font-size: 0.9em;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+        gap: 1rem;
+      }
+      .metric {
+        background: #fff;
+        border: 1px solid #d2d6dc;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+      }
+      .metric h3 {
+        margin-top: 0;
+        margin-bottom: 0.25rem;
+        font-size: 1rem;
+        color: #1f2933;
+      }
+      .metric p {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body data-projects="{{PROJECTS_JSON}}">
+    <h1>OnePiece Production Dashboard</h1>
+    <p>Explore production health metrics aggregated from ShotGrid, reconciliation reports, and delivery manifests.</p>
+    <nav>
+      <ul>
+        {{NAV_ITEMS}}
+      </ul>
+    </nav>
+
+    <section id="status-overview">
+      <h2>Overall status</h2>
+      <div class="grid" id="status-metrics">
+        <div class="metric"><h3>Projects</h3><p id="metric-projects">–</p></div>
+        <div class="metric"><h3>Shots</h3><p id="metric-shots">–</p></div>
+        <div class="metric"><h3>Versions</h3><p id="metric-versions">–</p></div>
+        <div class="metric"><h3>Open errors</h3><p id="metric-errors">–</p></div>
+      </div>
+    </section>
+
+    <section id="project-summary">
+      <h2>Project status totals</h2>
+      <p id="project-summary-placeholder" class="placeholder">Select a project via the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to see per-project totals.</p>
+      <table id="project-summary-table" hidden>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Count</th>
+          </tr>
+        </thead>
+        <tbody id="project-summary-body"></tbody>
+      </table>
+    </section>
+
+    <section id="episode-breakdown">
+      <h2>Episode breakdown</h2>
+      <table id="episode-table">
+        <thead>
+          <tr>
+            <th>Episode</th>
+            <th>Shots</th>
+            <th>Versions</th>
+            <th>Status tally</th>
+          </tr>
+        </thead>
+        <tbody id="episode-body">
+          <tr class="placeholder"><td colspan="4">Episode statistics will appear here when a project is configured.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="error-summary">
+      <h2>Reconciliation summary</h2>
+      <table id="error-table">
+        <thead>
+          <tr>
+            <th>Mismatch type</th>
+            <th>Path</th>
+            <th>Occurrences</th>
+            <th>Shots</th>
+          </tr>
+        </thead>
+        <tbody id="error-body">
+          <tr class="placeholder"><td colspan="4">No reconciliation data loaded yet.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="deliveries">
+      <h2>Recent deliveries</h2>
+      <table id="deliveries-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Created</th>
+            <th>Manifest</th>
+            <th>Files</th>
+          </tr>
+        </thead>
+        <tbody id="deliveries-body">
+          <tr class="placeholder"><td colspan="4">Configure a project to see delivery manifests and file counts.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <script>
+      const projectsData = JSON.parse(document.body.dataset.projects || '[]');
+      const primaryProject = projectsData.length ? projectsData[0] : null;
+
+      async function fetchJson(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Request to ${url} failed: ${response.status}`);
+        }
+        return await response.json();
+      }
+
+      function renderStatus(data) {
+        document.getElementById('metric-projects').textContent = data.projects ?? '0';
+        document.getElementById('metric-shots').textContent = data.shots ?? '0';
+        document.getElementById('metric-versions').textContent = data.versions ?? '0';
+        document.getElementById('metric-errors').textContent = data.errors ?? '0';
+      }
+
+      function renderProjectSummary(statusTotals) {
+        const table = document.getElementById('project-summary-table');
+        const placeholder = document.getElementById('project-summary-placeholder');
+        const body = document.getElementById('project-summary-body');
+        body.innerHTML = '';
+        const keys = Object.keys(statusTotals);
+        if (!keys.length) {
+          table.hidden = true;
+          placeholder.hidden = false;
+          return;
+        }
+        placeholder.hidden = true;
+        table.hidden = false;
+        keys.sort().forEach((key) => {
+          const row = document.createElement('tr');
+          const statusCell = document.createElement('td');
+          statusCell.textContent = key || 'unknown';
+          row.appendChild(statusCell);
+          const countCell = document.createElement('td');
+          countCell.textContent = statusTotals[key];
+          row.appendChild(countCell);
+          body.appendChild(row);
+        });
+      }
+
+      function renderEpisodes(episodes) {
+        const body = document.getElementById('episode-body');
+        body.innerHTML = '';
+        if (!episodes.length) {
+          const row = document.createElement('tr');
+          row.classList.add('placeholder');
+          const cell = document.createElement('td');
+          cell.colSpan = 4;
+          cell.textContent = 'No episode statistics available.';
+          row.appendChild(cell);
+          body.appendChild(row);
+          return;
+        }
+        episodes.forEach((episode) => {
+          const row = document.createElement('tr');
+          const nameCell = document.createElement('td');
+          nameCell.textContent = episode.episode;
+          row.appendChild(nameCell);
+          const shotsCell = document.createElement('td');
+          shotsCell.textContent = episode.shots;
+          row.appendChild(shotsCell);
+          const versionsCell = document.createElement('td');
+          versionsCell.textContent = episode.versions;
+          row.appendChild(versionsCell);
+          const statusCell = document.createElement('td');
+          const parts = [];
+          const statusCounts = episode.status_counts || {};
+          Object.keys(statusCounts).sort().forEach((statusKey) => {
+            parts.push(`${statusKey || 'unknown'}: ${statusCounts[statusKey]}`);
+          });
+          statusCell.textContent = parts.join(', ') || '—';
+          row.appendChild(statusCell);
+          body.appendChild(row);
+        });
+      }
+
+      function renderErrorSummary(entries) {
+        const body = document.getElementById('error-body');
+        body.innerHTML = '';
+        if (!entries.length) {
+          const row = document.createElement('tr');
+          row.classList.add('placeholder');
+          const cell = document.createElement('td');
+          cell.colSpan = 4;
+          cell.textContent = 'No mismatches detected.';
+          row.appendChild(cell);
+          body.appendChild(row);
+          return;
+        }
+        entries.forEach((entry) => {
+          const row = document.createElement('tr');
+          const typeCell = document.createElement('td');
+          typeCell.textContent = entry.type;
+          row.appendChild(typeCell);
+          const pathCell = document.createElement('td');
+          pathCell.textContent = entry.path || '—';
+          row.appendChild(pathCell);
+          const countCell = document.createElement('td');
+          countCell.textContent = entry.count;
+          row.appendChild(countCell);
+          const shotsCell = document.createElement('td');
+          shotsCell.textContent = (entry.shots || []).join(', ') || '—';
+          row.appendChild(shotsCell);
+          body.appendChild(row);
+        });
+      }
+
+      function renderDeliveries(entries) {
+        const body = document.getElementById('deliveries-body');
+        body.innerHTML = '';
+        if (!entries.length) {
+          const row = document.createElement('tr');
+          row.classList.add('placeholder');
+          const cell = document.createElement('td');
+          cell.colSpan = 4;
+          cell.textContent = 'No deliveries returned for this project.';
+          row.appendChild(cell);
+          body.appendChild(row);
+          return;
+        }
+        entries.forEach((entry) => {
+          const row = document.createElement('tr');
+          const nameCell = document.createElement('td');
+          nameCell.textContent = entry.name || '—';
+          row.appendChild(nameCell);
+          const createdCell = document.createElement('td');
+          createdCell.textContent = entry.created_at || '—';
+          row.appendChild(createdCell);
+          const manifestCell = document.createElement('td');
+          if (entry.manifest) {
+            const link = document.createElement('a');
+            link.href = entry.manifest;
+            link.textContent = 'Manifest';
+            manifestCell.appendChild(link);
+          } else {
+            manifestCell.textContent = '—';
+          }
+          row.appendChild(manifestCell);
+          const filesCell = document.createElement('td');
+          filesCell.textContent = typeof entry.file_count === 'number' ? entry.file_count : (entry.items ? entry.items.length : '0');
+          row.appendChild(filesCell);
+          body.appendChild(row);
+        });
+      }
+
+      async function initialise() {
+        try {
+          const status = await fetchJson('/status');
+          renderStatus(status);
+        } catch (error) {
+          console.error(error);
+        }
+
+        try {
+          const summary = await fetchJson('/errors/summary');
+          renderErrorSummary(summary);
+        } catch (error) {
+          console.error(error);
+        }
+
+        if (primaryProject) {
+          try {
+            const projectData = await fetchJson(`/projects/${encodeURIComponent(primaryProject)}`);
+            renderProjectSummary(projectData.status_totals || {});
+          } catch (error) {
+            console.error(error);
+          }
+
+          try {
+            const episodes = await fetchJson(`/projects/${encodeURIComponent(primaryProject)}/episodes`);
+            renderEpisodes(episodes.episodes || []);
+          } catch (error) {
+            console.error(error);
+          }
+
+          try {
+            const deliveries = await fetchJson(`/deliveries/${encodeURIComponent(primaryProject)}`);
+            renderDeliveries(deliveries);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      }
+
+      initialise();
+    </script>
+  </body>
+</html>

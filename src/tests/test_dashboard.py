@@ -161,6 +161,7 @@ async def test_project_detail_returns_summary() -> None:
     assert data["shots"] == 2
     assert data["versions"] == 3
     assert data["approved_versions"] == 1
+    assert data["status_totals"] == {"apr": 1, "pub": 1, "published": 1}
     assert [item["version"] for item in data["latest_published"]] == ["v003", "v002"]
 
 
@@ -196,6 +197,37 @@ async def test_errors_endpoint_uses_reconcile_provider() -> None:
     assert response.status_code == 200
     data = response.json()
     assert any(item["type"] in {"missing_in_fs", "version_mismatch"} for item in data)
+
+
+@pytest.mark.anyio("asyncio")
+async def test_error_summary_endpoint_groups_results() -> None:
+    payload = {
+        "shotgrid": [
+            {"shot": "ep01", "version": "v001"},
+            {"shot": "ep01", "version": "v002"},
+        ],
+        "filesystem": [
+            {"shot": "ep01", "version": "v001", "path": "/tmp/a.mov"},
+            {"shot": "ep01", "version": "v003", "path": "/tmp/a.mov"},
+        ],
+        "s3": None,
+    }
+
+    dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
+        lambda: dashboard.ReconcileService(DummyReconcileProvider(payload))
+    )
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/errors/summary")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert any(entry["type"] == "orphan_in_fs" for entry in data)
+    match = next(entry for entry in data if entry["type"] == "orphan_in_fs")
+    assert match["path"] == "/tmp/a.mov"
+    assert match["count"] == 1
+    assert match["shots"] == ["ep01"]
 
 
 @pytest.mark.anyio("asyncio")
@@ -247,6 +279,49 @@ async def test_deliveries_endpoint_normalises_entries() -> None:
     assert data[0]["name"] == "alpha_20240101"
     assert data[0]["created_at"].startswith("2024-01-01")
     assert len(data[0]["items"]) == 2
+    assert data[0]["file_count"] == 2
+
+
+@pytest.mark.anyio("asyncio")
+async def test_project_episode_endpoint_returns_grouped_stats() -> None:
+    versions = [
+        {
+            "project": "alpha",
+            "episode": "EP01",
+            "shot": "EP01_SC001_SH0010",
+            "version": "v001",
+            "status": "apr",
+        },
+        {
+            "project": "alpha",
+            "shot": "EP01_SC001_SH0010",
+            "version": "v002",
+            "status": "pub",
+        },
+        {
+            "project": "alpha",
+            "shot": "EP02_SC001_SH0100",
+            "version": "v003",
+            "status": "wip",
+        },
+    ]
+
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = (
+        lambda: dashboard.ShotGridService(DummyShotgridClient(versions))
+    )
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/projects/alpha/episodes")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["project"] == "alpha"
+    assert data["status_totals"] == {"apr": 1, "pub": 1, "wip": 1}
+    episodes = {entry["episode"]: entry for entry in data["episodes"]}
+    assert episodes["EP01"]["versions"] == 2
+    assert episodes["EP01"]["status_counts"] == {"apr": 1, "pub": 1}
+    assert episodes["EP02"]["shots"] == 1
 
 
 @pytest.mark.anyio("asyncio")
@@ -257,4 +332,4 @@ async def test_landing_page_returns_html() -> None:
 
     assert response.status_code == 200
     assert "OnePiece Production Dashboard" in response.text
-    assert 'href="/status"' in response.text
+    assert 'href="/errors/summary"' in response.text
