@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any
 
 import pytest
@@ -47,7 +45,17 @@ def test_submit_job_success(
             "message": "Queued for processing.",
         }
 
-    monkeypatch.setitem(render_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setattr(
+        "apps.trafalgar.web.render.RenderSubmissionService.submit_job",
+        lambda self, request: fake_submit(
+            scene=request.scene,
+            frames=request.frames,
+            output=request.output,
+            dcc=request.dcc,
+            priority=request.priority,
+            user=request.user,
+        ),
+    )
 
     response = client.post(
         "/jobs",

@@ -236,9 +236,7 @@ class RenderSubmissionService:
         except RenderSubmissionError:
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            logger.exception(
-                "render.job.cancel.error", job_id=job_id, farm=record.farm
-            )
+            logger.exception("render.job.cancel.error", job_id=job_id, farm=record.farm)
             raise RenderSubmissionError(
                 f"Failed to cancel job '{job_id}' on farm '{record.farm}'."
             ) from exc
