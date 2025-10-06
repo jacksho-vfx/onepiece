@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import getpass
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Awaitable, Callable, Mapping, Sequence
 
 import structlog
@@ -116,11 +118,55 @@ class RenderJobResponse(BaseModel):
     )
 
 
+class RenderJobMetadata(BaseModel):
+    """Structured metadata about a submitted render job."""
+
+    job_id: str = Field(..., description="Job identifier returned by the adapter.")
+    farm: str = Field(..., description="Registered adapter key handling the job.")
+    farm_type: str = Field(..., description="Adapter type reported by the farm.")
+    status: str = Field(..., description="Current status reported for the job.")
+    message: str | None = Field(
+        None, description="Optional status message provided by the adapter."
+    )
+    request: RenderJobRequest = Field(
+        ..., description="Original submission payload for the job."
+    )
+
+
+class JobsListResponse(BaseModel):
+    """Envelope returned when listing render jobs."""
+
+    jobs: Sequence[RenderJobMetadata]
+
+
+@dataclass
+class _JobRecord:
+    """Internal storage representation for submitted render jobs."""
+
+    job_id: str
+    farm: str
+    farm_type: str
+    status: str
+    message: str | None
+    request: RenderJobRequest
+
+    def snapshot(self) -> RenderJobMetadata:
+        return RenderJobMetadata(
+            job_id=self.job_id,
+            farm=self.farm,
+            farm_type=self.farm_type,
+            status=self.status,
+            message=self.message,
+            request=self.request.model_copy(deep=True),
+        )
+
+
 class RenderSubmissionService:
     """Submit render jobs using the shared adapter registry."""
 
     def __init__(self, adapters: Mapping[str, RenderAdapter] | None = None) -> None:
         self._adapters = dict(adapters or FARM_ADAPTERS)
+        self._jobs: dict[str, _JobRecord] = {}
 
     def list_farms(self) -> list[FarmInfo]:
         entries: list[FarmInfo] = []
@@ -136,7 +182,7 @@ class RenderSubmissionService:
         if adapter is None:
             raise RenderSubmissionError(f"Unknown render farm '{request.farm}'.")
         resolved_user = request.user or getpass.getuser()
-        return adapter(
+        result = adapter(
             scene=request.scene,
             frames=request.frames,
             output=request.output,
@@ -144,8 +190,92 @@ class RenderSubmissionService:
             priority=request.priority,
             user=resolved_user,
         )
+        job_id = result.get("job_id", "")
+        record = _JobRecord(
+            job_id=job_id,
+            farm=request.farm,
+            farm_type=result.get("farm_type", request.farm),
+            status=result.get("status", "unknown"),
+            message=result.get("message"),
+            request=request.model_copy(deep=True),
+        )
+        if job_id:
+            self._jobs[job_id] = record
+        return result
+
+    def list_jobs(self) -> list[RenderJobMetadata]:
+        jobs: list[RenderJobMetadata] = []
+        for record in self._jobs.values():
+            self._refresh_job(record)
+            jobs.append(record.snapshot())
+        return jobs
+
+    def get_job(self, job_id: str) -> RenderJobMetadata:
+        record = self._jobs.get(job_id)
+        if record is None:
+            raise KeyError(job_id)
+        self._refresh_job(record)
+        return record.snapshot()
+
+    def cancel_job(self, job_id: str) -> RenderJobMetadata:
+        record = self._jobs.get(job_id)
+        if record is None:
+            raise KeyError(job_id)
+        adapter = self._adapters.get(record.farm)
+        if adapter is None:
+            raise RenderSubmissionError(
+                f"Unknown render farm '{record.farm}' for job '{job_id}'."
+            )
+        cancel = getattr(adapter, "cancel_job", None)
+        if not callable(cancel):
+            raise RenderSubmissionError(
+                f"Render farm '{record.farm}' does not support job cancellation."
+            )
+        try:
+            result = cancel(job_id)
+        except RenderSubmissionError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.exception("render.job.cancel.error", job_id=job_id, farm=record.farm)
+            raise RenderSubmissionError(
+                f"Failed to cancel job '{job_id}' on farm '{record.farm}'."
+            ) from exc
+        self._update_record_from_result(record, result)
+        return record.snapshot()
+
+    def _refresh_job(self, record: _JobRecord) -> None:
+        adapter = self._adapters.get(record.farm)
+        if adapter is None:
+            return
+        status_lookup = getattr(adapter, "get_job_status", None)
+        if not callable(status_lookup):
+            return
+        try:
+            result = status_lookup(record.job_id)
+        except RenderSubmissionError as exc:
+            logger.warning(
+                "render.job.status.failed",
+                job_id=record.job_id,
+                farm=record.farm,
+                error=str(exc),
+            )
+            return
+        except Exception:  # pragma: no cover - defensive guard
+            logger.exception(
+                "render.job.status.error", job_id=record.job_id, farm=record.farm
+            )
+            return
+        self._update_record_from_result(record, result)
+
+    def _update_record_from_result(
+        self, record: _JobRecord, result: SubmissionResult
+    ) -> None:
+        record.status = result.get("status", record.status)
+        record.message = result.get("message", record.message)
+        record.farm_type = result.get("farm_type", record.farm_type)
 
 
+@lru_cache
 def get_render_service() -> (
     RenderSubmissionService
 ):  # pragma: no cover - runtime wiring
@@ -245,3 +375,33 @@ async def create_job(
     )
 
     return JSONResponse(status_code=status_code, content=payload.model_dump())
+
+
+@app.get("/jobs", response_model=JobsListResponse)
+def list_jobs(
+    service: RenderSubmissionService = Depends(get_render_service),
+) -> JobsListResponse:
+    jobs = service.list_jobs()
+    return JobsListResponse(jobs=jobs)
+
+
+@app.get("/jobs/{job_id}", response_model=RenderJobMetadata)
+def get_job(
+    job_id: str, service: RenderSubmissionService = Depends(get_render_service)
+) -> RenderJobMetadata:
+    try:
+        return service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+
+
+@app.delete("/jobs/{job_id}", response_model=RenderJobMetadata)
+def cancel_job(
+    job_id: str, service: RenderSubmissionService = Depends(get_render_service)
+) -> RenderJobMetadata:
+    try:
+        return service.cancel_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    except RenderSubmissionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
