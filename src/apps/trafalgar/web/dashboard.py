@@ -3,9 +3,11 @@
 import json
 import os
 from collections import Counter, defaultdict
+from functools import lru_cache
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
+from time import monotonic
 from typing import Any, Callable, Iterable, Mapping, Sequence, Awaitable
 from urllib.parse import quote
 
@@ -95,6 +97,65 @@ def _load_known_projects() -> set[str]:
     return projects
 
 
+def _parse_float(value: Any, default: float) -> float:
+    try:
+        if value is None:
+            raise ValueError("missing")
+        if isinstance(value, (int, float)):
+            result = float(value)
+        else:
+            text = str(value).strip()
+            if not text:
+                raise ValueError("empty")
+            result = float(text)
+    except (TypeError, ValueError):
+        return max(0.0, float(default))
+    return max(0.0, float(result))
+
+
+def _parse_int(value: Any, default: int) -> int:
+    try:
+        if value is None:
+            raise ValueError("missing")
+        if isinstance(value, int):
+            result = value
+        else:
+            text = str(value).strip()
+            if not text:
+                raise ValueError("empty")
+            result = int(text)
+    except (TypeError, ValueError):
+        return max(0, int(default))
+    return max(0, int(result))
+
+
+def _load_cache_configuration() -> tuple[float, int]:
+    """Return cache configuration from the environment or FastAPI state."""
+
+    default_ttl = 30.0
+    default_max_records = 5000
+
+    ttl_value = os.getenv("ONEPIECE_DASHBOARD_CACHE_TTL")
+    max_records_value = os.getenv("ONEPIECE_DASHBOARD_CACHE_MAX_RECORDS")
+
+    ttl = _parse_float(ttl_value, default_ttl)
+    max_records = _parse_int(max_records_value, default_max_records)
+
+    try:  # pragma: no cover - FastAPI app may not be initialised in tests
+        state = getattr(app, "state", None)
+    except NameError:  # pragma: no cover - app not yet defined
+        state = None
+
+    if state is not None:
+        ttl = _parse_float(getattr(state, "dashboard_cache_ttl", ttl), ttl)
+        max_records = _parse_int(
+            getattr(state, "dashboard_cache_max_records", max_records),
+            max_records,
+        )
+
+    return ttl, max_records
+
+
 # ---------------------------------------------------------------------------
 # ShotGrid aggregation
 # ---------------------------------------------------------------------------
@@ -109,10 +170,24 @@ class ShotGridService:
         *,
         known_projects: Iterable[str] | None = None,
         version_fetcher: Callable[[Any], Sequence[Mapping[str, Any]]] | None = None,
+        cache_ttl: float | int | None = None,
+        cache_max_records: int | None = None,
+        time_provider: Callable[[], float] | None = None,
     ) -> None:
         self._client = client
         self._configured_projects = set(known_projects or [])
         self._fetcher = version_fetcher
+        default_ttl, default_max_records = _load_cache_configuration()
+        ttl_source = cache_ttl if cache_ttl is not None else default_ttl
+        max_records_source = (
+            cache_max_records if cache_max_records is not None else default_max_records
+        )
+        self._cache_ttl: float = _parse_float(ttl_source, default_ttl)
+        self._cache_max_records: int = _parse_int(max_records_source, default_max_records)
+        self._time_provider = time_provider or monotonic
+        self._version_cache: dict[
+            tuple[Any, ...], tuple[float, list[Mapping[str, Any]]]
+        ] = {}
 
     def _filter_versions(self, project_name: str) -> list[Mapping[str, Any]]:
         versions = [
@@ -126,6 +201,13 @@ class ShotGridService:
 
         return versions
 
+    def _cache_key(self) -> tuple[Any, ...]:
+        return (
+            "versions",
+            tuple(sorted(self._configured_projects)),
+            self._fetcher,
+        )
+
     def _fetch_versions(self) -> list[Mapping[str, Any]]:
         """
         Fetch versions from the configured client or fetcher.
@@ -134,33 +216,58 @@ class ShotGridService:
         - client.list_versions()
         - client.get_versions_for_project(name)
         """
+        cache_key = self._cache_key()
+        now = self._time_provider()
+
+        if self._cache_ttl > 0:
+            cached = self._version_cache.get(cache_key)
+            if cached is not None:
+                expires_at, cached_versions = cached
+                if expires_at > now:
+                    return [dict(item) for item in cached_versions]
+
         if self._fetcher is not None:
             fetcher: Callable[[Any], Sequence[Mapping[str, Any]]] = self._fetcher
-            return list(fetcher(self._client))
-
-        if hasattr(self._client, "list_versions"):
+            versions_result = list(fetcher(self._client))
+        elif hasattr(self._client, "list_versions"):
             versions_raw: Any = getattr(self._client, "list_versions")()
             if isinstance(versions_raw, Sequence):
-                return [dict(item) for item in versions_raw]
-            return []
+                versions_result = [dict(item) for item in versions_raw]
+            else:
+                versions_result = []
+        else:
+            project_names: set[str] = set(self._configured_projects)
+            all_versions: list[Mapping[str, Any]] = []
+            if project_names and hasattr(self._client, "get_versions_for_project"):
+                fetch = getattr(self._client, "get_versions_for_project")
+                for name in project_names:
+                    try:
+                        results: Any = fetch(name)
+                    except Exception as exc:  # pragma: no cover
+                        logger.warning(
+                            "dashboard.fetch_versions_failed",
+                            project=name,
+                            error=str(exc),
+                        )
+                        continue
+                    if isinstance(results, Sequence):
+                        all_versions.extend(dict(item) for item in results)
+            versions_result = all_versions
 
-        project_names: set[str] = set(self._configured_projects)
-        all_versions: list[Mapping[str, Any]] = []
-        if project_names and hasattr(self._client, "get_versions_for_project"):
-            fetch = getattr(self._client, "get_versions_for_project")
-            for name in project_names:
-                try:
-                    results: Any = fetch(name)
-                except Exception as exc:  # pragma: no cover
-                    logger.warning(
-                        "dashboard.fetch_versions_failed",
-                        project=name,
-                        error=str(exc),
-                    )
-                    continue
-                if isinstance(results, Sequence):
-                    all_versions.extend(dict(item) for item in results)
-        return all_versions
+        can_cache = self._cache_ttl > 0
+        if can_cache and self._cache_max_records > 0:
+            if len(versions_result) > self._cache_max_records:
+                can_cache = False
+
+        if can_cache:
+            self._version_cache[cache_key] = (
+                now + self._cache_ttl,
+                [dict(item) for item in versions_result],
+            )
+        else:
+            self._version_cache.pop(cache_key, None)
+
+        return [dict(item) for item in versions_result]
 
     def _project_names(self, versions: Iterable[Mapping[str, Any]]) -> set[str]:
         names = {str(v.get("project")) for v in versions if v.get("project")}
@@ -409,9 +516,16 @@ def get_shotgrid_client() -> Any:  # pragma: no cover - runtime wiring
     return ShotgridClient()
 
 
+@lru_cache(maxsize=1)
 def get_shotgrid_service() -> ShotGridService:
     client = get_shotgrid_client()
-    return ShotGridService(client, known_projects=_load_known_projects())
+    cache_ttl, cache_max_records = _load_cache_configuration()
+    return ShotGridService(
+        client,
+        known_projects=_load_known_projects(),
+        cache_ttl=cache_ttl,
+        cache_max_records=cache_max_records,
+    )
 
 
 def get_reconcile_service() -> ReconcileService:
