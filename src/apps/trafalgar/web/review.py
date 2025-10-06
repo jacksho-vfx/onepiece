@@ -1,7 +1,5 @@
 """FastAPI application exposing playlist review data."""
 
-from __future__ import annotations
-
 from typing import Any, Iterable, Mapping
 
 import structlog
@@ -21,7 +19,7 @@ def get_shotgrid_client() -> ShotGridClient:  # pragma: no cover - runtime wirin
 
 
 def _extract_playlist_name(record: Mapping[str, Any]) -> str | None:
-    """Return a human readable playlist name for *record* if possible."""
+    """Return a human-readable playlist name for *record* if possible."""
 
     candidates: Iterable[str | None]
 
