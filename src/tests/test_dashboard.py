@@ -49,6 +49,16 @@ class DummyDeliveryProvider(DeliveryProvider):
         ]
 
 
+class DummyIngestFacade:
+    def __init__(self, summary: Mapping[str, Any]) -> None:
+        self._summary = summary
+        self.calls: list[int] = []
+
+    def summarise_recent_runs(self, limit: int = 10) -> Mapping[str, Any]:
+        self.calls.append(limit)
+        return self._summary
+
+
 @pytest.fixture(autouse=True)
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
@@ -96,6 +106,15 @@ async def test_status_endpoint_aggregates_counts() -> None:
     dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
         lambda: dashboard.ReconcileService(DummyReconcileProvider(reconcile_payload))
     )
+    ingest_summary = {
+        "counts": {"total": 3, "successful": 2, "failed": 0, "running": 1},
+        "last_success_at": "2024-01-01T09:00:00+00:00",
+        "failure_streak": 0,
+    }
+    ingest_facade = DummyIngestFacade(ingest_summary)
+    dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (
+        lambda: ingest_facade
+    )
 
     transport = ASGITransport(app=dashboard.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -103,12 +122,12 @@ async def test_status_endpoint_aggregates_counts() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data == {
-        "projects": 2,
-        "shots": 3,
-        "versions": 3,
-        "errors": 1,
-    }
+    assert data["projects"] == 2
+    assert data["shots"] == 3
+    assert data["versions"] == 3
+    assert data["errors"] == 1
+    assert data["ingest"] == ingest_summary
+    assert ingest_facade.calls == [10]
 
 
 @pytest.mark.anyio("asyncio")
