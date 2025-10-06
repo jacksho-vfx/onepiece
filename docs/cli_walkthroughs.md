@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in v0.9.0:** The Trafalgar stack now ships with FastAPI dashboard, ingest, review, and render services plus Typer commands so you can rehearse the web tooling locally without pointing at production infrastructure.
+> **New in Trafalgar v0.7.0:** The Trafalgar dashboard now auto-discovers projects, caches ShotGrid queries with configurable TTLs, and exposes render job management endpoints so you can rehearse full production flows locally even when upstream systems are unavailable.
 
 ## 1. Validate a workstation environment
 
@@ -196,13 +196,14 @@ MediaShuttle-ready package.
 
 ## 6. Exercise the DCC scaffolding stubs
 
-The v0.9.0 release focuses on the Trafalgar web suite: the dashboard, ingest
-run API, review routes, and render submission service can all be launched
-locally via the Typer commands described above (`trafalgar web dashboard`,
-`trafalgar web ingest`, `trafalgar web review`, and `trafalgar web render`). Use
-the snippet below to export
-placeholder metadata with the existing DCC stubs while the web services provide
-context for show-level analytics:
+The Trafalgar v0.7.0 release focuses on keeping the web suite responsive: the
+dashboard auto-caches version lookups, gracefully handles sparse delivery
+manifests, and the render API now mirrors the CLI's job lifecycle so you can
+list, inspect, and cancel submissions via HTTP. Launch the services with the
+Typer commands described above (`trafalgar web dashboard`, `trafalgar web
+ingest`, `trafalgar web review`, and `trafalgar web render`) and use the snippet
+below to export placeholder metadata with the existing DCC stubs while the web
+services provide context for show-level analytics:
 
 ```bash
 python - <<'PY'

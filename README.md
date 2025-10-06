@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest release: v0.9.0.** This release expands the Trafalgar suite with FastAPI-powered dashboard, ingest, review, and render services plus CLI entry points, introduces analytics-driven landing pages, and fixes project navigation for complex show names.
+> **Latest Trafalgar release: v0.7.0.** This update adds render job management endpoints, caches ShotGrid status lookups with configurable TTLs, auto-discovers dashboard projects, and streamlines delivery manifests so the web tooling stays responsive even when upstream systems are slow.
 
 ## Quick start
 
@@ -43,18 +43,13 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in v0.9.0
+## What's new in Trafalgar v0.7.0
 
-- **FastAPI dashboard for Trafalgar** – The web application ships with a Typer command so teams can launch the dashboard locally for iteration and demos.
-- **Trafalgar CLI entry point** – The `trafalgar web dashboard`, `trafalgar web ingest`, `trafalgar web render`, `trafalgar web review`, and `trafalgar ingest` commands now delegate to uvicorn helpers for a uniform operator experience.
-- **Ingest runs API** – A dedicated FastAPI service and registry expose ingest run history, including recent run summaries and result payloads.
-- **Ingest CLI wiring fixes** – The Trafalgar ingest commands reuse the shared uvicorn loader, resolving invocation issues that previously blocked launches.
-- **Review endpoints & dashboard links** – FastAPI review routes surface playlist data and wire dashboard links directly to review payloads.
-- **Render submission API** – A Trafalgar render service mirrors the CLI payload validation, lists available farm adapters, and returns structured submission results.
-- **Dashboard landing page revamp** – The landing page now aggregates episodes, approvals, playlists, and template coverage for quick health checks.
-- **Episode analytics** – Episode-level breakdowns, template stats, and leaderboards highlight production hotspots directly within the dashboard.
-- **Dashboard link hardening** – Project URLs are now safely encoded so navigation works when show names include spaces or symbols.
-- **CLI documentation refresh** – The CLI examples reference the expanded Trafalgar command set so operators can adopt the new services quickly.
+- **Dashboard data resilience** – Project discovery now combines environment configuration with on-the-fly ShotGrid lookups and caches the results locally so teams can keep browsing known shows even if ShotGrid is offline.
+- **Configurable ShotGrid caching** – Version queries honour TTL and record-count limits, dramatically reducing API pressure for frequently refreshed dashboards while falling back automatically when datasets grow beyond safe cache sizes.
+- **Normalised status metrics** – Dashboard summaries collapse mixed-case and abbreviated ShotGrid statuses into canonical buckets, ensuring the overall status, per-project totals, and episode breakdowns tell the same story.
+- **Delivery manifest optimisation** – Delivery payloads prefer upstream manifest data when provided, regenerate manifests only once per delivery, and gracefully handle packages that arrive without entry lists so operators still get a full audit trail.
+- **Render job management** – The render FastAPI app now tracks submitted jobs in memory, exposes endpoints to list and inspect them, and supports adapter-powered cancellation, mirroring the CLI workflow for real-time follow-up.
 
 ## Requirements
 
