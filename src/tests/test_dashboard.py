@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence, Protocol, Mapping, Generator
+from typing import Any, Sequence, Protocol, Mapping, Generator, Iterable
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -469,6 +469,117 @@ async def test_deliveries_endpoint_handles_missing_entries() -> None:
     data = response.json()
     assert data[0]["items"] == []
     assert data[0]["file_count"] == 0
+
+
+def test_delivery_service_prefers_provider_manifest_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[Mapping[str, Any]]] = []
+
+    def fake_get_manifest_data(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+        calls.append(list(entries))
+        return {"files": []}
+
+    monkeypatch.setattr(dashboard, "get_manifest_data", fake_get_manifest_data)
+
+    manifest_items = [
+        {
+            "show": "Alpha",
+            "episode": "EP01",
+            "scene": "SC001",
+            "shot": "SH0010",
+            "asset": "comp",
+            "version": 1,
+            "source_path": "/tmp/source.mov",
+            "delivery_path": "media/clip.mov",
+            "checksum": "cached",
+        }
+    ]
+
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-1",
+            "name": "alpha_20240101",
+            "archive": "/tmp/alpha.zip",
+            "manifest": "/tmp/alpha.json",
+            "manifest_data": {"files": manifest_items},
+            "entries": [
+                {
+                    "show": "Alpha",
+                    "episode": "EP01",
+                    "scene": "SC001",
+                    "shot": "SH0010",
+                    "asset": "comp",
+                    "version": 1,
+                    "source_path": "/tmp/source.mov",
+                    "delivery_path": "media/clip.mov",
+                }
+            ],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+    payload = service.list_deliveries("alpha")
+
+    assert payload[0]["items"] == manifest_items
+    assert payload[0]["file_count"] == 1
+    assert calls == []
+
+
+def test_delivery_service_caches_recomputed_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[Mapping[str, Any]]] = []
+
+    def fake_get_manifest_data(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+        calls.append(list(entries))
+        return {
+            "files": [
+                {
+                    "show": "Alpha",
+                    "episode": "EP01",
+                    "scene": "SC001",
+                    "shot": "SH0010",
+                    "asset": "comp",
+                    "version": 1,
+                    "source_path": "/tmp/source.mov",
+                    "delivery_path": "media/clip.mov",
+                    "checksum": "generated",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(dashboard, "get_manifest_data", fake_get_manifest_data)
+
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-2",
+            "name": "alpha_20240102",
+            "archive": "/tmp/alpha_02.zip",
+            "manifest": "/tmp/alpha_02.json",
+            "entries": [
+                {
+                    "show": "Alpha",
+                    "episode": "EP01",
+                    "scene": "SC001",
+                    "shot": "SH0010",
+                    "asset": "comp",
+                    "version": 1,
+                    "source_path": "/tmp/source.mov",
+                    "delivery_path": "media/clip.mov",
+                }
+            ],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+
+    first = service.list_deliveries("alpha")
+    second = service.list_deliveries("alpha")
+
+    assert len(calls) == 1
+    assert first == second
+    assert first[0]["file_count"] == 1
 
 
 @pytest.mark.anyio("asyncio")
