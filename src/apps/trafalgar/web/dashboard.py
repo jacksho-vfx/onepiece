@@ -183,7 +183,9 @@ class ShotGridService:
             cache_max_records if cache_max_records is not None else default_max_records
         )
         self._cache_ttl: float = _parse_float(ttl_source, default_ttl)
-        self._cache_max_records: int = _parse_int(max_records_source, default_max_records)
+        self._cache_max_records: int = _parse_int(
+            max_records_source, default_max_records
+        )
         self._time_provider = time_provider or monotonic
         self._version_cache: dict[
             tuple[Any, ...], tuple[float, list[Mapping[str, Any]]]
