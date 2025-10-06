@@ -97,6 +97,95 @@ def _load_known_projects() -> set[str]:
     return projects
 
 
+def _project_registry_path() -> Path | None:
+    """Return the path used for caching discovered project names."""
+
+    override = os.getenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY")
+    if override:
+        return Path(override)
+
+    cache_root = os.getenv("XDG_CACHE_HOME")
+    if cache_root:
+        base = Path(cache_root)
+    else:
+        try:
+            base = Path.home() / ".cache"
+        except RuntimeError:  # pragma: no cover - extremely rare environments
+            return None
+
+    return base / "onepiece" / "dashboard-projects.json"
+
+
+def _load_project_registry() -> set[str]:
+    """Return cached project names from the local registry if available."""
+
+    path = _project_registry_path()
+    if path is None or not path.is_file():
+        return set()
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "dashboard.project_registry.load_failed", path=str(path), error=str(exc)
+        )
+        return set()
+
+    projects: set[str] = set()
+    for item in data:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                projects.add(text)
+        elif item is not None:
+            text = str(item).strip()
+            if text:
+                projects.add(text)
+    return projects
+
+
+def _store_project_registry(projects: Iterable[str]) -> None:
+    """Persist discovered project names for reuse when ShotGrid is offline."""
+
+    path = _project_registry_path()
+    if path is None:
+        return
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = sorted({str(item).strip() for item in projects if str(item).strip()})
+        path.write_text(json.dumps(payload, indent=2, sort_keys=False), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "dashboard.project_registry.store_failed", path=str(path), error=str(exc)
+        )
+
+
+def _coerce_project_name(value: Any) -> str | None:
+    """Best effort extraction of a project name from ShotGrid responses."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+
+    if isinstance(value, Mapping):
+        for key in ("name", "code", "project"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        # Some APIs return nested dictionaries (e.g. {"name": {"value": "..."}})
+        for candidate in value.values():
+            name = _coerce_project_name(candidate)
+            if name:
+                return name
+
+    text = str(value).strip()
+    return text or None
+
+
 def _parse_float(value: Any, default: float) -> float:
     try:
         if value is None:
@@ -190,6 +279,34 @@ class ShotGridService:
         self._version_cache: dict[
             tuple[Any, ...], tuple[float, list[Mapping[str, Any]]]
         ] = {}
+
+    def discover_projects(self) -> list[str]:
+        """Return a sorted list of known projects using ShotGrid if available."""
+
+        projects = {item.strip() for item in self._configured_projects if item.strip()}
+        projects.update(_load_project_registry())
+
+        try:
+            fetch_projects = getattr(self._client, "list_projects", None)
+            if callable(fetch_projects):
+                records = fetch_projects()
+                for record in records:
+                    name = _coerce_project_name(record)
+                    if name:
+                        projects.add(name)
+            else:
+                for record in self._fetch_versions():
+                    name = _coerce_project_name(record.get("project"))
+                    if name:
+                        projects.add(name)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("dashboard.project_discovery.failed", error=str(exc))
+            return sorted(projects)
+
+        if projects:
+            _store_project_registry(projects)
+
+        return sorted(projects)
 
     def _filter_versions(self, project_name: str) -> list[Mapping[str, Any]]:
         versions = [
@@ -547,6 +664,31 @@ app = FastAPI(title="OnePiece Dashboard", version=TRAFALGAR_VERSION)
 _TEMPLATE_CACHE: str | None = None
 
 
+def discover_projects(shotgrid_service: ShotGridService | None = None) -> list[str]:
+    """Return known projects, consulting ShotGrid when possible."""
+
+    if shotgrid_service is None:
+        override = app.dependency_overrides.get(get_shotgrid_service)
+        provider: Callable[[], ShotGridService]
+        if override is not None:
+            provider = override
+        else:
+            provider = get_shotgrid_service
+        try:
+            shotgrid_service = provider()
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("dashboard.project_discovery.unavailable", error=str(exc))
+            fallback = _load_known_projects().union(_load_project_registry())
+            return sorted(fallback)
+
+    try:
+        return shotgrid_service.discover_projects()
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("dashboard.project_discovery.error", error=str(exc))
+        fallback = _load_known_projects().union(_load_project_registry())
+        return sorted(fallback)
+
+
 @app.middleware("http")
 async def log_requests(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -576,7 +718,7 @@ def _load_landing_template() -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request) -> HTMLResponse:
-    projects = sorted(_load_known_projects())
+    projects = discover_projects()
     example_project = projects[0] if projects else None
 
     nav_items: list[str] = [
