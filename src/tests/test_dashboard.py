@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Sequence, Protocol, Mapping, Generator
 
 import pytest
@@ -72,6 +74,50 @@ class DummyIngestFacade:
         return self._summary
 
 
+def test_shotgrid_service_discovers_projects_and_updates_registry(
+    tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry_path = tmp_path / "projects.json"
+    monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
+    monkeypatch.delenv("ONEPIECE_DASHBOARD_PROJECTS", raising=False)
+
+    versions: Sequence[dict[str, Any]] = [
+        {"project": "alpha"},
+        {"project": {"name": "beta"}},
+        {"project": {"code": "alpha"}},
+    ]
+
+    client = DummyShotgridClient(versions)
+    service = dashboard.ShotGridService(client, known_projects={"omega"})
+
+    projects = service.discover_projects()
+
+    assert projects == ["alpha", "beta", "omega"]
+    stored = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert stored == projects
+
+
+def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
+    tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry_path = tmp_path / "projects.json"
+    registry_path.write_text(json.dumps(["cached"]), encoding="utf-8")
+    monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
+
+    class OfflineShotgridClient(DummyShotgridClient):
+        def list_versions(self) -> Sequence[dict[str, Any]]:
+            raise RuntimeError("offline")
+
+    service = dashboard.ShotGridService(
+        OfflineShotgridClient([]),
+        known_projects={"env_project"},
+    )
+
+    projects = service.discover_projects()
+
+    assert projects == ["cached", "env_project"]
+
+
 @pytest.fixture(autouse=True)
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
@@ -139,6 +185,33 @@ def test_shotgrid_service_skips_cache_when_dataset_exceeds_limit() -> None:
     second = service.overall_status()
     assert second["versions"] == 2
     assert client.calls == 2
+
+
+@pytest.mark.anyio("asyncio")
+async def test_landing_page_uses_discovered_projects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    registry_path = tmp_path / "projects.json"
+    monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
+    monkeypatch.delenv("ONEPIECE_DASHBOARD_PROJECTS", raising=False)
+
+    versions = [
+        {"project": "beta"},
+        {"project": "alpha"},
+    ]
+
+    service = dashboard.ShotGridService(DummyShotgridClient(versions))
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    text = response.text
+    assert "Summary for alpha" in text
+    assert "Episode breakdown for alpha" in text
+    assert "[&quot;alpha&quot;, &quot;beta&quot;]" in text
 
 
 @pytest.mark.anyio("asyncio")
