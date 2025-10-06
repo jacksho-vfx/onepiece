@@ -16,6 +16,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.delivery.manifest import get_manifest_data
 from libraries.reconcile import comparator
+from .ingest_adapter import (
+    IngestRunDashboardFacade,
+    get_ingest_dashboard_facade,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -505,10 +509,12 @@ async def landing_page(request: Request) -> HTMLResponse:
 async def status(
     shotgrid_service: ShotGridService = Depends(get_shotgrid_service),
     reconcile_service: ReconcileService = Depends(get_reconcile_service),
+    ingest_facade: IngestRunDashboardFacade = Depends(get_ingest_dashboard_facade),
 ) -> JSONResponse:
     summary = shotgrid_service.overall_status()
     errors = reconcile_service.list_errors()
-    payload = {**summary, "errors": len(errors)}
+    ingest_summary = ingest_facade.summarise_recent_runs()
+    payload = {**summary, "errors": len(errors), "ingest": ingest_summary}
     return JSONResponse(content=payload)
 
 
