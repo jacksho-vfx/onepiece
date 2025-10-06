@@ -494,6 +494,63 @@ async def landing_page(request: Request) -> HTMLResponse:
     nav_html = "\n        ".join(nav_items)
     html = template.replace("{{PROJECTS_JSON}}", projects_json).replace(
         "{{NAV_ITEMS}}", nav_html
+    render_base_url = os.getenv("ONEPIECE_RENDER_BASE_URL", "http://127.0.0.1:8100")
+    render_links = textwrap.dedent(
+        f"""
+              <li>
+                <a href=\"{render_base_url}/farms\" target=\"_blank\" rel=\"noopener\">Render farm catalogue</a>
+                <span class=\"hint\">Start via <code>trafalgar web render --port &lt;port&gt;</code>.</span>
+              </li>
+              <li>
+                <a href=\"{render_base_url}/jobs\" target=\"_blank\" rel=\"noopener\">Submit render job</a>
+                <span class=\"hint\">Review JSON responses from the render service.</span>
+              </li>
+        """
+    )
+
+    html_template = textwrap.dedent(
+        """
+        <!DOCTYPE html>
+        <html lang=\"en\">
+          <head>
+            <meta charset=\"utf-8\" />
+            <title>OnePiece Dashboard</title>
+            <style>
+              body { font-family: sans-serif; margin: 2rem; }
+              h1 { color: #222; }
+              ul { list-style: none; padding: 0; }
+              li { margin-bottom: 0.5rem; }
+              a { color: #0070f3; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              .hint { color: #555; font-size: 0.85rem; margin-left: 0.5rem; }
+              .review-section { margin-top: 2rem; }
+              .playlist-table { border-collapse: collapse; width: 100%; max-width: 48rem; }
+              .playlist-table th, .playlist-table td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+              .playlist-table th { background-color: #f6f8fa; }
+              .playlist-table .placeholder td { text-align: center; font-style: italic; color: #666; }
+              .hidden { display: none; }
+            </style>
+          </head>
+          <body>
+            <h1>OnePiece Production Dashboard</h1>
+            <p>Select a section:</p>
+            <ul>
+              <li><a href=\"/status\">Project status overview</a></li>
+              <li><a href=\"/errors\">Reconciliation mismatches</a></li>
+              <li><a href=\"/deliveries/example\">Example project deliveries</a></li>
+        __RENDER_LINKS__
+        __REVIEW_LINKS__
+            </ul>
+        __PLAYLIST_PREVIEW__
+          </body>
+        </html>
+        """
+    )
+
+    html = (
+        html_template.replace("__RENDER_LINKS__", render_links)
+        .replace("__REVIEW_LINKS__", review_links)
+        .replace("__PLAYLIST_PREVIEW__", playlist_preview.strip())
     )
     return HTMLResponse(content=html)
 

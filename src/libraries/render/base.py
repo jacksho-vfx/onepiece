@@ -5,12 +5,18 @@ from __future__ import annotations
 from typing import Protocol, TypedDict, runtime_checkable
 
 
-class SubmissionResult(TypedDict):
-    """Typed dictionary describing a render job submission result."""
+class SubmissionResultRequired(TypedDict):
+    """Required fields describing a render job submission result."""
 
     job_id: str
     status: str
     farm_type: str
+
+
+class SubmissionResult(SubmissionResultRequired, total=False):
+    """Render job submission result with optional descriptive metadata."""
+
+    message: str
 
 
 class RenderSubmissionError(RuntimeError):
