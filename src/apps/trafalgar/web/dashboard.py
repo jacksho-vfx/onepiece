@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence, Awaitable
+from urllib.parse import quote
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -463,14 +464,15 @@ async def landing_page(request: Request) -> HTMLResponse:
 
     if example_project:
         safe_project = escape(example_project)
+        encoded_project = quote(example_project, safe="")
         nav_items.extend(
             [
-                f'<li><a href="/projects/{safe_project}">Summary for {safe_project}</a></li>',
-                f'<li><a href="/projects/{safe_project}/episodes">Episode breakdown for {safe_project}</a></li>',
-                f'<li><a href="/deliveries/{safe_project}">Deliveries for {safe_project}</a></li>',
+                f'<li><a href="/projects/{encoded_project}">Summary for {safe_project}</a></li>',
+                f'<li><a href="/projects/{encoded_project}/episodes">Episode breakdown for {safe_project}</a></li>',
+                f'<li><a href="/deliveries/{encoded_project}">Deliveries for {safe_project}</a></li>',
             ]
         )
-        review_link = f"/review/projects/{safe_project}/playlists"
+        review_link = f"/review/projects/{encoded_project}/playlists"
     else:
         nav_items.extend(
             [
