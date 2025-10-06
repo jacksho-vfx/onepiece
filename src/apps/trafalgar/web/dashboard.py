@@ -2,13 +2,13 @@
 
 import json
 import os
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from functools import lru_cache
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from time import monotonic
-from typing import Any, Callable, Iterable, Mapping, Sequence, Awaitable
+from typing import Any, Awaitable, Callable, Hashable, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
 import structlog
@@ -596,15 +596,95 @@ class DeliveryProvider:
 
 
 class DeliveryService:
-    def __init__(self, provider: DeliveryProvider | None = None) -> None:
+    def __init__(
+        self,
+        provider: DeliveryProvider | None = None,
+        *,
+        manifest_cache_size: int = 32,
+    ) -> None:
         self._provider = provider or DeliveryProvider()
+        self._manifest_cache: OrderedDict[Hashable, dict[str, Any]] = OrderedDict()
+        self._manifest_cache_size = max(0, manifest_cache_size)
+
+    def _manifest_cache_key(self, delivery: Mapping[str, Any]) -> Hashable | None:
+        for key in ("id", "delivery_id"):
+            value = delivery.get(key)
+            if isinstance(value, Hashable):
+                return value
+        return None
+
+    @staticmethod
+    def _clone_manifest_data(manifest: Mapping[str, Any]) -> dict[str, Any]:
+        files = manifest.get("files", [])
+        if isinstance(files, Sequence) and not isinstance(
+            files, (str, bytes, bytearray)
+        ):
+            cloned_files = [
+                dict(item) if isinstance(item, Mapping) else item for item in files
+            ]
+        else:
+            cloned_files = []
+        return {"files": cloned_files}
+
+    def _store_manifest(self, key: Hashable, manifest: Mapping[str, Any]) -> None:
+        if self._manifest_cache_size == 0:
+            return
+        self._manifest_cache[key] = self._clone_manifest_data(manifest)
+        self._manifest_cache.move_to_end(key)
+        while len(self._manifest_cache) > self._manifest_cache_size:
+            self._manifest_cache.popitem(last=False)
+
+    def _lookup_manifest(self, key: Hashable) -> dict[str, Any] | None:
+        if self._manifest_cache_size == 0:
+            return None
+        cached = self._manifest_cache.get(key)
+        if cached is None:
+            return None
+        self._manifest_cache.move_to_end(key)
+        return self._clone_manifest_data(cached)
+
+    @staticmethod
+    def _normalise_manifest_payload(
+        payload: Any,
+    ) -> dict[str, Any] | None:
+        if isinstance(payload, Mapping):
+            return DeliveryService._clone_manifest_data(payload)
+        if isinstance(payload, Sequence) and not isinstance(
+            payload, (str, bytes, bytearray)
+        ):
+            files = [
+                dict(item) if isinstance(item, Mapping) else item for item in payload
+            ]
+            return {"files": files}
+        return None
 
     def list_deliveries(self, project_name: str) -> list[dict[str, Any]]:
         deliveries = self._provider.list_deliveries(project_name)
         result: list[dict[str, Any]] = []
         for delivery in deliveries:
             entries = delivery.get("entries") or []
-            manifest = get_manifest_data(entries)
+            manifest_data = self._normalise_manifest_payload(
+                delivery.get("manifest_data")
+            )
+            if manifest_data is None:
+                manifest_data = self._normalise_manifest_payload(delivery.get("items"))
+
+            cache_key = self._manifest_cache_key(delivery)
+            if manifest_data is None and cache_key is not None:
+                manifest_data = self._lookup_manifest(cache_key)
+
+            if manifest_data is None:
+                if entries:
+                    manifest_data = get_manifest_data(entries)
+                else:
+                    manifest_data = {"files": []}
+                if cache_key is not None:
+                    self._store_manifest(cache_key, manifest_data)
+            else:
+                if cache_key is not None:
+                    self._store_manifest(cache_key, manifest_data)
+
+            files = manifest_data.get("files", [])
             result.append(
                 {
                     "project": project_name,
@@ -614,8 +694,8 @@ class DeliveryService:
                     "created_at": _parse_datetime(
                         delivery.get("created_at") or delivery.get("timestamp")
                     ),
-                    "items": manifest.get("files", []),
-                    "file_count": len(manifest.get("files", [])),
+                    "items": files,
+                    "file_count": len(files),
                 }
             )
         return result
