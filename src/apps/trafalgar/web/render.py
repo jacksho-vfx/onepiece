@@ -29,7 +29,9 @@ class FarmInfo(BaseModel):
     """Metadata describing a render farm adapter."""
 
     name: str = Field(..., description="Adapter identifier used by the API and CLI.")
-    description: str = Field(..., description="Human readable description of the adapter.")
+    description: str = Field(
+        ..., description="Human readable description of the adapter."
+    )
 
 
 class FarmsResponse(BaseModel):
@@ -41,8 +43,12 @@ class FarmsResponse(BaseModel):
 class RenderJobRequest(BaseModel):
     """Request payload mirroring the CLI submission options."""
 
-    dcc: str = Field(..., description="Digital content creation package (e.g. maya, nuke).")
-    scene: str = Field(..., description="Path to the scene file that should be rendered.")
+    dcc: str = Field(
+        ..., description="Digital content creation package (e.g. maya, nuke)."
+    )
+    scene: str = Field(
+        ..., description="Path to the scene file that should be rendered."
+    )
     frames: str = Field(
         "1-100",
         description="Frame range to render, supporting Deadline style notation (e.g. 1-100x2).",
@@ -52,7 +58,9 @@ class RenderJobRequest(BaseModel):
         "mock",
         description="Render farm to submit to (see /farms for the available adapters).",
     )
-    priority: int = Field(50, ge=0, description="Render job priority communicated to the adapter.")
+    priority: int = Field(
+        50, ge=0, description="Render job priority communicated to the adapter."
+    )
     user: str | None = Field(
         None,
         description="Submitting user; defaults to the service account if omitted.",
@@ -92,9 +100,15 @@ class RenderJobRequest(BaseModel):
 class RenderJobResponse(BaseModel):
     """Response payload describing the outcome of a render submission."""
 
-    job_id: str = Field(..., description="Identifier returned by the render farm (if any).")
-    status: str = Field(..., description="Submission status reported by the render farm.")
-    farm_type: str = Field(..., description="Render farm adapter that processed the submission.")
+    job_id: str = Field(
+        ..., description="Identifier returned by the render farm (if any)."
+    )
+    status: str = Field(
+        ..., description="Submission status reported by the render farm."
+    )
+    farm_type: str = Field(
+        ..., description="Render farm adapter that processed the submission."
+    )
     message: str | None = Field(
         None,
         description="Optional detail returned by the adapter (for example not implemented notices).",
@@ -131,7 +145,9 @@ class RenderSubmissionService:
         )
 
 
-def get_render_service() -> RenderSubmissionService:  # pragma: no cover - runtime wiring
+def get_render_service() -> (
+    RenderSubmissionService
+):  # pragma: no cover - runtime wiring
     return RenderSubmissionService()
 
 
@@ -142,7 +158,9 @@ app = FastAPI(title="OnePiece Render Service", version="1.0.0")
 async def log_requests(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    logger.info("render.api.request.start", method=request.method, path=request.url.path)
+    logger.info(
+        "render.api.request.start", method=request.method, path=request.url.path
+    )
     response = await call_next(request)
     logger.info(
         "render.api.request.complete",

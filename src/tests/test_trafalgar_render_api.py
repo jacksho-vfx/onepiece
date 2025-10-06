@@ -22,7 +22,9 @@ def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
     assert "deadline" in farm_names
 
 
-def test_submit_job_success(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+def test_submit_job_success(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
     called: dict[str, Any] = {}
 
     def fake_submit(
