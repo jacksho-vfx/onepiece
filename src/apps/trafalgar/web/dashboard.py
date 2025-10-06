@@ -332,7 +332,9 @@ class ReconcileService:
                 group["shots"].add(str(shot))
 
         summary: list[dict[str, Any]] = []
-        for _, data in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1])):
+        for _, data in sorted(
+            grouped.items(), key=lambda item: (item[0][0], item[0][1])
+        ):
             summary.append(
                 {
                     "type": data["type"],
@@ -472,9 +474,9 @@ async def landing_page(request: Request) -> HTMLResponse:
     else:
         nav_items.extend(
             [
-                '<li><code>/projects/&lt;project&gt;</code></li>',
-                '<li><code>/projects/&lt;project&gt;/episodes</code></li>',
-                '<li><code>/deliveries/&lt;project&gt;</code></li>',
+                "<li><code>/projects/&lt;project&gt;</code></li>",
+                "<li><code>/projects/&lt;project&gt;/episodes</code></li>",
+                "<li><code>/deliveries/&lt;project&gt;</code></li>",
             ]
         )
         review_link = "/review/projects/example/playlists"
@@ -490,10 +492,8 @@ async def landing_page(request: Request) -> HTMLResponse:
     template = _load_landing_template()
     projects_json = escape(json.dumps(projects))
     nav_html = "\n        ".join(nav_items)
-    html = (
-        template.replace("{{PROJECTS_JSON}}", projects_json).replace(
-            "{{NAV_ITEMS}}", nav_html
-        )
+    html = template.replace("{{PROJECTS_JSON}}", projects_json).replace(
+        "{{NAV_ITEMS}}", nav_html
     )
     return HTMLResponse(content=html)
 
