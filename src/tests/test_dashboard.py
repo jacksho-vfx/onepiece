@@ -12,9 +12,22 @@ from apps.trafalgar.web import dashboard
 class DummyShotgridClient:
     def __init__(self, versions: Sequence[dict[str, Any]]) -> None:
         self._versions = list(versions)
+        self.calls = 0
 
     def list_versions(self) -> Sequence[dict[str, Any]]:
+        self.calls += 1
         return self._versions
+
+
+class FakeMonotonic:
+    def __init__(self) -> None:
+        self._value = 0.0
+
+    def advance(self, seconds: float) -> None:
+        self._value += seconds
+
+    def __call__(self) -> float:
+        return self._value
 
 
 class ReconcileDataProvider(Protocol):
@@ -62,13 +75,70 @@ class DummyIngestFacade:
 @pytest.fixture(autouse=True)
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
+    dashboard.get_shotgrid_service.cache_clear()
     yield
     dashboard.app.dependency_overrides.clear()
+    dashboard.get_shotgrid_service.cache_clear()
 
 
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+def test_shotgrid_service_caches_versions_until_ttl_expiry() -> None:
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "alpha", "shot": "EP01_SC002_SH0010", "version": "v002"},
+    ]
+    client = DummyShotgridClient(versions)
+    clock = FakeMonotonic()
+
+    service = dashboard.ShotGridService(
+        client,
+        known_projects={"alpha"},
+        cache_ttl=10.0,
+        cache_max_records=10,
+        time_provider=clock,
+    )
+
+    summary = service.overall_status()
+    assert summary["versions"] == 2
+    assert client.calls == 1
+
+    project_summary = service.project_summary("alpha")
+    assert project_summary["versions"] == 2
+    assert client.calls == 1
+
+    clock.advance(11.0)
+    refreshed_summary = service.project_summary("alpha")
+    assert refreshed_summary["versions"] == 2
+    assert client.calls == 2
+
+
+def test_shotgrid_service_skips_cache_when_dataset_exceeds_limit() -> None:
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "alpha", "shot": "EP01_SC001_SH0020", "version": "v002"},
+    ]
+    client = DummyShotgridClient(versions)
+    clock = FakeMonotonic()
+
+    service = dashboard.ShotGridService(
+        client,
+        known_projects={"alpha"},
+        cache_ttl=30.0,
+        cache_max_records=1,
+        time_provider=clock,
+    )
+
+    first = service.overall_status()
+    assert first["versions"] == 2
+    assert client.calls == 1
+
+    second = service.overall_status()
+    assert second["versions"] == 2
+    assert client.calls == 2
 
 
 @pytest.mark.anyio("asyncio")
