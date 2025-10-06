@@ -95,3 +95,31 @@ def test_web_ingest_command_is_still_supported(
         reload=False,
         log_level="error",
     )
+
+
+def test_web_review_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -> None:
+    uvicorn_mock = SimpleNamespace(run=Mock())
+    mocker.patch("apps.trafalgar.app._load_uvicorn", return_value=uvicorn_mock)
+
+    result = runner.invoke(
+        trafalgar_app,
+        [
+            "web",
+            "review",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9300",
+            "--log-level",
+            "critical",
+        ],
+    )
+
+    assert result.exit_code == 0
+    uvicorn_mock.run.assert_called_once_with(
+        "apps.trafalgar.web.review:app",
+        host="0.0.0.0",
+        port=9300,
+        reload=False,
+        log_level="critical",
+    )

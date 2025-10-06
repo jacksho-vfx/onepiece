@@ -46,7 +46,7 @@ These resources provide a safe sandbox to explore the command surface before poi
 ## What's new in v0.9.0
 
 - **FastAPI dashboard for Trafalgar** – The web application ships with a Typer command so teams can launch the dashboard locally for iteration and demos.
-- **Trafalgar CLI entry point** – The `trafalgar web dashboard`, `trafalgar web ingest`, `trafalgar web render`, and `trafalgar ingest` commands now delegate to uvicorn helpers for a uniform operator experience.
+- **Trafalgar CLI entry point** – The `trafalgar web dashboard`, `trafalgar web ingest`, `trafalgar web render`, `trafalgar web review`, and `trafalgar ingest` commands now delegate to uvicorn helpers for a uniform operator experience.
 - **Ingest runs API** – A dedicated FastAPI service and registry expose ingest run history, including recent run summaries and result payloads.
 - **Ingest CLI wiring fixes** – The Trafalgar ingest commands reuse the shared uvicorn loader, resolving invocation issues that previously blocked launches.
 - **Review endpoints & dashboard links** – FastAPI review routes surface playlist data and wire dashboard links directly to review payloads.

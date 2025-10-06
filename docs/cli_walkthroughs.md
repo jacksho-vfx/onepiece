@@ -198,7 +198,9 @@ MediaShuttle-ready package.
 
 The v0.9.0 release focuses on the Trafalgar web suite: the dashboard, ingest
 run API, review routes, and render submission service can all be launched
-locally via the Typer commands described above. Use the snippet below to export
+locally via the Typer commands described above (`trafalgar web dashboard`,
+`trafalgar web ingest`, `trafalgar web review`, and `trafalgar web render`). Use
+the snippet below to export
 placeholder metadata with the existing DCC stubs while the web services provide
 context for show-level analytics:
 
