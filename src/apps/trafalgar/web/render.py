@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.responses import Response
 
 from apps.onepiece.render.submit import DCC_CHOICES, FARM_ADAPTERS
+from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import RenderSubmissionError, SubmissionResult
 from libraries.render.models import RenderAdapter
 
@@ -151,7 +152,7 @@ def get_render_service() -> (
     return RenderSubmissionService()
 
 
-app = FastAPI(title="OnePiece Render Service", version="1.0.0")
+app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 
 
 @app.middleware("http")

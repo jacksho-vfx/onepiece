@@ -2,5 +2,6 @@
 
 from apps.trafalgar.app import app, web_app
 from . import web as web  # re-export for convenience
+from .version import TRAFALGAR_VERSION, __version__
 
-__all__ = ["app", "web", "web_app"]
+__all__ = ["app", "web", "web_app", "TRAFALGAR_VERSION", "__version__"]
