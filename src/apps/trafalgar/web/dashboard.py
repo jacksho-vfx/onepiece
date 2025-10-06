@@ -154,7 +154,9 @@ def _store_project_registry(projects: Iterable[str]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = sorted({str(item).strip() for item in projects if str(item).strip()})
-        path.write_text(json.dumps(payload, indent=2, sort_keys=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, indent=2, sort_keys=False), encoding="utf-8"
+        )
     except OSError as exc:
         logger.warning(
             "dashboard.project_registry.store_failed", path=str(path), error=str(exc)

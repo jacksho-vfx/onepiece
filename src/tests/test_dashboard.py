@@ -81,7 +81,7 @@ def test_shotgrid_service_discovers_projects_and_updates_registry(
     monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
     monkeypatch.delenv("ONEPIECE_DASHBOARD_PROJECTS", raising=False)
 
-    versions = [
+    versions: Sequence[dict[str, Any]] = [
         {"project": "alpha"},
         {"project": {"name": "beta"}},
         {"project": {"code": "alpha"}},
@@ -105,7 +105,7 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
     monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
 
     class OfflineShotgridClient(DummyShotgridClient):
-        def list_versions(self) -> Sequence[dict[str, Any]]:  # type: ignore[override]
+        def list_versions(self) -> Sequence[dict[str, Any]]:
             raise RuntimeError("offline")
 
     service = dashboard.ShotGridService(
