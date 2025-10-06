@@ -13,6 +13,7 @@ import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.delivery.manifest import get_manifest_data
 from libraries.reconcile import comparator
 
@@ -422,7 +423,7 @@ def get_delivery_service() -> DeliveryService:
 # ---------------------------------------------------------------------------
 
 
-app = FastAPI(title="OnePiece Dashboard", version="1.0.0")
+app = FastAPI(title="OnePiece Dashboard", version=TRAFALGAR_VERSION)
 _TEMPLATE_CACHE: str | None = None
 
 

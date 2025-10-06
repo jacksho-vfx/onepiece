@@ -10,7 +10,41 @@ _No changes yet._
 
 ---
 
-## [v0.8.0] – Current Release
+## [v0.9.0] – Current Release
+
+### Added / Improved
+
+**Trafalgar Web Platform**
+- Launched the Trafalgar FastAPI dashboard with a dedicated Typer command so
+  teams can iterate on the UI locally alongside the CLI.
+- Added an ingest runs API and CLI entrypoints that surface recent run
+  summaries and reuse the shared uvicorn loader for consistency.
+- Introduced review endpoints that power dashboard review links and expose
+  playlist metadata via FastAPI.
+- Delivered a render submission API that mirrors the CLI payload validation,
+  enumerates registered farm adapters, and returns structured submission
+  results.
+
+**Dashboard Analytics & UX**
+- Rebuilt the dashboard landing page with richer aggregates, template
+  summaries, and a template-driven layout for at-a-glance status checks.
+- Added dedicated episode analytics, leaderboard tables, and template coverage
+  breakdowns to highlight production hotspots.
+- Hardened dashboard project links with URL encoding so navigation remains
+  reliable when show names include spaces or symbols.
+
+**Documentation**
+- Expanded the CLI examples to cover the Trafalgar dashboard, ingest, and
+  render commands, making it easier to adopt the new services.
+
+### Fixed
+
+- Corrected the Trafalgar ingest command wiring so uvicorn-powered services
+  start reliably from the Typer entrypoints.
+
+---
+
+## [v0.8.0] – Previous Release
 
 ### Added / Improved
 

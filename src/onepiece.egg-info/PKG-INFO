@@ -1,3 +1,28 @@
+Metadata-Version: 2.4
+Name: onepiece
+Version: 0.9.0
+Summary: Open-source pipeline CLI toolkit
+Author-email: Jack Shortiss <jdshortiss@hotmail.com>
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: typer>=0.19.2
+Requires-Dist: tqdm>=4.66.1
+Requires-Dist: structlog>=23.3.0
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: av>=12.0
+Requires-Dist: rich>=13.7.0
+Requires-Dist: click>=8.3.0
+Requires-Dist: uvicorn>=0.30.0
+Requires-Dist: pytest>=8.0.0
+Requires-Dist: pytest-mock>=3.12.0
+Requires-Dist: black==24.8.0
+Requires-Dist: isort>=5.12.0
+Requires-Dist: ruff>=0.6.8
+Requires-Dist: mypy>=1.11.1
+Dynamic: license-file
+
 # OnePiece
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.

@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in v0.8.0:** The CLI now ships with common DCC client scaffolding, letting you exercise metadata export and validation flows without requiring the actual DCC applications.
+> **New in v0.9.0:** The Trafalgar stack now ships with FastAPI dashboard, ingest, review, and render services plus Typer commands so you can rehearse the web tooling locally without pointing at production infrastructure.
 
 ## 1. Validate a workstation environment
 
@@ -196,10 +196,11 @@ MediaShuttle-ready package.
 
 ## 6. Exercise the DCC scaffolding stubs
 
-The v0.8.0 release introduces lightweight DCC clients that expose a shared API
-surface without requiring Maya, Nuke, Houdini, Blender, or 3ds Max to be
-installed. Use the snippet below to export placeholder metadata and inspect the
-generated JSON payload:
+The v0.9.0 release focuses on the Trafalgar web suite: the dashboard, ingest
+run API, review routes, and render submission service can all be launched
+locally via the Typer commands described above. Use the snippet below to export
+placeholder metadata with the existing DCC stubs while the web services provide
+context for show-level analytics:
 
 ```bash
 python - <<'PY'

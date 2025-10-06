@@ -6,6 +6,7 @@ import structlog
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
+from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.review.dailies import DailiesClip, fetch_playlist_versions
 from libraries.shotgrid.api import ShotGridClient, ShotGridError
 
@@ -153,7 +154,7 @@ def _summarise_clips(clips: Iterable[DailiesClip]) -> dict[str, Any]:
     }
 
 
-app = FastAPI(title="OnePiece Review API", version="1.0.0")
+app = FastAPI(title="OnePiece Review API", version=TRAFALGAR_VERSION)
 
 
 @app.get("/projects/{project_name}/playlists")

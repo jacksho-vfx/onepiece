@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
@@ -91,7 +92,7 @@ def get_ingest_run_service() -> IngestRunService:  # pragma: no cover - runtime 
     return IngestRunService()
 
 
-app = FastAPI(title="OnePiece Ingest Runs", version="1.0.0")
+app = FastAPI(title="OnePiece Ingest Runs", version=TRAFALGAR_VERSION)
 
 
 @app.middleware("http")
