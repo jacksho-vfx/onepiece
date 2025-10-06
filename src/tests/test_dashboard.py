@@ -445,6 +445,33 @@ async def test_deliveries_endpoint_normalises_entries() -> None:
 
 
 @pytest.mark.anyio("asyncio")
+async def test_deliveries_endpoint_handles_missing_entries() -> None:
+    deliveries = [
+        {
+            "project": "alpha",
+            "name": "alpha_20240101",
+            "archive": "/tmp/alpha.zip",
+            "manifest": "/tmp/alpha.json",
+            "created_at": "2024-01-01T10:00:00Z",
+            "entries": None,
+        }
+    ]
+
+    dashboard.app.dependency_overrides[dashboard.get_delivery_service] = (
+        lambda: dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+    )
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/deliveries/alpha")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["items"] == []
+    assert data[0]["file_count"] == 0
+
+
+@pytest.mark.anyio("asyncio")
 async def test_project_episode_endpoint_returns_grouped_stats() -> None:
     versions = [
         {
