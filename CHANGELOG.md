@@ -10,7 +10,37 @@ _No changes yet._
 
 ---
 
-## [v0.9.0] – Current Release
+## [Trafalgar v0.7.0] – Current Release
+
+### Added / Improved
+
+**Dashboard services**
+- Auto-discover ShotGrid projects when the dashboard loads, merge them with
+  environment configuration, and persist a cache so operators can keep working
+  through temporary ShotGrid outages.
+- Introduce TTL-governed caching for version queries with safeguards against
+  excessively large result sets, keeping status endpoints responsive while
+  reducing API pressure.
+- Normalise abbreviated and mixed-case ShotGrid status values before
+  aggregating them so the landing page, project summaries, and episode views
+  report consistent totals.
+
+**Delivery workflows**
+- Prefer provider-supplied manifest payloads and cache regenerated manifests per
+  delivery, eliminating redundant recomputation and surfacing accurate file
+  counts for each package.
+- Gracefully handle deliveries that arrive without manifest entries, ensuring
+  the dashboard still lists the drop with empty item metadata instead of
+  raising errors.
+
+**Render API**
+- Track submitted render jobs in memory, expose list/detail endpoints, refresh
+  adapter status on demand, and allow compatible adapters to cancel jobs via the
+  HTTP API for parity with the CLI workflow.
+
+---
+
+## [v0.9.0] – Previous Release
 
 ### Added / Improved
 
