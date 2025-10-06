@@ -438,7 +438,9 @@ class ShotGridService:
         }
         shots = {str(record.get("shot")) for record in versions if record.get("shot")}
         approved = sum(
-            1 for record in versions if _canonicalise_status(record.get("status")) == "approved"
+            1
+            for record in versions
+            if _canonicalise_status(record.get("status")) == "approved"
         )
         published = [
             record
