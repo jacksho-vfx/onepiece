@@ -280,7 +280,7 @@ async def test_project_detail_returns_summary() -> None:
             "project": "alpha",
             "shot": "EP01_SC001_SH0010",
             "version": "v001",
-            "status": "apr",
+            "status": "APR",
             "user": "nami",
             "timestamp": datetime(2024, 1, 1, 9, 0, 0),
         },
@@ -288,7 +288,7 @@ async def test_project_detail_returns_summary() -> None:
             "project": "alpha",
             "shot": "EP01_SC001_SH0010",
             "version": "v002",
-            "status": "pub",
+            "status": "Final",
             "user": "zoro",
             "timestamp": "2024-01-01T10:00:00Z",
         },
@@ -296,7 +296,7 @@ async def test_project_detail_returns_summary() -> None:
             "project": "alpha",
             "shot": "EP02_SC003_SH0020",
             "version": "v003",
-            "status": "published",
+            "status": "Published",
             "user": "luffy",
             "timestamp": "2024-01-01T11:00:00+00:00",
         },
@@ -323,7 +323,7 @@ async def test_project_detail_returns_summary() -> None:
     assert data["shots"] == 2
     assert data["versions"] == 3
     assert data["approved_versions"] == 1
-    assert data["status_totals"] == {"apr": 1, "pub": 1, "published": 1}
+    assert data["status_totals"] == {"approved": 1, "published": 2}
     assert [item["version"] for item in data["latest_published"]] == ["v003", "v002"]
 
 
@@ -592,7 +592,7 @@ async def test_project_episode_endpoint_returns_grouped_stats() -> None:
             "episode": "EP01",
             "shot": "EP01_SC001_SH0010",
             "version": "v001",
-            "status": "apr",
+            "status": "Approved",
         },
         {
             "project": "alpha",
@@ -604,7 +604,7 @@ async def test_project_episode_endpoint_returns_grouped_stats() -> None:
             "project": "alpha",
             "shot": "EP02_SC001_SH0100",
             "version": "v003",
-            "status": "wip",
+            "status": "WIP",
         },
     ]
 
@@ -619,10 +619,10 @@ async def test_project_episode_endpoint_returns_grouped_stats() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["project"] == "alpha"
-    assert data["status_totals"] == {"apr": 1, "pub": 1, "wip": 1}
+    assert data["status_totals"] == {"approved": 1, "published": 1, "wip": 1}
     episodes = {entry["episode"]: entry for entry in data["episodes"]}
     assert episodes["EP01"]["versions"] == 2
-    assert episodes["EP01"]["status_counts"] == {"apr": 1, "pub": 1}
+    assert episodes["EP01"]["status_counts"] == {"approved": 1, "published": 1}
     assert episodes["EP02"]["shots"] == 1
 
 

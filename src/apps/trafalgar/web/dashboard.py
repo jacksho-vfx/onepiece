@@ -26,6 +26,19 @@ from .ingest_adapter import (
 logger = structlog.get_logger(__name__)
 
 
+# Canonical status mapping so that abbreviated and mixed-case values are
+# aggregated consistently across dashboard views.
+STATUS_CANONICAL_PREFIXES: OrderedDict[str, str] = OrderedDict(
+    {
+        "apr": "approved",
+        "approved": "approved",
+        "pub": "published",
+        "published": "published",
+        "final": "published",
+    }
+)
+
+
 # ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
@@ -84,11 +97,19 @@ def _normalise_version_name(record: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _is_status(status: Any, expected: Sequence[str]) -> bool:
-    if not status:
-        return False
-    text = str(status).lower()
-    return any(text.startswith(prefix) for prefix in expected)
+def _canonicalise_status(value: Any) -> str:
+    if not value:
+        return "unknown"
+
+    text = str(value).strip().lower()
+    if not text:
+        return "unknown"
+
+    for prefix, label in STATUS_CANONICAL_PREFIXES.items():
+        if text.startswith(prefix):
+            return label
+
+    return text
 
 
 def _load_known_projects() -> set[str]:
@@ -417,20 +438,17 @@ class ShotGridService:
         }
         shots = {str(record.get("shot")) for record in versions if record.get("shot")}
         approved = sum(
-            1
-            for record in versions
-            if _is_status(record.get("status"), ("apr", "approved"))
+            1 for record in versions if _canonicalise_status(record.get("status")) == "approved"
         )
         published = [
             record
             for record in versions
-            if _is_status(record.get("status"), ("pub", "published", "final"))
+            if _canonicalise_status(record.get("status")) == "published"
         ]
 
         status_totals: Counter[str] = Counter()
         for record in versions:
-            status = record.get("status")
-            key = str(status).strip().lower() if status else "unknown"
+            key = _canonicalise_status(record.get("status"))
             status_totals[key] += 1
 
         published.sort(
@@ -490,8 +508,7 @@ class ShotGridService:
                 stats["shots"].add(str(shot))
             stats["versions"] += 1
 
-            status = record.get("status")
-            key = str(status).strip().lower() if status else "unknown"
+            key = _canonicalise_status(record.get("status"))
             stats["status_counts"][key] += 1
             overall_status[key] += 1
 
