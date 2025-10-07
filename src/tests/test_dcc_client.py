@@ -144,6 +144,41 @@ def test_publish_scene_supports_direct_upload(
 
 
 @patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    package_path = publish_scene(
+        SupportedDCC.NUKE,
+        scene_name="ep01_sh011",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        dry_run=True,
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+    )
+
+    expected_package = destination / "ep01_sh011"
+    assert package_path == expected_package
+    assert (expected_package / "metadata.json").exists()
+
+    sync_mock.assert_called_once_with(
+        source=expected_package,
+        destination="s3://libraries-bucket/ep01_sh011",
+        dry_run=True,
+        include=None,
+        exclude=None,
+        profile=None,
+    )
+
+
+@patch("libraries.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(
     sync_mock: MagicMock, tmp_path: Path
 ) -> None:

@@ -117,6 +117,11 @@ def publish(
         "--dependency-summary/--no-dependency-summary",
         help="Print dependency validation summary after publishing.",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run/--no-dry-run",
+        help="Synchronise to S3 without uploading new files.",
+    ),
 ) -> None:
     """Package a scene and publish it to S3."""
 
@@ -144,6 +149,7 @@ def publish(
         profile=profile,
         direct_s3_path=direct_upload_path,
         dependency_callback=capture_report if dependency_summary else None,
+        dry_run=dry_run,
     )
 
     log.info("cli_publish_completed", package=str(package_path))
