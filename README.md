@@ -212,6 +212,60 @@ onepiece aws ingest \
   --client-bucket client_in
 ```
 
+Manifests can be supplied to enrich ingest analytics and validate vendor drop
+metadata without relying solely on filename parsing:
+
+```bash
+onepiece aws ingest \
+  /deliveries/vendor_drop_2024_02_14 \
+  --project "Frost Giant" \
+  --show-code FG \
+  --manifest delivery_manifest.json \
+  --dry-run
+```
+
+The manifest may be authored as CSV or JSON. Both formats expect the following
+fields for each entry:
+
+| Field | Description |
+| --- | --- |
+| `show` | Show code that should match `--show-code`. |
+| `episode` | Episode identifier, e.g. `ep001`. |
+| `scene` | Scene identifier, e.g. `sc01`. |
+| `shot` | Shot identifier, e.g. `0001`. |
+| `asset` | Delivery asset/descriptor such as `comp`. |
+| `version` | Integer version number. |
+| `source_path` | Absolute path to the vendor's source media. |
+| `delivery_path` | Expected filename (or relative path) in the ingest folder. |
+| `checksum` | Optional checksum string used for audit trails. |
+
+Example CSV row:
+
+```csv
+show,episode,scene,shot,asset,version,source_path,delivery_path,checksum
+FG,ep010,sc02,0010,comp,4,/srv/vendor/shot.mov,FG_ep010_sc02_0010_comp_v004.mov,md5:deadbeef
+```
+
+Example JSON entry:
+
+```json
+{
+  "files": [
+    {
+      "show": "FG",
+      "episode": "ep010",
+      "scene": "sc02",
+      "shot": "0010",
+      "asset": "comp",
+      "version": 4,
+      "source_path": "/srv/vendor/shot.mov",
+      "delivery_path": "FG_ep010_sc02_0010_comp_v004.mov",
+      "checksum": "md5:deadbeef"
+    }
+  ]
+}
+```
+
 Invalid files are reported at the end of the run alongside a summary of skipped
 and uploaded media.
 

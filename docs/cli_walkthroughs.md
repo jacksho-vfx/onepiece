@@ -95,12 +95,18 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
      /tmp/onepiece_ingest_dry_run \
      --project "Demo Project" \
      --show-code SHOW01 \
+     --manifest docs/examples/delivery_manifest.json \
      --dry-run \
      --report-format json \
      --report-path /tmp/onepiece_ingest_report.json
    ```
 
    The CLI validates filenames, resolves destination buckets, and writes a JSON payload that lists the target `s3://` keys, rejected files, and any warnings encountered. The dry-run guarantee means no uploads or ShotGrid registrations occur—use the analytics report (JSON or CSV) to confirm everything looks correct before running the command for real.
+
+   When using manifests, ensure each entry describes the show, episode, scene, shot,
+   asset, version, source path, and expected delivery filename. The parser accepts
+   the same columns whether the data is authored as CSV or under a `files`/`deliveries`
+   key in JSON manifests.
 
 3. Open the report to review the planned uploads before performing a real ingest:
 
