@@ -86,3 +86,57 @@ schema:
 This response mirrors the Pydantic models defined in
 `src/apps/trafalgar/web/dashboard.py` and demonstrates the key metrics surfaced
 by the dashboard.
+
+## Real-time render and ingest updates
+
+Trafalgar now exposes Server-Sent Events (SSE) and WebSocket feeds so clients
+can react to render job and ingest run lifecycle changes without polling.
+
+### Render job streams
+
+- `GET /jobs/stream` – SSE endpoint emitting JSON payloads.
+- `GET /jobs/ws` – WebSocket endpoint sending JSON frames.
+
+Each event payload includes an `event` string describing the lifecycle stage and
+`job` metadata mirroring `RenderJobMetadata`. Example SSE subscription using
+`curl`:
+
+```bash
+curl -N http://localhost:8000/jobs/stream
+```
+
+Sample event:
+
+```text
+data: {"event": "job.created", "job": {"job_id": "stub-1", "status": "queued", "farm": "mock", "farm_type": "stub", "message": null, "request": {...}}}
+```
+
+### Ingest run streams
+
+- `GET /runs/stream` – SSE endpoint emitting ingest run updates.
+- `GET /runs/ws` – WebSocket endpoint sending JSON frames.
+
+Events carry an `event` string (`run.created`, `run.updated`, or `run.removed`)
+and a `run` payload matching the REST responses. Example Python snippet using
+`httpx` to consume the SSE feed:
+
+```python
+import asyncio
+import httpx
+
+
+async def consume_ingest_events():
+    async with httpx.AsyncClient(base_url="http://localhost:8001") as client:
+        async with client.stream("GET", "/runs/stream") as response:
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    payload = line.removeprefix("data: ").strip()
+                    if payload and payload != "{}":
+                        print(payload)
+
+
+asyncio.run(consume_ingest_events())
+```
+
+Slow consumers are automatically trimmed or disconnected to avoid unbounded
+buffers; reconnecting restores the stream.
