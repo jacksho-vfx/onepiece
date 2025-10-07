@@ -3,12 +3,12 @@
 from pathlib import Path
 
 import pytest
+from click.testing import Result
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
 import importlib
 
-ingest_module = importlib.import_module("apps.onepiece.aws.ingest")
 from apps.onepiece.utils.errors import (
     ExitCode,
     OnePieceConfigError,
@@ -21,6 +21,7 @@ from libraries.ingest.service import (
     ShotgridSchemaError,
 )
 
+ingest_module = importlib.import_module("apps.onepiece.aws.ingest")
 runner = CliRunner()
 
 
@@ -34,9 +35,11 @@ class _StubService:
 
 def _invoke_with_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: Exception
-):
+) -> Result:
     class _Factory:
-        def __init__(self, *args: object, **kwargs: object) -> None:  # noqa: D401 - test stub
+        def __init__(
+            self, *args: object, **kwargs: object
+        ) -> None:  # noqa: D401 - test stub
             self._service = _StubService(error=error)
 
         def ingest_folder(self, *args: object, **kwargs: object) -> None:
