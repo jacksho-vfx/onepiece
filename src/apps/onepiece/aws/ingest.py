@@ -80,10 +80,12 @@ def ingest(
         raise typer.BadParameter("--report-format is required when using --report-path")
 
     if (report_format is not None or report_path is not None) and not dry_run:
-        raise typer.BadParameter("Analytics reports are only available when --dry-run is used")
+        raise typer.BadParameter(
+            "Analytics reports are only available when --dry-run is used"
+        )
 
     total_files = sum(1 for path in folder.rglob("*") if path.is_file())
-        
+
     if total_files == 0:
         raise OnePieceValidationError(
             "No media files were discovered in the delivery folder. "
@@ -186,8 +188,7 @@ def _build_dry_run_report(report: IngestReport) -> Dict[str, Any]:
     )
 
     invalid: Iterable[Dict[str, str]] = (
-        {"file": str(path), "reason": reason}
-        for path, reason in report.invalid
+        {"file": str(path), "reason": reason} for path, reason in report.invalid
     )
 
     warnings: Iterable[str] = tuple(report.warnings)
@@ -207,7 +208,9 @@ def _render_report(analytics: Dict[str, Any], format: ReportFormat) -> str:
 
     rows = list(_iter_csv_rows(analytics))
     buffer = StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=["status", "file", "destination", "details"])
+    writer = csv.DictWriter(
+        buffer, fieldnames=["status", "file", "destination", "details"]
+    )
     writer.writeheader()
     for row in rows:
         writer.writerow(row)

@@ -9,7 +9,7 @@ from libraries.ingest.service import (
     ShotgridSchemaError,
     parse_media_filename,
 )
-from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
+from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError, Version
 
 
 class DummyUploader:
@@ -20,7 +20,7 @@ class DummyUploader:
         self.uploads.append((file_path, bucket, key))
 
 
-class _RecordingShotgridClient(ShotgridClient):
+class _RecordingShotgridClient(ShotgridClient):  # type: ignore[misc]
     def __init__(self) -> None:
         super().__init__()
         self.register_calls: list[tuple[str, Path]] = []
@@ -32,7 +32,7 @@ class _RecordingShotgridClient(ShotgridClient):
         shot_code: str,
         file_path: Path,
         description: str | None = None,
-    ) -> dict[str, str]:
+    ) -> Version:
         self.register_calls.append((shot_code, file_path))
         return super().register_version(
             project_name=project_name,
