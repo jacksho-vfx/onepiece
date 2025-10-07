@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast, Dict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,9 +16,83 @@ def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
     response = client.get("/farms")
     assert response.status_code == 200
     payload = response.json()
-    farm_names = {farm["name"] for farm in payload["farms"]}
-    assert "mock" in farm_names
-    assert "deadline" in farm_names
+    farms = {farm["name"]: farm for farm in payload["farms"]}
+    assert "mock" in farms
+    assert "deadline" in farms
+    for farm in farms.values():
+        assert "capabilities" in farm
+        capabilities = farm["capabilities"]
+        assert "priority" in capabilities
+        assert "chunking" in capabilities
+        assert "cancellation" in capabilities
+
+
+def test_get_farms_returns_capabilities(client: TestClient) -> None:
+    response = client.get("/farms")
+    assert response.status_code == 200
+
+    payload = cast(Dict[str, Any], response.json())
+    farms_list = cast(list[Dict[str, Any]], payload["farms"])
+    farms = {farm["name"]: farm for farm in farms_list}
+
+    expected: Dict[str, Dict[str, Any]] = {
+        "mock": {
+            "priority": {"default": 50, "minimum": 0, "maximum": 100},
+            "chunking": {
+                "enabled": True,
+                "minimum": 1,
+                "maximum": 10,
+                "default": 5,
+            },
+            "cancellation": {"supported": False},
+        },
+        "deadline": {
+            "priority": {"default": 50, "minimum": 0, "maximum": 100},
+            "chunking": {
+                "enabled": True,
+                "minimum": 1,
+                "maximum": 50,
+                "default": 10,
+            },
+            "cancellation": {"supported": False},
+        },
+        "tractor": {
+            "priority": {"default": 75, "minimum": 1, "maximum": 150},
+            "chunking": {
+                "enabled": True,
+                "minimum": 1,
+                "maximum": 30,
+                "default": 8,
+            },
+            "cancellation": {"supported": False},
+        },
+        "opencue": {
+            "priority": {"default": 60, "minimum": 0, "maximum": 120},
+            "chunking": {
+                "enabled": True,
+                "minimum": 1,
+                "maximum": 25,
+                "default": 6,
+            },
+            "cancellation": {"supported": False},
+        },
+    }
+
+    for name, expectation in expected.items():
+        farm = farms[name]
+        capabilities = cast(Dict[str, Any], farm["capabilities"])
+        priority = cast(Dict[str, Any], capabilities["priority"])
+        chunking = cast(Dict[str, Any], capabilities["chunking"])
+        cancellation = cast(Dict[str, Any], capabilities["cancellation"])
+
+        assert priority["default"] == expectation["priority"]["default"]
+        assert priority["minimum"] == expectation["priority"]["minimum"]
+        assert priority["maximum"] == expectation["priority"]["maximum"]
+        assert chunking["enabled"] == expectation["chunking"]["enabled"]
+        assert chunking["minimum"] == expectation["chunking"]["minimum"]
+        assert chunking["maximum"] == expectation["chunking"]["maximum"]
+        assert chunking["default"] == expectation["chunking"]["default"]
+        assert cancellation["supported"] == expectation["cancellation"]["supported"]
 
 
 def test_submit_job_success(

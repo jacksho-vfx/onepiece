@@ -48,4 +48,5 @@ def get_capabilities() -> AdapterCapabilities:
         chunk_size_min=1,
         chunk_size_max=10,
         default_chunk_size=5,
+        cancellation_supported=False,
     )
