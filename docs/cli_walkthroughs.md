@@ -76,7 +76,39 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
 
 3. Once you are satisfied, remove the `--dry-run` flag to execute the transfer for real.
 
-## 3. Package a DCC publish for QA
+## 3. Analyse an ingest dry run
+
+1. Create a scratch delivery directory with a couple of filenames that match and break the ingest rules:
+
+   ```bash
+   mkdir -p /tmp/onepiece_ingest_dry_run
+   touch /tmp/onepiece_ingest_dry_run/SHOW01_ep001_sc01_0001_comp.mov
+   touch /tmp/onepiece_ingest_dry_run/BADNAME.mov
+   ```
+
+2. Run the ingest command in dry-run mode while exporting analytics as JSON:
+
+   ```bash
+   onepiece aws ingest \
+     /tmp/onepiece_ingest_dry_run \
+     --project "Demo Project" \
+     --show-code SHOW01 \
+     --dry-run \
+     --report-format json \
+     --report-path /tmp/onepiece_ingest_report.json
+   ```
+
+   The CLI validates filenames, resolves destination buckets, and writes a JSON payload that lists the target `s3://` keys, rejected files, and any warnings encountered.
+
+3. Open the report to review the planned uploads before performing a real ingest:
+
+   ```bash
+   cat /tmp/onepiece_ingest_report.json
+   ```
+
+   The same `--report-format csv` flag streams a tabular version to stdout (or to `--report-path`) when you prefer spreadsheet tooling.
+
+## 4. Package a DCC publish for QA
 
 This scenario simulates a Maya lighting publish that bundles render outputs, previews, and metadata before pushing them to S3.
 
@@ -122,7 +154,7 @@ notes,"QA dry run for onboarding"
 
 4. Inspect the generated report for any validation warnings. When the report looks good, rerun the command without `--report-only` to build and upload the package.
 
-## 4. Bootstrap a ShotGrid project
+## 5. Bootstrap a ShotGrid project
 
 The `docs/examples/shotgrid_hierarchy.csv` file models a minimal episodic show structure.
 
@@ -152,7 +184,7 @@ onepiece shotgrid apply-hierarchy \
 
 Dropping the `--dry-run` flag will create the entities using the resilient bulk helpers described in the README.
 
-## 5. Package a ShotGrid playlist for delivery
+## 6. Package a ShotGrid playlist for delivery
 
 The playlist packaging helpers can be exercised locally with the in-memory
 ShotGrid client. Create a sandbox directory with placeholder media and then run
@@ -215,7 +247,7 @@ MediaShuttle-ready package.
 3. Inspect the generated directory and `manifest.json` file to confirm the
    playlist structure.
 
-## 6. Exercise the DCC scaffolding stubs
+## 7. Exercise the DCC scaffolding stubs
 
 The Trafalgar v0.7.0 release focuses on keeping the web suite responsive: the
 dashboard auto-caches version lookups, gracefully handles sparse delivery

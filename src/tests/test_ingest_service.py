@@ -9,7 +9,7 @@ from libraries.ingest.service import (
     ShotgridSchemaError,
     parse_media_filename,
 )
-from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
+from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError, Version
 
 
 class DummyUploader:
@@ -18,6 +18,28 @@ class DummyUploader:
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self.uploads.append((file_path, bucket, key))
+
+
+class _RecordingShotgridClient(ShotgridClient):  # type: ignore[misc]
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_calls: list[tuple[str, Path]] = []
+
+    def register_version(
+        self,
+        *,
+        project_name: str,
+        shot_code: str,
+        file_path: Path,
+        description: str | None = None,
+    ) -> Version:
+        self.register_calls.append((shot_code, file_path))
+        return super().register_version(
+            project_name=project_name,
+            shot_code=shot_code,
+            file_path=file_path,
+            description=description,
+        )
 
 
 class _FailingShotgridClient:
@@ -93,6 +115,39 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert len(versions) == 1
     assert versions[0]["shot"] == "ep001_sc01_0001"
     assert versions[0]["code"] == valid.stem
+
+
+def test_ingest_service_returns_dry_run_report(tmp_path: Path) -> None:
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+
+    valid = incoming / "SHOW01_ep001_sc01_0001_comp.mov"
+    valid.write_bytes(b"data")
+
+    uploader = DummyUploader()
+    shotgrid = _RecordingShotgridClient()
+
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+        dry_run=True,
+    )
+
+    report = service.ingest_folder(incoming, recursive=False)
+
+    assert report.processed_count == 1
+    assert not uploader.uploads
+    assert not shotgrid.register_calls
+    assert any("Dry run: would upload" in warning for warning in report.warnings)
+    assert any(
+        "Dry run: would register ShotGrid Version" in warning
+        for warning in report.warnings
+    )
 
 
 def _prepare_ingest_folder(tmp_path: Path) -> Path:

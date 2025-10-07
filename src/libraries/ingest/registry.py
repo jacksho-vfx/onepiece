@@ -92,9 +92,13 @@ def _load_report(payload: Mapping[str, Any]) -> IngestReport:
     invalid_payload = payload.get("invalid", [])
     if not isinstance(invalid_payload, Iterable):
         invalid_payload = []
+    warnings_payload = payload.get("warnings", [])
+    if not isinstance(warnings_payload, Iterable):
+        warnings_payload = []
     processed = _load_processed(cast(List[Mapping[str, Any]], processed_payload))
     invalid = _load_invalid(cast(List[Iterable[Any]], invalid_payload))
-    return IngestReport(processed=processed, invalid=invalid)
+    warnings = [str(item) for item in warnings_payload]
+    return IngestReport(processed=processed, invalid=invalid, warnings=warnings)
 
 
 @dataclass

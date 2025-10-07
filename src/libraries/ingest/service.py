@@ -82,6 +82,7 @@ class IngestReport:
 
     processed: List[IngestedMedia] = field(default_factory=list)
     invalid: List[Tuple[Path, str]] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
 
     @property
     def processed_count(self) -> int:
@@ -194,6 +195,7 @@ class MediaIngestService:
             except FilenameValidationError as exc:
                 log.warning("ingest.invalid_filename", file=str(path), reason=str(exc))
                 report.invalid.append((path, str(exc)))
+                report.warnings.append(f"{path.name}: {exc}")
                 _notify("skipped")
                 continue
 
@@ -204,6 +206,7 @@ class MediaIngestService:
                 )
                 log.warning("ingest.mismatched_show", file=str(path), reason=reason)
                 report.invalid.append((path, reason))
+                report.warnings.append(f"{path.name}: {reason}")
                 _notify("skipped")
                 continue
 
@@ -218,81 +221,91 @@ class MediaIngestService:
                 dry_run=self.dry_run,
             )
 
-            if not self.dry_run:
+            if self.dry_run:
+                destination = f"s3://{bucket}/{key}"
+                report.warnings.append(
+                    f"Dry run: would upload {path.name} to {destination}"
+                )
+            else:
                 self.uploader.upload(path, bucket, key)
 
-            try:
-                version = self.shotgrid.register_version(
-                    project_name=self.project_name,
-                    shot_code=media_info.shot_name,
-                    file_path=path,
-                    description=media_info.descriptor,
+            if self.dry_run:
+                report.warnings.append(
+                    f"Dry run: would register ShotGrid Version {media_info.version_code}"
                 )
-            except ShotgridAuthenticationError:
-                raise
-            except PermissionError as exc:
-                message = (
-                    "ShotGrid rejected the provided credentials while registering "
-                    f"'{media_info.version_code}'."
-                )
-                log.error(
-                    "ingest.shotgrid.auth_failed",
-                    file=str(path),
-                    shot=media_info.shot_name,
-                    reason=str(exc),
-                )
-                raise ShotgridAuthenticationError(
-                    f"{message} Check the API key or session token before retrying."
-                ) from exc
-            except ValueError as exc:
-                message = (
-                    "ShotGrid rejected the version payload for "
-                    f"'{media_info.version_code}'."
-                )
-                log.error(
-                    "ingest.shotgrid.schema_failed",
-                    file=str(path),
-                    shot=media_info.shot_name,
-                    reason=str(exc),
-                )
-                raise ShotgridSchemaError(
-                    f"{message} Confirm the project, shot, and template align with ShotGrid before retrying."
-                ) from exc
-            except (ShotgridOperationError, ConnectionError, TimeoutError) as exc:
-                message = (
-                    "ShotGrid did not respond while registering "
-                    f"'{media_info.version_code}'."
-                )
-                log.error(
-                    "ingest.shotgrid.connectivity_failed",
-                    file=str(path),
-                    shot=media_info.shot_name,
-                    reason=str(exc),
-                )
-                raise ShotgridConnectivityError(
-                    f"{message} Verify network access and ShotGrid availability, then retry the ingest."
-                ) from exc
-            except OSError as exc:
-                message = (
-                    "Encountered a network error while contacting ShotGrid for "
-                    f"'{media_info.version_code}'."
-                )
-                log.error(
-                    "ingest.shotgrid.os_error",
-                    file=str(path),
-                    shot=media_info.shot_name,
-                    reason=str(exc),
-                )
-                raise ShotgridConnectivityError(
-                    f"{message} Check VPN or proxy settings and retry once connectivity is restored."
-                ) from exc
+            else:
+                try:
+                    version = self.shotgrid.register_version(
+                        project_name=self.project_name,
+                        shot_code=media_info.shot_name,
+                        file_path=path,
+                        description=media_info.descriptor,
+                    )
+                except ShotgridAuthenticationError:
+                    raise
+                except PermissionError as exc:
+                    message = (
+                        "ShotGrid rejected the provided credentials while registering "
+                        f"'{media_info.version_code}'."
+                    )
+                    log.error(
+                        "ingest.shotgrid.auth_failed",
+                        file=str(path),
+                        shot=media_info.shot_name,
+                        reason=str(exc),
+                    )
+                    raise ShotgridAuthenticationError(
+                        f"{message} Check the API key or session token before retrying."
+                    ) from exc
+                except ValueError as exc:
+                    message = (
+                        "ShotGrid rejected the version payload for "
+                        f"'{media_info.version_code}'."
+                    )
+                    log.error(
+                        "ingest.shotgrid.schema_failed",
+                        file=str(path),
+                        shot=media_info.shot_name,
+                        reason=str(exc),
+                    )
+                    raise ShotgridSchemaError(
+                        f"{message} Confirm the project, shot, and template align with ShotGrid before retrying."
+                    ) from exc
+                except (ShotgridOperationError, ConnectionError, TimeoutError) as exc:
+                    message = (
+                        "ShotGrid did not respond while registering "
+                        f"'{media_info.version_code}'."
+                    )
+                    log.error(
+                        "ingest.shotgrid.connectivity_failed",
+                        file=str(path),
+                        shot=media_info.shot_name,
+                        reason=str(exc),
+                    )
+                    raise ShotgridConnectivityError(
+                        f"{message} Verify network access and ShotGrid availability, then retry the ingest."
+                    ) from exc
+                except OSError as exc:
+                    message = (
+                        "Encountered a network error while contacting ShotGrid for "
+                        f"'{media_info.version_code}'."
+                    )
+                    log.error(
+                        "ingest.shotgrid.os_error",
+                        file=str(path),
+                        shot=media_info.shot_name,
+                        reason=str(exc),
+                    )
+                    raise ShotgridConnectivityError(
+                        f"{message} Check VPN or proxy settings and retry once connectivity is restored."
+                    ) from exc
 
-            log.info(
-                "ingest.version_registered",
-                version_id=version["id"],
-                version_code=version["code"],
-                shot=media_info.shot_name,
-            )
+                log.info(
+                    "ingest.version_registered",
+                    version_id=version["id"],
+                    version_code=version["code"],
+                    shot=media_info.shot_name,
+                )
 
             report.processed.append(
                 IngestedMedia(path=path, bucket=bucket, key=key, media_info=media_info)
