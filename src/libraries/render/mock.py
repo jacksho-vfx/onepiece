@@ -6,7 +6,7 @@ import uuid
 
 import structlog
 
-from .base import SubmissionResult
+from .base import AdapterCapabilities, SubmissionResult
 
 log = structlog.get_logger(__name__)
 
@@ -18,6 +18,7 @@ def submit_job(
     dcc: str,
     priority: int,
     user: str,
+    chunk_size: int | None,
 ) -> SubmissionResult:
     """Simulate submitting a render job by generating a fake job identifier."""
 
@@ -31,5 +32,20 @@ def submit_job(
         priority=priority,
         user=user,
         job_id=job_id,
+        chunk_size=chunk_size,
     )
     return SubmissionResult(job_id=job_id, status="submitted", farm_type="mock")
+
+
+def get_capabilities() -> AdapterCapabilities:
+    """Return static capabilities for the mock adapter used in tests."""
+
+    return AdapterCapabilities(
+        default_priority=50,
+        priority_min=0,
+        priority_max=100,
+        chunk_size_enabled=True,
+        chunk_size_min=1,
+        chunk_size_max=10,
+        default_chunk_size=5,
+    )

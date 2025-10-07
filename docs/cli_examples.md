@@ -18,7 +18,10 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 
 ### Review & render
 - `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--burnin/--no-burnin --codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest.
-- `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging.
+- `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --chunk-size <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging and adapter-aware defaults.
+- `python -m apps.onepiece render preset save <name> --farm <deadline|tractor|…> [--dcc <dcc>] [--scene <scene>] [--frames <range>] [--output <path>] [--priority <n> --chunk-size <n> --user <user>]` — persist a reusable render submission preset to disk.
+- `python -m apps.onepiece render preset list` — enumerate discovered render presets with key metadata.
+- `python -m apps.onepiece render preset use <name> [--scene <scene>] [--frames <range>] [--output <path>] [--farm <deadline|tractor|…> --dcc <dcc> --priority <n> --chunk-size <n> --user <user>]` — apply a preset and submit a job with optional overrides.
 
 ### Notifications
 - `python -m apps.onepiece notify email --subject <text> --message <body> [--recipients user@example.com,… --mock]` — send or mock an email notification through the configured backend.
