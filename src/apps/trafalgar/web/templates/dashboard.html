@@ -6,14 +6,42 @@
     <style>
       :root {
         color-scheme: light dark;
+        --background-color: #f9fafb;
+        --text-color: #1f2933;
+        --muted-text-color: #52606d;
+        --link-color: #0b69a3;
+        --link-hover-color: #084c7a;
+        --surface-color: #ffffff;
+        --surface-alt-color: #f4f5f7;
+        --surface-stripe-color: #f9fafb;
+        --border-color: #d2d6dc;
+        --shadow-color: rgba(15, 23, 42, 0.12);
+        --code-background: #f1f5f9;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background-color: #0f172a;
+          --text-color: #f1f5f9;
+          --muted-text-color: #cbd5f5;
+          --link-color: #60a5fa;
+          --link-hover-color: #93c5fd;
+          --surface-color: #111827;
+          --surface-alt-color: #1f2937;
+          --surface-stripe-color: #16213b;
+          --border-color: #374151;
+          --shadow-color: rgba(15, 23, 42, 0.6);
+          --code-background: #1f2937;
+        }
       }
       body {
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         margin: 2rem;
         line-height: 1.5;
+        background: var(--background-color);
+        color: var(--text-color);
       }
       h1 {
-        color: #1f2933;
+        color: var(--text-color);
         margin-bottom: 0.5rem;
       }
       nav ul {
@@ -25,12 +53,13 @@
         margin-bottom: 2rem;
       }
       nav a {
-        color: #0b69a3;
+        color: var(--link-color);
         text-decoration: none;
         font-weight: 600;
       }
       nav a:hover {
         text-decoration: underline;
+        color: var(--link-hover-color);
       }
       section {
         margin-bottom: 2.5rem;
@@ -39,28 +68,28 @@
         border-collapse: collapse;
         width: 100%;
         max-width: 64rem;
-        background: #fff;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+        background: var(--surface-color);
+        box-shadow: 0 1px 2px var(--shadow-color);
       }
       th, td {
         padding: 0.75rem;
-        border: 1px solid #d2d6dc;
+        border: 1px solid var(--border-color);
         text-align: left;
         vertical-align: top;
       }
       th {
-        background-color: #f4f5f7;
+        background-color: var(--surface-alt-color);
         font-weight: 700;
       }
       tbody tr:nth-child(even) {
-        background-color: #f9fafb;
+        background-color: var(--surface-stripe-color);
       }
       .placeholder {
         font-style: italic;
-        color: #52606d;
+        color: var(--muted-text-color);
       }
       code {
-        background: #f1f5f9;
+        background: var(--code-background);
         border-radius: 4px;
         padding: 0.1rem 0.4rem;
         font-size: 0.9em;
@@ -71,17 +100,17 @@
         gap: 1rem;
       }
       .metric {
-        background: #fff;
-        border: 1px solid #d2d6dc;
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 1rem;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+        box-shadow: 0 1px 2px var(--shadow-color);
       }
       .metric h3 {
         margin-top: 0;
         margin-bottom: 0.25rem;
         font-size: 1rem;
-        color: #1f2933;
+        color: var(--text-color);
       }
       .metric p {
         margin: 0;
@@ -93,7 +122,7 @@
       .metric .metric-detail {
         margin-top: 0.35rem;
         font-size: 0.9rem;
-        color: #52606d;
+        color: var(--muted-text-color);
       }
     </style>
   </head>
