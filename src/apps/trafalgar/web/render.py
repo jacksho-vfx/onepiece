@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import asyncio
 import json
-from typing import Any, Awaitable, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence, AsyncGenerator
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
@@ -536,7 +536,7 @@ def list_jobs(
     return JobsListResponse(jobs=jobs)
 
 
-async def _job_event_stream(request: Request):
+async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
     queue = await JOB_EVENTS.subscribe()
     try:
         while True:
@@ -555,9 +555,7 @@ async def _job_event_stream(request: Request):
 
 @app.get("/jobs/stream")
 async def stream_jobs(request: Request) -> StreamingResponse:
-    return StreamingResponse(
-        _job_event_stream(request), media_type="text/event-stream"
-    )
+    return StreamingResponse(_job_event_stream(request), media_type="text/event-stream")
 
 
 @app.websocket("/jobs/ws")
@@ -594,5 +592,3 @@ def cancel_job(
         raise HTTPException(status_code=404, detail="Job not found.") from exc
     except RenderSubmissionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-

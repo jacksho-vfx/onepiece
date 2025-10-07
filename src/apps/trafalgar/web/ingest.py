@@ -4,7 +4,17 @@ import asyncio
 import json
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Sequence, cast
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Sequence,
+    cast,
+    AsyncGenerator,
+)
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
@@ -167,7 +177,9 @@ async def list_runs(
     return JSONResponse(content=payload)
 
 
-async def _ingest_event_stream(request: Request):
+async def _ingest_event_stream(
+    request: Request,
+) -> AsyncGenerator[IngestRunRecord, None]:
     queue = await INGEST_EVENTS.subscribe()
     try:
         while True:
@@ -220,5 +232,3 @@ async def get_run(
 @app.get("/health")
 def health_check() -> Dict[str, str]:
     return {"status": "ok"}
-
-

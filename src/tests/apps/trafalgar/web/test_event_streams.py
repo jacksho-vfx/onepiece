@@ -92,6 +92,8 @@ def _ingest_record(run_id: str = "run-001") -> IngestRunRecord:
         completed_at=datetime(2024, 1, 1, 12, 30, tzinfo=timezone.utc),
         report=report,
     )
+
+
 @pytest.fixture(autouse=True)
 def clear_overrides() -> Iterator[None]:
     render.app.dependency_overrides.clear()
@@ -107,7 +109,9 @@ def anyio_backend() -> str:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_render_job_stream_emits_created_events(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_render_job_stream_emits_created_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
@@ -135,7 +139,9 @@ async def test_render_job_stream_emits_created_events(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.anyio("asyncio")
-async def test_render_job_websocket_receives_updates(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_render_job_websocket_receives_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
@@ -180,7 +186,9 @@ async def test_ingest_stream_emits_run_updates(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.anyio("asyncio")
-async def test_ingest_websocket_receives_events(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_ingest_websocket_receives_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     provider = StaticIngestProvider([_ingest_record("run-ws")])
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(ingest, "INGEST_EVENTS", broadcaster)
