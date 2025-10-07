@@ -9,6 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from apps.trafalgar.web import render
+from apps.trafalgar.web.job_store import JobStore
 
 
 class StubJobAdapter:
@@ -178,3 +179,58 @@ async def test_cancel_job_reports_adapter_errors() -> None:
 
     assert response.status_code == 400
     assert "does not support job cancellation" in response.json()["detail"]
+
+
+@pytest.mark.anyio("asyncio")
+async def test_job_store_persists_records_between_services(tmp_path) -> None:
+    store_path = tmp_path / "jobs.json"
+    adapter = StubJobAdapter()
+    service = render.RenderSubmissionService(
+        {"mock": adapter}, job_store=JobStore(store_path)
+    )
+    render.app.dependency_overrides[render.get_render_service] = lambda: service
+
+    transport = ASGITransport(app=render.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        submit_response = await client.post("/jobs", json=_job_payload())
+        assert submit_response.status_code == 201
+        job_id = submit_response.json()["job_id"]
+
+    # New service instance should load the previously stored job.
+    new_service = render.RenderSubmissionService(
+        {}, job_store=JobStore(store_path)
+    )
+    render.app.dependency_overrides[render.get_render_service] = lambda: new_service
+
+    transport = ASGITransport(app=render.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        list_response = await client.get("/jobs")
+
+    assert list_response.status_code == 200
+    jobs = list_response.json()["jobs"]
+    assert [job["job_id"] for job in jobs] == [job_id]
+
+
+@pytest.mark.anyio("asyncio")
+async def test_history_limit_removes_old_jobs(tmp_path) -> None:
+    store_path = tmp_path / "jobs.json"
+    adapter = StubJobAdapter()
+    service = render.RenderSubmissionService(
+        {"mock": adapter}, job_store=JobStore(store_path), history_limit=1
+    )
+    render.app.dependency_overrides[render.get_render_service] = lambda: service
+
+    transport = ASGITransport(app=render.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        first = await client.post("/jobs", json=_job_payload())
+        assert first.status_code == 201
+        second = await client.post("/jobs", json=_job_payload())
+        assert second.status_code == 201
+        latest_job_id = second.json()["job_id"]
+
+    # Reload the service to ensure only the latest job remains persisted.
+    new_service = render.RenderSubmissionService(
+        {}, job_store=JobStore(store_path)
+    )
+    jobs = new_service.list_jobs()
+    assert [job.job_id for job in jobs] == [latest_job_id]
