@@ -72,11 +72,26 @@ class IngestRunProvider:
     def __init__(self, registry: IngestRunRegistry | None = None) -> None:
         self._registry = registry or IngestRunRegistry()
 
+    def _cached_runs(self, *, refresh: bool = False) -> list[IngestRunRecord]:
+        return cast(
+            list[IngestRunRecord], self._registry.load_all(force_refresh=refresh)
+        )
+
     def load_recent_runs(self, limit: int | None = None) -> Sequence[IngestRunRecord]:
-        return cast(Sequence[IngestRunRecord], self._registry.load_recent(limit))
+        records = self._cached_runs()
+        records.sort(
+            key=lambda record: record.started_at or datetime.min,
+            reverse=True,
+        )
+        if limit is None:
+            return records
+        return records[:limit]
 
     def get_run(self, run_id: str) -> IngestRunRecord | None:
-        return self._registry.get(run_id)
+        for record in self._cached_runs():
+            if record.run_id == run_id:
+                return record
+        return None
 
 
 class IngestRunService:

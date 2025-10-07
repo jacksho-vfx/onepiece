@@ -140,3 +140,14 @@ asyncio.run(consume_ingest_events())
 
 Slow consumers are automatically trimmed or disconnected to avoid unbounded
 buffers; reconnecting restores the stream.
+
+### Operational notes for ingest run lookups
+
+Operators frequently probe the ingest API for specific run identifiers when
+triaging ingest incidents. Trafalgar now memoises registry reads so repeated
+`404` lookups reuse the most recent snapshot instead of hammering the JSON
+registry on disk. The cache is invalidated whenever the registry file changes
+and gracefully falls back to the last good snapshot if a concurrent writer
+briefly produces malformed JSON. As a result, rapid-fire checks for missing
+runs no longer result in transient `500` errors while the registry is being
+updated.
