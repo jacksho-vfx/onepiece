@@ -7,6 +7,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
+from apps.trafalgar.web.security import (
+    AuthenticatedPrincipal,
+    ROLE_REVIEW_READ,
+    create_protected_router,
+    require_roles,
+)
 from libraries.review.dailies import DailiesClip, fetch_playlist_versions
 from libraries.shotgrid.api import ShotGridClient, ShotGridError
 
@@ -155,12 +161,14 @@ def _summarise_clips(clips: Iterable[DailiesClip]) -> dict[str, Any]:
 
 
 app = FastAPI(title="OnePiece Review API", version=TRAFALGAR_VERSION)
+router = create_protected_router()
 
 
-@app.get("/projects/{project_name}/playlists")
+@router.get("/projects/{project_name}/playlists")
 def list_playlists(
     project_name: str,
     client: ShotGridClient = Depends(get_shotgrid_client),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_REVIEW_READ)),
 ) -> JSONResponse:
     try:
         playlists = _list_project_playlists(client, project_name)
@@ -191,11 +199,12 @@ def list_playlists(
     return JSONResponse(content=response)
 
 
-@app.get("/projects/{project_name}/playlists/{playlist_name}")
+@router.get("/projects/{project_name}/playlists/{playlist_name}")
 def playlist_detail(
     project_name: str,
     playlist_name: str,
     client: ShotGridClient = Depends(get_shotgrid_client),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_REVIEW_READ)),
 ) -> JSONResponse:
     try:
         available = _list_project_playlists(client, project_name)
@@ -226,3 +235,6 @@ def playlist_detail(
         "clips": [_clip_to_dict(clip) for clip in clips],
     }
     return JSONResponse(content=response)
+
+
+app.include_router(router)

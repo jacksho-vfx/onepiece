@@ -35,6 +35,14 @@ from libraries.render.models import RenderAdapter
 
 from apps.trafalgar.web.events import EventBroadcaster
 from apps.trafalgar.web.job_store import JobStore
+from apps.trafalgar.web.security import (
+    AuthenticatedPrincipal,
+    ROLE_RENDER_MANAGE,
+    ROLE_RENDER_READ,
+    ROLE_RENDER_SUBMIT,
+    create_protected_router,
+    require_roles,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -672,6 +680,7 @@ def get_render_service() -> (
 
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
+router = create_protected_router()
 
 
 @app.exception_handler(RenderSubmissionError)
@@ -720,30 +729,35 @@ async def log_requests(
     return response
 
 
-@app.get("/")
-def root() -> Mapping[str, str]:
+@router.get("/")
+def root(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+) -> Mapping[str, str]:
     return {"message": "OnePiece Render API is running"}
 
 
-@app.get("/health")
+@router.get("/health")
 def health(
     service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> Mapping[str, Any]:
     return {"status": "ok", "render_history": service.get_metrics()}
 
 
-@app.get("/farms", response_model=FarmsResponse)
+@router.get("/farms", response_model=FarmsResponse)
 def farms(
     service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> FarmsResponse:
     entries = service.list_farms()
     return FarmsResponse(farms=entries)
 
 
-@app.post("/jobs")
+@router.post("/jobs")
 async def create_job(
     request: RenderJobRequest,
     service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_SUBMIT)),
 ) -> JSONResponse:
     logger.info(
         "render.api.submit.start",
@@ -787,9 +801,10 @@ async def create_job(
     return JSONResponse(status_code=201, content=payload.model_dump())
 
 
-@app.get("/jobs", response_model=JobsListResponse)
+@router.get("/jobs", response_model=JobsListResponse)
 def list_jobs(
     service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> JobsListResponse:
     jobs = service.list_jobs()
     return JobsListResponse(jobs=jobs)
@@ -812,13 +827,19 @@ async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
         await JOB_EVENTS.unsubscribe(queue)
 
 
-@app.get("/jobs/stream")
-async def stream_jobs(request: Request) -> StreamingResponse:
+@router.get("/jobs/stream")
+async def stream_jobs(
+    request: Request,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+) -> StreamingResponse:
     return StreamingResponse(_job_event_stream(request), media_type="text/event-stream")
 
 
-@app.websocket("/jobs/ws")
-async def jobs_websocket(websocket: WebSocket) -> None:
+@router.websocket("/jobs/ws")
+async def jobs_websocket(
+    websocket: WebSocket,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+) -> None:
     await websocket.accept()
     queue = await JOB_EVENTS.subscribe()
     try:
@@ -831,9 +852,11 @@ async def jobs_websocket(websocket: WebSocket) -> None:
         await JOB_EVENTS.unsubscribe(queue)
 
 
-@app.get("/jobs/{job_id}", response_model=RenderJobMetadata)
+@router.get("/jobs/{job_id}", response_model=RenderJobMetadata)
 def get_job(
-    job_id: str, service: RenderSubmissionService = Depends(get_render_service)
+    job_id: str,
+    service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> RenderJobMetadata:
     try:
         return service.get_job(job_id)
@@ -841,11 +864,16 @@ def get_job(
         raise HTTPException(status_code=404, detail="Job not found.") from exc
 
 
-@app.delete("/jobs/{job_id}", response_model=RenderJobMetadata)
+@router.delete("/jobs/{job_id}", response_model=RenderJobMetadata)
 def cancel_job(
-    job_id: str, service: RenderSubmissionService = Depends(get_render_service)
+    job_id: str,
+    service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_MANAGE)),
 ) -> RenderJobMetadata:
     try:
         return service.cancel_job(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found.") from exc
+
+
+app.include_router(router)

@@ -24,6 +24,12 @@ from starlette.websockets import WebSocketDisconnect
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from apps.trafalgar.web.events import EventBroadcaster
+from apps.trafalgar.web.security import (
+    AuthenticatedPrincipal,
+    ROLE_INGEST_READ,
+    create_protected_router,
+    require_roles,
+)
 from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
@@ -161,6 +167,7 @@ def get_ingest_run_service() -> IngestRunService:  # pragma: no cover - runtime 
 
 
 app = FastAPI(title="OnePiece Ingest Runs", version=TRAFALGAR_VERSION)
+router = create_protected_router()
 
 
 @app.middleware("http")
@@ -178,15 +185,18 @@ async def log_requests(
     return response
 
 
-@app.get("/")
-def root() -> dict[str, str]:
+@router.get("/")
+def root(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
+) -> dict[str, str]:
     return {"message": "OnePiece Ingest API is running"}
 
 
-@app.get("/runs")
+@router.get("/runs")
 async def list_runs(
     limit: int = Query(20, ge=1, le=100),
     service: IngestRunService = Depends(get_ingest_run_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
 ) -> JSONResponse:
     payload = service.list_runs(limit)
     return JSONResponse(content=payload)
@@ -211,15 +221,21 @@ async def _ingest_event_stream(
         await INGEST_EVENTS.unsubscribe(queue)
 
 
-@app.get("/runs/stream")
-async def stream_runs(request: Request) -> StreamingResponse:
+@router.get("/runs/stream")
+async def stream_runs(
+    request: Request,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
+) -> StreamingResponse:
     return StreamingResponse(
         _ingest_event_stream(request), media_type="text/event-stream"
     )
 
 
-@app.websocket("/runs/ws")
-async def runs_websocket(websocket: WebSocket) -> None:
+@router.websocket("/runs/ws")
+async def runs_websocket(
+    websocket: WebSocket,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
+) -> None:
     await websocket.accept()
     queue = await INGEST_EVENTS.subscribe()
     try:
@@ -232,10 +248,11 @@ async def runs_websocket(websocket: WebSocket) -> None:
         await INGEST_EVENTS.unsubscribe(queue)
 
 
-@app.get("/runs/{run_id}")
+@router.get("/runs/{run_id}")
 async def get_run(
     run_id: str,
     service: IngestRunService = Depends(get_ingest_run_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
 ) -> JSONResponse:
     try:
         payload = service.get_run(run_id)
@@ -244,6 +261,11 @@ async def get_run(
     return JSONResponse(content=payload)
 
 
-@app.get("/health")
-def health_check() -> Dict[str, str]:
+@router.get("/health")
+def health_check(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
+) -> Dict[str, str]:
     return {"status": "ok"}
+
+
+app.include_router(router)
