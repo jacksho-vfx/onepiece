@@ -559,9 +559,7 @@ class RenderSubmissionService:
     def _load_jobs(self) -> None:
         if not self._store:
             return
-        loaded_records = sorted(
-            self._store.load(), key=lambda entry: entry.created_at
-        )
+        loaded_records = sorted(self._store.load(), key=lambda entry: entry.created_at)
         self._jobs = OrderedDict((record.job_id, record) for record in loaded_records)
         previous_count = len(self._jobs)
         self._enforce_history_limit()
