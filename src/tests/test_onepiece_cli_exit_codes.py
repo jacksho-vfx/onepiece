@@ -36,7 +36,11 @@ def _install_mock_adapter(
     def _adapter(**_: Any) -> dict[str, Any]:
         if adapter_error is not None:
             raise adapter_error
-        return adapter_result or {"job_id": "job-1", "status": "queued", "farm_type": "mock"}
+        return adapter_result or {
+            "job_id": "job-1",
+            "status": "queued",
+            "farm_type": "mock",
+        }
 
     monkeypatch.setitem(submit_module.FARM_CAPABILITY_PROVIDERS, "mock", _capabilities)
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", _adapter)
