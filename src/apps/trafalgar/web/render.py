@@ -20,10 +20,12 @@ from starlette.websockets import WebSocketDisconnect
 from apps.onepiece.render.submit import (
     DCC_CHOICES,
     FARM_ADAPTERS,
+    _get_adapter_capabilities,
     _resolve_priority_and_chunk_size,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import (
+    AdapterCapabilities,
     RenderAdapterUnavailableError,
     RenderSubmissionError,
     SubmissionResult,
@@ -43,6 +45,67 @@ FARM_DESCRIPTIONS: Mapping[str, str] = {
 }
 
 
+class PriorityCapabilityDescriptor(BaseModel):
+    """Describe the priority range supported by a render adapter."""
+
+    default: int | None = Field(
+        None,
+        description="Default priority applied when a request omits an explicit value.",
+    )
+    minimum: int | None = Field(
+        None, description="Lowest accepted priority value for the adapter."
+    )
+    maximum: int | None = Field(
+        None, description="Highest accepted priority value for the adapter."
+    )
+
+
+class ChunkingCapabilityDescriptor(BaseModel):
+    """Describe how a render adapter handles frame chunk sizing."""
+
+    enabled: bool = Field(
+        False,
+        description="Whether the adapter supports chunking frames into smaller batches.",
+    )
+    minimum: int | None = Field(
+        None,
+        description="Smallest chunk size accepted when chunking is enabled.",
+    )
+    maximum: int | None = Field(
+        None,
+        description="Largest chunk size accepted when chunking is enabled.",
+    )
+    default: int | None = Field(
+        None, description="Default chunk size applied when chunking is enabled."
+    )
+
+
+class CancellationCapabilityDescriptor(BaseModel):
+    """Describe whether an adapter exposes job cancellation APIs."""
+
+    supported: bool = Field(
+        False,
+        description="Whether the adapter implements cancellation for in-flight jobs.",
+    )
+
+
+class FarmCapabilities(BaseModel):
+    """Structured capability metadata exposed for an adapter."""
+
+    priority: PriorityCapabilityDescriptor = Field(
+        default_factory=PriorityCapabilityDescriptor,
+        description="Priority handling characteristics for the adapter.",
+    )
+    chunking: ChunkingCapabilityDescriptor = Field(
+        default_factory=ChunkingCapabilityDescriptor,
+        description="Chunk sizing behaviour supported by the adapter.",
+    )
+    cancellation: CancellationCapabilityDescriptor = Field(
+        default_factory=CancellationCapabilityDescriptor,
+        description="Cancellation support advertised by the adapter.",
+    )
+
+
 class FarmInfo(BaseModel):
     """Metadata describing a render farm adapter."""
 
@@ -50,12 +113,52 @@ class FarmInfo(BaseModel):
     description: str = Field(
         ..., description="Human readable description of the adapter."
     )
+    capabilities: FarmCapabilities = Field(
+        default_factory=FarmCapabilities,
+        description="Capability descriptors declared by the adapter.",
+    )
 
 
 class FarmsResponse(BaseModel):
     """Response payload enumerating available render farm adapters."""
 
     farms: Sequence[FarmInfo]
+
+
+def _build_farm_capabilities(farm: str) -> FarmCapabilities:
+    """Translate adapter capability metadata into API descriptors."""
+
+    try:
+        raw_capabilities: AdapterCapabilities = _get_adapter_capabilities(farm)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "render.farm.capabilities.unavailable",
+            farm=farm,
+            error=str(exc),
+        )
+        return FarmCapabilities()
+
+    chunk_enabled = raw_capabilities.get("chunk_size_enabled", False)
+    default_chunk = raw_capabilities.get("default_chunk_size")
+    if not chunk_enabled:
+        default_chunk = None
+
+    return FarmCapabilities(
+        priority=PriorityCapabilityDescriptor(
+            default=raw_capabilities.get("default_priority", 50),
+            minimum=raw_capabilities.get("priority_min"),
+            maximum=raw_capabilities.get("priority_max"),
+        ),
+        chunking=ChunkingCapabilityDescriptor(
+            enabled=chunk_enabled,
+            minimum=raw_capabilities.get("chunk_size_min"),
+            maximum=raw_capabilities.get("chunk_size_max"),
+            default=default_chunk,
+        ),
+        cancellation=CancellationCapabilityDescriptor(
+            supported=raw_capabilities.get("cancellation_supported", False),
+        ),
+    )
 
 
 class RenderJobRequest(BaseModel):
@@ -255,7 +358,14 @@ class RenderSubmissionService:
             description = FARM_DESCRIPTIONS.get(
                 name, f"Render farm adapter registered as '{name}'."
             )
-            entries.append(FarmInfo(name=name, description=description))
+            capabilities = _build_farm_capabilities(name)
+            entries.append(
+                FarmInfo(
+                    name=name,
+                    description=description,
+                    capabilities=capabilities,
+                )
+            )
         return entries
 
     def submit_job(self, request: RenderJobRequest) -> SubmissionResult:

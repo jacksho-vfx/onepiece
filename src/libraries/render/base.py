@@ -29,6 +29,7 @@ class AdapterCapabilities(TypedDict, total=False):
     chunk_size_min: int
     chunk_size_max: int
     default_chunk_size: int
+    cancellation_supported: bool
 
 
 class RenderSubmissionError(RuntimeError):
