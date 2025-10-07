@@ -13,6 +13,11 @@ from typer.testing import CliRunner
 from apps.onepiece.app import app
 from libraries.render.base import RenderSubmissionError
 from apps.onepiece.render import submit as submit_module
+from apps.onepiece.utils.errors import (
+    ExitCode,
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 
 runner = CliRunner()
 
@@ -162,7 +167,9 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     )
 
     assert result.exit_code == 1
-    assert "Render submission failed: Adapter failure" in result.stderr
+    assert isinstance(result.exception, OnePieceExternalServiceError)
+    assert result.exception.exit_code == ExitCode.EXTERNAL
+    assert "Render submission failed: Adapter failure" in str(result.exception)
 
     events = {(level, event) for level, event, _ in log_events}
     assert ("info", "render.submit.start") in events
@@ -219,7 +226,9 @@ def test_render_submit_priority_validation(
     )
 
     assert result.exit_code != 0
-    assert "supported maximum" in result.stderr
+    assert isinstance(result.exception, OnePieceValidationError)
+    assert result.exception.exit_code == ExitCode.VALIDATION
+    assert "supported maximum" in str(result.exception)
 
 
 def test_render_preset_crud_flow(
