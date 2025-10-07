@@ -118,7 +118,9 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert versions[0]["code"] == valid.stem
 
 
-def test_ingest_service_returns_dry_run_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_ingest_service_returns_dry_run_report(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     caplog.set_level(logging.INFO)
     incoming = tmp_path / "incoming"
     incoming.mkdir()
