@@ -85,8 +85,15 @@
       }
       .metric p {
         margin: 0;
+      }
+      .metric .metric-value {
         font-size: 1.5rem;
         font-weight: 700;
+      }
+      .metric .metric-detail {
+        margin-top: 0.35rem;
+        font-size: 0.9rem;
+        color: #52606d;
       }
     </style>
   </head>
@@ -102,10 +109,17 @@
     <section id="status-overview">
       <h2>Overall status</h2>
       <div class="grid" id="status-metrics">
-        <div class="metric"><h3>Projects</h3><p id="metric-projects">–</p></div>
-        <div class="metric"><h3>Shots</h3><p id="metric-shots">–</p></div>
-        <div class="metric"><h3>Versions</h3><p id="metric-versions">–</p></div>
-        <div class="metric"><h3>Open errors</h3><p id="metric-errors">–</p></div>
+        <div class="metric"><h3>Projects</h3><p class="metric-value" id="metric-projects">–</p></div>
+        <div class="metric"><h3>Shots</h3><p class="metric-value" id="metric-shots">–</p></div>
+        <div class="metric"><h3>Versions</h3><p class="metric-value" id="metric-versions">–</p></div>
+        <div class="metric"><h3>Open errors</h3><p class="metric-value" id="metric-errors">–</p></div>
+        <div class="metric">
+          <h3>Ingest runs (last 10)</h3>
+          <p class="metric-value" id="metric-ingest-total">–</p>
+          <p class="metric-detail" id="metric-ingest-breakdown">Successful: – • Failed: – • Running: –</p>
+        </div>
+        <div class="metric"><h3>Last ingest success</h3><p class="metric-value" id="metric-ingest-last-success">–</p></div>
+        <div class="metric"><h3>Failure streak</h3><p class="metric-value" id="metric-ingest-failure-streak">–</p></div>
       </div>
     </section>
 
@@ -186,11 +200,69 @@
         return await response.json();
       }
 
+      function normaliseCount(value, fallback = '–') {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return Math.max(0, Math.trunc(value)).toString();
+        }
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return fallback;
+          }
+          const numeric = Number(trimmed);
+          if (Number.isFinite(numeric)) {
+            return Math.max(0, Math.trunc(numeric)).toString();
+          }
+          return trimmed;
+        }
+        return fallback;
+      }
+
+      function formatLastSuccess(value) {
+        if (!value) {
+          return 'No successful runs yet';
+        }
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+          try {
+            return parsed.toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            });
+          } catch (error) {
+            console.error('Failed to format ingest last success timestamp', error);
+          }
+        }
+        return typeof value === 'string' ? value : 'Unknown';
+      }
+
       function renderStatus(data) {
         document.getElementById('metric-projects').textContent = data.projects ?? '0';
         document.getElementById('metric-shots').textContent = data.shots ?? '0';
         document.getElementById('metric-versions').textContent = data.versions ?? '0';
         document.getElementById('metric-errors').textContent = data.errors ?? '0';
+
+        const ingest = (data && data.ingest) || {};
+        const counts = ingest.counts || {};
+        const total = normaliseCount(counts.total);
+        const successful = normaliseCount(counts.successful);
+        const failed = normaliseCount(counts.failed);
+        const running = normaliseCount(counts.running);
+
+        document.getElementById('metric-ingest-total').textContent = total;
+        document.getElementById(
+          'metric-ingest-breakdown',
+        ).textContent = `Successful: ${successful} • Failed: ${failed} • Running: ${running}`;
+
+        const lastSuccess = formatLastSuccess(ingest.last_success_at);
+        document.getElementById('metric-ingest-last-success').textContent = lastSuccess;
+
+        const failureStreakValue = normaliseCount(ingest.failure_streak, '0');
+        const streakNumber = Number.parseInt(failureStreakValue, 10);
+        const failureText = Number.isNaN(streakNumber)
+          ? failureStreakValue
+          : `${streakNumber} run${streakNumber === 1 ? '' : 's'}`;
+        document.getElementById('metric-ingest-failure-streak').textContent = failureText;
       }
 
       function renderProjectSummary(statusTotals) {

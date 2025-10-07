@@ -74,3 +74,32 @@ async def test_status_includes_ingest_summary_fields() -> None:
     assert payload["shots"] == 2
     assert payload["versions"] == 3
     assert payload["errors"] == 1
+
+
+@pytest.mark.anyio("asyncio")
+async def test_status_handles_partial_ingest_summary() -> None:
+    ingest_summary: Mapping[str, Any] = {
+        "counts": {"successful": "2", "failed": 1},
+        "failure_streak": None,
+    }
+    facade = StubIngestFacade(ingest_summary)
+
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = (
+        lambda: StubShotGridService()
+    )
+    dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
+        lambda: StubReconcileService()
+    )
+    dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (
+        lambda: facade
+    )
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "ingest" in payload
+    assert payload["ingest"]["counts"] == {"successful": "2", "failed": 1}
+    assert payload["ingest"].get("failure_streak") is None
