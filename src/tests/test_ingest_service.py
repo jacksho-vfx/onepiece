@@ -2,8 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from libraries.ingest.service import MediaIngestService, parse_media_filename
-from libraries.shotgrid.client import ShotgridClient
+from libraries.ingest.service import (
+    MediaIngestService,
+    ShotgridAuthenticationError,
+    ShotgridConnectivityError,
+    ShotgridSchemaError,
+    parse_media_filename,
+)
+from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
 
 
 class DummyUploader:
@@ -12,6 +18,21 @@ class DummyUploader:
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self.uploads.append((file_path, bucket, key))
+
+
+class _FailingShotgridClient:
+    def __init__(self, exception: Exception) -> None:
+        self._exception = exception
+
+    def register_version(
+        self,
+        *,
+        project_name: str,
+        shot_code: str,
+        file_path: Path,
+        description: str | None = None,
+    ) -> dict[str, str]:
+        raise self._exception
 
 
 def test_parse_media_filename_success() -> None:
@@ -72,3 +93,61 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert len(versions) == 1
     assert versions[0]["shot"] == "ep001_sc01_0001"
     assert versions[0]["code"] == valid.stem
+
+
+def _prepare_ingest_folder(tmp_path: Path) -> Path:
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    valid = incoming / "SHOW01_ep001_sc01_0001_comp.mov"
+    valid.write_bytes(b"data")
+    return incoming
+
+
+def _make_service(shotgrid: ShotgridClient) -> MediaIngestService:
+    uploader = DummyUploader()
+    return MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+    )
+
+
+def test_ingest_service_raises_authentication_error(tmp_path: Path) -> None:
+    incoming = _prepare_ingest_folder(tmp_path)
+    service = _make_service(_FailingShotgridClient(PermissionError("invalid api key")))
+
+    with pytest.raises(ShotgridAuthenticationError) as excinfo:
+        service.ingest_folder(incoming, recursive=False)
+
+    assert "Check the API key" in str(excinfo.value)
+    assert "retry" in str(excinfo.value).lower()
+
+
+def test_ingest_service_raises_schema_error(tmp_path: Path) -> None:
+    incoming = _prepare_ingest_folder(tmp_path)
+    service = _make_service(_FailingShotgridClient(ValueError("missing Shot entity")))
+
+    with pytest.raises(ShotgridSchemaError) as excinfo:
+        service.ingest_folder(incoming, recursive=False)
+
+    message = str(excinfo.value)
+    assert "rejected the version payload" in message
+    assert "retry" in message.lower()
+
+
+def test_ingest_service_raises_connectivity_error(tmp_path: Path) -> None:
+    incoming = _prepare_ingest_folder(tmp_path)
+    service = _make_service(
+        _FailingShotgridClient(ShotgridOperationError("timed out communicating"))
+    )
+
+    with pytest.raises(ShotgridConnectivityError) as excinfo:
+        service.ingest_folder(incoming, recursive=False)
+
+    message = str(excinfo.value)
+    assert "ShotGrid did not respond" in message
+    assert "retry" in message.lower()
