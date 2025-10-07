@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Callable, List, Optional, Union
@@ -27,6 +28,7 @@ def s5_sync(
     include: Optional[List[str]] = None,
     exclude: Optional[List[str]] = None,
     progress_callback: Callable[[str], None] | None = None,
+    profile: Optional[str] = None,
 ) -> None:
     """
     Sync a folder to/from S3 bucket using s5cmd with dry-run and filters.
@@ -51,11 +53,17 @@ def s5_sync(
 
     log.info("running_s5cmd", command=" ".join(cmd))
 
+    popen_env = None
+    if profile is not None:
+        popen_env = os.environ.copy()
+        popen_env["AWS_PROFILE"] = profile
+
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=popen_env,
     )
 
     stdout_lines: list[str] = []

@@ -141,6 +141,7 @@ def publish(
         bucket=bucket,
         show_code=show_code,
         show_type=resolved_show_type,
+        profile=profile,
         direct_s3_path=direct_upload_path,
         dependency_callback=capture_report if dependency_summary else None,
     )

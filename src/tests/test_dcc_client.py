@@ -118,6 +118,7 @@ def test_publish_scene_supports_direct_upload(
         bucket="libraries-bucket",
         show_code="OP",
         show_type="vfx",
+        profile="artist-profile",
         direct_s3_path="s3://custom/path",
         dependency_callback=callback,
         plugin_inventory=["CaraVR", "OCIO"],
@@ -135,6 +136,7 @@ def test_publish_scene_supports_direct_upload(
         dry_run=False,
         include=None,
         exclude=None,
+        profile="artist-profile",
     )
 
     metadata_path = expected_package / "metadata.json"

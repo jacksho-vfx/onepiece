@@ -75,6 +75,7 @@ def test_s5_sync_upload_command_order(mock_popen: Any) -> None:
     ]
 
     assert mock_popen.call_args.args[0] == expected_cmd
+    assert mock_popen.call_args.kwargs["env"] is None
 
 
 @patch("libraries.aws.s5_sync.subprocess.Popen")
@@ -94,3 +95,18 @@ def test_s5_sync_download_command_order(mock_popen: Any) -> None:
     ]
 
     assert mock_popen.call_args.args[0] == expected_cmd
+
+
+@patch("libraries.aws.s5_sync.subprocess.Popen")
+def test_s5_sync_sets_profile_env(mock_popen: Any) -> None:
+    mock_popen.return_value = DummyProcess(returncode=0, stdout="upload file\n")
+
+    s5_sync(
+        source=UPath("/local/path"),
+        destination="s3://bucket/context",
+        profile="artist",
+    )
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env is not None
+    assert env["AWS_PROFILE"] == "artist"
