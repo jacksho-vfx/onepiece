@@ -142,9 +142,23 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
     dashboard.get_shotgrid_service.cache_clear()
+    for attr in (
+        "dashboard_cache_ttl",
+        "dashboard_cache_max_records",
+        "dashboard_cache_max_projects",
+    ):
+        if hasattr(dashboard.app.state, attr):
+            delattr(dashboard.app.state, attr)
     yield
     dashboard.app.dependency_overrides.clear()
     dashboard.get_shotgrid_service.cache_clear()
+    for attr in (
+        "dashboard_cache_ttl",
+        "dashboard_cache_max_records",
+        "dashboard_cache_max_projects",
+    ):
+        if hasattr(dashboard.app.state, attr):
+            delattr(dashboard.app.state, attr)
 
 
 @pytest.fixture
@@ -201,6 +215,60 @@ def test_shotgrid_service_skips_cache_when_dataset_exceeds_limit() -> None:
     first = service.overall_status()
     assert first["versions"] == 2
     assert client.calls == 1
+
+    second = service.overall_status()
+    assert second["versions"] == 2
+    assert client.calls == 2
+
+
+def test_shotgrid_service_skips_cache_when_project_count_exceeds_limit() -> None:
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "beta", "shot": "EP01_SC002_SH0010", "version": "v002"},
+    ]
+    client = DummyShotgridClient(versions)
+    clock = FakeMonotonic()
+
+    service = dashboard.ShotGridService(
+        client,
+        known_projects={"alpha", "beta"},
+        cache_ttl=30.0,
+        cache_max_records=10,
+        cache_max_projects=1,
+        time_provider=clock,
+    )
+
+    first = service.overall_status()
+    assert first["versions"] == 2
+    assert client.calls == 1
+
+    second = service.overall_status()
+    assert second["versions"] == 2
+    assert client.calls == 2
+
+
+def test_shotgrid_service_manual_invalidation_clears_cache() -> None:
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "alpha", "shot": "EP01_SC002_SH0010", "version": "v002"},
+    ]
+    client = DummyShotgridClient(versions)
+    clock = FakeMonotonic()
+
+    service = dashboard.ShotGridService(
+        client,
+        known_projects={"alpha"},
+        cache_ttl=60.0,
+        cache_max_records=10,
+        cache_max_projects=10,
+        time_provider=clock,
+    )
+
+    first = service.overall_status()
+    assert first["versions"] == 2
+    assert client.calls == 1
+
+    service.invalidate_cache()
 
     second = service.overall_status()
     assert second["versions"] == 2
@@ -406,6 +474,94 @@ async def test_metrics_endpoint_combines_dashboards(
     assert render_facade.calls == 1
     assert review_facade.project_calls
     assert set(review_facade.project_calls[0]) == {"alpha", "beta"}
+
+
+@pytest.mark.anyio("asyncio")
+async def test_admin_cache_endpoint_returns_active_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "admin-token")
+
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+    ]
+
+    service = dashboard.ShotGridService(
+        DummyShotgridClient(versions),
+        cache_ttl=45.0,
+        cache_max_records=123,
+        cache_max_projects=7,
+    )
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    headers = {"Authorization": "Bearer admin-token"}
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/admin/cache", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ttl_seconds"] == pytest.approx(45.0)
+    assert payload["max_records"] == 123
+    assert payload["max_projects"] == 7
+
+
+@pytest.mark.anyio("asyncio")
+async def test_admin_cache_endpoint_updates_settings_and_flushes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "admin-token")
+
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "alpha", "shot": "EP01_SC002_SH0010", "version": "v002"},
+    ]
+
+    client = DummyShotgridClient(versions)
+    clock = FakeMonotonic()
+
+    service = dashboard.ShotGridService(
+        client,
+        known_projects={"alpha"},
+        cache_ttl=60.0,
+        cache_max_records=20,
+        cache_max_projects=5,
+        time_provider=clock,
+    )
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = lambda: service
+
+    # Prime the cache to ensure the flush path clears it.
+    first = service.overall_status()
+    assert first["versions"] == 2
+    assert client.calls == 1
+
+    transport = ASGITransport(app=dashboard.app)
+    headers = {"Authorization": "Bearer admin-token"}
+    payload = {
+        "ttl_seconds": 5.5,
+        "max_records": 2,
+        "max_projects": 1,
+        "flush": True,
+    }
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as http_client:
+        response = await http_client.post("/admin/cache", json=payload, headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ttl_seconds"] == pytest.approx(5.5)
+    assert payload["max_records"] == 2
+    assert payload["max_projects"] == 1
+
+    assert getattr(dashboard.app.state, "dashboard_cache_ttl") == pytest.approx(5.5)
+    assert getattr(dashboard.app.state, "dashboard_cache_max_records") == 2
+    assert getattr(dashboard.app.state, "dashboard_cache_max_projects") == 1
+
+    # Cache was flushed, so the next call should hit ShotGrid again.
+    second = service.overall_status()
+    assert second["versions"] == 2
+    assert client.calls == 2
 
 
 @pytest.mark.anyio("asyncio")

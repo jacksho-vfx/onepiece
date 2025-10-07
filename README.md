@@ -47,6 +47,7 @@ These resources provide a safe sandbox to explore the command surface before poi
 
 - **Dashboard data resilience** – Project discovery now combines environment configuration with on-the-fly ShotGrid lookups and caches the results locally so teams can keep browsing known shows even if ShotGrid is offline.
 - **Configurable ShotGrid caching** – Version queries honour TTL and record-count limits, dramatically reducing API pressure for frequently refreshed dashboards while falling back automatically when datasets grow beyond safe cache sizes.
+- **Runtime cache controls** – Authenticated operators can inspect or tune the dashboard cache without restarting the service, including TTLs, record thresholds, project limits, and manual flushes for stale data.
 - **Normalised status metrics** – Dashboard summaries collapse mixed-case and abbreviated ShotGrid statuses into canonical buckets, ensuring the overall status, per-project totals, and episode breakdowns tell the same story.
 - **Delivery manifest optimisation** – Delivery payloads prefer upstream manifest data when provided, regenerate manifests only once per delivery, and gracefully handle packages that arrive without entry lists so operators still get a full audit trail.
 - **Render job management** – The render FastAPI app now tracks submitted jobs in memory, exposes endpoints to list and inspect them, and supports adapter-powered cancellation, mirroring the CLI workflow for real-time follow-up.

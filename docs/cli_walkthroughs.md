@@ -4,6 +4,27 @@ These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. T
 
 > **New in Trafalgar v0.7.0:** The Trafalgar dashboard now auto-discovers projects, caches ShotGrid queries with configurable TTLs, and exposes render job management endpoints so you can rehearse full production flows locally even when upstream systems are unavailable.
 
+### Adjusting dashboard cache behaviour
+
+The dashboard cache limits can be tuned without restarting the service:
+
+- Set the environment variables `ONEPIECE_DASHBOARD_CACHE_TTL`, `ONEPIECE_DASHBOARD_CACHE_MAX_RECORDS`, and `ONEPIECE_DASHBOARD_CACHE_MAX_PROJECTS` before launching the app to define the default TTL (in seconds), the maximum number of cached ShotGrid versions, and the maximum number of distinct projects that can be cached.
+- At runtime, authenticate with the dashboard token and call the admin endpoints to inspect or update the cache:
+
+  ```bash
+  # Inspect the current cache configuration
+  curl -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+    http://localhost:8000/admin/cache
+
+  # Reduce the TTL to 15 seconds, cap the cache to 2 projects, and flush existing entries
+  curl -X POST -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"ttl_seconds": 15, "max_projects": 2, "flush": true}' \
+    http://localhost:8000/admin/cache
+  ```
+
+The update endpoint validates inputs and immediately applies the new limits to the in-memory cache used by ShotGrid queries, making it easy to evict stale data or throttle memory usage when operators notice the dataset growing.
+
 ## 1. Validate a workstation environment
 
 1. Export temporary environment variables (replace the values with your sandbox credentials):
