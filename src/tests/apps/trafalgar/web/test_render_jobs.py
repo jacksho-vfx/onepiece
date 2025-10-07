@@ -30,10 +30,15 @@ class StubJobAdapter:
         dcc: str,
         priority: int,
         user: str,
+        chunk_size: int | None,
     ) -> dict[str, str]:
         self._counter += 1
         job_id = f"stub-{self._counter}"
-        self._jobs[job_id] = {"status": "submitted", "message": None}
+        self._jobs[job_id] = {
+            "status": "submitted",
+            "message": None,
+            "chunk_size": chunk_size,
+        }
         return {"job_id": job_id, "status": "submitted", "farm_type": "stub"}
 
     def set_status(self, job_id: str, status: str, message: str | None = None) -> None:

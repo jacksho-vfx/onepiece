@@ -19,6 +19,18 @@ class SubmissionResult(SubmissionResultRequired, total=False):
     message: str
 
 
+class AdapterCapabilities(TypedDict, total=False):
+    """Describe configurable behaviour supported by a render adapter."""
+
+    default_priority: int
+    priority_min: int
+    priority_max: int
+    chunk_size_enabled: bool
+    chunk_size_min: int
+    chunk_size_max: int
+    default_chunk_size: int
+
+
 class RenderSubmissionError(RuntimeError):
     """Raised when a render job cannot be submitted."""
 
@@ -35,11 +47,13 @@ class RenderSubmitter(Protocol):
         dcc: str,
         priority: int,
         user: str,
+        chunk_size: int | None,
     ) -> SubmissionResult:
         """Submit a job to a render farm and return identifying metadata."""
 
 
 __all__ = [
+    "AdapterCapabilities",
     "RenderSubmissionError",
     "RenderSubmitter",
     "SubmissionResult",

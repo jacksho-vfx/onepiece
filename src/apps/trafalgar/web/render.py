@@ -14,7 +14,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from starlette.responses import Response
 
-from apps.onepiece.render.submit import DCC_CHOICES, FARM_ADAPTERS
+from apps.onepiece.render.submit import (
+    DCC_CHOICES,
+    FARM_ADAPTERS,
+    _resolve_priority_and_chunk_size,
+)
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import RenderSubmissionError, SubmissionResult
 from libraries.render.models import RenderAdapter
@@ -64,8 +68,15 @@ class RenderJobRequest(BaseModel):
         "mock",
         description="Render farm to submit to (see /farms for the available adapters).",
     )
-    priority: int = Field(
-        50, ge=0, description="Render job priority communicated to the adapter."
+    priority: int | None = Field(
+        None,
+        ge=0,
+        description="Render job priority communicated to the adapter (defaults to adapter metadata).",
+    )
+    chunk_size: int | None = Field(
+        None,
+        ge=1,
+        description="Frames per chunk to dispatch when supported by the adapter.",
     )
     user: str | None = Field(
         None,
@@ -221,22 +232,32 @@ class RenderSubmissionService:
         if adapter is None:
             raise RenderSubmissionError(f"Unknown render farm '{request.farm}'.")
         resolved_user = request.user or getpass.getuser()
+        resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
+            farm=request.farm,
+            priority=request.priority,
+            chunk_size=request.chunk_size,
+        )
         result = adapter(
             scene=request.scene,
             frames=request.frames,
             output=request.output,
             dcc=request.dcc,
-            priority=request.priority,
+            priority=resolved_priority,
             user=resolved_user,
+            chunk_size=resolved_chunk,
         )
         job_id = result.get("job_id", "")
+        stored_request = request.model_copy(
+            update={"priority": resolved_priority, "chunk_size": resolved_chunk},
+            deep=True,
+        )
         record = _JobRecord(
             job_id=job_id,
             farm=request.farm,
             farm_type=result.get("farm_type", request.farm),
             status=result.get("status", "unknown"),
             message=result.get("message"),
-            request=request.model_copy(deep=True),
+            request=stored_request,
         )
         if job_id:
             self._jobs[job_id] = record

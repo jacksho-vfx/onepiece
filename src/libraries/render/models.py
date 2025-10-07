@@ -1,5 +1,7 @@
 from typing import Protocol
-from libraries.render.base import SubmissionResult
+from collections.abc import Callable
+
+from libraries.render.base import AdapterCapabilities, SubmissionResult
 
 
 class RenderAdapter(Protocol):
@@ -12,4 +14,11 @@ class RenderAdapter(Protocol):
         dcc: str,
         priority: int,
         user: str,
+        chunk_size: int | None,
     ) -> SubmissionResult: ...
+
+
+CapabilityProvider = Callable[[], AdapterCapabilities]
+
+
+__all__ = ["RenderAdapter", "CapabilityProvider"]
