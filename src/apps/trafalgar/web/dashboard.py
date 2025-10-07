@@ -12,8 +12,10 @@ from typing import Any, Awaitable, Callable, Hashable, Iterable, Mapping, Sequen
 from urllib.parse import quote
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.delivery.manifest import get_manifest_data
@@ -22,6 +24,11 @@ from .ingest_adapter import (
     IngestRunDashboardFacade,
     get_ingest_dashboard_facade,
 )
+from .render import RenderSubmissionService, get_render_service
+from . import review as review_module
+from libraries.review.dailies import fetch_playlist_versions
+from libraries.review.dailies import DailiesClip
+from libraries.shotgrid.api import ShotGridError
 
 logger = structlog.get_logger(__name__)
 
@@ -37,6 +44,27 @@ STATUS_CANONICAL_PREFIXES: OrderedDict[str, str] = OrderedDict(
         "final": "published",
     }
 )
+
+
+_DASHBOARD_TOKEN_ENV = "TRAFALGAR_DASHBOARD_TOKEN"
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def require_dashboard_auth(
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
+) -> None:
+    """Validate bearer token credentials for privileged dashboard endpoints."""
+
+    expected_token = os.getenv(_DASHBOARD_TOKEN_ENV)
+    if not expected_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Dashboard authentication token is not configured.",
+        )
+
+    provided = credentials.credentials if credentials else None
+    if not provided or provided != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid authentication token.")
 
 
 # ---------------------------------------------------------------------------
@@ -614,6 +642,186 @@ class DeliveryProvider:
         return []
 
 
+class RenderDashboardFacade:
+    """Aggregate render job metrics for dashboard consumption."""
+
+    def __init__(self, service: RenderSubmissionService | None = None) -> None:
+        self._service = service or get_render_service()
+
+    def summarise_jobs(self) -> dict[str, Any]:
+        jobs = self._service.list_jobs()
+        status_counts: Counter[str] = Counter()
+        farm_counts: Counter[str] = Counter()
+        for job in jobs:
+            status_counts[str(job.status).lower()] += 1
+            farm_counts[str(job.farm)] += 1
+        return {
+            "jobs": len(jobs),
+            "by_status": dict(sorted(status_counts.items())),
+            "by_farm": dict(sorted(farm_counts.items())),
+        }
+
+
+class ReviewDashboardFacade:
+    """Summarise review playlist activity across projects."""
+
+    def __init__(self, client: Any | None = None) -> None:
+        self._client = client or review_module.get_shotgrid_client()
+
+    def summarise_projects(self, project_names: Iterable[str]) -> dict[str, Any]:
+        project_summaries: list[dict[str, Any]] = []
+        total_playlists = 0
+        total_clips = 0
+        total_shots = 0
+        total_duration = 0.0
+
+        for project in project_names:
+            try:
+                playlists = review_module._list_project_playlists(  # noqa: SLF001
+                    self._client, project
+                )
+            except ShotGridError as exc:
+                logger.warning(
+                    "dashboard.review.playlists_failed",
+                    project=project,
+                    error=str(exc),
+                )
+                continue
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.warning(
+                    "dashboard.review.playlists_error",
+                    project=project,
+                    error=str(exc),
+                )
+                continue
+
+            playlists_processed = 0
+            project_clips = 0
+            project_shots = 0
+            project_duration = 0.0
+
+            for playlist in playlists:
+                try:
+                    clips: Iterable[DailiesClip] = fetch_playlist_versions(
+                        self._client, project, playlist
+                    )
+                except ShotGridError as exc:
+                    logger.warning(
+                        "dashboard.review.playlist_summary_failed",
+                        project=project,
+                        playlist=playlist,
+                        error=str(exc),
+                    )
+                    continue
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    logger.warning(
+                        "dashboard.review.playlist_summary_error",
+                        project=project,
+                        playlist=playlist,
+                        error=str(exc),
+                    )
+                    continue
+
+                summary = review_module._summarise_clips(clips)  # noqa: SLF001
+                playlists_processed += 1
+                project_clips += int(summary.get("clips", 0))
+                project_shots += int(summary.get("shots", 0))
+                project_duration += float(summary.get("duration_seconds", 0.0))
+
+            total_playlists += playlists_processed
+            total_clips += project_clips
+            total_shots += project_shots
+            total_duration += project_duration
+
+            project_summaries.append(
+                {
+                    "project": project,
+                    "playlists": playlists_processed,
+                    "clips": project_clips,
+                    "shots": project_shots,
+                    "duration_seconds": project_duration,
+                }
+            )
+
+        return {
+            "totals": {
+                "projects": len(project_summaries),
+                "playlists": total_playlists,
+                "clips": total_clips,
+                "shots": total_shots,
+                "duration_seconds": total_duration,
+            },
+            "projects": project_summaries,
+        }
+
+
+def get_render_dashboard_facade() -> RenderDashboardFacade:  # pragma: no cover - wiring
+    return RenderDashboardFacade()
+
+
+def get_review_dashboard_facade() -> ReviewDashboardFacade:  # pragma: no cover - wiring
+    return ReviewDashboardFacade()
+
+
+# ---------------------------------------------------------------------------
+# Dashboard response schemas
+# ---------------------------------------------------------------------------
+
+
+class IngestCountsModel(BaseModel):
+    total: int = Field(0, ge=0)
+    successful: int = Field(0, ge=0)
+    failed: int = Field(0, ge=0)
+    running: int = Field(0, ge=0)
+
+
+class IngestSummaryModel(BaseModel):
+    counts: IngestCountsModel
+    last_success_at: str | None = None
+    failure_streak: int = Field(0, ge=0)
+
+
+class RenderSummaryModel(BaseModel):
+    jobs: int = Field(0, ge=0)
+    by_status: Mapping[str, int] = Field(default_factory=dict)
+    by_farm: Mapping[str, int] = Field(default_factory=dict)
+
+
+class ReviewProjectSummaryModel(BaseModel):
+    project: str
+    playlists: int = Field(0, ge=0)
+    clips: int = Field(0, ge=0)
+    shots: int = Field(0, ge=0)
+    duration_seconds: float = Field(0.0, ge=0.0)
+
+
+class ReviewTotalsModel(BaseModel):
+    projects: int = Field(0, ge=0)
+    playlists: int = Field(0, ge=0)
+    clips: int = Field(0, ge=0)
+    shots: int = Field(0, ge=0)
+    duration_seconds: float = Field(0.0, ge=0.0)
+
+
+class ReviewSummaryModel(BaseModel):
+    totals: ReviewTotalsModel
+    projects: Sequence[ReviewProjectSummaryModel] = Field(default_factory=list)
+
+
+class StatusSummaryModel(BaseModel):
+    projects: int = Field(0, ge=0)
+    shots: int = Field(0, ge=0)
+    versions: int = Field(0, ge=0)
+    errors: int = Field(0, ge=0)
+
+
+class DashboardMetricsModel(BaseModel):
+    status: StatusSummaryModel
+    ingest: IngestSummaryModel
+    render: RenderSummaryModel
+    review: ReviewSummaryModel
+
+
 class DeliveryService:
     def __init__(
         self,
@@ -875,6 +1083,104 @@ async def status(
     ingest_summary = ingest_facade.summarise_recent_runs()
     payload = {**summary, "errors": len(errors), "ingest": ingest_summary}
     return JSONResponse(content=payload)
+
+
+@app.get(
+    "/metrics",
+    response_model=DashboardMetricsModel,
+    dependencies=[Depends(require_dashboard_auth)],
+)
+async def metrics(
+    shotgrid_service: ShotGridService = Depends(get_shotgrid_service),
+    reconcile_service: ReconcileService = Depends(get_reconcile_service),
+    ingest_facade: IngestRunDashboardFacade = Depends(get_ingest_dashboard_facade),
+    render_facade: RenderDashboardFacade = Depends(get_render_dashboard_facade),
+    review_facade: ReviewDashboardFacade = Depends(get_review_dashboard_facade),
+) -> DashboardMetricsModel:
+    status_summary = shotgrid_service.overall_status()
+    error_count = len(reconcile_service.list_errors())
+
+    ingest_raw = ingest_facade.summarise_recent_runs()
+    ingest_counts_raw = (
+        ingest_raw.get("counts", {}) if isinstance(ingest_raw, Mapping) else {}
+    )
+    ingest_counts = {
+        str(key): _parse_int(value, 0) for key, value in dict(ingest_counts_raw).items()
+    }
+    ingest_model = IngestSummaryModel(
+        counts=IngestCountsModel(**ingest_counts),
+        last_success_at=(
+            ingest_raw.get("last_success_at")
+            if isinstance(ingest_raw, Mapping)
+            else None
+        ),
+        failure_streak=(
+            _parse_int(ingest_raw.get("failure_streak"), 0)
+            if isinstance(ingest_raw, Mapping)
+            else 0
+        ),
+    )
+
+    render_raw = render_facade.summarise_jobs()
+    render_model = RenderSummaryModel(
+        jobs=_parse_int(render_raw.get("jobs"), 0),
+        by_status={
+            str(key): _parse_int(value, 0)
+            for key, value in dict(render_raw.get("by_status", {})).items()
+        },
+        by_farm={
+            str(key): _parse_int(value, 0)
+            for key, value in dict(render_raw.get("by_farm", {})).items()
+        },
+    )
+
+    project_names = shotgrid_service.discover_projects()
+    review_raw = review_facade.summarise_projects(project_names)
+    review_projects_raw = (
+        list(review_raw.get("projects", [])) if isinstance(review_raw, Mapping) else []
+    )
+    review_projects_model = [
+        ReviewProjectSummaryModel(
+            project=str(entry.get("project")),
+            playlists=_parse_int(entry.get("playlists"), 0),
+            clips=_parse_int(entry.get("clips"), 0),
+            shots=_parse_int(entry.get("shots"), 0),
+            duration_seconds=_parse_float(entry.get("duration_seconds"), 0.0),
+        )
+        for entry in review_projects_raw
+        if isinstance(entry, Mapping) and entry.get("project")
+    ]
+    review_totals_raw = (
+        review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    )
+    review_model = ReviewSummaryModel(
+        totals=ReviewTotalsModel(
+            projects=_parse_int(
+                review_totals_raw.get("projects"), len(review_projects_model)
+            ),
+            playlists=_parse_int(review_totals_raw.get("playlists"), 0),
+            clips=_parse_int(review_totals_raw.get("clips"), 0),
+            shots=_parse_int(review_totals_raw.get("shots"), 0),
+            duration_seconds=_parse_float(
+                review_totals_raw.get("duration_seconds"), 0.0
+            ),
+        ),
+        projects=review_projects_model,
+    )
+
+    status_model = StatusSummaryModel(
+        projects=_parse_int(status_summary.get("projects"), 0),
+        shots=_parse_int(status_summary.get("shots"), 0),
+        versions=_parse_int(status_summary.get("versions"), 0),
+        errors=error_count,
+    )
+
+    return DashboardMetricsModel(
+        status=status_model,
+        ingest=ingest_model,
+        render=render_model,
+        review=review_model,
+    )
 
 
 @app.get("/projects/{project_name}")
