@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast, Dict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,9 +30,12 @@ def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
 def test_get_farms_returns_capabilities(client: TestClient) -> None:
     response = client.get("/farms")
     assert response.status_code == 200
-    farms = {farm["name"]: farm for farm in response.json()["farms"]}
 
-    expected = {
+    payload = cast(Dict[str, Any], response.json())
+    farms_list = cast(list[Dict[str, Any]], payload["farms"])
+    farms = {farm["name"]: farm for farm in farms_list}
+
+    expected: Dict[str, Dict[str, Any]] = {
         "mock": {
             "priority": {"default": 50, "minimum": 0, "maximum": 100},
             "chunking": {
@@ -77,20 +80,21 @@ def test_get_farms_returns_capabilities(client: TestClient) -> None:
 
     for name, expectation in expected.items():
         farm = farms[name]
-        capabilities = farm["capabilities"]
-        priority = capabilities["priority"]
+        capabilities = cast(Dict[str, Any], farm["capabilities"])
+        priority = cast(Dict[str, Any], capabilities["priority"])
+        chunking = cast(Dict[str, Any], capabilities["chunking"])
+        cancellation = cast(Dict[str, Any], capabilities["cancellation"])
+
         assert priority["default"] == expectation["priority"]["default"]
         assert priority["minimum"] == expectation["priority"]["minimum"]
         assert priority["maximum"] == expectation["priority"]["maximum"]
-
-        chunking = capabilities["chunking"]
         assert chunking["enabled"] == expectation["chunking"]["enabled"]
         assert chunking["minimum"] == expectation["chunking"]["minimum"]
         assert chunking["maximum"] == expectation["chunking"]["maximum"]
         assert chunking["default"] == expectation["chunking"]["default"]
-
-        cancellation = capabilities["cancellation"]
         assert cancellation["supported"] == expectation["cancellation"]["supported"]
+
+
 def test_submit_job_success(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:
