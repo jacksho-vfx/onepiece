@@ -1,6 +1,8 @@
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
 from apps.trafalgar.web.render import (
@@ -11,7 +13,9 @@ from apps.trafalgar.web.render import (
 )
 
 
-def test_health_reports_history_and_pruning(tmp_path, monkeypatch):
+def test_health_reports_history_and_pruning(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     store_path = tmp_path / "jobs.json"
     monkeypatch.setenv(JOB_STORE_PATH_ENV, str(store_path))
     monkeypatch.setenv(JOB_RETENTION_HOURS_ENV, "0.0001")  # ~0.36 seconds
