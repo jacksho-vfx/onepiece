@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any, Iterable, List, Mapping, cast
 
 import structlog
@@ -119,55 +120,95 @@ class IngestRunRegistry:
         if path is None:
             path = Path(env_path).expanduser() if env_path else DEFAULT_REGISTRY_PATH
         self._path = path
+        self._cache_lock = RLock()
+        self._cache_records: list[IngestRunRecord] | None = None
+        self._cache_fingerprint: tuple[float, int] | None = None
 
     @property
     def path(self) -> Path:
         return self._path
 
-    def _load_payload(self) -> list[Mapping[str, Any]]:
+    def _snapshot(self) -> tuple[float, int] | None:
+        try:
+            stat = self._path.stat()
+        except FileNotFoundError:
+            return None
+        return (stat.st_mtime, stat.st_size)
+
+    def _load_payload(self) -> tuple[list[Mapping[str, Any]] | None, tuple[float, int] | None]:
         if not self._path.exists():
-            return []
+            return [], None
         try:
             with self._path.open("r", encoding="utf-8") as fh:
                 payload = json.load(fh)
+        except FileNotFoundError:
+            return [], None
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning(
                 "ingest.registry.load_failed", path=str(self._path), error=str(exc)
             )
-            return []
+            return None, None
 
         if isinstance(payload, list):
-            return [item for item in payload if isinstance(item, Mapping)]
-
-        if isinstance(payload, Mapping):
+            data = [item for item in payload if isinstance(item, Mapping)]
+        elif isinstance(payload, Mapping):
             runs = payload.get("runs", [])
             if isinstance(runs, list):
-                return [item for item in runs if isinstance(item, Mapping)]
-
-        logger.warning(
-            "ingest.registry.unexpected_payload", payload_type=type(payload).__name__
-        )
-        return []
-
-    def load_all(self) -> list[IngestRunRecord]:
-        records: list[IngestRunRecord] = []
-        for entry in self._load_payload():
-            run_id = entry.get("id") or entry.get("run_id")
-            if not run_id:
-                logger.warning("ingest.registry.missing_run_id", data=entry)
-                continue
-            report_payload = entry.get("report", {})
-            if not isinstance(report_payload, Mapping):
-                logger.warning("ingest.registry.invalid_report", data=report_payload)
-                report_payload = {}
-            record = IngestRunRecord(
-                run_id=str(run_id),
-                started_at=_parse_datetime(entry.get("started_at")),
-                completed_at=_parse_datetime(entry.get("completed_at")),
-                report=_load_report(report_payload),
+                data = [item for item in runs if isinstance(item, Mapping)]
+            else:
+                data = []
+        else:
+            logger.warning(
+                "ingest.registry.unexpected_payload", payload_type=type(payload).__name__
             )
-            records.append(record)
-        return records
+            data = []
+
+        return data, self._snapshot()
+
+    def invalidate_cache(self) -> None:
+        """Clear any cached registry data."""
+
+        with self._cache_lock:
+            self._cache_records = None
+            self._cache_fingerprint = None
+
+    def load_all(self, *, force_refresh: bool = False) -> list[IngestRunRecord]:
+        with self._cache_lock:
+            fingerprint = self._snapshot()
+            if (
+                not force_refresh
+                and self._cache_records is not None
+                and fingerprint == self._cache_fingerprint
+            ):
+                return list(self._cache_records)
+
+            payload, new_fingerprint = self._load_payload()
+            if payload is None:
+                if self._cache_records is not None:
+                    return list(self._cache_records)
+                return []
+
+            records: list[IngestRunRecord] = []
+            for entry in payload:
+                run_id = entry.get("id") or entry.get("run_id")
+                if not run_id:
+                    logger.warning("ingest.registry.missing_run_id", data=entry)
+                    continue
+                report_payload = entry.get("report", {})
+                if not isinstance(report_payload, Mapping):
+                    logger.warning("ingest.registry.invalid_report", data=report_payload)
+                    report_payload = {}
+                record = IngestRunRecord(
+                    run_id=str(run_id),
+                    started_at=_parse_datetime(entry.get("started_at")),
+                    completed_at=_parse_datetime(entry.get("completed_at")),
+                    report=_load_report(report_payload),
+                )
+                records.append(record)
+
+            self._cache_records = records
+            self._cache_fingerprint = new_fingerprint
+            return list(records)
 
     def load_recent(self, limit: int | None = None) -> list[IngestRunRecord]:
         records = self.load_all()
