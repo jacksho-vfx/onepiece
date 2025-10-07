@@ -152,7 +152,6 @@ async def test_render_job_websocket_receives_updates(
     import apps.trafalgar.web.security as security
     from fastapi.security.http import HTTPAuthorizationCredentials
 
-    # ✅ Patch auth schemes (skip real HTTP/API key validation)
     monkeypatch.setattr(
         fastapi.security.HTTPBearer,
         "__call__",
@@ -166,7 +165,6 @@ async def test_render_job_websocket_receives_updates(
         lambda self, request=None: "test-api-key",
     )
 
-    # ✅ Dummy credential store that returns a valid principal
     class DummyCredentialStore:
         def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
             return render.AuthenticatedPrincipal(
@@ -186,7 +184,6 @@ async def test_render_job_websocket_receives_updates(
         security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
     )
 
-    # ✅ Set up render service & broadcaster
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
@@ -194,7 +191,6 @@ async def test_render_job_websocket_receives_updates(
 
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
-    # ✅ Dynamically find and override the require_roles dependency for /jobs/ws
     jobs_route = next(r for r in render.app.router.routes if r.path == "/jobs/ws")
 
     def find_role_dependency(dependant: Any) -> Any:
@@ -218,7 +214,6 @@ async def test_render_job_websocket_receives_updates(
 
     render.app.dependency_overrides[role_dependency] = fake_principal
 
-    # ✅ Run the websocket connection test
     client = TestClient(render.app)
 
     with client.websocket_connect("/jobs/ws") as websocket:
