@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -117,7 +118,8 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert versions[0]["code"] == valid.stem
 
 
-def test_ingest_service_returns_dry_run_report(tmp_path: Path) -> None:
+def test_ingest_service_returns_dry_run_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
     incoming = tmp_path / "incoming"
     incoming.mkdir()
 
@@ -147,6 +149,10 @@ def test_ingest_service_returns_dry_run_report(tmp_path: Path) -> None:
     assert any(
         "Dry run: would register ShotGrid Version" in warning
         for warning in report.warnings
+    )
+    assert any(
+        "ingest.version_registration_skipped" in record.getMessage()
+        for record in caplog.records
     )
 
 

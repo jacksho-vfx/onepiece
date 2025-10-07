@@ -233,6 +233,13 @@ class MediaIngestService:
                 report.warnings.append(
                     f"Dry run: would register ShotGrid Version {media_info.version_code}"
                 )
+                log.info(
+                    "ingest.version_registration_skipped",
+                    file=str(path),
+                    shot=media_info.shot_name,
+                    version_code=media_info.version_code,
+                    dry_run=True,
+                )
             else:
                 try:
                     version = self.shotgrid.register_version(
@@ -299,13 +306,13 @@ class MediaIngestService:
                     raise ShotgridConnectivityError(
                         f"{message} Check VPN or proxy settings and retry once connectivity is restored."
                     ) from exc
-
-                log.info(
-                    "ingest.version_registered",
-                    version_id=version["id"],
-                    version_code=version["code"],
-                    shot=media_info.shot_name,
-                )
+                else:
+                    log.info(
+                        "ingest.version_registered",
+                        version_id=version["id"],
+                        version_code=version["code"],
+                        shot=media_info.shot_name,
+                    )
 
             report.processed.append(
                 IngestedMedia(path=path, bucket=bucket, key=key, media_info=media_info)

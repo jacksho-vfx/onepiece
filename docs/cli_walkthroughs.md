@@ -74,6 +74,8 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
      --dry-run
    ```
 
+   Dry runs never create S3 objects or ShotGrid Versions; they emit analytics so you can verify the impact safely. Review the generated report before promoting the command to a full ingest.
+
 3. Once you are satisfied, remove the `--dry-run` flag to execute the transfer for real.
 
 ## 3. Analyse an ingest dry run
@@ -98,7 +100,7 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
      --report-path /tmp/onepiece_ingest_report.json
    ```
 
-   The CLI validates filenames, resolves destination buckets, and writes a JSON payload that lists the target `s3://` keys, rejected files, and any warnings encountered.
+   The CLI validates filenames, resolves destination buckets, and writes a JSON payload that lists the target `s3://` keys, rejected files, and any warnings encountered. The dry-run guarantee means no uploads or ShotGrid registrations occur—use the analytics report (JSON or CSV) to confirm everything looks correct before running the command for real.
 
 3. Open the report to review the planned uploads before performing a real ingest:
 
