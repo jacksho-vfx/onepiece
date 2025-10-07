@@ -25,7 +25,7 @@ from typing import (
     runtime_checkable,
 )
 
-from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
+from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError, Version
 from libraries.validations.naming import (
     validate_episode_name,
     validate_scene_name,
@@ -467,7 +467,9 @@ class MediaIngestService:
                 self.max_workers = int(env_workers)
             except ValueError:
                 log.warning(
-                    "ingest.invalid_max_workers_env", value=env_workers, default=self.max_workers
+                    "ingest.invalid_max_workers_env",
+                    value=env_workers,
+                    default=self.max_workers,
                 )
         self.max_workers = max(1, self.max_workers)
 
@@ -672,7 +674,9 @@ class MediaIngestService:
                 _notify(job.path, "uploaded")
             return report
 
-        checkpoint_store = self._build_checkpoint_store() if self.resume_enabled else None
+        checkpoint_store = (
+            self._build_checkpoint_store() if self.resume_enabled else None
+        )
         results = self._execute_uploads(upload_jobs, checkpoint_store)
 
         for result in results:
@@ -712,9 +716,12 @@ class MediaIngestService:
             return [self._process_job(job, checkpoint_store) for job in jobs]
 
         results: dict[Path, _UploadResult] = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.max_workers
+        ) as executor:
             future_to_job = {
-                executor.submit(self._process_job, job, checkpoint_store): job for job in jobs
+                executor.submit(self._process_job, job, checkpoint_store): job
+                for job in jobs
             }
             for future in concurrent.futures.as_completed(future_to_job):
                 job = future_to_job[future]
@@ -741,7 +748,9 @@ class MediaIngestService:
         warnings: list[str] = []
         should_checkpoint = self._should_checkpoint(job, checkpoint_store)
 
-        if should_checkpoint and not isinstance(self.uploader, ResumableUploaderProtocol):
+        if should_checkpoint and not isinstance(
+            self.uploader, ResumableUploaderProtocol
+        ):
             warning = (
                 "Resume requested for "
                 f"{job.path.name} but the configured uploader does not support resumable transfers."
@@ -783,7 +792,7 @@ class MediaIngestService:
     ) -> None:
         if should_checkpoint and isinstance(self.uploader, ResumableUploaderProtocol):
             assert checkpoint_store is not None
-            resumable = cast(ResumableUploaderProtocol, self.uploader)
+            resumable = self.uploader
             checkpoint = checkpoint_store.load(job.bucket, job.key)
             if checkpoint is None:
                 checkpoint = UploadCheckpoint(
@@ -821,7 +830,7 @@ class MediaIngestService:
         if should_checkpoint and checkpoint_store is not None:
             checkpoint_store.delete(job.bucket, job.key)
 
-    def _register_version(self, job: _UploadJob) -> Mapping[str, Any]:
+    def _register_version(self, job: _UploadJob) -> Version:
         media_info = job.media_info
         path = job.path
         try:
