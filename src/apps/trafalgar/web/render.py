@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import getpass
+import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Awaitable, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -17,6 +18,8 @@ from apps.onepiece.render.submit import DCC_CHOICES, FARM_ADAPTERS
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import RenderSubmissionError, SubmissionResult
 from libraries.render.models import RenderAdapter
+
+from apps.trafalgar.web.job_store import JobStore
 
 logger = structlog.get_logger(__name__)
 
@@ -160,13 +163,49 @@ class _JobRecord:
             request=self.request.model_copy(deep=True),
         )
 
+    def to_storage(self) -> dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "farm": self.farm,
+            "farm_type": self.farm_type,
+            "status": self.status,
+            "message": self.message,
+            "request": self.request.model_dump(),
+        }
+
+    @classmethod
+    def from_storage(cls, payload: Mapping[str, Any]) -> "_JobRecord":
+        return cls(
+            job_id=str(payload["job_id"]),
+            farm=str(payload["farm"]),
+            farm_type=str(payload.get("farm_type", payload["farm"])),
+            status=str(payload.get("status", "unknown")),
+            message=payload.get("message"),
+            request=RenderJobRequest(**payload["request"]),
+        )
+
+
+JOB_STORE_PATH_ENV = "TRAFALGAR_RENDER_JOBS_PATH"
+JOB_HISTORY_LIMIT_ENV = "TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT"
+
 
 class RenderSubmissionService:
     """Submit render jobs using the shared adapter registry."""
 
-    def __init__(self, adapters: Mapping[str, RenderAdapter] | None = None) -> None:
+    def __init__(
+        self,
+        adapters: Mapping[str, RenderAdapter] | None = None,
+        *,
+        job_store: JobStore | None = None,
+        history_limit: int | None = None,
+    ) -> None:
         self._adapters = dict(adapters or FARM_ADAPTERS)
         self._jobs: dict[str, _JobRecord] = {}
+        self._store = job_store
+        self._history_limit = (
+            history_limit if history_limit and history_limit > 0 else None
+        )
+        self._load_jobs()
 
     def list_farms(self) -> list[FarmInfo]:
         entries: list[FarmInfo] = []
@@ -201,20 +240,26 @@ class RenderSubmissionService:
         )
         if job_id:
             self._jobs[job_id] = record
+            self._enforce_history_limit()
+            self._persist_jobs()
         return result
 
     def list_jobs(self) -> list[RenderJobMetadata]:
         jobs: list[RenderJobMetadata] = []
+        dirty = False
         for record in self._jobs.values():
-            self._refresh_job(record)
+            dirty = self._refresh_job(record) or dirty
             jobs.append(record.snapshot())
+        if dirty:
+            self._persist_jobs()
         return jobs
 
     def get_job(self, job_id: str) -> RenderJobMetadata:
         record = self._jobs.get(job_id)
         if record is None:
             raise KeyError(job_id)
-        self._refresh_job(record)
+        if self._refresh_job(record):
+            self._persist_jobs()
         return record.snapshot()
 
     def cancel_job(self, job_id: str) -> RenderJobMetadata:
@@ -240,16 +285,17 @@ class RenderSubmissionService:
             raise RenderSubmissionError(
                 f"Failed to cancel job '{job_id}' on farm '{record.farm}'."
             ) from exc
-        self._update_record_from_result(record, result)
+        if self._update_record_from_result(record, result):
+            self._persist_jobs()
         return record.snapshot()
 
-    def _refresh_job(self, record: _JobRecord) -> None:
+    def _refresh_job(self, record: _JobRecord) -> bool:
         adapter = self._adapters.get(record.farm)
         if adapter is None:
-            return
+            return False
         status_lookup = getattr(adapter, "get_job_status", None)
         if not callable(status_lookup):
-            return
+            return False
         try:
             result = status_lookup(record.job_id)
         except RenderSubmissionError as exc:
@@ -259,27 +305,75 @@ class RenderSubmissionService:
                 farm=record.farm,
                 error=str(exc),
             )
-            return
+            return False
         except Exception:  # pragma: no cover - defensive guard
             logger.exception(
                 "render.job.status.error", job_id=record.job_id, farm=record.farm
             )
-            return
-        self._update_record_from_result(record, result)
+            return False
+        return self._update_record_from_result(record, result)
 
     def _update_record_from_result(
         self, record: _JobRecord, result: SubmissionResult
-    ) -> None:
-        record.status = result.get("status", record.status)
-        record.message = result.get("message", record.message)
-        record.farm_type = result.get("farm_type", record.farm_type)
+    ) -> bool:
+        changed = False
+        status = result.get("status")
+        if status and status != record.status:
+            record.status = status
+            changed = True
+        if "message" in result and result.get("message") != record.message:
+            record.message = result.get("message")
+            changed = True
+        farm_type = result.get("farm_type")
+        if farm_type and farm_type != record.farm_type:
+            record.farm_type = farm_type
+            changed = True
+        return changed
+
+    def _load_jobs(self) -> None:
+        if not self._store:
+            return
+        for record in self._store.load():
+            self._jobs[record.job_id] = record
+        previous_count = len(self._jobs)
+        self._enforce_history_limit()
+        if self._history_limit is not None and len(self._jobs) < previous_count:
+            self._persist_jobs()
+
+    def _persist_jobs(self) -> None:
+        if not self._store:
+            return
+        self._store.save(self._jobs.values())
+
+    def _enforce_history_limit(self) -> None:
+        if self._history_limit is None:
+            return
+        while len(self._jobs) > self._history_limit:
+            oldest_key = next(iter(self._jobs))
+            self._jobs.pop(oldest_key, None)
 
 
 @lru_cache
 def get_render_service() -> (
     RenderSubmissionService
 ):  # pragma: no cover - runtime wiring
-    return RenderSubmissionService()
+    store_path = os.environ.get(JOB_STORE_PATH_ENV)
+    history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)
+
+    job_store = JobStore(store_path) if store_path else None
+
+    history_limit = None
+    if history_limit_value:
+        try:
+            history_limit = int(history_limit_value)
+        except ValueError:
+            logger.warning(
+                "render.job.history_limit.invalid",
+                value=history_limit_value,
+                env=JOB_HISTORY_LIMIT_ENV,
+            )
+
+    return RenderSubmissionService(job_store=job_store, history_limit=history_limit)
 
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
