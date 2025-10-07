@@ -303,6 +303,7 @@ def publish_scene(
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
     *,
+    dry_run: bool = False,
     profile: str | None = None,
     direct_s3_path: str | None = None,
     dependency_callback: Callable[[DCCDependencyReport], None] | None = None,
@@ -382,7 +383,7 @@ def publish_scene(
     s5_sync(
         source=package_dir,
         destination=destination_path,
-        dry_run=False,
+        dry_run=dry_run,
         include=None,
         exclude=None,
         profile=profile,
