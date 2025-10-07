@@ -97,6 +97,8 @@ def test_publish_cli_invokes_publish_with_direct_upload(
             "OP",
             "--show-type",
             "vfx",
+            "--profile",
+            "artist-profile",
             "--direct-upload-path",
             "s3://bucket/custom/path",
             "--dependency-summary",
@@ -106,6 +108,7 @@ def test_publish_cli_invokes_publish_with_direct_upload(
     assert result.exit_code == 0, result.output
     assert called["args"][0] is SupportedDCC.NUKE
     assert called["kwargs"]["direct_s3_path"] == "s3://bucket/custom/path"
+    assert called["kwargs"]["profile"] == "artist-profile"
     assert "Dependency summary for Nuke" in result.output
     assert "Plugins missing: None" in result.output
 

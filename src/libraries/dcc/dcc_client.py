@@ -303,6 +303,7 @@ def publish_scene(
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
     *,
+    profile: str | None = None,
     direct_s3_path: str | None = None,
     dependency_callback: Callable[[DCCDependencyReport], None] | None = None,
     plugin_inventory: Iterable[str] | None = None,
@@ -384,6 +385,7 @@ def publish_scene(
         dry_run=False,
         include=None,
         exclude=None,
+        profile=profile,
     )
 
     return package_dir
