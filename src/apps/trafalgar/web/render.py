@@ -164,10 +164,10 @@ class JobsListResponse(BaseModel):
 class APIErrorDetail(BaseModel):
     """Standardised error payload returned by the render API."""
 
-    code: str = Field(..., description="Machine readable error code identifying the failure.")
-    message: str = Field(
-        ..., description="Human readable summary of what went wrong."
+    code: str = Field(
+        ..., description="Machine readable error code identifying the failure."
     )
+    message: str = Field(..., description="Human readable summary of what went wrong.")
     hint: str | None = Field(
         None, description="Optional remediation guidance for operators."
     )
