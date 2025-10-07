@@ -73,7 +73,9 @@ class IngestRunProvider:
         self._registry = registry or IngestRunRegistry()
 
     def _cached_runs(self, *, refresh: bool = False) -> list[IngestRunRecord]:
-        return self._registry.load_all(force_refresh=refresh)
+        return cast(
+            list[IngestRunRecord], self._registry.load_all(force_refresh=refresh)
+        )
 
     def load_recent_runs(self, limit: int | None = None) -> Sequence[IngestRunRecord]:
         records = self._cached_runs()

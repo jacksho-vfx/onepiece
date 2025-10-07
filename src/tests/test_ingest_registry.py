@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+from typing import Any
 
+from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
 from apps.trafalgar.web.ingest import (
@@ -12,12 +14,12 @@ from apps.trafalgar.web.ingest import (
 from libraries.ingest.registry import IngestRunRegistry
 
 
-class CountingRegistry(IngestRunRegistry):
+class CountingRegistry(IngestRunRegistry):  # type: ignore[misc]
     def __init__(self, path: Path) -> None:
         super().__init__(path=path)
         self.payload_reads = 0
 
-    def _load_payload(self):  # type: ignore[override]
+    def _load_payload(self) -> Any:
         self.payload_reads += 1
         return super()._load_payload()
 
@@ -39,7 +41,9 @@ def test_registry_reuses_cached_data_for_missing_runs(tmp_path: Path) -> None:
     assert registry.payload_reads == 1
 
 
-def test_registry_serves_cached_records_when_reload_fails(tmp_path: Path, monkeypatch) -> None:
+def test_registry_serves_cached_records_when_reload_fails(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     registry_path = tmp_path / "registry.json"
     _write_registry(
         registry_path,
@@ -60,7 +64,7 @@ def test_registry_serves_cached_records_when_reload_fails(tmp_path: Path, monkey
     # Simulate an in-progress writer updating the file with incomplete JSON.
     registry_path.write_text("{", encoding="utf-8")  # invalid payload, updates mtime
 
-    def _failing_load(*args, **kwargs):
+    def _failing_load(*args: Any, **kwargs: Any) -> None:
         raise json.JSONDecodeError("err", "doc", 0)
 
     monkeypatch.setattr("libraries.ingest.registry.json.load", _failing_load)

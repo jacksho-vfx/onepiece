@@ -135,7 +135,9 @@ class IngestRunRegistry:
             return None
         return (stat.st_mtime, stat.st_size)
 
-    def _load_payload(self) -> tuple[list[Mapping[str, Any]] | None, tuple[float, int] | None]:
+    def _load_payload(
+        self,
+    ) -> tuple[list[Mapping[str, Any]] | None, tuple[float, int] | None]:
         if not self._path.exists():
             return [], None
         try:
@@ -159,7 +161,8 @@ class IngestRunRegistry:
                 data = []
         else:
             logger.warning(
-                "ingest.registry.unexpected_payload", payload_type=type(payload).__name__
+                "ingest.registry.unexpected_payload",
+                payload_type=type(payload).__name__,
             )
             data = []
 
@@ -196,7 +199,9 @@ class IngestRunRegistry:
                     continue
                 report_payload = entry.get("report", {})
                 if not isinstance(report_payload, Mapping):
-                    logger.warning("ingest.registry.invalid_report", data=report_payload)
+                    logger.warning(
+                        "ingest.registry.invalid_report", data=report_payload
+                    )
                     report_payload = {}
                 record = IngestRunRecord(
                     run_id=str(run_id),
