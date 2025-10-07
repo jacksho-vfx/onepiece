@@ -1,15 +1,19 @@
 """FastAPI application exposing ingest run summaries for Trafalgar."""
 
+import asyncio
+import json
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence, cast, Dict
+from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Sequence, cast
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
+from starlette.websockets import WebSocketDisconnect
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
+from apps.trafalgar.web.events import EventBroadcaster
 from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
@@ -73,23 +77,62 @@ class IngestRunService:
         provider: IngestRunProvider | None = None,
         *,
         serializer: Callable[[IngestRunRecord], Mapping[str, Any]] | None = None,
+        broadcaster: EventBroadcaster | None = None,
     ) -> None:
         self._provider = provider or IngestRunProvider()
         self._serialize = serializer or _serialise_run
+        self._events = broadcaster
+        self._snapshots: dict[str, str] = {}
 
     def list_runs(self, limit: int) -> list[Mapping[str, Any]]:
         records = self._provider.load_recent_runs(limit)
-        return [self._serialize(record) for record in records]
+        payloads = [self._serialize(record) for record in records]
+        self._sync_events(payloads)
+        return payloads
 
     def get_run(self, run_id: str) -> Mapping[str, Any]:
         record = self._provider.get_run(run_id)
         if record is None:
             raise KeyError(run_id)
-        return self._serialize(record)
+        payload = self._serialize(record)
+        self._track_run(payload)
+        return payload
+
+    def _track_run(self, payload: Mapping[str, Any]) -> None:
+        if not self._events:
+            return
+        run_id = str(payload.get("id", ""))
+        if not run_id:
+            return
+        signature = json.dumps(payload, sort_keys=True)
+        previous = self._snapshots.get(run_id)
+        if previous == signature:
+            return
+        self._snapshots[run_id] = signature
+        event = "run.updated" if previous is not None else "run.created"
+        self._events.publish({"event": event, "run": payload})
+
+    def _sync_events(self, payloads: Sequence[Mapping[str, Any]]) -> None:
+        if not self._events:
+            return
+        active_ids: set[str] = set()
+        for payload in payloads:
+            run_id = str(payload.get("id", ""))
+            if not run_id:
+                continue
+            active_ids.add(run_id)
+            self._track_run(payload)
+        removed = set(self._snapshots) - active_ids
+        for run_id in removed:
+            self._snapshots.pop(run_id, None)
+            self._events.publish({"event": "run.removed", "run": {"id": run_id}})
+
+
+INGEST_EVENTS = EventBroadcaster(max_buffer=64)
 
 
 def get_ingest_run_service() -> IngestRunService:  # pragma: no cover - runtime wiring
-    return IngestRunService()
+    return IngestRunService(broadcaster=INGEST_EVENTS)
 
 
 app = FastAPI(title="OnePiece Ingest Runs", version=TRAFALGAR_VERSION)
@@ -124,6 +167,44 @@ async def list_runs(
     return JSONResponse(content=payload)
 
 
+async def _ingest_event_stream(request: Request):
+    queue = await INGEST_EVENTS.subscribe()
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30)
+            except asyncio.TimeoutError:
+                if await request.is_disconnected():
+                    break
+                yield b"data: {}\n\n"
+                continue
+            payload = json.dumps(event).encode("utf-8")
+            yield b"data: " + payload + b"\n\n"
+    finally:
+        await INGEST_EVENTS.unsubscribe(queue)
+
+
+@app.get("/runs/stream")
+async def stream_runs(request: Request) -> StreamingResponse:
+    return StreamingResponse(
+        _ingest_event_stream(request), media_type="text/event-stream"
+    )
+
+
+@app.websocket("/runs/ws")
+async def runs_websocket(websocket: WebSocket) -> None:
+    await websocket.accept()
+    queue = await INGEST_EVENTS.subscribe()
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await INGEST_EVENTS.unsubscribe(queue)
+
+
 @app.get("/runs/{run_id}")
 async def get_run(
     run_id: str,
@@ -139,3 +220,5 @@ async def get_run(
 @app.get("/health")
 def health_check() -> Dict[str, str]:
     return {"status": "ok"}
+
+

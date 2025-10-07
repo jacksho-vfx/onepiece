@@ -6,13 +6,16 @@ import getpass
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+import asyncio
+import json
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from starlette.responses import Response
+from starlette.websockets import WebSocketDisconnect
 
 from apps.onepiece.render.submit import (
     DCC_CHOICES,
@@ -23,6 +26,7 @@ from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import RenderSubmissionError, SubmissionResult
 from libraries.render.models import RenderAdapter
 
+from apps.trafalgar.web.events import EventBroadcaster
 from apps.trafalgar.web.job_store import JobStore
 
 logger = structlog.get_logger(__name__)
@@ -209,6 +213,7 @@ class RenderSubmissionService:
         *,
         job_store: JobStore | None = None,
         history_limit: int | None = None,
+        broadcaster: EventBroadcaster | None = None,
     ) -> None:
         self._adapters = dict(adapters or FARM_ADAPTERS)
         self._jobs: dict[str, _JobRecord] = {}
@@ -216,6 +221,7 @@ class RenderSubmissionService:
         self._history_limit = (
             history_limit if history_limit and history_limit > 0 else None
         )
+        self._events = broadcaster
         self._load_jobs()
 
     def list_farms(self) -> list[FarmInfo]:
@@ -263,6 +269,7 @@ class RenderSubmissionService:
             self._jobs[job_id] = record
             self._enforce_history_limit()
             self._persist_jobs()
+            self._emit_event("job.created", record)
         return result
 
     def list_jobs(self) -> list[RenderJobMetadata]:
@@ -349,6 +356,8 @@ class RenderSubmissionService:
         if farm_type and farm_type != record.farm_type:
             record.farm_type = farm_type
             changed = True
+        if changed:
+            self._emit_event("job.updated", record)
         return changed
 
     def _load_jobs(self) -> None:
@@ -371,7 +380,30 @@ class RenderSubmissionService:
             return
         while len(self._jobs) > self._history_limit:
             oldest_key = next(iter(self._jobs))
-            self._jobs.pop(oldest_key, None)
+            record = self._jobs.pop(oldest_key, None)
+            if record is not None:
+                self._emit_event(
+                    "job.removed",
+                    record,
+                    payload_override={"job": {"job_id": record.job_id}},
+                )
+
+    def _emit_event(
+        self,
+        event: str,
+        record: _JobRecord,
+        *,
+        payload_override: Mapping[str, Any] | None = None,
+    ) -> None:
+        if not self._events:
+            return
+        payload = {"event": event, "job": record.snapshot().model_dump()}
+        if payload_override:
+            payload.update(payload_override)
+        self._events.publish(payload)
+
+
+JOB_EVENTS = EventBroadcaster(max_buffer=64)
 
 
 @lru_cache
@@ -394,7 +426,11 @@ def get_render_service() -> (
                 env=JOB_HISTORY_LIMIT_ENV,
             )
 
-    return RenderSubmissionService(job_store=job_store, history_limit=history_limit)
+    return RenderSubmissionService(
+        job_store=job_store,
+        history_limit=history_limit,
+        broadcaster=JOB_EVENTS,
+    )
 
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
@@ -500,6 +536,44 @@ def list_jobs(
     return JobsListResponse(jobs=jobs)
 
 
+async def _job_event_stream(request: Request):
+    queue = await JOB_EVENTS.subscribe()
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30)
+            except asyncio.TimeoutError:
+                if await request.is_disconnected():
+                    break
+                yield b"data: {}\n\n"
+                continue
+            payload = json.dumps(event).encode("utf-8")
+            yield b"data: " + payload + b"\n\n"
+    finally:
+        await JOB_EVENTS.unsubscribe(queue)
+
+
+@app.get("/jobs/stream")
+async def stream_jobs(request: Request) -> StreamingResponse:
+    return StreamingResponse(
+        _job_event_stream(request), media_type="text/event-stream"
+    )
+
+
+@app.websocket("/jobs/ws")
+async def jobs_websocket(websocket: WebSocket) -> None:
+    await websocket.accept()
+    queue = await JOB_EVENTS.subscribe()
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await JOB_EVENTS.unsubscribe(queue)
+
+
 @app.get("/jobs/{job_id}", response_model=RenderJobMetadata)
 def get_job(
     job_id: str, service: RenderSubmissionService = Depends(get_render_service)
@@ -520,3 +594,5 @@ def cancel_job(
         raise HTTPException(status_code=404, detail="Job not found.") from exc
     except RenderSubmissionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
