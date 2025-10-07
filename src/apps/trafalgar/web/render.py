@@ -23,7 +23,11 @@ from apps.onepiece.render.submit import (
     _resolve_priority_and_chunk_size,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
-from libraries.render.base import RenderSubmissionError, SubmissionResult
+from libraries.render.base import (
+    RenderAdapterUnavailableError,
+    RenderSubmissionError,
+    SubmissionResult,
+)
 from libraries.render.models import RenderAdapter
 
 from apps.trafalgar.web.events import EventBroadcaster
@@ -157,6 +161,27 @@ class JobsListResponse(BaseModel):
     jobs: Sequence[RenderJobMetadata]
 
 
+class APIErrorDetail(BaseModel):
+    """Standardised error payload returned by the render API."""
+
+    code: str = Field(..., description="Machine readable error code identifying the failure.")
+    message: str = Field(
+        ..., description="Human readable summary of what went wrong."
+    )
+    hint: str | None = Field(
+        None, description="Optional remediation guidance for operators."
+    )
+    context: dict[str, Any] | None = Field(
+        None, description="Structured context describing the failing request."
+    )
+
+
+class APIErrorResponse(BaseModel):
+    """Envelope returned for failed render API requests."""
+
+    error: APIErrorDetail
+
+
 @dataclass
 class _JobRecord:
     """Internal storage representation for submitted render jobs."""
@@ -236,7 +261,13 @@ class RenderSubmissionService:
     def submit_job(self, request: RenderJobRequest) -> SubmissionResult:
         adapter = self._adapters.get(request.farm)
         if adapter is None:
-            raise RenderSubmissionError(f"Unknown render farm '{request.farm}'.")
+            raise RenderSubmissionError(
+                f"Unknown render farm '{request.farm}'.",
+                code="render.farm_not_found",
+                status_code=404,
+                hint="Use the /farms endpoint to list available adapters and retry with a registered farm key.",
+                context={"farm": request.farm},
+            )
         resolved_user = request.user or getpass.getuser()
         resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
             farm=request.farm,
@@ -297,12 +328,20 @@ class RenderSubmissionService:
         adapter = self._adapters.get(record.farm)
         if adapter is None:
             raise RenderSubmissionError(
-                f"Unknown render farm '{record.farm}' for job '{job_id}'."
+                f"Unknown render farm '{record.farm}' for job '{job_id}'.",
+                code="render.farm_not_found",
+                status_code=404,
+                hint="The adapter handling this job is no longer registered with the service.",
+                context={"farm": record.farm, "job_id": job_id},
             )
         cancel = getattr(adapter, "cancel_job", None)
         if not callable(cancel):
             raise RenderSubmissionError(
-                f"Render farm '{record.farm}' does not support job cancellation."
+                f"Render farm '{record.farm}' does not support job cancellation.",
+                code="render.cancellation_unsupported",
+                status_code=409,
+                hint="Retry cancellation through the farm's native tooling or use an adapter that exposes cancellation APIs.",
+                context={"farm": record.farm, "job_id": job_id},
             )
         try:
             result = cancel(job_id)
@@ -310,8 +349,10 @@ class RenderSubmissionService:
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.exception("render.job.cancel.error", job_id=job_id, farm=record.farm)
-            raise RenderSubmissionError(
-                f"Failed to cancel job '{job_id}' on farm '{record.farm}'."
+            raise RenderAdapterUnavailableError(
+                f"Failed to cancel job '{job_id}' on farm '{record.farm}'.",
+                hint="Check connectivity to the render farm and retry the cancellation once the service is healthy.",
+                context={"farm": record.farm, "job_id": job_id},
             ) from exc
         if self._update_record_from_result(record, result):
             self._persist_jobs()
@@ -436,6 +477,35 @@ def get_render_service() -> (
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 
 
+@app.exception_handler(RenderSubmissionError)
+async def render_submission_error_handler(
+    request: Request, exc: RenderSubmissionError
+) -> JSONResponse:
+    """Map adapter errors to standardised JSON responses."""
+
+    status_code = exc.status_code or 400
+    error_detail = APIErrorDetail(
+        code=exc.code,
+        message=str(exc),
+        hint=exc.hint,
+        context=exc.context or None,
+    )
+    log = logger.error if status_code >= 500 else logger.warning
+    log(
+        "render.api.error",
+        code=error_detail.code,
+        message=error_detail.message,
+        hint=error_detail.hint,
+        context=error_detail.context,
+        status=status_code,
+        path=str(request.url.path),
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content=APIErrorResponse(error=error_detail).model_dump(exclude_none=True),
+    )
+
+
 @app.middleware("http")
 async def log_requests(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -488,14 +558,8 @@ async def create_job(
     )
     try:
         result = service.submit_job(request)
-    except RenderSubmissionError as exc:
-        logger.warning(
-            "render.api.submit.failed",
-            farm=request.farm,
-            scene=request.scene,
-            error=str(exc),
-        )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RenderSubmissionError:
+        raise
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
             "render.api.submit.error",
@@ -514,10 +578,6 @@ async def create_job(
         message=result.get("message"),
     )
 
-    status_code = 201
-    if payload.status == "not_implemented":
-        status_code = 501
-
     logger.info(
         "render.api.submit.complete",
         farm=payload.farm_type,
@@ -525,7 +585,7 @@ async def create_job(
         job_id=payload.job_id,
     )
 
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    return JSONResponse(status_code=201, content=payload.model_dump())
 
 
 @app.get("/jobs", response_model=JobsListResponse)
@@ -590,5 +650,3 @@ def cancel_job(
         return service.cancel_job(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found.") from exc
-    except RenderSubmissionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
