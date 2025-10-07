@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "show": "SHOW01",
+      "episode": "ep001",
+      "scene": "sc01",
+      "shot": "0001",
+      "asset": "comp",
+      "version": 2,
+      "source_path": "/deliveries/vendor_drop/SHOW01_ep001_sc01_0001_comp_v002.mov",
+      "delivery_path": "SHOW01_ep001_sc01_0001_comp_v002.mov",
+      "checksum": "md5:deadbeefcafefeeddeadbeefcafefeed"
+    }
+  ]
+}

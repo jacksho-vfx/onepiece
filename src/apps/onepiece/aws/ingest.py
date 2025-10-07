@@ -18,12 +18,15 @@ from apps.onepiece.utils.errors import (
 from apps.onepiece.utils.progress import progress_tracker
 from libraries.ingest import (
     Boto3Uploader,
+    Delivery,
+    DeliveryManifestError,
     IngestReport,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
     ShotgridSchemaError,
     UploaderProtocol,
+    load_delivery_manifest,
 )
 from libraries.shotgrid.client import ShotgridClient
 
@@ -60,6 +63,14 @@ def ingest(
     client_bucket: str = typer.Option(
         "client_in", help="S3 bucket for client deliveries"
     ),
+    manifest: Path | None = typer.Option(
+        None,
+        "--manifest",
+        help=(
+            "Optional CSV or JSON manifest describing each delivery entry. "
+            "When provided, entries are matched to filenames to enrich ingest metadata."
+        ),
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate without uploading to S3"
     ),
@@ -93,6 +104,31 @@ def ingest(
             "report, share it with the vendor, and retry once files are available."
         )
 
+    manifest_entries: list[Delivery] | None = None
+    if manifest is not None:
+        if not manifest.exists() or not manifest.is_file():
+            raise typer.BadParameter(
+                "Manifest path must point to an existing file",
+                param_hint="manifest",
+            )
+        try:
+            manifest_entries = load_delivery_manifest(manifest)
+        except FileNotFoundError:
+            raise typer.BadParameter(
+                "Manifest path must point to an existing file",
+                param_hint="manifest",
+            ) from None
+        except DeliveryManifestError as exc:
+            raise OnePieceValidationError(
+                f"Unable to parse manifest '{manifest}': {exc}. "
+                "Update the schema and retry the ingest."
+            ) from exc
+
+        if not manifest_entries:
+            raise OnePieceValidationError(
+                f"Manifest '{manifest}' does not contain any deliveries. Provide at least one entry."
+            )
+
     shotgrid = ShotgridClient()
     uploader = _DryRunUploader() if dry_run else Boto3Uploader()
     typed_uploader: UploaderProtocol = cast(UploaderProtocol, uploader)
@@ -123,6 +159,7 @@ def ingest(
             report = service.ingest_folder(
                 folder,
                 progress_callback=_on_progress,
+                manifest=manifest_entries,
             )
         except ShotgridAuthenticationError as exc:
             raise OnePieceConfigError(

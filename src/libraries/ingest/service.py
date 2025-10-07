@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import csv
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, List, Protocol, Tuple, cast
+from typing import (
+    Callable,
+    Iterable,
+    List,
+    Mapping,
+    Protocol,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
 from libraries.validations.naming import (
@@ -74,6 +85,7 @@ class IngestedMedia:
     bucket: str
     key: str
     media_info: MediaInfo
+    delivery: Delivery | None = None
 
 
 @dataclass
@@ -107,6 +119,156 @@ class ShotgridSchemaError(RuntimeError):
 
 class ShotgridConnectivityError(RuntimeError):
     """Raised when ShotGrid cannot be reached after retries."""
+
+
+class DeliveryManifestError(ValueError):
+    """Raised when delivery manifest payloads cannot be parsed."""
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """Structured metadata describing a delivery manifest entry."""
+
+    show: str
+    episode: str
+    scene: str
+    shot: str
+    asset: str
+    version: int
+    source_path: Path
+    delivery_path: Path
+    checksum: str | None = None
+
+    @property
+    def shot_name(self) -> str:
+        return f"{self.episode}_{self.scene}_{self.shot}"
+
+
+def _normalise_manifest_entry(
+    entry: Mapping[str, object],
+    *,
+    index: int,
+    manifest_path: Path,
+) -> Delivery:
+    normalised: dict[str, object] = {
+        str(key).lower(): value for key, value in entry.items()
+    }
+
+    def _require(key: str) -> object:
+        lowered = key.lower()
+        if lowered not in normalised:
+            raise DeliveryManifestError(
+                f"Manifest entry {index} in '{manifest_path}' is missing '{key}'"
+            )
+        return normalised[lowered]
+
+    checksum_value = normalised.get("checksum")
+    checksum = None if checksum_value in (None, "") else str(checksum_value)
+
+    version_raw = _require("version")
+    try:
+        version = int(cast(str, version_raw))
+    except (TypeError, ValueError) as exc:
+        raise DeliveryManifestError(
+            f"Manifest entry {index} in '{manifest_path}' has an invalid version: {version_raw!r}"
+        ) from exc
+
+    delivery_path_raw = _require("delivery_path")
+    if not delivery_path_raw:
+        raise DeliveryManifestError(
+            f"Manifest entry {index} in '{manifest_path}' has an empty delivery_path"
+        )
+
+    source_path_raw = _require("source_path")
+    if not source_path_raw:
+        raise DeliveryManifestError(
+            f"Manifest entry {index} in '{manifest_path}' has an empty source_path"
+        )
+
+    return Delivery(
+        show=str(_require("show")),
+        episode=str(_require("episode")),
+        scene=str(_require("scene")),
+        shot=str(_require("shot")),
+        asset=str(_require("asset")),
+        version=version,
+        source_path=Path(str(source_path_raw)),
+        delivery_path=Path(str(delivery_path_raw)),
+        checksum=checksum,
+    )
+
+
+def _load_manifest_rows(manifest_path: Path) -> list[Mapping[str, object]]:
+    suffix = manifest_path.suffix.lower()
+    if suffix == ".csv":
+        with manifest_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            return [
+                {key: value for key, value in row.items() if key is not None}
+                for row in reader
+                if any((value or "").strip() for value in row.values())
+            ]
+
+    if suffix == ".json":
+        with manifest_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, Mapping):
+            if "files" in payload:
+                rows = payload["files"]
+            elif "deliveries" in payload:
+                rows = payload["deliveries"]
+            else:
+                raise DeliveryManifestError(
+                    f"JSON manifest '{manifest_path}' must contain a 'files' or 'deliveries' array"
+                )
+        else:
+            raise DeliveryManifestError(
+                f"Unsupported JSON manifest payload in '{manifest_path}': {type(payload).__name__}"
+            )
+
+        if not isinstance(rows, list):
+            raise DeliveryManifestError(
+                f"JSON manifest '{manifest_path}' has an invalid entry collection"
+            )
+
+        entries: list[Mapping[str, object]] = []
+        for index, item in enumerate(rows):
+            if not isinstance(item, Mapping):
+                raise DeliveryManifestError(
+                    f"Manifest entry {index} in '{manifest_path}' is not an object"
+                )
+            entries.append(cast(Mapping[str, object], item))
+        return entries
+
+    raise DeliveryManifestError(
+        f"Unsupported manifest format for '{manifest_path}'. Provide a CSV or JSON manifest."
+    )
+
+
+def load_delivery_manifest(manifest_path: Path) -> list[Delivery]:
+    """Return :class:`Delivery` entries parsed from *manifest_path*."""
+
+    if not manifest_path.exists() or not manifest_path.is_file():
+        raise FileNotFoundError(f"Manifest file not found: {manifest_path}")
+
+    rows = _load_manifest_rows(manifest_path)
+    deliveries: list[Delivery] = []
+    for index, entry in enumerate(rows):
+        deliveries.append(
+            _normalise_manifest_entry(entry, index=index, manifest_path=manifest_path)
+        )
+    return deliveries
+
+
+def _build_manifest_index(deliveries: Sequence[Delivery]) -> dict[str, Delivery]:
+    index: dict[str, Delivery] = {}
+    for delivery in deliveries:
+        relative = delivery.delivery_path.as_posix()
+        index.setdefault(relative, delivery)
+        index.setdefault(delivery.delivery_path.name, delivery)
+    return index
 
 
 def parse_media_filename(filename: str) -> MediaInfo:
@@ -169,11 +331,23 @@ class MediaIngestService:
         folder: Path,
         recursive: bool = True,
         progress_callback: Callable[[Path, str], None] | None = None,
+        manifest: Sequence[Delivery] | Mapping[str, Delivery] | Path | None = None,
     ) -> IngestReport:
         """Ingest all media files from *folder* and return a summary report."""
 
         if not folder.exists() or not folder.is_dir():
             raise FileNotFoundError(f"Incoming folder does not exist: {folder}")
+
+        manifest_entries: list[Delivery] = []
+        if manifest is not None:
+            if isinstance(manifest, Path):
+                manifest_entries = load_delivery_manifest(manifest)
+            elif isinstance(manifest, Mapping):
+                manifest_entries = list(manifest.values())
+            else:
+                manifest_entries = list(manifest)
+
+        manifest_lookup = _build_manifest_index(manifest_entries)
 
         report = IngestReport()
         candidates: Iterable[Path]
@@ -198,6 +372,59 @@ class MediaIngestService:
                 report.warnings.append(f"{path.name}: {exc}")
                 _notify("skipped")
                 continue
+
+            delivery_entry: Delivery | None = None
+            if manifest_lookup:
+                relative_key = path.relative_to(folder).as_posix()
+                delivery_entry = manifest_lookup.get(relative_key)
+                if delivery_entry is None:
+                    delivery_entry = manifest_lookup.get(path.name)
+
+                if delivery_entry is None:
+                    warning = f"Manifest does not contain metadata for '{path.name}'."
+                    log.warning(
+                        "ingest.manifest_missing_entry",
+                        file=str(path),
+                        folder=str(folder),
+                    )
+                    report.warnings.append(warning)
+                else:
+                    mismatches: list[str] = []
+                    if delivery_entry.show != media_info.show_code:
+                        mismatches.append(
+                            f"show '{delivery_entry.show}' != '{media_info.show_code}'"
+                        )
+                    if delivery_entry.episode != media_info.episode:
+                        mismatches.append(
+                            f"episode '{delivery_entry.episode}' != '{media_info.episode}'"
+                        )
+                    if delivery_entry.scene != media_info.scene:
+                        mismatches.append(
+                            f"scene '{delivery_entry.scene}' != '{media_info.scene}'"
+                        )
+                    if delivery_entry.shot != media_info.shot:
+                        mismatches.append(
+                            f"shot '{delivery_entry.shot}' != '{media_info.shot}'"
+                        )
+                    if delivery_entry.delivery_path.name != path.name:
+                        mismatches.append(
+                            f"filename '{delivery_entry.delivery_path.name}' != '{path.name}'"
+                        )
+
+                    if mismatches:
+                        reason = (
+                            "Manifest metadata does not match filename: "
+                            + "; ".join(mismatches)
+                        )
+                        log.warning(
+                            "ingest.manifest_mismatch",
+                            file=str(path),
+                            reason=reason,
+                        )
+                        report.invalid.append((path, reason))
+                        report.warnings.append(f"{path.name}: {reason}")
+                        _notify("skipped")
+                        continue
 
             if media_info.show_code != self.show_code:
                 reason = (
@@ -315,7 +542,13 @@ class MediaIngestService:
                     )
 
             report.processed.append(
-                IngestedMedia(path=path, bucket=bucket, key=key, media_info=media_info)
+                IngestedMedia(
+                    path=path,
+                    bucket=bucket,
+                    key=key,
+                    media_info=media_info,
+                    delivery=delivery_entry,
+                )
             )
             _notify("uploaded")
 
