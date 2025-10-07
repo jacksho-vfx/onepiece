@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import os
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -384,7 +385,7 @@ class RenderSubmissionService:
         broadcaster: EventBroadcaster | None = None,
     ) -> None:
         self._adapters = dict(adapters or FARM_ADAPTERS)
-        self._jobs: dict[str, _JobRecord] = {}
+        self._jobs: OrderedDict[str, _JobRecord] = OrderedDict()
         self._store = job_store
         self._history_limit = (
             history_limit if history_limit and history_limit > 0 else None
@@ -558,8 +559,10 @@ class RenderSubmissionService:
     def _load_jobs(self) -> None:
         if not self._store:
             return
-        for record in self._store.load():
-            self._jobs[record.job_id] = record
+        loaded_records = sorted(
+            self._store.load(), key=lambda entry: entry.created_at
+        )
+        self._jobs = OrderedDict((record.job_id, record) for record in loaded_records)
         previous_count = len(self._jobs)
         self._enforce_history_limit()
         if self._history_limit is not None and len(self._jobs) < previous_count:
@@ -575,15 +578,13 @@ class RenderSubmissionService:
             return
         removed = 0
         while len(self._jobs) > self._history_limit:
-            oldest_key = next(iter(self._jobs))
-            record = self._jobs.pop(oldest_key, None)
-            if record is not None:
-                self._emit_event(
-                    "job.removed",
-                    record,
-                    payload_override={"job": {"job_id": record.job_id}},
-                )
-                removed += 1
+            oldest_key, record = self._jobs.popitem(last=False)
+            self._emit_event(
+                "job.removed",
+                record,
+                payload_override={"job": {"job_id": record.job_id}},
+            )
+            removed += 1
         if removed:
             self._last_history_prune_at = _utcnow()
             self._last_history_prune_count = removed
