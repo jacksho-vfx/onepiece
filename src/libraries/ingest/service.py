@@ -167,7 +167,7 @@ def _normalise_manifest_entry(
 
     version_raw = _require("version")
     try:
-        version = int(version_raw)
+        version = int(cast(str, version_raw))
     except (TypeError, ValueError) as exc:
         raise DeliveryManifestError(
             f"Manifest entry {index} in '{manifest_path}' has an invalid version: {version_raw!r}"

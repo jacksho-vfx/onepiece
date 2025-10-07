@@ -109,14 +109,14 @@ def ingest(
         if not manifest.exists() or not manifest.is_file():
             raise typer.BadParameter(
                 "Manifest path must point to an existing file",
-                param_name="manifest",
+                param_hint="manifest",
             )
         try:
             manifest_entries = load_delivery_manifest(manifest)
         except FileNotFoundError:
             raise typer.BadParameter(
                 "Manifest path must point to an existing file",
-                param_name="manifest",
+                param_hint="manifest",
             ) from None
         except DeliveryManifestError as exc:
             raise OnePieceValidationError(
