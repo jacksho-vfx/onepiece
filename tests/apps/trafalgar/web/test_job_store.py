@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -21,7 +22,9 @@ def job_request() -> RenderJobRequest:
     )
 
 
-def _record(job_id: str, request: RenderJobRequest, *, created_at: datetime) -> _JobRecord:
+def _record(
+    job_id: str, request: RenderJobRequest, *, created_at: datetime
+) -> _JobRecord:
     return _JobRecord(
         job_id=job_id,
         farm="mock",
@@ -33,7 +36,9 @@ def _record(job_id: str, request: RenderJobRequest, *, created_at: datetime) -> 
     )
 
 
-def test_job_store_prunes_expired_records(tmp_path, job_request):
+def test_job_store_prunes_expired_records(
+    tmp_path: Path, job_request: RenderJobRequest
+) -> None:
     path = tmp_path / "jobs.json"
     store = JobStore(path, retention=timedelta(seconds=60))
 
@@ -54,7 +59,9 @@ def test_job_store_prunes_expired_records(tmp_path, job_request):
     assert stats.last_save_at is not None
 
 
-def test_job_store_prunes_on_load(tmp_path, job_request):
+def test_job_store_prunes_on_load(
+    tmp_path: Path, job_request: RenderJobRequest
+) -> None:
     path = tmp_path / "jobs.json"
 
     now = datetime.now(timezone.utc)

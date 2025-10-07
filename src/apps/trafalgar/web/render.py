@@ -487,9 +487,7 @@ class RenderSubmissionService:
             "history_size": len(self._jobs),
             "history_limit": self._history_limit,
             "history_pruned_total": self._history_pruned_total,
-            "last_history_prune_at": _serialise_datetime(
-                self._last_history_prune_at
-            ),
+            "last_history_prune_at": _serialise_datetime(self._last_history_prune_at),
             "last_history_pruned": self._last_history_prune_count,
             "store": store_metrics,
         }
