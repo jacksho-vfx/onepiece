@@ -365,9 +365,7 @@ async def test_metrics_endpoint_combines_dashboards(
         lambda: dashboard.ShotGridService(DummyShotgridClient(versions))
     )
     dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
-        lambda: dashboard.ReconcileService(
-            DummyReconcileProvider(reconcile_payload)
-        )
+        lambda: dashboard.ReconcileService(DummyReconcileProvider(reconcile_payload))
     )
     ingest_facade = DummyIngestFacade(ingest_summary)
     dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (

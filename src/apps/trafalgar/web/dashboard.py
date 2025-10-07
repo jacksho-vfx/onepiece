@@ -645,9 +645,7 @@ class DeliveryProvider:
 class RenderDashboardFacade:
     """Aggregate render job metrics for dashboard consumption."""
 
-    def __init__(
-        self, service: RenderSubmissionService | None = None
-    ) -> None:
+    def __init__(self, service: RenderSubmissionService | None = None) -> None:
         self._service = service or get_render_service()
 
     def summarise_jobs(self) -> dict[str, Any]:
@@ -1138,7 +1136,9 @@ async def metrics(
 
     project_names = shotgrid_service.discover_projects()
     review_raw = review_facade.summarise_projects(project_names)
-    review_projects_raw = list(review_raw.get("projects", [])) if isinstance(review_raw, Mapping) else []
+    review_projects_raw = (
+        list(review_raw.get("projects", [])) if isinstance(review_raw, Mapping) else []
+    )
     review_projects_model = [
         ReviewProjectSummaryModel(
             project=str(entry.get("project")),
@@ -1150,7 +1150,9 @@ async def metrics(
         for entry in review_projects_raw
         if isinstance(entry, Mapping) and entry.get("project")
     ]
-    review_totals_raw = review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    review_totals_raw = (
+        review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    )
     review_model = ReviewSummaryModel(
         totals=ReviewTotalsModel(
             projects=_parse_int(
@@ -1228,5 +1230,3 @@ async def deliveries(
 ) -> JSONResponse:
     payload = delivery_service.list_deliveries(project_name)
     return JSONResponse(content=payload)
-
-
