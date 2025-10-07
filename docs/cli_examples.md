@@ -8,7 +8,7 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 - `python -m apps.onepiece info` — print environment and configuration details for the pipeline client.
 
 ### AWS utilities
-- `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run]` — validate deliveries, upload to S3, and register ShotGrid Versions.
+- `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run --report-format <json|csv> --report-path <file>]` — validate deliveries, upload to S3, and register ShotGrid Versions. The analytics flags capture dry-run results as JSON or CSV so you can review invalid files and planned uploads before executing a real ingest.
 - `python -m apps.onepiece aws sync-from <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — mirror S3 data into a local directory via `s5cmd` with progress reporting.
 - `python -m apps.onepiece aws sync-to <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — push local renders back to S3 using `s5cmd` with progress feedback.
 
