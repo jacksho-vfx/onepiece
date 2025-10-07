@@ -144,9 +144,7 @@ def test_publish_scene_supports_direct_upload(
 
 
 @patch("libraries.dcc.dcc_client.s5_sync")
-def test_publish_scene_honours_dry_run(
-    sync_mock: MagicMock, tmp_path: Path
-) -> None:
+def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
     package_path = publish_scene(
