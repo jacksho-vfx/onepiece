@@ -19,6 +19,7 @@ If the ingest command exits early, review the CLI heading and take the suggested
 - **Configuration error** – ShotGrid rejected the configured credentials. Refresh the API script key or token, update the environment variables used by ingest, and rerun the command once authentication succeeds.
 - **Validation error** – ShotGrid rejected the version payload. Confirm that the referenced project, shot, and naming conventions exist in ShotGrid, adjust the filenames or ShotGrid schema, then retry the ingest.
 - **External service error** – The CLI could not reach ShotGrid. Check VPN or proxy connectivity, verify the ShotGrid status page, and rerun the ingest after connectivity is restored.
+- **Empty delivery folder** – The ingest command will exit early with a validation warning pointing to the dry-run report. Run the same command with `--dry-run`, share the generated report with the vendor to request the missing files, then rerun ingest once the delivery is complete.
 
 ### DCC integration
 - `python -m apps.onepiece dcc open-shot --shot <scene_file> [--dcc <maya|nuke|…>]` — open the scene in the inferred or specified DCC, surfacing external errors cleanly.

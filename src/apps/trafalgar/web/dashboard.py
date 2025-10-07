@@ -269,17 +269,20 @@ def _parse_int(value: Any, default: int) -> int:
     return max(0, int(result))
 
 
-def _load_cache_configuration() -> tuple[float, int]:
+def _load_cache_configuration() -> tuple[float, int, int]:
     """Return cache configuration from the environment or FastAPI state."""
 
     default_ttl = 30.0
     default_max_records = 5000
+    default_max_projects = 50
 
     ttl_value = os.getenv("ONEPIECE_DASHBOARD_CACHE_TTL")
     max_records_value = os.getenv("ONEPIECE_DASHBOARD_CACHE_MAX_RECORDS")
+    max_projects_value = os.getenv("ONEPIECE_DASHBOARD_CACHE_MAX_PROJECTS")
 
     ttl = _parse_float(ttl_value, default_ttl)
     max_records = _parse_int(max_records_value, default_max_records)
+    max_projects = _parse_int(max_projects_value, default_max_projects)
 
     try:  # pragma: no cover - FastAPI app may not be initialised in tests
         state = getattr(app, "state", None)
@@ -292,8 +295,12 @@ def _load_cache_configuration() -> tuple[float, int]:
             getattr(state, "dashboard_cache_max_records", max_records),
             max_records,
         )
+        max_projects = _parse_int(
+            getattr(state, "dashboard_cache_max_projects", max_projects),
+            max_projects,
+        )
 
-    return ttl, max_records
+    return ttl, max_records, max_projects
 
 
 # ---------------------------------------------------------------------------
@@ -312,24 +319,68 @@ class ShotGridService:
         version_fetcher: Callable[[Any], Sequence[Mapping[str, Any]]] | None = None,
         cache_ttl: float | int | None = None,
         cache_max_records: int | None = None,
+        cache_max_projects: int | None = None,
         time_provider: Callable[[], float] | None = None,
     ) -> None:
         self._client = client
         self._configured_projects = set(known_projects or [])
         self._fetcher = version_fetcher
-        default_ttl, default_max_records = _load_cache_configuration()
+        default_ttl, default_max_records, default_max_projects = (
+            _load_cache_configuration()
+        )
         ttl_source = cache_ttl if cache_ttl is not None else default_ttl
         max_records_source = (
             cache_max_records if cache_max_records is not None else default_max_records
+        )
+        max_projects_source = (
+            cache_max_projects
+            if cache_max_projects is not None
+            else default_max_projects
         )
         self._cache_ttl: float = _parse_float(ttl_source, default_ttl)
         self._cache_max_records: int = _parse_int(
             max_records_source, default_max_records
         )
+        self._cache_max_projects: int = _parse_int(
+            max_projects_source, default_max_projects
+        )
         self._time_provider = time_provider or monotonic
         self._version_cache: dict[
             tuple[Any, ...], tuple[float, list[Mapping[str, Any]]]
         ] = {}
+
+    @property
+    def cache_settings(self) -> dict[str, float | int]:
+        """Return the current cache settings."""
+
+        return {
+            "ttl_seconds": self._cache_ttl,
+            "max_records": self._cache_max_records,
+            "max_projects": self._cache_max_projects,
+        }
+
+    def configure_cache(
+        self,
+        *,
+        ttl_seconds: float | int | None = None,
+        max_records: int | None = None,
+        max_projects: int | None = None,
+    ) -> None:
+        """Adjust cache settings at runtime."""
+
+        if ttl_seconds is not None:
+            self._cache_ttl = _parse_float(ttl_seconds, self._cache_ttl)
+        if max_records is not None:
+            self._cache_max_records = _parse_int(max_records, self._cache_max_records)
+        if max_projects is not None:
+            self._cache_max_projects = _parse_int(
+                max_projects, self._cache_max_projects
+            )
+
+    def invalidate_cache(self) -> None:
+        """Clear cached ShotGrid responses."""
+
+        self._version_cache.clear()
 
     def discover_projects(self) -> list[str]:
         """Return a sorted list of known projects using ShotGrid if available."""
@@ -427,6 +478,17 @@ class ShotGridService:
         can_cache = self._cache_ttl > 0
         if can_cache and self._cache_max_records > 0:
             if len(versions_result) > self._cache_max_records:
+                can_cache = False
+        if can_cache and self._cache_max_projects > 0:
+            project_count = len(
+                {
+                    _coerce_project_name(item.get("project"))
+                    or str(item.get("project")).strip()
+                    for item in versions_result
+                    if item.get("project") is not None
+                }
+            )
+            if project_count > self._cache_max_projects:
                 can_cache = False
 
         if can_cache:
@@ -822,6 +884,19 @@ class DashboardMetricsModel(BaseModel):
     review: ReviewSummaryModel
 
 
+class CacheSettingsModel(BaseModel):
+    ttl_seconds: float = Field(ge=0.0)
+    max_records: int = Field(ge=0)
+    max_projects: int = Field(ge=0)
+
+
+class CacheSettingsUpdateModel(BaseModel):
+    ttl_seconds: float | None = Field(default=None, ge=0.0)
+    max_records: int | None = Field(default=None, ge=0)
+    max_projects: int | None = Field(default=None, ge=0)
+    flush: bool = False
+
+
 class DeliveryService:
     def __init__(
         self,
@@ -947,12 +1022,13 @@ def get_shotgrid_client() -> Any:  # pragma: no cover - runtime wiring
 @lru_cache(maxsize=1)
 def get_shotgrid_service() -> ShotGridService:
     client = get_shotgrid_client()
-    cache_ttl, cache_max_records = _load_cache_configuration()
+    cache_ttl, cache_max_records, cache_max_projects = _load_cache_configuration()
     return ShotGridService(
         client,
         known_projects=_load_known_projects(),
         cache_ttl=cache_ttl,
         cache_max_records=cache_max_records,
+        cache_max_projects=cache_max_projects,
     )
 
 
@@ -1181,6 +1257,54 @@ async def metrics(
         render=render_model,
         review=review_model,
     )
+
+
+@app.get(
+    "/admin/cache",
+    response_model=CacheSettingsModel,
+    dependencies=[Depends(require_dashboard_auth)],
+)
+async def get_cache_settings(
+    shotgrid_service: ShotGridService = Depends(get_shotgrid_service),
+) -> CacheSettingsModel:
+    """Return the active cache configuration for the dashboard."""
+
+    return CacheSettingsModel(**shotgrid_service.cache_settings)
+
+
+@app.post(
+    "/admin/cache",
+    response_model=CacheSettingsModel,
+    dependencies=[Depends(require_dashboard_auth)],
+)
+async def update_cache_settings(
+    payload: CacheSettingsUpdateModel,
+    shotgrid_service: ShotGridService = Depends(get_shotgrid_service),
+) -> CacheSettingsModel:
+    """Update cache configuration and optionally flush cached responses."""
+
+    updates: dict[str, float | int] = {}
+    if payload.ttl_seconds is not None:
+        updates["ttl_seconds"] = payload.ttl_seconds
+    if payload.max_records is not None:
+        updates["max_records"] = payload.max_records
+    if payload.max_projects is not None:
+        updates["max_projects"] = payload.max_projects
+
+    if updates:
+        shotgrid_service.configure_cache(**updates)  # type: ignore[arg-type]
+        settings = shotgrid_service.cache_settings
+        if "ttl_seconds" in updates:
+            app.state.dashboard_cache_ttl = settings["ttl_seconds"]
+        if "max_records" in updates:
+            app.state.dashboard_cache_max_records = settings["max_records"]
+        if "max_projects" in updates:
+            app.state.dashboard_cache_max_projects = settings["max_projects"]
+
+    if payload.flush:
+        shotgrid_service.invalidate_cache()
+
+    return CacheSettingsModel(**shotgrid_service.cache_settings)
 
 
 @app.get("/projects/{project_name}")

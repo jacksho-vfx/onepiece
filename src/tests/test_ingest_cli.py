@@ -53,6 +53,8 @@ def _invoke_with_error(
 
     folder = tmp_path / "incoming"
     folder.mkdir()
+    media = folder / "dummy.mov"
+    media.write_text("")
 
     return runner.invoke(
         app,
@@ -67,6 +69,40 @@ def _invoke_with_error(
             "--dry-run",
         ],
     )
+
+
+def test_ingest_cli_warns_on_empty_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    folder = tmp_path / "incoming"
+    folder.mkdir()
+
+    def _unexpected_service(
+        *args: object, **kwargs: object
+    ) -> None:  # pragma: no cover
+        raise AssertionError(
+            "MediaIngestService should not be constructed for empty folders"
+        )
+
+    monkeypatch.setattr(ingest_module, "MediaIngestService", _unexpected_service)
+
+    result = runner.invoke(
+        app,
+        [
+            "aws",
+            "ingest",
+            str(folder),
+            "--project",
+            "CoolShow",
+            "--show-code",
+            "SHOW01",
+        ],
+    )
+
+    assert isinstance(result.exception, OnePieceValidationError)
+    message = str(result.exception)
+    assert "No media files" in message
+    assert "--dry-run" in message
 
 
 def test_ingest_cli_maps_authentication_error(

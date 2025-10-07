@@ -82,6 +82,15 @@ def ingest(
     if (report_format is not None or report_path is not None) and not dry_run:
         raise typer.BadParameter("Analytics reports are only available when --dry-run is used")
 
+    total_files = sum(1 for path in folder.rglob("*") if path.is_file())
+        
+    if total_files == 0:
+        raise OnePieceValidationError(
+            "No media files were discovered in the delivery folder. "
+            "Run the ingest command with --dry-run to generate a validation "
+            "report, share it with the vendor, and retry once files are available."
+        )
+
     shotgrid = ShotgridClient()
     uploader = _DryRunUploader() if dry_run else Boto3Uploader()
     typed_uploader: UploaderProtocol = cast(UploaderProtocol, uploader)
@@ -96,8 +105,6 @@ def ingest(
         client_bucket=client_bucket,
         dry_run=dry_run,
     )
-
-    total_files = sum(1 for path in folder.rglob("*") if path.is_file())
     status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
 
     with progress_tracker(

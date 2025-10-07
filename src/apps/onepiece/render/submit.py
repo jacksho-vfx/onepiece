@@ -16,6 +16,13 @@ from libraries.render import deadline, mock, opencue, tractor
 from libraries.render.base import AdapterCapabilities, RenderSubmissionError
 from libraries.render.models import CapabilityProvider, RenderAdapter
 
+from apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceIOError,
+    OnePieceRuntimeError,
+    OnePieceValidationError,
+)
+
 log = structlog.get_logger(__name__)
 
 app = typer.Typer(name="render", help="Render farm submission commands.")
@@ -47,15 +54,20 @@ FARM_CAPABILITY_PROVIDERS: Final[dict[str, CapabilityProvider]] = {
 def _get_adapter(farm: str) -> RenderAdapter:
     adapter = FARM_ADAPTERS.get(farm)
     if adapter is None:
-        raise RenderSubmissionError(f"Unknown render farm '{farm}'.")
+        raise OnePieceValidationError(f"Unknown render farm '{farm}'.")
     return adapter
 
 
 def _get_adapter_capabilities(farm: str) -> AdapterCapabilities:
     provider = FARM_CAPABILITY_PROVIDERS.get(farm)
     if provider is None:
-        raise RenderSubmissionError(f"Unknown render farm '{farm}'.")
-    return provider()
+        raise OnePieceValidationError(f"Unknown render farm '{farm}'.")
+    try:
+        return provider()
+    except RenderSubmissionError as exc:
+        raise OnePieceExternalServiceError(
+            f"Failed to query capabilities from '{farm}' adapter: {exc}"
+        ) from exc
 
 
 def _resolve_priority_and_chunk_size(
@@ -73,14 +85,12 @@ def _resolve_priority_and_chunk_size(
     min_priority = capabilities.get("priority_min")
     max_priority = capabilities.get("priority_max")
     if min_priority is not None and resolved_priority < min_priority:
-        raise typer.BadParameter(
-            f"Priority {resolved_priority} is below the supported minimum of {min_priority}.",
-            param_hint="--priority",
+        raise OnePieceValidationError(
+            f"Priority {resolved_priority} is below the supported minimum of {min_priority} (--priority)."
         )
     if max_priority is not None and resolved_priority > max_priority:
-        raise typer.BadParameter(
-            f"Priority {resolved_priority} exceeds the supported maximum of {max_priority}.",
-            param_hint="--priority",
+        raise OnePieceValidationError(
+            f"Priority {resolved_priority} exceeds the supported maximum of {max_priority} (--priority)."
         )
 
     chunk_enabled = capabilities.get("chunk_size_enabled", False)
@@ -90,27 +100,23 @@ def _resolve_priority_and_chunk_size(
 
     if resolved_chunk is not None:
         if not chunk_enabled:
-            raise typer.BadParameter(
-                "Chunk sizing is not supported by this adapter.",
-                param_hint="--chunk-size",
+            raise OnePieceValidationError(
+                "Chunk sizing is not supported by this adapter (--chunk-size)."
             )
         min_chunk = capabilities.get("chunk_size_min")
         max_chunk = capabilities.get("chunk_size_max")
         if min_chunk is not None and resolved_chunk < min_chunk:
-            raise typer.BadParameter(
-                f"Chunk size {resolved_chunk} is below the supported minimum of {min_chunk}.",
-                param_hint="--chunk-size",
+            raise OnePieceValidationError(
+                f"Chunk size {resolved_chunk} is below the supported minimum of {min_chunk} (--chunk-size)."
             )
         if max_chunk is not None and resolved_chunk > max_chunk:
-            raise typer.BadParameter(
-                f"Chunk size {resolved_chunk} exceeds the supported maximum of {max_chunk}.",
-                param_hint="--chunk-size",
+            raise OnePieceValidationError(
+                f"Chunk size {resolved_chunk} exceeds the supported maximum of {max_chunk} (--chunk-size)."
             )
     elif chunk_size is not None:
         # Explicitly requested None but the adapter does not support chunking.
-        raise typer.BadParameter(
-            "Chunk sizing is not supported by this adapter.",
-            param_hint="--chunk-size",
+        raise OnePieceValidationError(
+            "Chunk sizing is not supported by this adapter (--chunk-size)."
         )
 
     return resolved_priority, resolved_chunk, capabilities
@@ -119,9 +125,9 @@ def _resolve_priority_and_chunk_size(
 def _validate_preset_name(name: str) -> str:
     cleaned = name.strip()
     if not cleaned:
-        raise typer.BadParameter("Preset name cannot be empty.")
+        raise OnePieceValidationError("Preset name cannot be empty.")
     if any(sep in cleaned for sep in ("/", "\\")):
-        raise typer.BadParameter("Preset name cannot include path separators.")
+        raise OnePieceValidationError("Preset name cannot include path separators.")
     return cleaned
 
 
@@ -143,7 +149,7 @@ def _preset_path(name: str) -> Path:
 def _load_preset(name: str) -> dict[str, Any]:
     path = _preset_path(name)
     if not path.exists():
-        raise FileNotFoundError(f"Preset '{name}' was not found at {path}.")
+        raise OnePieceIOError(f"Preset '{name}' was not found at {path}.")
     return cast(dict[str, Any], json.loads(path.read_text()))
 
 
@@ -251,8 +257,7 @@ def submit(
             scene=str(scene),
             error=str(exc),
         )
-        typer.secho(f"Render submission failed: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
+        raise OnePieceExternalServiceError(f"Render submission failed: {exc}") from exc
     except Exception as exc:  # pragma: no cover - defensive programming
         log.exception(
             "render.submit.error",
@@ -260,12 +265,9 @@ def submit(
             farm=farm,
             scene=str(scene),
         )
-        typer.secho(
-            f"Render submission failed due to an unexpected error: {exc}",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1) from exc
+        raise OnePieceRuntimeError(
+            "Render submission failed due to an unexpected error."
+        ) from exc
 
     job_id = result.get("job_id", "")
     status = result.get("status", "unknown")
@@ -289,7 +291,7 @@ def submit(
     if status == "not_implemented":
         detail = message or f"{farm_type.title()} adapter is not implemented yet."
         typer.secho(f"Render adapter response: {detail}", fg=typer.colors.YELLOW)
-        raise typer.Exit(code=0)
+        return
 
     typer.secho(
         f"Submitted {dcc} scene '{scene}' to {farm_type} with job ID {job_id} (status: {status}).",
@@ -424,11 +426,7 @@ def use_preset(
 ) -> None:
     """Execute a preset, optionally overriding fields before submission."""
 
-    try:
-        preset = _load_preset(name)
-    except FileNotFoundError as exc:
-        typer.secho(str(exc), fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
+    preset = _load_preset(name)
 
     merged: dict[str, Any] = dict(preset)
 
@@ -460,13 +458,10 @@ def use_preset(
     }
     missing = [hint for field, hint in required_fields.items() if not merged.get(field)]
     if missing:
-        typer.secho(
+        raise OnePieceValidationError(
             "Preset is missing required fields. Provide overrides for: "
-            + ", ".join(missing),
-            fg=typer.colors.RED,
-            err=True,
+            + ", ".join(missing)
         )
-        raise typer.Exit(code=1)
 
     typer.secho(f"Using preset '{name}'.", fg=typer.colors.BLUE)
 
