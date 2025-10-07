@@ -76,6 +76,16 @@ The Trafalgar render service responds to failures with a consistent JSON envelop
 
 Adapters raise typed exceptions (for example `adapter.not_implemented`, `adapter.job_rejected`) which the FastAPI exception handler translates into this payload. Clients should rely on the `code` field rather than parsing free-form text.
 
+## Trafalgar render history retention
+
+The Trafalgar render service persists recent job submissions to a JSON file so operators can inspect them after restarts. Tune the retention knobs through environment variables before starting the API server:
+
+- `TRAFALGAR_RENDER_JOBS_PATH` – location on disk where job history snapshots are stored.
+- `TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT` – maximum number of jobs kept in memory; older entries are dropped when the limit is exceeded.
+- `TRAFALGAR_RENDER_JOBS_RETENTION_HOURS` – age-based retention window for persisted jobs. Entries older than the configured number of hours are pruned on save and when the service restarts.
+
+The `/health` endpoint now reports the active history size, the number of jobs pruned due to retention limits, and the most recent compaction time so operators can confirm pruning activity without inspecting logs.
+
 ## Requirements
 
 - Python 3.11 or newer

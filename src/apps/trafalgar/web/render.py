@@ -5,6 +5,7 @@ from __future__ import annotations
 import getpass
 import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import asyncio
 import json
@@ -36,6 +37,35 @@ from apps.trafalgar.web.events import EventBroadcaster
 from apps.trafalgar.web.job_store import JobStore
 
 logger = structlog.get_logger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _serialise_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            pass
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            pass
+        else:
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+    return _utcnow()
+
 
 FARM_DESCRIPTIONS: Mapping[str, str] = {
     "deadline": "Autodesk Deadline render manager (stub).",
@@ -256,6 +286,9 @@ class RenderJobMetadata(BaseModel):
     request: RenderJobRequest = Field(
         ..., description="Original submission payload for the job."
     )
+    submitted_at: datetime = Field(
+        ..., description="UTC timestamp recording when the job was stored."
+    )
 
 
 class JobsListResponse(BaseModel):
@@ -295,6 +328,7 @@ class _JobRecord:
     status: str
     message: str | None
     request: RenderJobRequest
+    created_at: datetime
 
     def snapshot(self) -> RenderJobMetadata:
         return RenderJobMetadata(
@@ -304,6 +338,7 @@ class _JobRecord:
             status=self.status,
             message=self.message,
             request=self.request.model_copy(deep=True),
+            submitted_at=self.created_at,
         )
 
     def to_storage(self) -> dict[str, Any]:
@@ -314,10 +349,13 @@ class _JobRecord:
             "status": self.status,
             "message": self.message,
             "request": self.request.model_dump(),
+            "created_at": self.created_at.astimezone(timezone.utc).isoformat(),
         }
 
     @classmethod
     def from_storage(cls, payload: Mapping[str, Any]) -> "_JobRecord":
+        created_at_raw = payload.get("created_at")
+        created_at = _parse_timestamp(created_at_raw)
         return cls(
             job_id=str(payload["job_id"]),
             farm=str(payload["farm"]),
@@ -325,11 +363,13 @@ class _JobRecord:
             status=str(payload.get("status", "unknown")),
             message=payload.get("message"),
             request=RenderJobRequest(**payload["request"]),
+            created_at=created_at,
         )
 
 
 JOB_STORE_PATH_ENV = "TRAFALGAR_RENDER_JOBS_PATH"
 JOB_HISTORY_LIMIT_ENV = "TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT"
+JOB_RETENTION_HOURS_ENV = "TRAFALGAR_RENDER_JOBS_RETENTION_HOURS"
 
 
 class RenderSubmissionService:
@@ -350,6 +390,9 @@ class RenderSubmissionService:
             history_limit if history_limit and history_limit > 0 else None
         )
         self._events = broadcaster
+        self._history_pruned_total = 0
+        self._last_history_prune_at: datetime | None = None
+        self._last_history_prune_count = 0
         self._load_jobs()
 
     def list_farms(self) -> list[FarmInfo]:
@@ -405,6 +448,7 @@ class RenderSubmissionService:
             status=result.get("status", "unknown"),
             message=result.get("message"),
             request=stored_request,
+            created_at=_utcnow(),
         )
         if job_id:
             self._jobs[job_id] = record
@@ -529,6 +573,7 @@ class RenderSubmissionService:
     def _enforce_history_limit(self) -> None:
         if self._history_limit is None:
             return
+        removed = 0
         while len(self._jobs) > self._history_limit:
             oldest_key = next(iter(self._jobs))
             record = self._jobs.pop(oldest_key, None)
@@ -538,6 +583,24 @@ class RenderSubmissionService:
                     record,
                     payload_override={"job": {"job_id": record.job_id}},
                 )
+                removed += 1
+        if removed:
+            self._last_history_prune_at = _utcnow()
+            self._last_history_prune_count = removed
+            self._history_pruned_total += removed
+
+    def get_metrics(self) -> dict[str, Any]:
+        store_metrics: dict[str, Any] | None = None
+        if self._store:
+            store_metrics = self._store.stats.to_dict()
+        return {
+            "history_size": len(self._jobs),
+            "history_limit": self._history_limit,
+            "history_pruned_total": self._history_pruned_total,
+            "last_history_prune_at": _serialise_datetime(self._last_history_prune_at),
+            "last_history_pruned": self._last_history_prune_count,
+            "store": store_metrics,
+        }
 
     def _emit_event(
         self,
@@ -548,7 +611,10 @@ class RenderSubmissionService:
     ) -> None:
         if not self._events:
             return
-        payload = {"event": event, "job": record.snapshot().model_dump()}
+        payload = {
+            "event": event,
+            "job": record.snapshot().model_dump(mode="json"),
+        }
         if payload_override:
             payload.update(payload_override)
         self._events.publish(payload)
@@ -563,8 +629,29 @@ def get_render_service() -> (
 ):  # pragma: no cover - runtime wiring
     store_path = os.environ.get(JOB_STORE_PATH_ENV)
     history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)
+    retention_hours_value = os.environ.get(JOB_RETENTION_HOURS_ENV)
 
-    job_store = JobStore(store_path) if store_path else None
+    retention: timedelta | None = None
+    if retention_hours_value:
+        try:
+            hours = float(retention_hours_value)
+        except ValueError:
+            logger.warning(
+                "render.job.retention.invalid",
+                value=retention_hours_value,
+                env=JOB_RETENTION_HOURS_ENV,
+            )
+        else:
+            if hours <= 0:
+                logger.warning(
+                    "render.job.retention.ignored",
+                    value=retention_hours_value,
+                    env=JOB_RETENTION_HOURS_ENV,
+                )
+            else:
+                retention = timedelta(hours=hours)
+
+    job_store = JobStore(store_path, retention=retention) if store_path else None
 
     history_limit = None
     if history_limit_value:
@@ -639,8 +726,10 @@ def root() -> Mapping[str, str]:
 
 
 @app.get("/health")
-def health() -> Mapping[str, str]:
-    return {"status": "ok"}
+def health(
+    service: RenderSubmissionService = Depends(get_render_service),
+) -> Mapping[str, Any]:
+    return {"status": "ok", "render_history": service.get_metrics()}
 
 
 @app.get("/farms", response_model=FarmsResponse)
