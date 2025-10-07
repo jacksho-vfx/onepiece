@@ -73,8 +73,12 @@ def test_ingest_cli_warns_on_empty_folder(
     folder = tmp_path / "incoming"
     folder.mkdir()
 
-    def _unexpected_service(*args: object, **kwargs: object) -> None:  # pragma: no cover
-        raise AssertionError("MediaIngestService should not be constructed for empty folders")
+    def _unexpected_service(
+        *args: object, **kwargs: object
+    ) -> None:  # pragma: no cover
+        raise AssertionError(
+            "MediaIngestService should not be constructed for empty folders"
+        )
 
     monkeypatch.setattr(ingest_module, "MediaIngestService", _unexpected_service)
 
