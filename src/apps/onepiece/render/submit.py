@@ -6,7 +6,7 @@ import getpass
 import json
 import os
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import click
 import structlog
@@ -84,7 +84,9 @@ def _resolve_priority_and_chunk_size(
         )
 
     chunk_enabled = capabilities.get("chunk_size_enabled", False)
-    resolved_chunk = chunk_size if chunk_size is not None else capabilities.get("default_chunk_size")
+    resolved_chunk = (
+        chunk_size if chunk_size is not None else capabilities.get("default_chunk_size")
+    )
 
     if resolved_chunk is not None:
         if not chunk_enabled:
@@ -142,7 +144,7 @@ def _load_preset(name: str) -> dict[str, Any]:
     path = _preset_path(name)
     if not path.exists():
         raise FileNotFoundError(f"Preset '{name}' was not found at {path}.")
-    return json.loads(path.read_text())
+    return cast(dict[str, Any], json.loads(path.read_text()))
 
 
 def _save_preset(name: str, data: dict[str, Any]) -> Path:
@@ -327,7 +329,10 @@ def save_preset(
     name: str = typer.Argument(..., help="Name used to identify the preset."),
     *,
     farm: str = typer.Option(
-        ..., "--farm", help="Render farm targeted by this preset.", click_type=click.Choice(FARM_CHOICES, case_sensitive=False)
+        ...,
+        "--farm",
+        help="Render farm targeted by this preset.",
+        click_type=click.Choice(FARM_CHOICES, case_sensitive=False),
     ),
     dcc: str | None = typer.Option(
         None,
@@ -337,7 +342,9 @@ def save_preset(
     ),
     scene: Path | None = typer.Option(None, "--scene", help="Default scene file path."),
     frames: str | None = typer.Option(None, "--frames", help="Default frame range."),
-    output: Path | None = typer.Option(None, "--output", help="Default output directory."),
+    output: Path | None = typer.Option(
+        None, "--output", help="Default output directory."
+    ),
     priority: int | None = typer.Option(
         None,
         "--priority",
@@ -387,8 +394,12 @@ def use_preset(
     name: str = typer.Argument(..., help="Name of the preset to execute."),
     *,
     scene: Path | None = typer.Option(None, "--scene", help="Override the scene file."),
-    frames: str | None = typer.Option(None, "--frames", help="Override the frame range."),
-    output: Path | None = typer.Option(None, "--output", help="Override the output directory."),
+    frames: str | None = typer.Option(
+        None, "--frames", help="Override the frame range."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="Override the output directory."
+    ),
     farm: str | None = typer.Option(
         None,
         "--farm",
@@ -401,9 +412,15 @@ def use_preset(
         help="Override the preset DCC.",
         click_type=click.Choice(DCC_CHOICES, case_sensitive=False),
     ),
-    priority: int | None = typer.Option(None, "--priority", help="Override the preset priority."),
-    chunk_size: int | None = typer.Option(None, "--chunk-size", help="Override the preset chunk size."),
-    user: str | None = typer.Option(None, "--user", help="Override the submitting user."),
+    priority: int | None = typer.Option(
+        None, "--priority", help="Override the preset priority."
+    ),
+    chunk_size: int | None = typer.Option(
+        None, "--chunk-size", help="Override the preset chunk size."
+    ),
+    user: str | None = typer.Option(
+        None, "--user", help="Override the submitting user."
+    ),
 ) -> None:
     """Execute a preset, optionally overriding fields before submission."""
 
@@ -444,7 +461,8 @@ def use_preset(
     missing = [hint for field, hint in required_fields.items() if not merged.get(field)]
     if missing:
         typer.secho(
-            "Preset is missing required fields. Provide overrides for: " + ", ".join(missing),
+            "Preset is missing required fields. Provide overrides for: "
+            + ", ".join(missing),
             fg=typer.colors.RED,
             err=True,
         )

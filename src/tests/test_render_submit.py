@@ -169,7 +169,9 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert ("error", "render.submit.failed") in events
 
 
-def test_render_submit_priority_validation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_render_submit_priority_validation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     scene_file = tmp_path / "shot01.hip"
     scene_file.write_text("requires houdini")
     output_dir = tmp_path / "renders"
@@ -220,7 +222,9 @@ def test_render_submit_priority_validation(monkeypatch: pytest.MonkeyPatch, tmp_
     assert "supported maximum" in result.stderr
 
 
-def test_render_preset_crud_flow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_render_preset_crud_flow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     scene_file = tmp_path / "shot01.nk"
     scene_file.write_text("print('render')\n")
     output_dir = tmp_path / "renders"
