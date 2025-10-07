@@ -74,6 +74,26 @@ class DummyIngestFacade:
         return self._summary
 
 
+class DummyRenderFacade:
+    def __init__(self, summary: Mapping[str, Any]) -> None:
+        self._summary = summary
+        self.calls: int = 0
+
+    def summarise_jobs(self) -> Mapping[str, Any]:
+        self.calls += 1
+        return self._summary
+
+
+class DummyReviewFacade:
+    def __init__(self, summary: Mapping[str, Any]) -> None:
+        self._summary = summary
+        self.project_calls: list[list[str]] = []
+
+    def summarise_projects(self, project_names: Iterable[str]) -> Mapping[str, Any]:
+        self.project_calls.append(list(project_names))
+        return self._summary
+
+
 def test_shotgrid_service_discovers_projects_and_updates_registry(
     tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -271,6 +291,123 @@ async def test_status_endpoint_aggregates_counts() -> None:
     assert data["errors"] == 1
     assert data["ingest"] == ingest_summary
     assert ingest_facade.calls == [10]
+
+
+@pytest.mark.anyio("asyncio")
+async def test_metrics_endpoint_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/metrics")
+
+    assert response.status_code == 503
+
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "secret-token")
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/metrics")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio("asyncio")
+async def test_metrics_endpoint_combines_dashboards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "very-secret")
+
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "beta", "shot": "EP02_SC100_SH0500", "version": "v010"},
+        {"project": "alpha", "shot": "EP01_SC002_SH0020", "version": "v002"},
+    ]
+    reconcile_payload = {
+        "shotgrid": [{"shot": "ep01", "version": "v001"}],
+        "filesystem": [],
+        "s3": None,
+    }
+    ingest_summary = {
+        "counts": {"total": 4, "successful": 3, "failed": 1, "running": 0},
+        "last_success_at": "2024-01-01T09:00:00+00:00",
+        "failure_streak": 0,
+    }
+    render_summary = {
+        "jobs": 5,
+        "by_status": {"completed": 3, "running": 1, "failed": 1},
+        "by_farm": {"mock": 4, "tractor": 1},
+    }
+    review_summary = {
+        "totals": {
+            "projects": 2,
+            "playlists": 3,
+            "clips": 12,
+            "shots": 7,
+            "duration_seconds": 180.0,
+        },
+        "projects": [
+            {
+                "project": "alpha",
+                "playlists": 2,
+                "clips": 9,
+                "shots": 5,
+                "duration_seconds": 120.0,
+            },
+            {
+                "project": "beta",
+                "playlists": 1,
+                "clips": 3,
+                "shots": 2,
+                "duration_seconds": 60.0,
+            },
+        ],
+    }
+
+    dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = (
+        lambda: dashboard.ShotGridService(DummyShotgridClient(versions))
+    )
+    dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
+        lambda: dashboard.ReconcileService(
+            DummyReconcileProvider(reconcile_payload)
+        )
+    )
+    ingest_facade = DummyIngestFacade(ingest_summary)
+    dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (
+        lambda: ingest_facade
+    )
+    render_facade = DummyRenderFacade(render_summary)
+    dashboard.app.dependency_overrides[dashboard.get_render_dashboard_facade] = (
+        lambda: render_facade
+    )
+    review_facade = DummyReviewFacade(review_summary)
+    dashboard.app.dependency_overrides[dashboard.get_review_dashboard_facade] = (
+        lambda: review_facade
+    )
+
+    headers = {"Authorization": "Bearer very-secret"}
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/metrics", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["status"] == {
+        "projects": 2,
+        "shots": 3,
+        "versions": 3,
+        "errors": 1,
+    }
+    assert payload["ingest"]["counts"] == ingest_summary["counts"]
+    assert payload["ingest"]["last_success_at"] == "2024-01-01T09:00:00+00:00"
+    assert payload["render"] == {
+        "jobs": 5,
+        "by_status": {"completed": 3, "failed": 1, "running": 1},
+        "by_farm": {"mock": 4, "tractor": 1},
+    }
+    assert payload["review"]["totals"]["playlists"] == 3
+    assert payload["review"]["projects"][0]["project"] in {"alpha", "beta"}
+    assert render_facade.calls == 1
+    assert review_facade.project_calls
+    assert set(review_facade.project_calls[0]) == {"alpha", "beta"}
 
 
 @pytest.mark.anyio("asyncio")
