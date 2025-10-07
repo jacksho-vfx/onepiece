@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, Literal, cast
@@ -31,6 +32,13 @@ from libraries.ingest import (
 from libraries.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="AWS and S3 integration commands")
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
 
 
 class _DryRunUploader:
@@ -62,6 +70,38 @@ def ingest(
     ),
     client_bucket: str = typer.Option(
         "client_in", help="S3 bucket for client deliveries"
+    ),
+    max_workers: int = typer.Option(
+        int(os.getenv("INGEST_MAX_WORKERS", "4")),
+        "--max-workers",
+        help="Maximum number of concurrent uploads when using worker pools.",
+    ),
+    use_asyncio: bool = typer.Option(
+        _env_flag("INGEST_USE_ASYNCIO", False),
+        "--use-asyncio/--no-use-asyncio",
+        help="Coordinate uploads with asyncio instead of thread pools.",
+    ),
+    resume: bool = typer.Option(
+        _env_flag("INGEST_RESUME_ENABLED", False),
+        "--resume/--no-resume",
+        help=(
+            "Enable resumable uploads with checkpoint persistence for large media files."
+        ),
+    ),
+    checkpoint_dir: Path = typer.Option(
+        Path(os.getenv("INGEST_CHECKPOINT_DIR", ".ingest-checkpoints")),
+        "--checkpoint-dir",
+        help="Directory used to store upload checkpoint metadata when --resume is active.",
+    ),
+    checkpoint_threshold: int = typer.Option(
+        int(os.getenv("INGEST_CHECKPOINT_THRESHOLD", str(512 * 1024 * 1024))),
+        "--checkpoint-threshold",
+        help="Minimum file size in bytes that triggers checkpointed uploads.",
+    ),
+    upload_chunk_size: int = typer.Option(
+        int(os.getenv("INGEST_UPLOAD_CHUNK_SIZE", str(64 * 1024 * 1024))),
+        "--upload-chunk-size",
+        help="Chunk size in bytes used for resumable uploads.",
     ),
     manifest: Path | None = typer.Option(
         None,
@@ -142,6 +182,12 @@ def ingest(
         vendor_bucket=vendor_bucket,
         client_bucket=client_bucket,
         dry_run=dry_run,
+        max_workers=max_workers,
+        use_asyncio=use_asyncio,
+        resume_enabled=resume,
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_threshold_bytes=checkpoint_threshold,
+        upload_chunk_size=upload_chunk_size,
     )
     status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
 
