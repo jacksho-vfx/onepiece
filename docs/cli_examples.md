@@ -9,6 +9,13 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 
 ### AWS utilities
 - `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run --report-format <json|csv> --report-path <file>]` — validate deliveries, upload to S3, and register ShotGrid Versions. The analytics flags capture dry-run results as JSON or CSV so you can review invalid files and planned uploads before executing a real ingest.
+- **Ingest concurrency and resume tuning** – Heavy deliveries can be parallelised and resumed via additional flags and environment variables:
+  - `--max-workers` / `INGEST_MAX_WORKERS` – Size of the thread pool used for uploads (defaults to 4 when unset).
+  - `--use-asyncio/--no-use-asyncio` / `INGEST_USE_ASYNCIO` – Toggle asyncio task orchestration instead of threads.
+  - `--resume/--no-resume` / `INGEST_RESUME_ENABLED` – Enable resumable uploads with checkpoint persistence.
+  - `--checkpoint-dir` / `INGEST_CHECKPOINT_DIR` – Directory containing persisted multipart checkpoints (defaults to `.ingest-checkpoints`).
+  - `--checkpoint-threshold` / `INGEST_CHECKPOINT_THRESHOLD` – Minimum file size (bytes) before checkpoints are recorded; default is 512 MiB.
+  - `--upload-chunk-size` / `INGEST_UPLOAD_CHUNK_SIZE` – Chunk size (bytes) used for resumable transfers; default is 64 MiB.
 - `python -m apps.onepiece aws sync-from <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — mirror S3 data into a local directory via `s5cmd` with progress reporting.
 - `python -m apps.onepiece aws sync-to <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — push local renders back to S3 using `s5cmd` with progress feedback.
 

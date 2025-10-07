@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import csv
+import hashlib
 import json
 import logging
+import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
+    Any,
     Callable,
     Iterable,
     List,
@@ -16,6 +22,7 @@ from typing import (
     Sequence,
     Tuple,
     cast,
+    runtime_checkable,
 )
 
 from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
@@ -52,6 +59,106 @@ class UploaderProtocol(Protocol):
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         """Upload *file_path* to ``s3://bucket/key``."""
+
+
+@dataclass
+class UploadCheckpoint:
+    """Persisted state describing progress for a resumable upload."""
+
+    file_path: Path
+    bucket: str
+    key: str
+    file_size: int
+    bytes_transferred: int = 0
+    parts: list[tuple[int, str]] = field(default_factory=list)
+    upload_id: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "file_path": str(self.file_path),
+            "bucket": self.bucket,
+            "key": self.key,
+            "file_size": self.file_size,
+            "bytes_transferred": self.bytes_transferred,
+            "parts": [[part, etag] for part, etag in self.parts],
+            "upload_id": self.upload_id,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any]) -> "UploadCheckpoint":
+        parts_payload = payload.get("parts", [])
+        parts: list[tuple[int, str]] = []
+        for entry in parts_payload:
+            if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                part_number = int(entry[0])
+                etag = str(entry[1])
+                parts.append((part_number, etag))
+        return cls(
+            file_path=Path(str(payload["file_path"])),
+            bucket=str(payload["bucket"]),
+            key=str(payload["key"]),
+            file_size=int(payload.get("file_size", 0)),
+            bytes_transferred=int(payload.get("bytes_transferred", 0)),
+            parts=parts,
+            upload_id=payload.get("upload_id"),
+        )
+
+
+@runtime_checkable
+class ResumableUploaderProtocol(UploaderProtocol, Protocol):
+    """Uploader that supports resumable, checkpointed transfers."""
+
+    def upload_resumable(
+        self,
+        file_path: Path,
+        bucket: str,
+        key: str,
+        checkpoint: UploadCheckpoint,
+        chunk_size: int,
+        progress_callback: Callable[[UploadCheckpoint], None] | None = None,
+    ) -> None:
+        """Upload using *checkpoint* state and invoke *progress_callback* per chunk."""
+
+
+class UploadCheckpointStore:
+    """Thread-safe persistence helper for resumable upload checkpoints."""
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._lock = threading.Lock()
+        self._directory.mkdir(parents=True, exist_ok=True)
+
+    def load(self, bucket: str, key: str) -> UploadCheckpoint | None:
+        path = self._entry_path(bucket, key)
+        with self._lock:
+            if not path.exists():
+                return None
+            raw = path.read_text(encoding="utf-8")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            log.warning("ingest.checkpoint_corrupt", checkpoint=str(path))
+            return None
+        return UploadCheckpoint.from_payload(payload)
+
+    def save(self, checkpoint: UploadCheckpoint) -> None:
+        path = self._entry_path(checkpoint.bucket, checkpoint.key)
+        payload = checkpoint.to_payload()
+        encoded = json.dumps(payload, indent=2, sort_keys=True)
+        temp_path = path.with_suffix(".tmp")
+        with self._lock:
+            temp_path.write_text(encoded, encoding="utf-8")
+            temp_path.replace(path)
+
+    def delete(self, bucket: str, key: str) -> None:
+        path = self._entry_path(bucket, key)
+        with self._lock:
+            if path.exists():
+                path.unlink()
+
+    def _entry_path(self, bucket: str, key: str) -> Path:
+        digest = hashlib.sha1(f"{bucket}:{key}".encode("utf-8")).hexdigest()
+        return self._directory / f"{digest}.json"
 
 
 @dataclass(frozen=True)
@@ -142,6 +249,22 @@ class Delivery:
     @property
     def shot_name(self) -> str:
         return f"{self.episode}_{self.scene}_{self.shot}"
+
+
+@dataclass(frozen=True)
+class _UploadJob:
+    path: Path
+    bucket: str
+    key: str
+    media_info: "MediaInfo"
+    delivery: Delivery | None
+    size: int
+
+
+@dataclass(frozen=True)
+class _UploadResult:
+    media: IngestedMedia
+    warnings: list[str]
 
 
 def _normalise_manifest_entry(
@@ -325,6 +448,62 @@ class MediaIngestService:
     vendor_bucket: str = "vendor_in"
     client_bucket: str = "client_in"
     dry_run: bool = False
+    max_workers: int = 1
+    use_asyncio: bool = False
+    resume_enabled: bool = False
+    checkpoint_dir: Path | None = None
+    checkpoint_threshold_bytes: int = 512 * 1024 * 1024
+    upload_chunk_size: int = 64 * 1024 * 1024
+
+    def __post_init__(self) -> None:
+        def _env_flag(name: str, default: bool) -> bool:
+            value = os.getenv(name)
+            if value is None:
+                return default
+            return value.lower() in {"1", "true", "yes", "on"}
+
+        if (env_workers := os.getenv("INGEST_MAX_WORKERS")) is not None:
+            try:
+                self.max_workers = int(env_workers)
+            except ValueError:
+                log.warning(
+                    "ingest.invalid_max_workers_env", value=env_workers, default=self.max_workers
+                )
+        self.max_workers = max(1, self.max_workers)
+
+        self.use_asyncio = _env_flag("INGEST_USE_ASYNCIO", self.use_asyncio)
+        self.resume_enabled = _env_flag("INGEST_RESUME_ENABLED", self.resume_enabled)
+
+        if (env_threshold := os.getenv("INGEST_CHECKPOINT_THRESHOLD")) is not None:
+            try:
+                self.checkpoint_threshold_bytes = int(env_threshold)
+            except ValueError:
+                log.warning(
+                    "ingest.invalid_checkpoint_threshold_env",
+                    value=env_threshold,
+                    default=self.checkpoint_threshold_bytes,
+                )
+
+        if (env_chunk := os.getenv("INGEST_UPLOAD_CHUNK_SIZE")) is not None:
+            try:
+                self.upload_chunk_size = int(env_chunk)
+            except ValueError:
+                log.warning(
+                    "ingest.invalid_chunk_size_env",
+                    value=env_chunk,
+                    default=self.upload_chunk_size,
+                )
+
+        checkpoint_dir_env = os.getenv("INGEST_CHECKPOINT_DIR")
+        if checkpoint_dir_env:
+            self.checkpoint_dir = Path(checkpoint_dir_env)
+        elif self.checkpoint_dir is None:
+            self.checkpoint_dir = Path(".ingest-checkpoints")
+
+        if self.upload_chunk_size <= 0:
+            self.upload_chunk_size = 64 * 1024 * 1024
+        if self.checkpoint_threshold_bytes < 0:
+            self.checkpoint_threshold_bytes = 0
 
     def ingest_folder(
         self,
@@ -356,13 +535,15 @@ class MediaIngestService:
         else:
             candidates = folder.iterdir()
 
+        def _notify(path: Path, status: str) -> None:
+            if progress_callback is not None:
+                progress_callback(path, status)
+
+        upload_jobs: list[_UploadJob] = []
+
         for path in sorted(candidates):
             if not path.is_file():
                 continue
-
-            def _notify(status: str) -> None:
-                if progress_callback is not None:
-                    progress_callback(path, status)
 
             try:
                 media_info = parse_media_filename(path.name)
@@ -370,7 +551,7 @@ class MediaIngestService:
                 log.warning("ingest.invalid_filename", file=str(path), reason=str(exc))
                 report.invalid.append((path, str(exc)))
                 report.warnings.append(f"{path.name}: {exc}")
-                _notify("skipped")
+                _notify(path, "skipped")
                 continue
 
             delivery_entry: Delivery | None = None
@@ -423,7 +604,7 @@ class MediaIngestService:
                         )
                         report.invalid.append((path, reason))
                         report.warnings.append(f"{path.name}: {reason}")
-                        _notify("skipped")
+                        _notify(path, "skipped")
                         continue
 
             if media_info.show_code != self.show_code:
@@ -434,7 +615,7 @@ class MediaIngestService:
                 log.warning("ingest.mismatched_show", file=str(path), reason=reason)
                 report.invalid.append((path, reason))
                 report.warnings.append(f"{path.name}: {reason}")
-                _notify("skipped")
+                _notify(path, "skipped")
                 continue
 
             bucket = self._resolve_bucket()
@@ -448,109 +629,56 @@ class MediaIngestService:
                 dry_run=self.dry_run,
             )
 
-            if self.dry_run:
-                destination = f"s3://{bucket}/{key}"
-                report.warnings.append(
-                    f"Dry run: would upload {path.name} to {destination}"
-                )
-            else:
-                self.uploader.upload(path, bucket, key)
-
-            if self.dry_run:
-                report.warnings.append(
-                    f"Dry run: would register ShotGrid Version {media_info.version_code}"
-                )
-                log.info(
-                    "ingest.version_registration_skipped",
-                    file=str(path),
-                    shot=media_info.shot_name,
-                    version_code=media_info.version_code,
-                    dry_run=True,
-                )
-            else:
-                try:
-                    version = self.shotgrid.register_version(
-                        project_name=self.project_name,
-                        shot_code=media_info.shot_name,
-                        file_path=path,
-                        description=media_info.descriptor,
-                    )
-                except ShotgridAuthenticationError:
-                    raise
-                except PermissionError as exc:
-                    message = (
-                        "ShotGrid rejected the provided credentials while registering "
-                        f"'{media_info.version_code}'."
-                    )
-                    log.error(
-                        "ingest.shotgrid.auth_failed",
-                        file=str(path),
-                        shot=media_info.shot_name,
-                        reason=str(exc),
-                    )
-                    raise ShotgridAuthenticationError(
-                        f"{message} Check the API key or session token before retrying."
-                    ) from exc
-                except ValueError as exc:
-                    message = (
-                        "ShotGrid rejected the version payload for "
-                        f"'{media_info.version_code}'."
-                    )
-                    log.error(
-                        "ingest.shotgrid.schema_failed",
-                        file=str(path),
-                        shot=media_info.shot_name,
-                        reason=str(exc),
-                    )
-                    raise ShotgridSchemaError(
-                        f"{message} Confirm the project, shot, and template align with ShotGrid before retrying."
-                    ) from exc
-                except (ShotgridOperationError, ConnectionError, TimeoutError) as exc:
-                    message = (
-                        "ShotGrid did not respond while registering "
-                        f"'{media_info.version_code}'."
-                    )
-                    log.error(
-                        "ingest.shotgrid.connectivity_failed",
-                        file=str(path),
-                        shot=media_info.shot_name,
-                        reason=str(exc),
-                    )
-                    raise ShotgridConnectivityError(
-                        f"{message} Verify network access and ShotGrid availability, then retry the ingest."
-                    ) from exc
-                except OSError as exc:
-                    message = (
-                        "Encountered a network error while contacting ShotGrid for "
-                        f"'{media_info.version_code}'."
-                    )
-                    log.error(
-                        "ingest.shotgrid.os_error",
-                        file=str(path),
-                        shot=media_info.shot_name,
-                        reason=str(exc),
-                    )
-                    raise ShotgridConnectivityError(
-                        f"{message} Check VPN or proxy settings and retry once connectivity is restored."
-                    ) from exc
-                else:
-                    log.info(
-                        "ingest.version_registered",
-                        version_id=version["id"],
-                        version_code=version["code"],
-                        shot=media_info.shot_name,
-                    )
-
-            report.processed.append(
-                IngestedMedia(
+            size = path.stat().st_size
+            upload_jobs.append(
+                _UploadJob(
                     path=path,
                     bucket=bucket,
                     key=key,
                     media_info=media_info,
                     delivery=delivery_entry,
+                    size=size,
                 )
             )
-            _notify("uploaded")
+
+        if not upload_jobs:
+            return report
+
+        if self.dry_run:
+            for job in upload_jobs:
+                destination = f"s3://{job.bucket}/{job.key}"
+                report.warnings.append(
+                    f"Dry run: would upload {job.path.name} to {destination}"
+                )
+                report.warnings.append(
+                    f"Dry run: would register ShotGrid Version {job.media_info.version_code}"
+                )
+                log.info(
+                    "ingest.version_registration_skipped",
+                    file=str(job.path),
+                    shot=job.media_info.shot_name,
+                    version_code=job.media_info.version_code,
+                    dry_run=True,
+                )
+                report.processed.append(
+                    IngestedMedia(
+                        path=job.path,
+                        bucket=job.bucket,
+                        key=job.key,
+                        media_info=job.media_info,
+                        delivery=job.delivery,
+                    )
+                )
+                _notify(job.path, "uploaded")
+            return report
+
+        checkpoint_store = self._build_checkpoint_store() if self.resume_enabled else None
+        results = self._execute_uploads(upload_jobs, checkpoint_store)
+
+        for result in results:
+            report.processed.append(result.media)
+            report.warnings.extend(result.warnings)
+            _notify(result.media.path, "uploaded")
 
         return report
 
@@ -562,12 +690,246 @@ class MediaIngestService:
             self.vendor_bucket if source_normalized == "vendor" else self.client_bucket
         )
 
+    def _build_checkpoint_store(self) -> UploadCheckpointStore:
+        if self.checkpoint_dir is None:
+            raise RuntimeError(
+                "Resume support was enabled without configuring a checkpoint directory"
+            )
+        return UploadCheckpointStore(self.checkpoint_dir)
+
+    def _execute_uploads(
+        self,
+        jobs: Sequence[_UploadJob],
+        checkpoint_store: UploadCheckpointStore | None,
+    ) -> list[_UploadResult]:
+        if not jobs:
+            return []
+
+        if self.use_asyncio:
+            return asyncio.run(self._run_asyncio_jobs(jobs, checkpoint_store))
+
+        if self.max_workers <= 1:
+            return [self._process_job(job, checkpoint_store) for job in jobs]
+
+        results: dict[Path, _UploadResult] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_job = {
+                executor.submit(self._process_job, job, checkpoint_store): job for job in jobs
+            }
+            for future in concurrent.futures.as_completed(future_to_job):
+                job = future_to_job[future]
+                results[job.path] = future.result()
+
+        return [results[job.path] for job in jobs]
+
+    async def _run_asyncio_jobs(
+        self,
+        jobs: Sequence[_UploadJob],
+        checkpoint_store: UploadCheckpointStore | None,
+    ) -> list[_UploadResult]:
+        semaphore = asyncio.Semaphore(self.max_workers)
+
+        async def _run(job: _UploadJob) -> _UploadResult:
+            async with semaphore:
+                return await asyncio.to_thread(self._process_job, job, checkpoint_store)
+
+        return list(await asyncio.gather(*(_run(job) for job in jobs)))
+
+    def _process_job(
+        self, job: _UploadJob, checkpoint_store: UploadCheckpointStore | None
+    ) -> _UploadResult:
+        warnings: list[str] = []
+        should_checkpoint = self._should_checkpoint(job, checkpoint_store)
+
+        if should_checkpoint and not isinstance(self.uploader, ResumableUploaderProtocol):
+            warning = (
+                "Resume requested for "
+                f"{job.path.name} but the configured uploader does not support resumable transfers."
+            )
+            warnings.append(warning)
+            log.warning(
+                "ingest.resume_unsupported",
+                file=str(job.path),
+                bucket=job.bucket,
+                key=job.key,
+            )
+
+        self._upload_job(job, checkpoint_store, should_checkpoint)
+        version = self._register_version(job)
+
+        media = IngestedMedia(
+            path=job.path,
+            bucket=job.bucket,
+            key=job.key,
+            media_info=job.media_info,
+            delivery=job.delivery,
+        )
+
+        if version is not None:
+            log.info(
+                "ingest.version_registered",
+                version_id=version["id"],
+                version_code=version["code"],
+                shot=job.media_info.shot_name,
+            )
+
+        return _UploadResult(media=media, warnings=warnings)
+
+    def _upload_job(
+        self,
+        job: _UploadJob,
+        checkpoint_store: UploadCheckpointStore | None,
+        should_checkpoint: bool,
+    ) -> None:
+        if should_checkpoint and isinstance(self.uploader, ResumableUploaderProtocol):
+            assert checkpoint_store is not None
+            resumable = cast(ResumableUploaderProtocol, self.uploader)
+            checkpoint = checkpoint_store.load(job.bucket, job.key)
+            if checkpoint is None:
+                checkpoint = UploadCheckpoint(
+                    file_path=job.path,
+                    bucket=job.bucket,
+                    key=job.key,
+                    file_size=job.size,
+                )
+            else:
+                checkpoint.file_path = job.path
+                checkpoint.file_size = job.size
+
+            checkpoint_store.save(checkpoint)
+
+            def _persist(state: UploadCheckpoint) -> None:
+                checkpoint_store.save(state)
+
+            try:
+                resumable.upload_resumable(
+                    job.path,
+                    job.bucket,
+                    job.key,
+                    checkpoint,
+                    max(self.upload_chunk_size, 1),
+                    _persist,
+                )
+            except Exception:
+                checkpoint_store.save(checkpoint)
+                raise
+            else:
+                checkpoint_store.delete(job.bucket, job.key)
+            return
+
+        self.uploader.upload(job.path, job.bucket, job.key)
+        if should_checkpoint and checkpoint_store is not None:
+            checkpoint_store.delete(job.bucket, job.key)
+
+    def _register_version(self, job: _UploadJob) -> Mapping[str, Any]:
+        media_info = job.media_info
+        path = job.path
+        try:
+            return self.shotgrid.register_version(
+                project_name=self.project_name,
+                shot_code=media_info.shot_name,
+                file_path=path,
+                description=media_info.descriptor,
+            )
+        except ShotgridAuthenticationError:
+            raise
+        except PermissionError as exc:
+            message = (
+                "ShotGrid rejected the provided credentials while registering "
+                f"'{media_info.version_code}'."
+            )
+            log.error(
+                "ingest.shotgrid.auth_failed",
+                file=str(path),
+                shot=media_info.shot_name,
+                reason=str(exc),
+            )
+            raise ShotgridAuthenticationError(
+                f"{message} Check the API key or session token before retrying."
+            ) from exc
+        except ValueError as exc:
+            message = (
+                "ShotGrid rejected the version payload for "
+                f"'{media_info.version_code}'."
+            )
+            log.error(
+                "ingest.shotgrid.schema_failed",
+                file=str(path),
+                shot=media_info.shot_name,
+                reason=str(exc),
+            )
+            raise ShotgridSchemaError(
+                f"{message} Confirm the project, shot, and template align with ShotGrid before retrying."
+            ) from exc
+        except (ShotgridOperationError, ConnectionError, TimeoutError) as exc:
+            message = (
+                "ShotGrid did not respond while registering "
+                f"'{media_info.version_code}'."
+            )
+            log.error(
+                "ingest.shotgrid.connectivity_failed",
+                file=str(path),
+                shot=media_info.shot_name,
+                reason=str(exc),
+            )
+            raise ShotgridConnectivityError(
+                f"{message} Verify network access and ShotGrid availability, then retry the ingest."
+            ) from exc
+        except OSError as exc:
+            message = (
+                "Encountered a network error while contacting ShotGrid for "
+                f"'{media_info.version_code}'."
+            )
+            log.error(
+                "ingest.shotgrid.os_error",
+                file=str(path),
+                shot=media_info.shot_name,
+                reason=str(exc),
+            )
+            raise ShotgridConnectivityError(
+                f"{message} Check VPN or proxy settings and retry once connectivity is restored."
+            ) from exc
+
+    def _should_checkpoint(
+        self, job: _UploadJob, checkpoint_store: UploadCheckpointStore | None
+    ) -> bool:
+        return (
+            self.resume_enabled
+            and checkpoint_store is not None
+            and job.size >= self.checkpoint_threshold_bytes
+        )
+
 
 class S3ClientProtocol(Protocol):
     """Subset of :mod:`boto3`'s S3 client used for uploads."""
 
     def upload_file(self, Filename: str, Bucket: str, Key: str) -> None:
         """Upload a local file to S3."""
+
+    def create_multipart_upload(self, Bucket: str, Key: str) -> Mapping[str, Any]:
+        """Initiate a multipart upload."""
+
+    def upload_part(
+        self,
+        Bucket: str,
+        Key: str,
+        PartNumber: int,
+        UploadId: str,
+        Body: bytes,
+    ) -> Mapping[str, Any]:
+        """Upload a single multipart chunk."""
+
+    def complete_multipart_upload(
+        self,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+        MultipartUpload: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Finalize a multipart upload."""
+
+    def abort_multipart_upload(self, Bucket: str, Key: str, UploadId: str) -> None:
+        """Abort a multipart upload."""
 
 
 class Boto3Uploader:
@@ -587,3 +949,65 @@ class Boto3Uploader:
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self._client.upload_file(str(file_path), bucket, key)
+
+    def upload_resumable(
+        self,
+        file_path: Path,
+        bucket: str,
+        key: str,
+        checkpoint: UploadCheckpoint,
+        chunk_size: int,
+        progress_callback: Callable[[UploadCheckpoint], None] | None = None,
+    ) -> None:
+        chunk_size = max(chunk_size, 5 * 1024 * 1024)
+        upload_id = checkpoint.upload_id
+
+        if upload_id is None:
+            response = self._client.create_multipart_upload(Bucket=bucket, Key=key)
+            upload_id = str(response["UploadId"])
+            checkpoint.upload_id = upload_id
+            if progress_callback is not None:
+                progress_callback(checkpoint)
+
+        part_number = len(checkpoint.parts) + 1
+        bytes_transferred = checkpoint.bytes_transferred
+
+        with file_path.open("rb") as handle:
+            handle.seek(bytes_transferred)
+            while True:
+                chunk = handle.read(chunk_size)
+                if not chunk:
+                    break
+                response = self._client.upload_part(
+                    Bucket=bucket,
+                    Key=key,
+                    PartNumber=part_number,
+                    UploadId=upload_id,
+                    Body=chunk,
+                )
+                etag = str(response.get("ETag", ""))
+                checkpoint.bytes_transferred += len(chunk)
+                checkpoint.parts.append((part_number, etag))
+                if progress_callback is not None:
+                    progress_callback(checkpoint)
+                part_number += 1
+
+        if not checkpoint.parts:
+            # Fallback for tiny objects where multipart uploads are unnecessary.
+            self.upload(file_path, bucket, key)
+            return
+
+        parts_payload = [
+            {"ETag": etag, "PartNumber": part_number}
+            for part_number, etag in checkpoint.parts
+        ]
+
+        self._client.complete_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": parts_payload},
+        )
+        checkpoint.upload_id = None
+        if progress_callback is not None:
+            progress_callback(checkpoint)
