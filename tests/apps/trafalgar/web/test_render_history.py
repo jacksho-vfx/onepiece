@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from apps.trafalgar.web.job_store import JobStore
-from apps.trafalgar.web.render import RenderJobRequest, RenderSubmissionService, _JobRecord
+from apps.trafalgar.web.render import (
+    RenderJobRequest,
+    RenderSubmissionService,
+    _JobRecord,
+)
 
 
 @pytest.fixture
@@ -25,7 +29,9 @@ def sample_request() -> RenderJobRequest:
     )
 
 
-def _make_record(job_id: str, created_at: datetime, request: RenderJobRequest) -> _JobRecord:
+def _make_record(
+    job_id: str, created_at: datetime, request: RenderJobRequest
+) -> _JobRecord:
     return _JobRecord(
         job_id=job_id,
         farm=request.farm,
@@ -50,9 +56,7 @@ def test_history_limit_pruning_consistent_after_reload(
     ]
     store.save(records)
 
-    service = RenderSubmissionService(
-        adapters={}, job_store=store, history_limit=2
-    )
+    service = RenderSubmissionService(adapters={}, job_store=store, history_limit=2)
 
     assert isinstance(service._jobs, OrderedDict)
     assert list(service._jobs.keys()) == ["job-2", "job-3"]
