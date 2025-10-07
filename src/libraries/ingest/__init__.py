@@ -6,6 +6,9 @@ from libraries.ingest.service import (
     IngestReport,
     UploaderProtocol,
     Boto3Uploader,
+    ShotgridAuthenticationError,
+    ShotgridConnectivityError,
+    ShotgridSchemaError,
 )
 
 __all__ = [
@@ -14,4 +17,7 @@ __all__ = [
     "IngestReport",
     "UploaderProtocol",
     "Boto3Uploader",
+    "ShotgridAuthenticationError",
+    "ShotgridConnectivityError",
+    "ShotgridSchemaError",
 ]

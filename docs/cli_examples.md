@@ -12,6 +12,14 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 - `python -m apps.onepiece aws sync-from <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — mirror S3 data into a local directory via `s5cmd` with progress reporting.
 - `python -m apps.onepiece aws sync-to <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — push local renders back to S3 using `s5cmd` with progress feedback.
 
+### Troubleshooting ShotGrid ingest failures
+
+If the ingest command exits early, review the CLI heading and take the suggested action before retrying:
+
+- **Configuration error** – ShotGrid rejected the configured credentials. Refresh the API script key or token, update the environment variables used by ingest, and rerun the command once authentication succeeds.
+- **Validation error** – ShotGrid rejected the version payload. Confirm that the referenced project, shot, and naming conventions exist in ShotGrid, adjust the filenames or ShotGrid schema, then retry the ingest.
+- **External service error** – The CLI could not reach ShotGrid. Check VPN or proxy connectivity, verify the ShotGrid status page, and rerun the ingest after connectivity is restored.
+
 ### DCC integration
 - `python -m apps.onepiece dcc open-shot --shot <scene_file> [--dcc <maya|nuke|…>]` — open the scene in the inferred or specified DCC, surfacing external errors cleanly.
 - `python -m apps.onepiece dcc publish --dcc <dcc> --scene-name <name> --renders <path> --previews <path> --otio <file> --metadata <file> --destination <dir> --bucket <bucket> --show-code <code> [--show-type vfx|prod --profile <aws_profile> --direct-upload-path s3://… --dependency-summary]` — package and publish a scene, optionally summarising dependency validation.

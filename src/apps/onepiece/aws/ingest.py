@@ -5,9 +5,20 @@ from typing import Literal, cast
 
 import typer
 
-from apps.onepiece.utils.errors import OnePieceValidationError
+from apps.onepiece.utils.errors import (
+    OnePieceConfigError,
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 from apps.onepiece.utils.progress import progress_tracker
-from libraries.ingest import Boto3Uploader, MediaIngestService, UploaderProtocol
+from libraries.ingest import (
+    Boto3Uploader,
+    MediaIngestService,
+    ShotgridAuthenticationError,
+    ShotgridConnectivityError,
+    ShotgridSchemaError,
+    UploaderProtocol,
+)
 from libraries.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="AWS and S3 integration commands")
@@ -74,10 +85,23 @@ def ingest(
             verb = status_messages.get(status, status.title())
             progress.advance(description=f"{verb} {path.name}")
 
-        report = service.ingest_folder(
-            folder,
-            progress_callback=_on_progress,
-        )
+        try:
+            report = service.ingest_folder(
+                folder,
+                progress_callback=_on_progress,
+            )
+        except ShotgridAuthenticationError as exc:
+            raise OnePieceConfigError(
+                f"{exc} Verify the ShotGrid credentials configured for ingest, then retry the command."
+            ) from exc
+        except ShotgridSchemaError as exc:
+            raise OnePieceValidationError(
+                f"{exc} Update the naming or ShotGrid entities to match, then retry the ingest."
+            ) from exc
+        except ShotgridConnectivityError as exc:
+            raise OnePieceExternalServiceError(
+                f"{exc} Check connectivity or service status, then retry the ingest once ShotGrid is reachable."
+            ) from exc
 
         progress.succeed(
             f"Processed {report.processed_count} file(s); {report.invalid_count} skipped."
