@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,7 @@ class FlakyResumableUploader:
         key: str,
         checkpoint: UploadCheckpoint,
         chunk_size: int,
-        progress_callback=None,
+        progress_callback: Any | None = None,
     ) -> None:
         part_number = len(checkpoint.parts) + 1
         with file_path.open("rb") as handle:
@@ -84,7 +85,9 @@ def test_resume_upload_recovers_from_interruption(tmp_path: Path) -> None:
         service.ingest_folder(folder, recursive=False)
 
     checkpoint_files = list(checkpoint_dir.glob("*.json"))
-    assert checkpoint_files, "Checkpoint metadata should be written after an interruption"
+    assert (
+        checkpoint_files
+    ), "Checkpoint metadata should be written after an interruption"
 
     payload = json.loads(checkpoint_files[0].read_text(encoding="utf-8"))
     assert payload["bytes_transferred"] > 0
