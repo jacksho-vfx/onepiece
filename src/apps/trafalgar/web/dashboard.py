@@ -325,13 +325,17 @@ class ShotGridService:
         self._client = client
         self._configured_projects = set(known_projects or [])
         self._fetcher = version_fetcher
-        default_ttl, default_max_records, default_max_projects = _load_cache_configuration()
+        default_ttl, default_max_records, default_max_projects = (
+            _load_cache_configuration()
+        )
         ttl_source = cache_ttl if cache_ttl is not None else default_ttl
         max_records_source = (
             cache_max_records if cache_max_records is not None else default_max_records
         )
         max_projects_source = (
-            cache_max_projects if cache_max_projects is not None else default_max_projects
+            cache_max_projects
+            if cache_max_projects is not None
+            else default_max_projects
         )
         self._cache_ttl: float = _parse_float(ttl_source, default_ttl)
         self._cache_max_records: int = _parse_int(
@@ -369,7 +373,9 @@ class ShotGridService:
         if max_records is not None:
             self._cache_max_records = _parse_int(max_records, self._cache_max_records)
         if max_projects is not None:
-            self._cache_max_projects = _parse_int(max_projects, self._cache_max_projects)
+            self._cache_max_projects = _parse_int(
+                max_projects, self._cache_max_projects
+            )
 
     def invalidate_cache(self) -> None:
         """Clear cached ShotGrid responses."""
@@ -1286,7 +1292,7 @@ async def update_cache_settings(
         updates["max_projects"] = payload.max_projects
 
     if updates:
-        shotgrid_service.configure_cache(**updates)
+        shotgrid_service.configure_cache(**updates)  # type: ignore[arg-type]
         settings = shotgrid_service.cache_settings
         if "ttl_seconds" in updates:
             app.state.dashboard_cache_ttl = settings["ttl_seconds"]

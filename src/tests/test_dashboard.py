@@ -543,7 +543,9 @@ async def test_admin_cache_endpoint_updates_settings_and_flushes(
         "max_projects": 1,
         "flush": True,
     }
-    async with AsyncClient(transport=transport, base_url="http://testserver") as http_client:
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as http_client:
         response = await http_client.post("/admin/cache", json=payload, headers=headers)
 
     assert response.status_code == 200
