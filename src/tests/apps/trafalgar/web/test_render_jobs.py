@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -182,7 +183,7 @@ async def test_cancel_job_reports_adapter_errors() -> None:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_job_store_persists_records_between_services(tmp_path) -> None:
+async def test_job_store_persists_records_between_services(tmp_path: Path) -> None:
     store_path = tmp_path / "jobs.json"
     adapter = StubJobAdapter()
     service = render.RenderSubmissionService(
@@ -197,9 +198,7 @@ async def test_job_store_persists_records_between_services(tmp_path) -> None:
         job_id = submit_response.json()["job_id"]
 
     # New service instance should load the previously stored job.
-    new_service = render.RenderSubmissionService(
-        {}, job_store=JobStore(store_path)
-    )
+    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
     render.app.dependency_overrides[render.get_render_service] = lambda: new_service
 
     transport = ASGITransport(app=render.app)
@@ -212,7 +211,7 @@ async def test_job_store_persists_records_between_services(tmp_path) -> None:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_history_limit_removes_old_jobs(tmp_path) -> None:
+async def test_history_limit_removes_old_jobs(tmp_path: Path) -> None:
     store_path = tmp_path / "jobs.json"
     adapter = StubJobAdapter()
     service = render.RenderSubmissionService(
@@ -229,8 +228,6 @@ async def test_history_limit_removes_old_jobs(tmp_path) -> None:
         latest_job_id = second.json()["job_id"]
 
     # Reload the service to ensure only the latest job remains persisted.
-    new_service = render.RenderSubmissionService(
-        {}, job_store=JobStore(store_path)
-    )
+    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
     jobs = new_service.list_jobs()
     assert [job.job_id for job in jobs] == [latest_job_id]

@@ -38,12 +38,16 @@ class JobStore:
         try:
             raw_data = self._path.read_text(encoding="utf-8")
         except OSError as exc:  # pragma: no cover - defensive guard
-            logger.warning("render.store.read_failed", path=str(self._path), error=str(exc))
+            logger.warning(
+                "render.store.read_failed", path=str(self._path), error=str(exc)
+            )
             return []
         try:
             payload = json.loads(raw_data or "[]")
         except json.JSONDecodeError as exc:
-            logger.warning("render.store.decode_failed", path=str(self._path), error=str(exc))
+            logger.warning(
+                "render.store.decode_failed", path=str(self._path), error=str(exc)
+            )
             return []
 
         records: list[_JobRecord] = []

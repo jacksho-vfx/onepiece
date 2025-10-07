@@ -202,7 +202,9 @@ class RenderSubmissionService:
         self._adapters = dict(adapters or FARM_ADAPTERS)
         self._jobs: dict[str, _JobRecord] = {}
         self._store = job_store
-        self._history_limit = history_limit if history_limit and history_limit > 0 else None
+        self._history_limit = (
+            history_limit if history_limit and history_limit > 0 else None
+        )
         self._load_jobs()
 
     def list_farms(self) -> list[FarmInfo]:
