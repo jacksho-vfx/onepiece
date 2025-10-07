@@ -52,6 +52,30 @@ These resources provide a safe sandbox to explore the command surface before poi
 - **Delivery manifest optimisation** – Delivery payloads prefer upstream manifest data when provided, regenerate manifests only once per delivery, and gracefully handle packages that arrive without entry lists so operators still get a full audit trail.
 - **Render job management** – The render FastAPI app now tracks submitted jobs in memory, exposes endpoints to list and inspect them, and supports adapter-powered cancellation, mirroring the CLI workflow for real-time follow-up.
 
+## Render API error handling
+
+The Trafalgar render service responds to failures with a consistent JSON envelope so operators and tooling can react deterministically. Error responses take the following form:
+
+```json
+{
+  "error": {
+    "code": "adapter.unavailable",
+    "message": "Farm is temporarily offline.",
+    "hint": "Check the farm status page and retry once the outage is resolved.",
+    "context": {
+      "farm": "mock"
+    }
+  }
+}
+```
+
+- `code` – Machine-readable identifier that maps to a HTTP status (`adapter.unavailable` → `503 Service Unavailable`, `render.farm_not_found` → `404 Not Found`, etc.).
+- `message` – Human-readable summary suitable for surfaced notifications.
+- `hint` – Optional remediation guidance included when the service can recommend concrete next steps.
+- `context` – Structured metadata (farm name, job identifier, and so on) to aid incident triage without digging through logs.
+
+Adapters raise typed exceptions (for example `adapter.not_implemented`, `adapter.job_rejected`) which the FastAPI exception handler translates into this payload. Clients should rely on the `code` field rather than parsing free-form text.
+
 ## Requirements
 
 - Python 3.11 or newer

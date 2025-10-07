@@ -13,7 +13,11 @@ import structlog
 import typer
 
 from libraries.render import deadline, mock, opencue, tractor
-from libraries.render.base import AdapterCapabilities, RenderSubmissionError
+from libraries.render.base import (
+    AdapterCapabilities,
+    RenderAdapterNotImplementedError,
+    RenderSubmissionError,
+)
 from libraries.render.models import CapabilityProvider, RenderAdapter
 
 from apps.onepiece.utils.errors import (
@@ -249,6 +253,21 @@ def submit(
             user=resolved_user,
             chunk_size=resolved_chunk,
         )
+    except RenderAdapterNotImplementedError as exc:
+        log.warning(
+            "render.submit.not_implemented",
+            dcc=dcc,
+            farm=farm,
+            scene=str(scene),
+            hint=exc.hint,
+        )
+        typer.secho(
+            f"Render adapter response: {exc}",
+            fg=typer.colors.YELLOW,
+        )
+        if exc.hint:
+            typer.secho(exc.hint, fg=typer.colors.YELLOW)
+        return
     except RenderSubmissionError as exc:
         log.error(
             "render.submit.failed",

@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.trafalgar.web import render as render_module
+from libraries.render.base import RenderAdapterUnavailableError
 
 
 @pytest.fixture()
@@ -98,9 +99,78 @@ def test_submit_job_not_implemented_response(client: TestClient) -> None:
 
     assert response.status_code == 501
     payload = response.json()
-    assert payload["status"] == "not_implemented"
-    assert payload["farm_type"] == "deadline"
-    assert "not implemented" in payload["message"].lower()
+    error = payload["error"]
+    assert error["code"] == "adapter.not_implemented"
+    assert "not implemented" in error["message"].lower()
+    assert error["context"]["adapter"] == "deadline"
+
+
+def test_submit_job_unknown_farm_response(client: TestClient) -> None:
+    original_override = render_module.app.dependency_overrides.get(
+        render_module.get_render_service
+    )
+    service = render_module.RenderSubmissionService(
+        {"deadline": render_module.FARM_ADAPTERS["deadline"]}
+    )
+    render_module.app.dependency_overrides[render_module.get_render_service] = (
+        lambda: service
+    )
+    try:
+        response = client.post(
+            "/jobs",
+            json={
+                "dcc": "maya",
+                "scene": "/projects/show/shot_v003.ma",
+                "output": "/tmp/renders",
+                "farm": "mock",
+            },
+        )
+    finally:
+        if original_override is None:
+            render_module.app.dependency_overrides.pop(
+                render_module.get_render_service, None
+            )
+        else:
+            render_module.app.dependency_overrides[render_module.get_render_service] = (
+                original_override
+            )
+
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["code"] == "render.farm_not_found"
+    assert error["context"]["farm"] == "mock"
+
+
+def test_submit_job_surfaces_adapter_unavailability(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+
+    def fail_with_unavailability(self, request):  # type: ignore[no-untyped-def]
+        raise RenderAdapterUnavailableError(
+            "Farm is temporarily offline.",
+            hint="Check the farm status page and retry once the outage is resolved.",
+            context={"farm": request.farm},
+        )
+
+    monkeypatch.setattr(
+        "apps.trafalgar.web.render.RenderSubmissionService.submit_job",
+        fail_with_unavailability,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/projects/show/shot_v004.ma",
+            "output": "/tmp/renders",
+            "farm": "mock",
+        },
+    )
+
+    assert response.status_code == 503
+    error = response.json()["error"]
+    assert error["code"] == "adapter.unavailable"
+    assert "outage" in error["hint"].lower()
 
 
 def test_submit_job_invalid_dcc_returns_validation_error(client: TestClient) -> None:

@@ -183,8 +183,10 @@ async def test_cancel_job_reports_adapter_errors() -> None:
 
         response = await client.delete(f"/jobs/{job_id}")
 
-    assert response.status_code == 400
-    assert "does not support job cancellation" in response.json()["detail"]
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "render.cancellation_unsupported"
+    assert error["context"]["job_id"] == job_id
 
 
 @pytest.mark.anyio("asyncio")

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import structlog
 
-from .base import AdapterCapabilities, SubmissionResult
+from .base import (
+    AdapterCapabilities,
+    RenderAdapterNotImplementedError,
+    SubmissionResult,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -32,11 +36,14 @@ def submit_job(
         chunk_size=chunk_size,
         status="not_implemented",
     )
-    return SubmissionResult(
-        job_id="",
-        status="not_implemented",
-        farm_type="opencue",
-        message=message,
+    raise RenderAdapterNotImplementedError(
+        message,
+        hint="Switch to the mock adapter for local development or configure the OpenCue integration.",
+        context={
+            "adapter": "opencue",
+            "scene": scene,
+            "dcc": dcc,
+        },
     )
 
 
