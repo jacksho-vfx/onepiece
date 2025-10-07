@@ -729,14 +729,14 @@ async def log_requests(
     return response
 
 
-@router.get("/")
+@router.get("/")  # type: ignore[misc]
 def root(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> Mapping[str, str]:
     return {"message": "OnePiece Render API is running"}
 
 
-@router.get("/health")
+@router.get("/health")  # type: ignore[misc]
 def health(
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
@@ -744,7 +744,7 @@ def health(
     return {"status": "ok", "render_history": service.get_metrics()}
 
 
-@router.get("/farms", response_model=FarmsResponse)
+@router.get("/farms", response_model=FarmsResponse)  # type: ignore[misc]
 def farms(
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
@@ -753,7 +753,7 @@ def farms(
     return FarmsResponse(farms=entries)
 
 
-@router.post("/jobs")
+@router.post("/jobs")  # type: ignore[misc]
 async def create_job(
     request: RenderJobRequest,
     service: RenderSubmissionService = Depends(get_render_service),
@@ -801,7 +801,7 @@ async def create_job(
     return JSONResponse(status_code=201, content=payload.model_dump())
 
 
-@router.get("/jobs", response_model=JobsListResponse)
+@router.get("/jobs", response_model=JobsListResponse)  # type: ignore[misc]
 def list_jobs(
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
@@ -827,7 +827,7 @@ async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
         await JOB_EVENTS.unsubscribe(queue)
 
 
-@router.get("/jobs/stream")
+@router.get("/jobs/stream")  # type: ignore[misc]
 async def stream_jobs(
     request: Request,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
@@ -835,7 +835,7 @@ async def stream_jobs(
     return StreamingResponse(_job_event_stream(request), media_type="text/event-stream")
 
 
-@router.websocket("/jobs/ws")
+@router.websocket("/jobs/ws")  # type: ignore[misc]
 async def jobs_websocket(
     websocket: WebSocket,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
@@ -852,7 +852,7 @@ async def jobs_websocket(
         await JOB_EVENTS.unsubscribe(queue)
 
 
-@router.get("/jobs/{job_id}", response_model=RenderJobMetadata)
+@router.get("/jobs/{job_id}", response_model=RenderJobMetadata)  # type: ignore[misc]
 def get_job(
     job_id: str,
     service: RenderSubmissionService = Depends(get_render_service),
@@ -864,7 +864,7 @@ def get_job(
         raise HTTPException(status_code=404, detail="Job not found.") from exc
 
 
-@router.delete("/jobs/{job_id}", response_model=RenderJobMetadata)
+@router.delete("/jobs/{job_id}", response_model=RenderJobMetadata)  # type: ignore[misc]
 def cancel_job(
     job_id: str,
     service: RenderSubmissionService = Depends(get_render_service),

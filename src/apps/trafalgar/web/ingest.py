@@ -185,14 +185,14 @@ async def log_requests(
     return response
 
 
-@router.get("/")
+@router.get("/")  # type: ignore[misc]
 def root(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
 ) -> dict[str, str]:
     return {"message": "OnePiece Ingest API is running"}
 
 
-@router.get("/runs")
+@router.get("/runs")  # type: ignore[misc]
 async def list_runs(
     limit: int = Query(20, ge=1, le=100),
     service: IngestRunService = Depends(get_ingest_run_service),
@@ -221,7 +221,7 @@ async def _ingest_event_stream(
         await INGEST_EVENTS.unsubscribe(queue)
 
 
-@router.get("/runs/stream")
+@router.get("/runs/stream")  # type: ignore[misc]
 async def stream_runs(
     request: Request,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
@@ -231,7 +231,7 @@ async def stream_runs(
     )
 
 
-@router.websocket("/runs/ws")
+@router.websocket("/runs/ws")  # type: ignore[misc]
 async def runs_websocket(
     websocket: WebSocket,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
@@ -248,7 +248,7 @@ async def runs_websocket(
         await INGEST_EVENTS.unsubscribe(queue)
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}")  # type: ignore[misc]
 async def get_run(
     run_id: str,
     service: IngestRunService = Depends(get_ingest_run_service),
@@ -261,7 +261,7 @@ async def get_run(
     return JSONResponse(content=payload)
 
 
-@router.get("/health")
+@router.get("/health")  # type: ignore[misc]
 def health_check(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_INGEST_READ)),
 ) -> Dict[str, str]:

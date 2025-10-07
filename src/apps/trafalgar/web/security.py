@@ -6,10 +6,10 @@ import hmac
 import json
 import os
 from functools import lru_cache
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, Callable
 
 import structlog
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Security, status, APIRouter
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
 
@@ -84,7 +84,9 @@ class CredentialRecord(BaseModel):
     """Credential definition loaded from configuration sources."""
 
     identifier: str = Field(validation_alias=AliasChoices("identifier", "id", "name"))
-    api_key: str | None = Field(default=None, validation_alias=AliasChoices("api_key", "key"))
+    api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("api_key", "key")
+    )
     api_secret: str | None = Field(
         default=None, validation_alias=AliasChoices("api_secret", "secret")
     )
@@ -92,7 +94,9 @@ class CredentialRecord(BaseModel):
         default=None,
         validation_alias=AliasChoices("bearer_token", "token", "oauth_token"),
     )
-    roles: set[str] = Field(default_factory=set, validation_alias=AliasChoices("roles", "scopes"))
+    roles: set[str] = Field(
+        default_factory=set, validation_alias=AliasChoices("roles", "scopes")
+    )
     description: str | None = None
 
     @field_validator("identifier", mode="before")
@@ -143,7 +147,9 @@ class CredentialRecord(BaseModel):
         return hmac.compare_digest(self.bearer_token, token)
 
     def to_principal(self, *, scheme: str) -> "AuthenticatedPrincipal":
-        return AuthenticatedPrincipal(identifier=self.identifier, roles=set(self.roles), scheme=scheme)
+        return AuthenticatedPrincipal(
+            identifier=self.identifier, roles=set(self.roles), scheme=scheme
+        )
 
 
 class CredentialStore:
@@ -164,7 +170,9 @@ class CredentialStore:
     def __bool__(self) -> bool:  # pragma: no cover - trivial
         return bool(self._records)
 
-    def authenticate_api_key(self, key: str, secret: str | None) -> "AuthenticatedPrincipal" | None:
+    def authenticate_api_key(
+        self, key: str, secret: str | None
+    ) -> "AuthenticatedPrincipal" | None:
         record = self._api_key_index.get(key)
         if record and record.matches_api_key(key, secret):
             return record.to_principal(scheme="api-key")
@@ -198,7 +206,9 @@ def _load_credential_sources() -> list[Mapping[str, Any]]:
         try:
             parsed = json.loads(inline)
         except json.JSONDecodeError as exc:
-            logger.error("security.credentials.invalid_json", source="env", error=str(exc))
+            logger.error(
+                "security.credentials.invalid_json", source="env", error=str(exc)
+            )
         else:
             entries.extend(_normalise_credential_payload(parsed))
 
@@ -208,7 +218,9 @@ def _load_credential_sources() -> list[Mapping[str, Any]]:
             with open(path, "r", encoding="utf-8") as handle:
                 parsed = json.load(handle)
         except OSError as exc:
-            logger.error("security.credentials.file_unreadable", path=path, error=str(exc))
+            logger.error(
+                "security.credentials.file_unreadable", path=path, error=str(exc)
+            )
         except json.JSONDecodeError as exc:
             logger.error("security.credentials.file_invalid", path=path, error=str(exc))
         else:
@@ -223,7 +235,9 @@ def _load_credential_records() -> list[CredentialRecord]:
         try:
             record = CredentialRecord.model_validate(entry)
         except ValidationError as exc:
-            logger.warning("security.credentials.entry_invalid", entry=entry, error=str(exc))
+            logger.warning(
+                "security.credentials.entry_invalid", entry=entry, error=str(exc)
+            )
             continue
         records.append(record)
     return records
@@ -283,13 +297,17 @@ def authenticate_request(
             principal = store.authenticate_bearer(token)
             if principal:
                 return principal
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token."
+        )
 
     if api_key:
         principal = store.authenticate_api_key(api_key, api_secret)
         if principal:
             return principal
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API credentials.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API credentials."
+        )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -297,10 +315,14 @@ def authenticate_request(
     )
 
 
-def require_roles(*roles: str, any_of: bool = False):
+def require_roles(
+    *roles: str, any_of: bool = False
+) -> Callable[[AuthenticatedPrincipal], AuthenticatedPrincipal]:
     """Return a dependency enforcing that the caller provides the given roles."""
 
-    def dependency(principal: AuthenticatedPrincipal = Depends(authenticate_request)) -> AuthenticatedPrincipal:
+    def dependency(
+        principal: AuthenticatedPrincipal = Depends(authenticate_request),
+    ) -> AuthenticatedPrincipal:
         principal.require_roles(roles, any_of=any_of)
         return principal
 
@@ -317,7 +339,9 @@ def reset_security_state() -> None:
     _api_secret_scheme = _build_api_secret_header()
 
 
-def create_protected_router(*, roles: Sequence[str] | None = None, any_of: bool = True):
+def create_protected_router(
+    *, roles: Sequence[str] | None = None, any_of: bool = True
+) -> APIRouter:
     """Create an ``APIRouter`` guarded by the authentication backend."""
 
     from fastapi import APIRouter

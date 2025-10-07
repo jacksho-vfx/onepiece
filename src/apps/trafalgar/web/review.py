@@ -164,7 +164,7 @@ app = FastAPI(title="OnePiece Review API", version=TRAFALGAR_VERSION)
 router = create_protected_router()
 
 
-@router.get("/projects/{project_name}/playlists")
+@router.get("/projects/{project_name}/playlists")  # type: ignore[misc]
 def list_playlists(
     project_name: str,
     client: ShotGridClient = Depends(get_shotgrid_client),
@@ -199,7 +199,7 @@ def list_playlists(
     return JSONResponse(content=response)
 
 
-@router.get("/projects/{project_name}/playlists/{playlist_name}")
+@router.get("/projects/{project_name}/playlists/{playlist_name}")  # type: ignore[misc]
 def playlist_detail(
     project_name: str,
     playlist_name: str,

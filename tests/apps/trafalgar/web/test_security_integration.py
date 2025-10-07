@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi.testclient import TestClient
 import pytest
 
@@ -35,16 +37,20 @@ def test_ingest_health_allows_authorised_client() -> None:
 
 def test_review_accepts_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyClient:
-        def list_playlists(self, project: str):  # pragma: no cover - simple stub
+        def list_playlists(
+            self, project: str
+        ) -> list[dict[str, str]]:  # pragma: no cover - simple stub
             return [{"playlist_name": "Dailies"}]
 
-    def _dummy_versions(client: DummyClient, project: str, playlist: str):
+    def _dummy_versions(client: DummyClient, project: str, playlist: str) -> list[Any]:
         return []
 
     monkeypatch.setattr(review, "fetch_playlist_versions", _dummy_versions)
 
     with TestClient(review.app) as client:
-        client.app.dependency_overrides[review.get_shotgrid_client] = lambda: DummyClient()
+        client.app.dependency_overrides[review.get_shotgrid_client] = (
+            lambda: DummyClient()
+        )
         response = client.get(
             "/projects/example/playlists",
             headers={"Authorization": "Bearer review-token"},

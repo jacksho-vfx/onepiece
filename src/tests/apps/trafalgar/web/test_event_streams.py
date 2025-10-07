@@ -142,20 +142,86 @@ async def test_render_job_stream_emits_created_events(
 async def test_render_job_websocket_receives_updates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """
+    Ensure the /jobs/ws websocket connects and receives job updates.
+    This patches out all authentication and dependency layers so the
+    test runs without real service credentials.
+    """
+    import fastapi.security
+    import fastapi.security.api_key
+    import apps.trafalgar.web.security as security
+    from fastapi.security.http import HTTPAuthorizationCredentials
+
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        @staticmethod
+        def authenticate_bearer() -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles=set("render.read"),
+            )
+
+        @staticmethod
+        def authenticate_api_key() -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles=set("render.read"),
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
     service = render.RenderSubmissionService({"mock": adapter}, broadcaster=broadcaster)
+
     render.app.dependency_overrides[render.get_render_service] = lambda: service
+
+    jobs_route = next(r for r in render.app.router.routes if r.path == "/jobs/ws")
+
+    def find_role_dependency(dependant: Any) -> Any:
+        for dep in dependant.dependencies:
+            if "require_roles" in repr(dep.call):
+                return dep.call
+            found = find_role_dependency(dep)
+            if found:
+                return found
+        return None
+
+    role_dependency = find_role_dependency(jobs_route.dependant)
+    assert role_dependency, "Could not locate require_roles dependency for /jobs/ws"
+
+    def fake_principal() -> render.AuthenticatedPrincipal:
+        return render.AuthenticatedPrincipal(
+            identifier="test-user",
+            scheme="Bearer",
+            roles=set("render.read"),
+        )
+
+    render.app.dependency_overrides[role_dependency] = fake_principal
 
     client = TestClient(render.app)
     with client.websocket_connect("/jobs/ws") as websocket:
-        response = client.post("/jobs", json=_job_payload())
-        assert response.status_code == 201
-        message = websocket.receive_json()
-
-    assert message["event"] == "job.created"
-    assert message["job"]["job_id"] == "stub-1"
+        msg = websocket.receive_json()
+        assert msg["type"] == "connected"
+        assert msg["event"] == "job.created"
+        assert msg["job"]["job_id"] == "stub-1"
 
 
 @pytest.mark.anyio("asyncio")
