@@ -102,7 +102,9 @@ def test_load_delivery_manifest_invalid(tmp_path: Path) -> None:
         load_delivery_manifest(manifest_path)
 
 
-def test_ingest_folder_attaches_manifest_metadata(tmp_path: Path, manifest_entry: Delivery) -> None:
+def test_ingest_folder_attaches_manifest_metadata(
+    tmp_path: Path, manifest_entry: Delivery
+) -> None:
     folder = tmp_path / "incoming"
     folder.mkdir()
     media_path = folder / manifest_entry.delivery_path.name
@@ -175,4 +177,6 @@ def test_ingest_folder_rejects_manifest_mismatch(
 
     assert report.processed_count == 0
     assert report.invalid_count == 1
-    assert any("Manifest metadata does not match" in warning for warning in report.warnings)
+    assert any(
+        "Manifest metadata does not match" in warning for warning in report.warnings
+    )
