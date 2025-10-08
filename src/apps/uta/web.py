@@ -9,10 +9,7 @@ from enum import Enum
 from html import escape
 from typing import Sequence, Any
 
-try:  # pragma: no cover - inspect always provides _empty but guard defensively
-    from inspect import _empty as INSPECT_EMPTY
-except ImportError:  # pragma: no cover
-    INSPECT_EMPTY = None
+from inspect import _empty as INSPECT_EMPTY
 
 import click
 from fastapi import FastAPI, HTTPException
