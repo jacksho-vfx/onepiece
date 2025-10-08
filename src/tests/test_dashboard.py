@@ -66,9 +66,7 @@ class DummyDeliveryProvider(DeliveryProvider):
 
 
 class SequencedDeliveryProvider(DeliveryProvider):
-    def __init__(
-        self, responses: Sequence[Sequence[Mapping[str, Any]]]
-    ) -> None:
+    def __init__(self, responses: Sequence[Sequence[Mapping[str, Any]]]) -> None:
         self._responses = [list(response) for response in responses]
         self.requests: list[str] = []
 
@@ -184,12 +182,8 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-def delivery_provider_factory() -> Callable[
-    ..., SequencedDeliveryProvider
-]:
-    def factory(
-        *responses: Sequence[Mapping[str, Any]]
-    ) -> SequencedDeliveryProvider:
+def delivery_provider_factory() -> Callable[..., SequencedDeliveryProvider]:
+    def factory(*responses: Sequence[Mapping[str, Any]]) -> SequencedDeliveryProvider:
         return SequencedDeliveryProvider(responses)
 
     return factory
