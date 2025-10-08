@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from apps.onepiece.aws.ingest import _prepare_ingest_options
 from apps.onepiece.config import load_profile
@@ -14,7 +15,9 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content)
 
 
-def test_load_profile_merges_precedence(tmp_path, monkeypatch):
+def test_load_profile_merges_precedence(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
@@ -79,7 +82,9 @@ client_bucket = "workspace-client"
     assert context.data["client_bucket"] == "workspace-client"
 
 
-def test_load_profile_honours_highest_precedence_default(tmp_path, monkeypatch):
+def test_load_profile_honours_highest_precedence_default(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
@@ -118,7 +123,7 @@ show_code = "WRK"
     assert context.data["show_code"] == "WRK"
 
 
-def test_prepare_ingest_options_cli_overrides(tmp_path):
+def test_prepare_ingest_options_cli_overrides(tmp_path: Path) -> None:
     profile_data = {
         "project": "ConfigProject",
         "show_code": "CFG",
@@ -163,7 +168,7 @@ def test_prepare_ingest_options_cli_overrides(tmp_path):
     assert resolved.upload_chunk_size == 789
 
 
-def test_prepare_ingest_options_requires_project_and_show_code():
+def test_prepare_ingest_options_requires_project_and_show_code() -> None:
     with pytest.raises(OnePieceConfigError):
         _prepare_ingest_options(
             {},
