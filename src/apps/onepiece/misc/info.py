@@ -2,6 +2,8 @@
 
 import os
 import sys
+from pathlib import Path
+from typing import Mapping, Optional
 
 try:  # Python 3.8+
     from importlib import metadata
@@ -11,6 +13,7 @@ except ImportError:  # pragma: no cover - Python <3.8 fallback
 import structlog
 import typer
 
+from apps.onepiece.config import load_profile
 from libraries.validations.dcc import SupportedDCC
 
 log = structlog.get_logger(__name__)
@@ -80,3 +83,56 @@ def info() -> None:
         aws_profile=aws_profile,
         dccs=dccs,
     )
+
+
+@app.command("profile")
+def profile(
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        "-p",
+        help="Override the profile name to load.",
+    ),
+    workspace: Optional[Path] = typer.Option(
+        None,
+        "--workspace",
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+        help="Path to a workspace directory that may contain onepiece.toml.",
+    ),
+    project_root: Optional[Path] = typer.Option(
+        None,
+        "--project-root",
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+        help="Project root used to discover configuration files.",
+    ),
+) -> None:
+    """Display the resolved configuration profile and its sources."""
+
+    context = load_profile(profile=profile, workspace=workspace, project_root=project_root)
+
+    typer.echo("=== OnePiece Profile Info ===")
+    typer.echo(f"Resolved profile: {context.name}")
+
+    typer.echo("Settings:")
+    if context.data:
+        for key in sorted(context.data):
+            value = context.data[key]
+            if isinstance(value, Mapping):
+                typer.echo(f"  {key}:")
+                for sub_key in sorted(value):
+                    typer.echo(f"    {sub_key}: {value[sub_key]}")
+            else:
+                typer.echo(f"  {key}: {value}")
+    else:
+        typer.echo("  <none>")
+
+    typer.echo("Configuration sources (lowest to highest precedence):")
+    if context.sources:
+        for source in context.sources:
+            typer.echo(f"  - {source}")
+    else:
+        typer.echo("  <none>")
