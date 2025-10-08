@@ -838,10 +838,23 @@ async def stream_jobs(
 async def jobs_websocket(
     websocket: WebSocket,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+    service: RenderSubmissionService = Depends(get_render_service),
 ) -> None:
     await websocket.accept()
     queue = await JOB_EVENTS.subscribe()
     try:
+        jobs = service.list_jobs()
+        handshake: dict[str, Any] = {"type": "connected"}
+        if jobs:
+            latest_job = jobs[-1]
+            handshake.update(
+                {
+                    "event": "job.created",
+                    "job": latest_job.model_dump(mode="json"),
+                }
+            )
+        await websocket.send_json(handshake)
+
         while True:
             event = await queue.get()
             await websocket.send_json(event)
