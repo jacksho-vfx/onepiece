@@ -47,3 +47,14 @@ def test_index_renders_failure_ui_state() -> None:
     body = response.text
     assert "status.textContent = 'Failed';" in body
     assert "status.classList.add('status-error');" in body
+
+
+def test_index_template_preserves_output_whitespace() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "data.stdout.trim()" not in body
+    assert "data.stderr.trim()" not in body
+    assert "const trailingNewlinePattern = /\\r?\\n$/;" in body
+    assert "cleaned.length > 0 ? cleaned : null;" in body
