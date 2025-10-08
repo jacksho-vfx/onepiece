@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import shlex
 from dataclasses import dataclass, field
+from enum import Enum
 from html import escape
 from typing import Sequence, Any
+
+from inspect import _empty as INSPECT_EMPTY
 
 import click
 from fastapi import FastAPI, HTTPException
@@ -73,6 +76,29 @@ def _format_parameter_label(parameter: click.Parameter) -> Any:
     return label
 
 
+def _is_missing_default(parameter: click.Parameter, value: Any) -> bool:
+    if value is None:
+        return True
+    if value is Ellipsis:
+        return True
+    parameter_empty = getattr(click.Parameter, "empty", None)
+    if parameter_empty is not None and value is parameter_empty:
+        return True
+    if INSPECT_EMPTY is not None and value is INSPECT_EMPTY:
+        return True
+    if getattr(parameter, "required", False):
+        if isinstance(value, Enum):
+            return True
+        value_type = type(value)
+        module = getattr(value_type, "__module__", "")
+        name = value_type.__name__
+        if module.startswith("typer.") and (
+            "Placeholder" in name or name.startswith("Default")
+        ):
+            return True
+    return False
+
+
 def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
     specs: list[ParameterSpec] = []
     for parameter in command.params:
@@ -80,7 +106,7 @@ def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
             continue
         default_value = getattr(parameter, "default", None)
         default: str | None
-        if default_value is None:
+        if _is_missing_default(parameter, default_value):
             default = None
         else:
             default = str(default_value)
