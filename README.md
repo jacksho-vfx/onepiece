@@ -21,12 +21,12 @@ onepiece --help
 Once installed, the CLI exposes a number of subcommands:
 
 - `onepiece info` &mdash; Prints information about the current environment, detected DCCs, and ShotGrid/AWS configuration hints.
-- `onepiece greet NAME` &mdash; A smoke-test command to confirm the CLI is wired up.
-- `onepiece publish ...` &mdash; Packages scene renders, previews, and metadata and pushes them to S3 (see the detailed options below).
+- `onepiece profile` &mdash; Displays the resolved configuration profile, including the settings loaded from `onepiece.toml` files.
+- `onepiece dcc publish ...` &mdash; Packages scene renders, previews, and metadata and pushes them to S3 (see the detailed options below).
 - `onepiece dcc open-shot` &mdash; Launches a scene file in the matching DCC, automatically inferring the application from the file extension when not supplied explicitly.
-- `onepiece ingest` and `onepiece aws ...` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
+- `onepiece aws sync-from` / `onepiece aws sync-to` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
 - `onepiece aws ingest` &mdash; Validates vendor/client deliveries, registers Versions in ShotGrid, and uploads media with detailed progress feedback.
-- `onepiece validate ...` &mdash; Runs validation suites for ingest/publish workflows.
+- `onepiece validate reconcile ...` &mdash; Runs validation suites for ingest/publish workflows.
 - `onepiece shotgrid package-playlist` &mdash; Bundles playlist media for client/vendor deliveries with MediaShuttle-ready folder structures.
 - `onepiece shotgrid show-setup` &mdash; Seeds a project hierarchy from a CSV manifest while tracking progress shot-by-shot.
 - `onepiece shotgrid deliver` &mdash; Builds MediaShuttle-ready ZIP archives from approved ShotGrid versions, writes manifests, and synchronises the package to S3.
@@ -176,10 +176,10 @@ uploaded, skipped, and failed files so operators can quickly audit the run.
 
 ### Publishing DCC packages
 
-The `publish` command gathers renders, previews, and metadata produced by a DCC and uploads a packaged result to S3.
+The `onepiece dcc publish` command gathers renders, previews, and metadata produced by a DCC and uploads a packaged result to S3.
 
 ```bash
-onepiece publish \
+onepiece dcc publish \
   --dcc maya \
   --scene-name seq010_sh010_lighting_v002 \
   --renders /projects/show/renders/latest \
