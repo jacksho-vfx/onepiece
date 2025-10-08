@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 from dataclasses import dataclass, field
 from enum import Enum
@@ -638,13 +639,21 @@ def _invoke_cli(arguments: Sequence[str]) -> RunCommandResponse:
     )
 
 
+def _split_extra_args(extra_args: str, *, posix: bool | None = None) -> list[str]:
+    if not extra_args:
+        return []
+    if posix is None:
+        posix = os.name != "nt"
+    return shlex.split(extra_args, posix=posix)
+
+
 @app.post("/api/run", response_model=RunCommandResponse)
 async def run_command(payload: RunCommandRequest) -> RunCommandResponse:
     command_path = tuple(payload.path)
     if command_path not in COMMAND_LOOKUP:
         raise HTTPException(status_code=404, detail="Unknown command path")
     try:
-        extra_args = shlex.split(payload.extra_args) if payload.extra_args else []
+        extra_args = _split_extra_args(payload.extra_args)
     except ValueError as exc:  # pragma: no cover - user facing error
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

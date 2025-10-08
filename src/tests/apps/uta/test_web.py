@@ -79,3 +79,11 @@ def test_index_honours_asgi_root_path_prefix() -> None:
         )
 
     assert api_response.status_code == 200
+
+
+def test_split_extra_args_windows_path_preserved() -> None:
+    arguments = web._split_extra_args(
+        "--script C:\\projects\\shot\\scene.nk", posix=False
+    )
+
+    assert arguments == ["--script", r"C:\projects\shot\scene.nk"]
