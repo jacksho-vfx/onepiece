@@ -446,6 +446,12 @@ def _render_index() -> str:
             font-size: 0.85rem;
             color: rgba(148, 163, 184, 0.9);
           }}
+          .status.status-success {{
+            color: #bbf7d0;
+          }}
+          .status.status-error {{
+            color: #fca5a5;
+          }}
           .command-output {{
             margin: 0.75rem 0 0;
             padding: 0.75rem;
@@ -511,9 +517,10 @@ def _render_index() -> str:
               event.preventDefault();
               const button = form.querySelector('.run-command');
               const argsField = form.querySelector('[name="args"]');
-              const path = card.dataset.commandPath.trim().split(/\s+/);
+              const path = card.dataset.commandPath.trim().split(/[\t\n\r\f\v ]+/);
               button.disabled = true;
               status.textContent = 'Running...';
+              status.classList.remove('status-success', 'status-error');
               output.hidden = true;
               output.textContent = '';
               try {{
@@ -536,11 +543,18 @@ def _render_index() -> str:
                 segments.push(`\n(exit code: ${{data.exit_code}})`);
                 output.textContent = segments.join('\n');
                 output.hidden = false;
-                status.textContent = 'Completed';
+                if (data.success) {{
+                  status.textContent = 'Completed';
+                  status.classList.add('status-success');
+                }} else {{
+                  status.textContent = 'Failed';
+                  status.classList.add('status-error');
+                }}
               }} catch (error) {{
                 output.textContent = error.message;
                 output.hidden = false;
                 status.textContent = 'Error';
+                status.classList.add('status-error');
               }} finally {{
                 button.disabled = false;
               }}
@@ -566,6 +580,7 @@ class RunCommandResponse(BaseModel):
     exit_code: int
     stdout: str
     stderr: str
+    success: bool
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -583,6 +598,7 @@ def _invoke_cli(arguments: Sequence[str]) -> RunCommandResponse:
         exit_code=result.exit_code,
         stdout=stdout,
         stderr=stderr,
+        success=result.exit_code == 0,
     )
 
 
