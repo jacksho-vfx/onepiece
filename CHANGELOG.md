@@ -24,6 +24,9 @@ _No changes yet._
 - Normalise abbreviated and mixed-case ShotGrid status values before
   aggregating them so the landing page, project summaries, and episode views
   report consistent totals.
+- Document the new cache configuration environment variables and admin
+  endpoints so operators can inspect, flush, and tune dashboard caching
+  behaviour.
 
 **Delivery workflows**
 - Prefer provider-supplied manifest payloads and cache regenerated manifests per

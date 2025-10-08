@@ -19,6 +19,13 @@ If the token is missing the service responds with `503 Service Unavailable` to
 indicate the dashboard has not been configured. When an incorrect token is
 provided the request is rejected with `401 Unauthorized`.
 
+### Cache administration authentication
+
+The cache inspection and refresh endpoints described below reuse the dashboard
+bearer token. Any request to `/admin/cache` without a valid
+`Authorization: Bearer <token>` header is rejected with `401 Unauthorized` to
+ensure in-memory state cannot be enumerated or flushed anonymously.
+
 ## Endpoint: `GET /metrics`
 
 The `/metrics` endpoint returns a JSON document that conforms to the following
@@ -151,3 +158,62 @@ and gracefully falls back to the last good snapshot if a concurrent writer
 briefly produces malformed JSON. As a result, rapid-fire checks for missing
 runs no longer result in transient `500` errors while the registry is being
 updated.
+
+## Dashboard caching controls
+
+The dashboard keeps frequently accessed data in memory so high-frequency status
+polls do not overwhelm backing services such as ShotGrid. Operators can tune
+the cache using environment variables and manage the runtime state via admin
+endpoints.
+
+### Environment variables
+
+Set the following environment variables before launching the dashboard to
+control cache behaviour:
+
+- `ONEPIECE_DASHBOARD_CACHE_TTL` – duration in seconds that a cached response
+  remains valid. Expired entries are lazily refreshed on the next request. Use a
+  higher value to avoid repeated ShotGrid queries, or a lower value if you need
+  near-real-time updates.
+- `ONEPIECE_DASHBOARD_CACHE_MAX_RECORDS` – maximum number of records retained in
+  a single cache bucket (for example, version summaries). When the limit is
+  exceeded the oldest entries are discarded to prevent unbounded growth.
+- `ONEPIECE_DASHBOARD_CACHE_MAX_PROJECTS` – caps the number of projects kept in
+  memory when aggregating project dashboards. Projects beyond the limit are
+  evicted using least-recently-used ordering so the hottest shows stay cached.
+
+Unset variables fall back to the defaults baked into the service configuration.
+Values outside of sane ranges are clamped to guard against accidental runaway
+memory usage.
+
+### Admin endpoints: `/admin/cache`
+
+- `GET /admin/cache` – returns a JSON snapshot of the in-memory caches,
+  including entry counts, TTL configuration, and the timestamp of the last
+  refresh for each bucket.
+- `POST /admin/cache` – flushes all caches and triggers background refreshes on
+  the next request cycle. The body can be empty; the act of hitting the endpoint
+  clears the stores.
+
+Both routes require the standard dashboard bearer token and respond with
+`401 Unauthorized` when the token is missing or incorrect. Operators should use
+these endpoints sparingly in production—force-flushing large caches can spike
+load on ShotGrid or other backing APIs until the cache repopulates.
+
+### On-disk project registry lifecycle
+
+The dashboard persists project metadata to `dashboard-projects.json` within the
+application data directory. When the service starts it attempts to hydrate the
+registry from ShotGrid; successful responses overwrite the file so the cache on
+disk reflects the latest project roster. If ShotGrid is temporarily
+unreachable, the in-memory cache is populated from the on-disk JSON so the
+dashboard can continue serving project lists without interruption. Once
+ShotGrid recovers, the next successful sync refreshes both memory and disk and
+prunes projects that have been archived or deleted upstream.
+
+The registry file is periodically pruned by comparing the cached entries with
+the authoritative ShotGrid list. Projects missing from ShotGrid are removed
+from the JSON snapshot, and the sync timestamp is updated. Operators should
+monitor filesystem permissions and available disk space—if the file cannot be
+written the dashboard logs a warning and continues using the in-memory view
+until persistence succeeds.

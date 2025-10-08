@@ -49,3 +49,11 @@ When `onepiece aws ingest` runs, the CLI resolves the active profile using the
 search order above, applies any overrides provided on the command line, and
 passes the merged configuration to the ingest service. Other commands can reuse
 these utilities to obtain consistent profile data.
+
+## Related Trafalgar dashboard configuration
+
+Environment variables that influence the Trafalgar dashboard runtime—such as
+cache TTLs, capacity limits, and admin endpoints—are documented in
+[`docs/dashboard_api.md`](./dashboard_api.md#dashboard-caching-controls). Review
+those settings alongside your profile files so deployment guides surface the
+operational levers available to operators.
