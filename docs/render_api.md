@@ -46,3 +46,21 @@ The descriptors can be interpreted as follows:
 These descriptors align with the validation logic used by the CLI
 (`python -m apps.onepiece render submit`) so interactive tools can surface the
 same guard rails and defaults without reaching into adapter internals.
+
+## Extending the adapter registry
+
+The Trafalgar service now sources its adapter list from the runtime
+`RenderSubmissionService` registry. Projects integrating bespoke farm managers
+can register additional adapters during startup:
+
+```python
+from apps.trafalgar.web.render import get_render_service
+
+service = get_render_service()
+service.register_adapter("studiofarm", submit_to_studio_farm)
+```
+
+The API will immediately accept `studiofarm` submissions and expose the key via
+`/farms` without requiring code changes. Request validation uses the same
+registry, so bespoke adapters can be surfaced to clients and tests by
+registering them with the shared service instance.
