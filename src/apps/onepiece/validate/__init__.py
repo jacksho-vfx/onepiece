@@ -7,6 +7,7 @@ from apps.onepiece.validate.dcc_environment import render_dcc_environment
 from apps.onepiece.validate.names import validate_names
 from apps.onepiece.validate.names_batch import names_batch
 from apps.onepiece.validate.paths import validate_paths
+from . import reconcile as reconcile_module
 
 app = typer.Typer(name="validate", help="Validation commands")
 
@@ -15,6 +16,7 @@ app.command("names-batch")(names_batch)
 app.command("paths")(validate_paths)
 app.command("asset-consistency")(asset_consistency)
 app.command("dcc-environment")(render_dcc_environment)
+app.command("reconcile")(reconcile_module.reconcile)
 
 
 __all__ = ["app"]
