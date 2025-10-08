@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence, Protocol, Mapping, Generator, Iterable
+from typing import Any, Sequence, Protocol, Mapping, Generator, Iterable, Callable
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -62,6 +63,22 @@ class DummyDeliveryProvider(DeliveryProvider):
             for delivery in self._deliveries
             if delivery.get("project") == project_name
         ]
+
+
+class SequencedDeliveryProvider(DeliveryProvider):
+    def __init__(
+        self, responses: Sequence[Sequence[Mapping[str, Any]]]
+    ) -> None:
+        self._responses = [list(response) for response in responses]
+        self.requests: list[str] = []
+
+    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]:
+        self.requests.append(project_name)
+        if self._responses:
+            response = self._responses.pop(0)
+        else:
+            response = []
+        return [copy.deepcopy(item) for item in response]
 
 
 class DummyIngestFacade:
@@ -164,6 +181,18 @@ def _clear_overrides() -> Generator[None, None, None]:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture
+def delivery_provider_factory() -> Callable[
+    ..., SequencedDeliveryProvider
+]:
+    def factory(
+        *responses: Sequence[Mapping[str, Any]]
+    ) -> SequencedDeliveryProvider:
+        return SequencedDeliveryProvider(responses)
+
+    return factory
 
 
 def test_shotgrid_service_caches_versions_until_ttl_expiry() -> None:
@@ -915,6 +944,121 @@ def test_delivery_service_caches_recomputed_manifest(
     assert len(calls) == 1
     assert first == second
     assert first[0]["file_count"] == 1
+
+
+def test_delivery_service_reuses_cached_manifest_and_returns_deep_copy(
+    delivery_provider_factory: Callable[..., SequencedDeliveryProvider],
+) -> None:
+    provider = delivery_provider_factory(
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+                "manifest_data": {"files": [{"path": "alpha.mov"}]},
+            }
+        ],
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+            }
+        ],
+    )
+    service = dashboard.DeliveryService(
+        provider,
+        manifest_cache_size=4,
+    )
+
+    first = service.list_deliveries("alpha")
+    assert first[0]["items"] == [{"path": "alpha.mov"}]
+
+    original_items = first[0]["items"]
+    original_file = original_items[0]
+    original_items.append({"path": "mutated.mov"})
+    original_file["path"] = "tampered.mov"
+
+    second = service.list_deliveries("alpha")
+
+    assert second[0]["items"] == [{"path": "alpha.mov"}]
+    assert second[0]["items"] is not original_items
+    assert second[0]["items"][0] is not original_file
+
+
+def test_delivery_service_evicts_oldest_manifest_when_cache_full(
+    delivery_provider_factory: Callable[..., SequencedDeliveryProvider],
+) -> None:
+    provider = delivery_provider_factory(
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+                "manifest_data": {"files": [{"path": "alpha.mov"}]},
+            }
+        ],
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-2",
+                "manifest_data": {"files": [{"path": "bravo.mov"}]},
+            }
+        ],
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+            }
+        ],
+    )
+
+    service = dashboard.DeliveryService(
+        provider,
+        manifest_cache_size=1,
+    )
+
+    first = service.list_deliveries("alpha")
+    assert first[0]["items"] == [{"path": "alpha.mov"}]
+    assert list(service._manifest_cache.keys()) == ["delivery-1"]
+
+    second = service.list_deliveries("alpha")
+    assert second[0]["items"] == [{"path": "bravo.mov"}]
+    assert list(service._manifest_cache.keys()) == ["delivery-2"]
+
+    third = service.list_deliveries("alpha")
+    assert third[0]["items"] == []
+    assert list(service._manifest_cache.keys()) == ["delivery-1"]
+
+
+def test_delivery_service_disables_manifest_cache_when_size_zero(
+    delivery_provider_factory: Callable[..., SequencedDeliveryProvider],
+) -> None:
+    provider = delivery_provider_factory(
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+                "manifest_data": {"files": [{"path": "alpha.mov"}]},
+            }
+        ],
+        [
+            {
+                "project": "alpha",
+                "id": "delivery-1",
+            }
+        ],
+    )
+
+    service = dashboard.DeliveryService(
+        provider,
+        manifest_cache_size=0,
+    )
+
+    first = service.list_deliveries("alpha")
+    assert first[0]["items"] == [{"path": "alpha.mov"}]
+    assert list(service._manifest_cache.keys()) == []
+
+    second = service.list_deliveries("alpha")
+    assert second[0]["items"] == []
+    assert list(service._manifest_cache.keys()) == []
 
 
 @pytest.mark.anyio("asyncio")

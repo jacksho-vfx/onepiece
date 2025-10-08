@@ -93,6 +93,11 @@ onepiece/
 - Tests inside `src/tests` include fixtures that mock AWS and ShotGrid interactions. Import them in new tests to avoid hitting live services.
 - Use the `--dry-run` flags offered by the `aws` and `publish` commands to inspect their behaviour without transferring data.
 
+## Extending delivery integrations
+
+- `DeliveryService` keeps a small LRU cache of delivery manifests keyed by `id`/`delivery_id`. When wiring a new provider, return a stable identifier so cache hits remain deterministic and consider increasing the `manifest_cache_size` argument when instantiating the service if the provider exposes a long delivery history.
+- Cached manifests are cloned on read/write, so modifying the structures returned by `DeliveryService.list_deliveries` will not affect other requests. If you need to invalidate the cache (for example, after retrofitting a manifest on disk), call the `/admin/cache` flush endpoint or recreate the service instance within the FastAPI dependency overrides.
+
 ## Releasing changes
 
 1. Bump the version in `pyproject.toml` following semantic versioning.

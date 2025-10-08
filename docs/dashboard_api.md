@@ -200,6 +200,31 @@ Both routes require the standard dashboard bearer token and respond with
 these endpoints sparingly in production—force-flushing large caches can spike
 load on ShotGrid or other backing APIs until the cache repopulates.
 
+### Delivery manifest cache
+
+`DeliveryService` memoises delivery manifests so repeated requests for the same
+delivery ID do not force the provider to recalculate or re-fetch metadata. The
+cache stores shallow delivery metadata alongside a deep copy of the manifest's
+`files` list, ensuring callers cannot accidentally mutate the cached structure.
+
+- `manifest_cache_size` controls how many deliveries are retained. The default
+  of `32` keeps enough history for typical review sessions while maintaining a
+  small in-memory footprint. Set the value to `0` to disable manifest caching
+  entirely, or increase it if operators frequently page through long delivery
+  histories.
+- Entries are evicted using least-recently-used (LRU) ordering. Once the cache
+  reaches its capacity, the oldest manifest is discarded when a new delivery is
+  encountered.
+- Cached manifests are cloned before being returned to callers and again when
+  they are stored, so downstream code can safely mutate response payloads
+  without corrupting the cache.
+
+Operationally, aim to provide stable `id` or `delivery_id` fields from custom
+providers so cache hits remain deterministic. When updating a manifest outside
+of the dashboard (for example, after a delivery is re-issued), trigger a cache
+flush via `POST /admin/cache` or restart the application to ensure callers see
+the refreshed metadata.
+
 ### On-disk project registry lifecycle
 
 The dashboard persists project metadata to `dashboard-projects.json` within the
