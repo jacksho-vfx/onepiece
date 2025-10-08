@@ -32,6 +32,7 @@ from starlette.websockets import WebSocketDisconnect
 from apps.onepiece.render.submit import (
     DCC_CHOICES,
     FARM_ADAPTERS,
+    FARM_CAPABILITY_PROVIDERS,
     _get_adapter_capabilities,
     _resolve_priority_and_chunk_size,
 )
@@ -46,7 +47,7 @@ from libraries.render.base import (
     RenderSubmissionError,
     SubmissionResult,
 )
-from libraries.render.models import RenderAdapter
+from libraries.render.models import CapabilityProvider, RenderAdapter
 
 from apps.trafalgar.web.events import EventBroadcaster
 from apps.trafalgar.web.job_store import JobStore
@@ -178,18 +179,23 @@ class FarmsResponse(BaseModel):
     farms: Sequence[FarmInfo]
 
 
-def _build_farm_capabilities(farm: str) -> FarmCapabilities:
+def _build_farm_capabilities(
+    farm: str, capabilities: AdapterCapabilities | None = None
+) -> FarmCapabilities:
     """Translate adapter capability metadata into API descriptors."""
 
-    try:
-        raw_capabilities: AdapterCapabilities = _get_adapter_capabilities(farm)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        logger.warning(
-            "render.farm.capabilities.unavailable",
-            farm=farm,
-            error=str(exc),
-        )
-        return FarmCapabilities()
+    if capabilities is None:
+        try:
+            raw_capabilities: AdapterCapabilities = _get_adapter_capabilities(farm)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "render.farm.capabilities.unavailable",
+                farm=farm,
+                error=str(exc),
+            )
+            return FarmCapabilities()
+    else:
+        raw_capabilities = dict(capabilities)
 
     chunk_enabled = raw_capabilities.get("chunk_size_enabled", False)
     default_chunk = raw_capabilities.get("default_chunk_size")
@@ -417,11 +423,30 @@ class RenderSubmissionService:
         self,
         adapters: Mapping[str, RenderAdapter] | None = None,
         *,
+        capability_registry: Mapping[
+            str, CapabilityProvider | AdapterCapabilities
+        ] | None = None,
         job_store: JobStore | None = None,
         history_limit: int | None = None,
         broadcaster: EventBroadcaster | None = None,
     ) -> None:
-        self._adapters = dict(adapters or FARM_ADAPTERS)
+        initial_adapters = adapters or FARM_ADAPTERS
+        self._adapters = {
+            name.strip().lower(): adapter for name, adapter in initial_adapters.items()
+        }
+        base_capabilities: dict[str, CapabilityProvider | AdapterCapabilities] = {
+            name: provider for name, provider in FARM_CAPABILITY_PROVIDERS.items()
+        }
+        if capability_registry:
+            for name, entry in capability_registry.items():
+                base_capabilities[name.strip().lower()] = entry
+        self._capability_sources: dict[
+            str, CapabilityProvider | AdapterCapabilities
+        ] = {}
+        for name in self._adapters:
+            entry = base_capabilities.get(name)
+            if entry is not None:
+                self._capability_sources[name] = entry
         self._jobs: OrderedDict[str, _JobRecord] = OrderedDict()
         self._store = job_store
         self._history_limit = (
@@ -439,7 +464,8 @@ class RenderSubmissionService:
             description = FARM_DESCRIPTIONS.get(
                 name, f"Render farm adapter registered as '{name}'."
             )
-            capabilities = _build_farm_capabilities(name)
+            capability_data = self._describe_capabilities(name)
+            capabilities = _build_farm_capabilities(name, capability_data)
             entries.append(
                 FarmInfo(
                     name=name,
@@ -449,11 +475,52 @@ class RenderSubmissionService:
             )
         return entries
 
-    def register_adapter(self, name: str, adapter: RenderAdapter) -> None:
+    def _capability_source(
+        self, farm: str
+    ) -> tuple[AdapterCapabilities | None, CapabilityProvider | None]:
+        entry = self._capability_sources.get(farm)
+        if entry is None:
+            return None, None
+        if callable(entry):
+            return None, entry
+        return dict(entry), None
+
+    def _describe_capabilities(self, farm: str) -> AdapterCapabilities | None:
+        capabilities, provider = self._capability_source(farm)
+        if capabilities is not None:
+            return capabilities
+        if provider is None:
+            return None
+        try:
+            return provider() or {}
+        except RenderSubmissionError as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "render.farm.capabilities.unavailable",
+                farm=farm,
+                error=str(exc),
+            )
+            return None
+
+    def register_adapter(
+        self,
+        name: str,
+        adapter: RenderAdapter,
+        *,
+        capability_provider: CapabilityProvider | None = None,
+        capabilities: AdapterCapabilities | None = None,
+    ) -> None:
         """Register or replace a render adapter at runtime."""
 
+        if capability_provider is not None and capabilities is not None:
+            raise ValueError(
+                "Provide either 'capabilities' or 'capability_provider', not both."
+            )
         key = name.strip().lower()
         self._adapters[key] = adapter
+        if capabilities is not None:
+            self._capability_sources[key] = dict(capabilities)
+        elif capability_provider is not None:
+            self._capability_sources[key] = capability_provider
 
     def adapter_keys(self) -> tuple[str, ...]:
         """Return the set of registered adapter identifiers."""
@@ -471,11 +538,16 @@ class RenderSubmissionService:
                 context={"farm": request.farm},
             )
         resolved_user = request.user or getpass.getuser()
+        capability_data, capability_provider = self._capability_source(request.farm)
+        if capability_data is None and capability_provider is None:
+            capability_data = {}
         try:
             resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
                 farm=request.farm,
                 priority=request.priority,
                 chunk_size=request.chunk_size,
+                capabilities=capability_data,
+                capability_provider=capability_provider,
             )
         except OnePieceValidationError as exc:
             raise RenderSubmissionError(

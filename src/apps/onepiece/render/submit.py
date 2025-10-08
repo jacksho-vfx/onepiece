@@ -79,15 +79,30 @@ def _resolve_priority_and_chunk_size(
     farm: str,
     priority: int | None,
     chunk_size: int | None,
+    capabilities: AdapterCapabilities | None = None,
+    capability_provider: CapabilityProvider | None = None,
 ) -> tuple[int, int | None, AdapterCapabilities]:
-    capabilities = _get_adapter_capabilities(farm)
+    resolved_capabilities: AdapterCapabilities
+    if capabilities is not None:
+        resolved_capabilities = dict(capabilities)
+    else:
+        provider = capability_provider
+        if provider is None:
+            resolved_capabilities = _get_adapter_capabilities(farm)
+        else:
+            try:
+                resolved_capabilities = provider() or {}
+            except RenderSubmissionError as exc:
+                raise OnePieceExternalServiceError(
+                    f"Failed to query capabilities from '{farm}' adapter: {exc}"
+                ) from exc
 
     resolved_priority = priority
     if resolved_priority is None:
-        resolved_priority = capabilities.get("default_priority", 50)
+        resolved_priority = resolved_capabilities.get("default_priority", 50)
 
-    min_priority = capabilities.get("priority_min")
-    max_priority = capabilities.get("priority_max")
+    min_priority = resolved_capabilities.get("priority_min")
+    max_priority = resolved_capabilities.get("priority_max")
     if min_priority is not None and resolved_priority < min_priority:
         raise OnePieceValidationError(
             f"Priority {resolved_priority} is below the supported minimum of {min_priority} (--priority)."
@@ -97,9 +112,11 @@ def _resolve_priority_and_chunk_size(
             f"Priority {resolved_priority} exceeds the supported maximum of {max_priority} (--priority)."
         )
 
-    chunk_enabled = capabilities.get("chunk_size_enabled", False)
+    chunk_enabled = resolved_capabilities.get("chunk_size_enabled", False)
     resolved_chunk = (
-        chunk_size if chunk_size is not None else capabilities.get("default_chunk_size")
+        chunk_size
+        if chunk_size is not None
+        else resolved_capabilities.get("default_chunk_size")
     )
 
     if resolved_chunk is not None:
@@ -107,8 +124,8 @@ def _resolve_priority_and_chunk_size(
             raise OnePieceValidationError(
                 "Chunk sizing is not supported by this adapter (--chunk-size)."
             )
-        min_chunk = capabilities.get("chunk_size_min")
-        max_chunk = capabilities.get("chunk_size_max")
+        min_chunk = resolved_capabilities.get("chunk_size_min")
+        max_chunk = resolved_capabilities.get("chunk_size_max")
         if min_chunk is not None and resolved_chunk < min_chunk:
             raise OnePieceValidationError(
                 f"Chunk size {resolved_chunk} is below the supported minimum of {min_chunk} (--chunk-size)."
@@ -123,7 +140,7 @@ def _resolve_priority_and_chunk_size(
             "Chunk sizing is not supported by this adapter (--chunk-size)."
         )
 
-    return resolved_priority, resolved_chunk, capabilities
+    return resolved_priority, resolved_chunk, resolved_capabilities
 
 
 def _validate_preset_name(name: str) -> str:

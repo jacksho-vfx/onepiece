@@ -232,6 +232,81 @@ def test_submit_job_accepts_runtime_registered_adapter(
     assert custom_called["farm"] == "bespoke"
 
 
+def test_submit_job_resolves_capabilities_for_registered_adapter(
+    client: TestClient,
+    render_service: render_module.RenderSubmissionService,
+) -> None:
+    submitted: Dict[str, Any] = {}
+    capability_calls = 0
+
+    def bespoke_capabilities() -> Dict[str, Any]:
+        nonlocal capability_calls
+        capability_calls += 1
+        return {
+            "default_priority": 80,
+            "priority_min": 40,
+            "priority_max": 90,
+            "chunk_size_enabled": True,
+            "default_chunk_size": 4,
+            "chunk_size_min": 2,
+            "chunk_size_max": 6,
+        }
+
+    def bespoke_submit(
+        *,
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> Dict[str, Any]:
+        submitted.update(
+            {
+                "scene": scene,
+                "frames": frames,
+                "output": output,
+                "dcc": dcc,
+                "priority": priority,
+                "user": user,
+                "chunk_size": chunk_size,
+            }
+        )
+        return {
+            "job_id": "bespoke-789",
+            "status": "queued",
+            "farm_type": "bespoke",
+        }
+
+    render_service.register_adapter(
+        "bespoke",
+        bespoke_submit,
+        capability_provider=bespoke_capabilities,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/scenes/bespoke.ma",
+            "frames": "10-20",
+            "output": "/tmp/bespoke",
+            "farm": "bespoke",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["job_id"] == "bespoke-789"
+    assert payload["status"] == "queued"
+    assert payload["farm_type"] == "bespoke"
+
+    assert submitted["priority"] == 80
+    assert submitted["chunk_size"] == 4
+    assert capability_calls >= 1
+
+
 def test_submit_job_not_implemented_response(client: TestClient) -> None:
     response = client.post(
         "/jobs",
