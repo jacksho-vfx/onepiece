@@ -1158,11 +1158,69 @@ async def status(
     shotgrid_service: ShotGridService = Depends(get_shotgrid_service),
     reconcile_service: ReconcileService = Depends(get_reconcile_service),
     ingest_facade: IngestRunDashboardFacade = Depends(get_ingest_dashboard_facade),
+    render_facade: RenderDashboardFacade = Depends(get_render_dashboard_facade),
+    review_facade: ReviewDashboardFacade = Depends(get_review_dashboard_facade),
 ) -> JSONResponse:
     summary = shotgrid_service.overall_status()
     errors = reconcile_service.list_errors()
     ingest_summary = ingest_facade.summarise_recent_runs()
-    payload = {**summary, "errors": len(errors), "ingest": ingest_summary}
+
+    render_raw = render_facade.summarise_jobs()
+    if not isinstance(render_raw, Mapping):
+        render_raw = {}
+    render_summary = {
+        "jobs": _parse_int(render_raw.get("jobs"), 0),
+        "by_status": {
+            str(key): _parse_int(value, 0)
+            for key, value in dict(render_raw.get("by_status", {})).items()
+        },
+        "by_farm": {
+            str(key): _parse_int(value, 0)
+            for key, value in dict(render_raw.get("by_farm", {})).items()
+        },
+    }
+
+    project_names = shotgrid_service.discover_projects()
+    review_raw = review_facade.summarise_projects(project_names)
+    if not isinstance(review_raw, Mapping):
+        review_raw = {}
+    review_projects_raw = list(review_raw.get("projects", []))
+    review_projects = [
+        {
+            "project": str(entry.get("project")),
+            "playlists": _parse_int(entry.get("playlists"), 0),
+            "clips": _parse_int(entry.get("clips"), 0),
+            "shots": _parse_int(entry.get("shots"), 0),
+            "duration_seconds": _parse_float(entry.get("duration_seconds"), 0.0),
+        }
+        for entry in review_projects_raw
+        if isinstance(entry, Mapping) and entry.get("project")
+    ]
+    review_totals_raw = (
+        review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    )
+    review_summary = {
+        "totals": {
+            "projects": _parse_int(
+                review_totals_raw.get("projects"), len(review_projects)
+            ),
+            "playlists": _parse_int(review_totals_raw.get("playlists"), 0),
+            "clips": _parse_int(review_totals_raw.get("clips"), 0),
+            "shots": _parse_int(review_totals_raw.get("shots"), 0),
+            "duration_seconds": _parse_float(
+                review_totals_raw.get("duration_seconds"), 0.0
+            ),
+        },
+        "projects": review_projects,
+    }
+
+    payload = {
+        **summary,
+        "errors": len(errors),
+        "ingest": ingest_summary,
+        "render": render_summary,
+        "review": review_summary,
+    }
     return JSONResponse(content=payload)
 
 
