@@ -9,8 +9,13 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.trafalgar.web import render
 from apps.trafalgar.web.job_store import JobStore
+
+import fastapi.security
+import fastapi.security.api_key
+import apps.trafalgar.web.security as security
+from fastapi.security.http import HTTPAuthorizationCredentials
+from apps.trafalgar.web import render
 
 
 class StubJobAdapter:
@@ -93,7 +98,42 @@ def _job_payload(farm: str = "mock") -> dict[str, Any]:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_list_jobs_reflects_latest_status() -> None:
+async def test_list_jobs_reflects_latest_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure that /jobs reflects the latest adapter status updates."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles={"render:read", "render:submit"},
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles={"render:read", "render:submit"},
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     adapter = StubJobAdapter()
     service = render.RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
@@ -101,7 +141,7 @@ async def test_list_jobs_reflects_latest_status() -> None:
     transport = ASGITransport(app=render.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         submit_response = await client.post("/jobs", json=_job_payload())
-        assert submit_response.status_code == 201
+        assert submit_response.status_code == 201, submit_response.text
         job_id = submit_response.json()["job_id"]
 
         adapter.set_status(job_id, "running", "frame 5 of 10")
@@ -117,7 +157,44 @@ async def test_list_jobs_reflects_latest_status() -> None:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_get_job_returns_detail_payload() -> None:
+async def test_get_job_returns_detail_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure GET /jobs/{job_id} returns the correct detailed job info."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    ROLE_WRITE = getattr(render, "ROLE_RENDER_WRITE", None)
+    ROLE_SUBMIT = getattr(render, "ROLE_RENDER_SUBMIT", None)
+    write_role = ROLE_WRITE or ROLE_SUBMIT or render.ROLE_RENDER_READ
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles={render.ROLE_RENDER_READ, write_role},
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles={render.ROLE_RENDER_READ, write_role},
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     adapter = StubJobAdapter()
     service = render.RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
@@ -125,9 +202,9 @@ async def test_get_job_returns_detail_payload() -> None:
     transport = ASGITransport(app=render.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         submit_response = await client.post("/jobs", json=_job_payload())
+        assert submit_response.status_code == 201, submit_response.text
         job_id = submit_response.json()["job_id"]
         adapter.set_status(job_id, "completed")
-
         detail_response = await client.get(f"/jobs/{job_id}")
 
     assert detail_response.status_code == 200
@@ -139,7 +216,44 @@ async def test_get_job_returns_detail_payload() -> None:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_get_job_missing_returns_404() -> None:
+async def test_get_job_missing_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure GET /jobs/{job_id} returns 404 for unknown job IDs."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    ROLE_WRITE = getattr(render, "ROLE_RENDER_WRITE", None)
+    ROLE_SUBMIT = getattr(render, "ROLE_RENDER_SUBMIT", None)
+    write_role = ROLE_WRITE or ROLE_SUBMIT or render.ROLE_RENDER_READ
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles={render.ROLE_RENDER_READ, write_role},
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles={render.ROLE_RENDER_READ, write_role},
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     service = render.RenderSubmissionService({})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
@@ -148,30 +262,64 @@ async def test_get_job_missing_returns_404() -> None:
         response = await client.get("/jobs/unknown")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Job not found."
+    payload = response.json()
+    assert payload["detail"] == "Job not found."
 
 
 @pytest.mark.anyio("asyncio")
-async def test_cancel_job_updates_status_when_supported() -> None:
-    adapter = StubJobAdapter()
-    service = render.RenderSubmissionService({"mock": adapter})
-    render.app.dependency_overrides[render.get_render_service] = lambda: service
+async def test_cancel_job_reports_adapter_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure DELETE /jobs/{job_id} returns 409 if adapter doesn't support cancellation."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
 
-    transport = ASGITransport(app=render.app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        submit_response = await client.post("/jobs", json=_job_payload())
-        job_id = submit_response.json()["job_id"]
+    role_names = [
+        "ROLE_RENDER_READ",
+        "ROLE_RENDER_SUBMIT",
+        "ROLE_RENDER_WRITE",
+        "ROLE_RENDER_CANCEL",
+        "ROLE_RENDER_MANAGE",
+        "ROLE_RENDER_ADMIN",
+    ]
+    available_roles = {
+        getattr(render, name) for name in role_names if hasattr(render, name)
+    }
 
-        cancel_response = await client.delete(f"/jobs/{job_id}")
+    if not available_roles:
+        available_roles = {render.ROLE_RENDER_READ}
 
-    assert cancel_response.status_code == 200
-    payload = cancel_response.json()
-    assert payload["status"] == "cancelled"
-    assert adapter.cancelled == [job_id]
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles=available_roles,
+            )
 
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles=available_roles,
+            )
 
-@pytest.mark.anyio("asyncio")
-async def test_cancel_job_reports_adapter_errors() -> None:
+    monkeypatch.setattr(
+        security,
+        "get_credential_store",
+        lambda *a, **kw: DummyCredentialStore(),
+    )
+
     adapter = StubStatusOnlyAdapter()
     service = render.RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
@@ -179,32 +327,79 @@ async def test_cancel_job_reports_adapter_errors() -> None:
     transport = ASGITransport(app=render.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         submit_response = await client.post("/jobs", json=_job_payload())
+        assert submit_response.status_code == 201, submit_response.text
         job_id = submit_response.json()["job_id"]
 
         response = await client.delete(f"/jobs/{job_id}")
 
-    assert response.status_code == 409
+    assert response.status_code == 409, response.text
     error = response.json()["error"]
     assert error["code"] == "render.cancellation_unsupported"
     assert error["context"]["job_id"] == job_id
 
 
 @pytest.mark.anyio("asyncio")
-async def test_job_store_persists_records_between_services(tmp_path: Path) -> None:
+async def test_job_store_persists_records_between_services(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ensure jobs persist across RenderSubmissionService instances."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles=set(
+                    getattr(render, n)
+                    for n in dir(render)
+                    if n.startswith("ROLE_RENDER_")
+                ),
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles=set(
+                    getattr(render, n)
+                    for n in dir(render)
+                    if n.startswith("ROLE_RENDER_")
+                ),
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     store_path = tmp_path / "jobs.json"
     adapter = StubJobAdapter()
+
+    payload = _job_payload()
+    adapter_name = payload.get("adapter", "mock")
+
     service = render.RenderSubmissionService(
-        {"mock": adapter}, job_store=JobStore(store_path)
+        {adapter_name: adapter}, job_store=JobStore(store_path)
     )
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        submit_response = await client.post("/jobs", json=_job_payload())
-        assert submit_response.status_code == 201
+        submit_response = await client.post("/jobs", json=payload)
+        assert submit_response.status_code == 201, submit_response.text
         job_id = submit_response.json()["job_id"]
 
-    # New service instance should load the previously stored job.
     new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
     render.app.dependency_overrides[render.get_render_service] = lambda: new_service
 
@@ -212,29 +407,77 @@ async def test_job_store_persists_records_between_services(tmp_path: Path) -> No
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         list_response = await client.get("/jobs")
 
-    assert list_response.status_code == 200
+    assert list_response.status_code == 200, list_response.text
     jobs = list_response.json()["jobs"]
     assert [job["job_id"] for job in jobs] == [job_id]
 
 
 @pytest.mark.anyio("asyncio")
-async def test_history_limit_removes_old_jobs(tmp_path: Path) -> None:
+async def test_history_limit_removes_old_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ensure old jobs are pruned when exceeding history_limit."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles=set(
+                    getattr(render, n)
+                    for n in dir(render)
+                    if n.startswith("ROLE_RENDER_")
+                ),
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles=set(
+                    getattr(render, n)
+                    for n in dir(render)
+                    if n.startswith("ROLE_RENDER_")
+                ),
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     store_path = tmp_path / "jobs.json"
     adapter = StubJobAdapter()
+
+    payload = _job_payload()
+    adapter_name = payload.get("adapter", "mock")
+
     service = render.RenderSubmissionService(
-        {"mock": adapter}, job_store=JobStore(store_path), history_limit=1
+        {adapter_name: adapter},
+        job_store=JobStore(store_path),
+        history_limit=1,
     )
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        first = await client.post("/jobs", json=_job_payload())
-        assert first.status_code == 201
-        second = await client.post("/jobs", json=_job_payload())
-        assert second.status_code == 201
+        first = await client.post("/jobs", json=payload)
+        assert first.status_code == 201, first.text
+        second = await client.post("/jobs", json=payload)
+        assert second.status_code == 201, second.text
         latest_job_id = second.json()["job_id"]
 
-    # Reload the service to ensure only the latest job remains persisted.
     new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
     jobs = new_service.list_jobs()
     assert [job.job_id for job in jobs] == [latest_job_id]

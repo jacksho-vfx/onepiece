@@ -12,6 +12,7 @@ from apps.trafalgar.web import ingest, render
 from apps.trafalgar.web.events import EventBroadcaster
 from libraries.ingest.registry import IngestRunRecord
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
+from tests.apps.trafalgar.web.security_patches import patch_security
 
 
 class StubJobAdapter:
@@ -142,20 +143,47 @@ async def test_render_job_stream_emits_created_events(
 async def test_render_job_websocket_receives_updates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """
+    Ensure the /jobs/ws websocket connects and receives job updates.
+    This patches out all authentication and dependency layers so the
+    test runs without real service credentials.
+    """
+
+    provide_principal = patch_security(monkeypatch, roles={"render:read"})
+
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
     service = render.RenderSubmissionService({"mock": adapter}, broadcaster=broadcaster)
+
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
-    client = TestClient(render.app)
-    with client.websocket_connect("/jobs/ws") as websocket:
-        response = client.post("/jobs", json=_job_payload())
-        assert response.status_code == 201
-        message = websocket.receive_json()
+    jobs_route = next(r for r in render.app.router.routes if r.path == "/jobs/ws")
 
-    assert message["event"] == "job.created"
-    assert message["job"]["job_id"] == "stub-1"
+    def find_role_dependency(dependant: Any) -> Any:
+        for dep in dependant.dependencies:
+            if "require_roles" in repr(dep.call):
+                return dep.call
+            found = find_role_dependency(dep)
+            if found:
+                return found
+        return None
+
+    role_dependency = find_role_dependency(jobs_route.dependant)
+    assert role_dependency, "Could not locate require_roles dependency for /jobs/ws"
+
+    render.app.dependency_overrides[role_dependency] = provide_principal
+
+    request = render.RenderJobRequest(**_job_payload())
+    service.submit_job(request)
+
+    client = TestClient(render.app)
+
+    with client.websocket_connect("/jobs/ws") as websocket:
+        msg = websocket.receive_json()
+        assert msg["type"] == "connected"
+        assert msg["event"] == "job.created"
+        assert msg["job"]["job_id"] == "stub-1"
 
 
 @pytest.mark.anyio("asyncio")
@@ -194,6 +222,29 @@ async def test_ingest_websocket_receives_events(
     monkeypatch.setattr(ingest, "INGEST_EVENTS", broadcaster)
     service = ingest.IngestRunService(provider=provider, broadcaster=broadcaster)
     ingest.app.dependency_overrides[ingest.get_ingest_run_service] = lambda: service
+
+    provide_principal = patch_security(monkeypatch, roles={"ingest:read"})
+
+    runs_route = next(r for r in ingest.app.router.routes if r.path == "/runs/ws")
+
+    def find_role_dependency(dependant: Any) -> Any:
+        for dep in dependant.dependencies:
+            if "require_roles" in repr(dep.call):
+                return dep.call
+            found = find_role_dependency(dep)
+            if found:
+                return found
+        return None
+
+    role_dependency = find_role_dependency(runs_route.dependant)
+    assert role_dependency, "Could not locate require_roles dependency for /runs/ws"
+
+    ingest.app.dependency_overrides[role_dependency] = provide_principal
+
+    runs_list_route = next(r for r in ingest.app.router.routes if r.path == "/runs")
+    list_role_dependency = find_role_dependency(runs_list_route.dependant)
+    assert list_role_dependency, "Could not locate require_roles dependency for /runs"
+    ingest.app.dependency_overrides[list_role_dependency] = provide_principal
 
     client = TestClient(ingest.app)
     with client.websocket_connect("/runs/ws") as websocket:

@@ -8,10 +8,15 @@ from fastapi.testclient import TestClient
 from apps.trafalgar.web.ingest import (
     IngestRunProvider,
     IngestRunService,
-    app,
-    get_ingest_run_service,
 )
 from libraries.ingest.registry import IngestRunRegistry
+
+import fastapi.security
+import fastapi.security.api_key
+import apps.trafalgar.web.security as security
+from fastapi.security.http import HTTPAuthorizationCredentials
+from apps.trafalgar.web import ingest, render
+from apps.trafalgar.web.ingest import app, get_ingest_run_service
 
 
 class CountingRegistry(IngestRunRegistry):  # type: ignore[misc]
@@ -61,8 +66,7 @@ def test_registry_serves_cached_records_when_reload_fails(
     record = registry.get("run-1")
     assert record is not None
 
-    # Simulate an in-progress writer updating the file with incomplete JSON.
-    registry_path.write_text("{", encoding="utf-8")  # invalid payload, updates mtime
+    registry_path.write_text("{", encoding="utf-8")
 
     def _failing_load(*args: Any, **kwargs: Any) -> None:
         raise json.JSONDecodeError("err", "doc", 0)
@@ -72,7 +76,48 @@ def test_registry_serves_cached_records_when_reload_fails(
     assert registry.get("run-1") is record
 
 
-def test_ingest_api_caches_repeated_missing_requests(tmp_path: Path) -> None:
+def test_ingest_api_caches_repeated_missing_requests(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Ensure /runs/{id} caches 404 responses and only reloads registry once."""
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    all_roles = set()
+    for module in (render, ingest):
+        for name in dir(module):
+            if name.startswith("ROLE_RENDER_") or name.startswith("ROLE_INGEST_"):
+                all_roles.add(getattr(module, name))
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles=all_roles,
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles=all_roles,
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
     registry_path = tmp_path / "registry.json"
     _write_registry(registry_path, [])
 
@@ -85,7 +130,7 @@ def test_ingest_api_caches_repeated_missing_requests(tmp_path: Path) -> None:
 
     for _ in range(5):
         response = client.get("/runs/not-here")
-        assert response.status_code == 404
+        assert response.status_code == 404, response.text
 
     assert registry.payload_reads == 1
 
