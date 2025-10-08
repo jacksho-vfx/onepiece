@@ -8,6 +8,8 @@ All notable changes to the OnePiece pipeline toolkit.
 
 - Corrected the ingest event stream typing to align with the byte payloads FastAPI
   yields to streaming clients, avoiding mismatched annotations during type checks.
+- Documented Trafalgar render job history retention controls and the `/render/health`
+  metrics so operators can tune pruning windows and alert on persistence issues.
 
 ---
 
