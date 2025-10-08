@@ -22,6 +22,14 @@ def sync_from(
     dry_run: bool = False,
     include: Optional[List[str]] = typer.Option(None, "--include"),
     exclude: Optional[List[str]] = typer.Option(None, "--exclude"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help=(
+            "Name of the AWS credential profile to use when running s5cmd "
+            "(sets AWS_PROFILE for the sync)."
+        ),
+    ),
 ) -> None:
     """Sync data from S3 into a local folder."""
 
@@ -33,6 +41,7 @@ def sync_from(
         dry_run=dry_run,
         include=include,
         exclude=exclude,
+        profile=profile,
     )
 
 
@@ -45,6 +54,14 @@ def sync_to(
     dry_run: bool = False,
     include: Optional[List[str]] = typer.Option(None, "--include"),
     exclude: Optional[List[str]] = typer.Option(None, "--exclude"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help=(
+            "Name of the AWS credential profile to use when running s5cmd "
+            "(sets AWS_PROFILE for the sync)."
+        ),
+    ),
 ) -> None:
     """Sync data from a local folder up to S3."""
 
@@ -56,6 +73,7 @@ def sync_to(
         dry_run=dry_run,
         include=include,
         exclude=exclude,
+        profile=profile,
     )
 
 

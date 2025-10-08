@@ -160,7 +160,7 @@ Versions, writing manifests, and synchronising the results to S3.
 
 ### AWS
 
-The AWS commands leverage the standard AWS CLI configuration. Configure credentials via `aws configure`, or specify a profile when running commands:
+The AWS commands leverage the standard AWS CLI configuration. Configure credentials via `aws configure`, or specify a profile when running commands. The optional `--profile` flag maps directly to the `AWS_PROFILE` environment variable so the spawned `s5cmd` process uses the matching credential profile:
 
 ```bash
 onepiece aws sync-from --bucket my-bucket --show-code SHOW --folder plates --local-path /data/plates --profile studio-prod

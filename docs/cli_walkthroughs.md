@@ -71,10 +71,13 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
      --folder plates \
      --manifest docs/examples/ingest_manifest.csv \
      --local-path "$ONEPIECE_INGEST_ROOT" \
-     --dry-run
+     --dry-run \
+     --profile studio-dev
    ```
 
    Dry runs never create S3 objects or ShotGrid Versions; they emit analytics so you can verify the impact safely. Review the generated report before promoting the command to a full ingest.
+
+   Passing `--profile` mirrors exporting `AWS_PROFILE` and ensures the underlying `s5cmd` call uses the same credential profile.
 
 3. Once you are satisfied, remove the `--dry-run` flag to execute the transfer for real.
 

@@ -16,8 +16,8 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
   - `--checkpoint-dir` / `INGEST_CHECKPOINT_DIR` – Directory containing persisted multipart checkpoints (defaults to `.ingest-checkpoints`).
   - `--checkpoint-threshold` / `INGEST_CHECKPOINT_THRESHOLD` – Minimum file size (bytes) before checkpoints are recorded; default is 512 MiB.
   - `--upload-chunk-size` / `INGEST_UPLOAD_CHUNK_SIZE` – Chunk size (bytes) used for resumable transfers; default is 64 MiB.
-- `python -m apps.onepiece aws sync-from <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — mirror S3 data into a local directory via `s5cmd` with progress reporting.
-- `python -m apps.onepiece aws sync-to <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> …]` — push local renders back to S3 using `s5cmd` with progress feedback.
+- `python -m apps.onepiece aws sync-from <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> … --profile <aws_profile>]` — mirror S3 data into a local directory via `s5cmd` with progress reporting. Supplying `--profile` sets `AWS_PROFILE` for the spawned `s5cmd` command.
+- `python -m apps.onepiece aws sync-to <bucket> <show_code> <folder> <local_path> [--dry-run --include <pattern> … --exclude <pattern> … --profile <aws_profile>]` — push local renders back to S3 using `s5cmd` with progress feedback. The optional profile maps to `AWS_PROFILE` for the sync process.
 
 ### Troubleshooting ShotGrid ingest failures
 
