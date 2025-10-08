@@ -32,6 +32,14 @@ def client() -> TestClient:
     return TestClient(render_module.app)
 
 
+@pytest.fixture()
+def render_service() -> render_module.RenderSubmissionService:
+    render_module.get_render_service.cache_clear()
+    service = render_module.get_render_service()
+    yield service
+    render_module.get_render_service.cache_clear()
+
+
 def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
     response = client.get("/farms")
     assert response.status_code == 200
@@ -180,6 +188,50 @@ def test_submit_job_success(
     assert called["user"] == "operator"
 
 
+def test_submit_job_accepts_runtime_registered_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+    render_service: render_module.RenderSubmissionService,
+) -> None:
+    custom_called: dict[str, Any] = {}
+
+    def fake_submit(
+        self: render_module.RenderSubmissionService,
+        request: render_module.RenderJobRequest,
+    ) -> dict[str, Any]:
+        custom_called.update(request.model_dump())
+        return {
+            "job_id": "custom-456",
+            "status": "queued",
+            "farm_type": request.farm,
+        }
+
+    render_service.register_adapter("bespoke", lambda **_: {})
+
+    monkeypatch.setattr(
+        render_module.RenderSubmissionService, "submit_job", fake_submit
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/path/to/scene.ma",
+            "frames": "1-10",
+            "output": "/tmp/output",
+            "farm": "BeSpOkE",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["job_id"] == "custom-456"
+    assert payload["status"] == "queued"
+    assert payload["farm_type"] == "bespoke"
+
+    assert custom_called["farm"] == "bespoke"
+
+
 def test_submit_job_not_implemented_response(client: TestClient) -> None:
     response = client.post(
         "/jobs",
@@ -229,10 +281,10 @@ def test_submit_job_unknown_farm_response(client: TestClient) -> None:
                 original_override
             )
 
-    assert response.status_code == 404
-    error = response.json()["error"]
-    assert error["code"] == "render.farm_not_found"
-    assert error["context"]["farm"] == "mock"
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert detail["loc"][-1] == "farm"
+    assert "Unknown farm" in detail["msg"]
 
 
 def test_submit_job_surfaces_adapter_unavailability(

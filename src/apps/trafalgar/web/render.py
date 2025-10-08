@@ -10,12 +10,22 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import asyncio
 import json
-from typing import Any, Awaitable, Callable, Mapping, Sequence, AsyncGenerator
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Mapping,
+    Sequence,
+    AsyncGenerator,
+    Collection,
+    ClassVar,
+)
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import Body, Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
 from starlette.responses import Response
 from starlette.websockets import WebSocketDisconnect
 
@@ -203,6 +213,10 @@ def _build_farm_capabilities(farm: str) -> FarmCapabilities:
 class RenderJobRequest(BaseModel):
     """Request payload mirroring the CLI submission options."""
 
+    _farm_registry_provider: ClassVar[Callable[[], Collection[str]]] = staticmethod(
+        lambda: tuple(FARM_ADAPTERS)
+    )
+
     dcc: str = Field(
         ..., description="Digital content creation package (e.g. maya, nuke)."
     )
@@ -243,13 +257,24 @@ class RenderJobRequest(BaseModel):
             )
         return text
 
+    @classmethod
+    def configure_farm_registry(cls, provider: Callable[[], Collection[str]]) -> None:
+        """Inject the callable used to resolve registered farm adapters."""
+
+        cls._farm_registry_provider = provider
+
     @field_validator("farm")
     @classmethod
-    def _normalise_farm(cls, value: str) -> str:
+    def _normalise_farm(cls, value: str, info: ValidationInfo) -> str:
         text = value.strip().lower()
-        if text not in FARM_ADAPTERS:
+        registry: Collection[str] | None = None
+        if info.context is not None:
+            registry = info.context.get("farm_registry")
+        if registry is None:
+            registry = cls._farm_registry_provider()
+        if text not in registry:
             raise ValueError(
-                f"Unknown farm '{value}'. Choose one of: {', '.join(sorted(FARM_ADAPTERS))}."
+                f"Unknown farm '{value}'. Choose one of: {', '.join(sorted(registry))}."
             )
         return text
 
@@ -419,6 +444,17 @@ class RenderSubmissionService:
                 )
             )
         return entries
+
+    def register_adapter(self, name: str, adapter: RenderAdapter) -> None:
+        """Register or replace a render adapter at runtime."""
+
+        key = name.strip().lower()
+        self._adapters[key] = adapter
+
+    def adapter_keys(self) -> tuple[str, ...]:
+        """Return the set of registered adapter identifiers."""
+
+        return tuple(sorted(self._adapters))
 
     def submit_job(self, request: RenderJobRequest) -> SubmissionResult:
         adapter = self._adapters.get(request.farm)
@@ -671,11 +707,30 @@ def get_render_service() -> (
                 env=JOB_HISTORY_LIMIT_ENV,
             )
 
-    return RenderSubmissionService(
+    service = RenderSubmissionService(
         job_store=job_store,
         history_limit=history_limit,
         broadcaster=JOB_EVENTS,
     )
+
+    RenderJobRequest.configure_farm_registry(service.adapter_keys)
+
+    return service
+
+
+def parse_render_job_request(
+    payload: Mapping[str, Any] = Body(...),
+    service: RenderSubmissionService = Depends(get_render_service),
+) -> RenderJobRequest:
+    """FastAPI dependency that validates render submissions with registry context."""
+
+    registry = service.adapter_keys()
+    try:
+        return RenderJobRequest.model_validate(
+            payload, context={"farm_registry": registry}
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
 
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
@@ -754,7 +809,7 @@ def farms(
 
 @router.post("/jobs")  # type: ignore[misc]
 async def create_job(
-    request: RenderJobRequest,
+    request: RenderJobRequest = Depends(parse_render_job_request),
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_SUBMIT)),
 ) -> JSONResponse:
