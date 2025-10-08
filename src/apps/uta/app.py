@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from importlib import import_module
 import webbrowser
+from typing import Any
 
 import typer
 
@@ -13,7 +14,7 @@ DEFAULT_PORT = 8050
 app = typer.Typer(name="uta", help="Browser GUI for the OnePiece toolchain.")
 
 
-def _load_uvicorn():
+def _load_uvicorn() -> Any:
     return import_module("uvicorn")
 
 

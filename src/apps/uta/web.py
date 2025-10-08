@@ -6,7 +6,7 @@ import asyncio
 import shlex
 from dataclasses import dataclass, field
 from html import escape
-from typing import Sequence
+from typing import Sequence, Any
 
 import click
 from fastapi import FastAPI, HTTPException
@@ -54,6 +54,7 @@ class PageSpec:
     help_text: str
     commands: list[CommandSpec] = field(default_factory=list)
 
+
 AUTO_PARAM_NAMES = {"help", "install_completion", "show_completion"}
 
 
@@ -61,7 +62,7 @@ def _normalise_help(value: str | None) -> str:
     return (value or "").strip()
 
 
-def _format_parameter_label(parameter: click.Parameter) -> str:
+def _format_parameter_label(parameter: click.Parameter) -> Any:
     if isinstance(parameter, click.Option):
         names = list(parameter.opts) + list(parameter.secondary_opts)
         label = ", ".join(names) if names else parameter.name
@@ -85,7 +86,7 @@ def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
             default = str(default_value)
         specs.append(
             ParameterSpec(
-                label=_format_parameter_label(parameter),
+                label=_format_parameter_label(parameter) or "",
                 help_text=(getattr(parameter, "help", "") or "").strip(),
                 required=getattr(parameter, "required", False),
                 default=default,
@@ -94,7 +95,9 @@ def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
     return specs
 
 
-def _collect_click_commands(command: click.Command, path: Sequence[str]) -> list[CommandSpec]:
+def _collect_click_commands(
+    command: click.Command, path: Sequence[str]
+) -> list[CommandSpec]:
     commands: list[CommandSpec] = []
     if isinstance(command, click.Group):
         if command.callback is not None:
@@ -121,8 +124,10 @@ def _collect_click_commands(command: click.Command, path: Sequence[str]) -> list
 def _build_pages() -> dict[str, PageSpec]:
     root_command = get_command(cli_app)
     pages: dict[str, PageSpec] = {}
-    for name, command in root_command.commands.items():
-        page = PageSpec(name=name, help_text=_normalise_help(getattr(command, "help", "")))
+    for name, command in root_command.commands.items():  # type: ignore[attr-defined]
+        page = PageSpec(
+            name=name, help_text=_normalise_help(getattr(command, "help", ""))
+        )
         page.commands.extend(_collect_click_commands(command, [name]))
         pages[name] = page
     for page in pages.values():
@@ -144,12 +149,14 @@ def _slugify(name: str) -> str:
 
 def _render_parameters(command: CommandSpec) -> str:
     if not command.parameters:
-        return "<p class=\"parameters-empty\">No additional options.</p>"
+        return '<p class="parameters-empty">No additional options.</p>'
     items = []
     for parameter in command.parameters:
-        parts = [f"<span class=\"param-label\">{escape(parameter.label)}</span>"]
+        parts = [f'<span class="param-label">{escape(parameter.label)}</span>']
         if parameter.help_text:
-            parts.append(f"<span class=\"param-help\">{escape(parameter.help_text)}</span>")
+            parts.append(
+                f'<span class="param-help">{escape(parameter.help_text)}</span>'
+            )
         meta = []
         if parameter.required:
             meta.append("required")
@@ -160,7 +167,7 @@ def _render_parameters(command: CommandSpec) -> str:
                 f"<span class=\"param-meta\">({' | '.join(escape(bit) for bit in meta)})</span>"
             )
         items.append(f"<li>{' '.join(parts)}</li>")
-    return "<ul class=\"parameters\">" + "".join(items) + "</ul>"
+    return '<ul class="parameters">' + "".join(items) + "</ul>"
 
 
 def _render_command(command: CommandSpec) -> str:
@@ -193,7 +200,9 @@ def _render_command(command: CommandSpec) -> str:
 def _render_page(page: PageSpec, *, is_active: bool) -> str:
     commands_html = "".join(_render_command(command) for command in page.commands)
     if not commands_html:
-        commands_html = "<p class=\"empty-page\">No commands are available for this section.</p>"
+        commands_html = (
+            '<p class="empty-page">No commands are available for this section.</p>'
+        )
     help_text = escape(page.help_text or "")
     page_id = f"page-{_slugify(page.name)}"
     active_class = "active" if is_active else ""
@@ -228,11 +237,11 @@ def _render_index() -> str:
         page_id = f"page-{_slugify(name)}"
         active_class = "active" if index == 0 else ""
         nav_items.append(
-            f"<button class=\"tab-button {active_class}\" data-target=\"{page_id}\">{escape(name.title())}</button>"
+            f'<button class="tab-button {active_class}" data-target="{page_id}">{escape(name.title())}</button>'
         )
         content_sections.append(_render_page(page, is_active=index == 0))
     nav_items.append(
-        "<button class=\"tab-button\" data-target=\"page-dashboard\">Dashboard</button>"
+        '<button class="tab-button" data-target="page-dashboard">Dashboard</button>'
     )
     content_sections.append(_render_dashboard_page(is_active=not content_sections))
 
