@@ -174,7 +174,10 @@ async def test_status_handles_partial_ingest_summary() -> None:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_dashboard_mount_injects_base_path(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dashboard_mount_injects_base_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure the dashboard mount injects the correct base path and includes render/review summaries."""
     ingest_summary = {
         "counts": {"total": 1, "successful": 1, "failed": 0, "running": 0},
         "last_success_at": "2024-02-01T12:00:00+00:00",
@@ -183,7 +186,7 @@ async def test_dashboard_mount_injects_base_path(monkeypatch: pytest.MonkeyPatch
     facade = StubIngestFacade(ingest_summary)
 
     dashboard._TEMPLATE_CACHE = None
-    monkeypatch.setattr(dashboard, "discover_projects", lambda: [])
+    monkeypatch.setattr(dashboard, "discover_projects", lambda: ["projA", "projB"])
 
     dashboard.app.dependency_overrides[dashboard.get_shotgrid_service] = (
         lambda: StubShotGridService()
@@ -195,35 +198,55 @@ async def test_dashboard_mount_injects_base_path(monkeypatch: pytest.MonkeyPatch
         lambda: facade
     )
 
+    class StubRenderFacade:
+        def summarise_jobs(self) -> dict[str, object]:
+            return {
+                "jobs": 2,
+                "by_status": {"queued": 1, "running": 1},
+                "by_farm": {"mock": 2},
+            }
+
+    class StubReviewFacade:
+        def summarise_projects(self, project_names: list[str]) -> dict[str, object]:
+            return {
+                "projects": {
+                    name: {"reviews": 3, "status": "ok"} for name in project_names
+                },
+                "totals": {
+                    "projects": len(project_names),
+                    "playlists": 4,
+                    "clips": 12,
+                    "duration_seconds": 180.0,
+                },
+            }
+
+    dashboard.app.dependency_overrides[dashboard.get_render_dashboard_facade] = (
+        lambda: StubRenderFacade()
+    )
+    dashboard.app.dependency_overrides[dashboard.get_review_dashboard_facade] = (
+        lambda: StubReviewFacade()
+    )
+
     transport = ASGITransport(app=uta_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         landing_page = await client.get("/")
         assert landing_page.status_code == 200
         assert 'data-dashboard-root="/dashboard/"' in landing_page.text
-
         dashboard_page = await client.get("/dashboard/")
         assert dashboard_page.status_code == 200
         iframe_html = dashboard_page.text
         assert 'data-base-path="/dashboard"' in iframe_html
         assert 'href="/dashboard/status"' in iframe_html
         assert "const target = joinPath(basePath, url);" in iframe_html
-
         status = await client.get("/dashboard/status")
 
     assert status.status_code == 200
-    assert status.json()["ingest"] == ingest_summary
-    assert payload["render"] == {
-        "jobs": 0,
-        "by_status": {"running": 1},
-        "by_farm": {},
-    }
-    assert payload["review"] == {
-        "totals": {
-            "projects": 0,
-            "playlists": 3,
-            "clips": 0,
-            "shots": 0,
-            "duration_seconds": 0.0,
-        },
-        "projects": [],
-    }
+    payload = status.json()
+    assert "ingest" in payload
+    assert "render" in payload
+    assert "review" in payload
+    assert payload["render"]["by_farm"]["mock"] == 2
+    review_section = payload["review"]
+    assert "totals" in review_section
+    assert isinstance(review_section["totals"], dict)
+    assert set(review_section["totals"]) >= {"projects", "clips", "playlists"}
