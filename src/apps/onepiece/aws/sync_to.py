@@ -16,6 +16,7 @@ def sync_to(
     dry_run: bool = False,
     include: list[str] | None = typer.Option(None, "--include"),
     exclude: list[str] | None = typer.Option(None, "--exclude"),
+    profile: str | None = None,
 ) -> None:
     """
     Sync local folder TO S3 using s5cmd with optional dry-run and filters.
@@ -46,6 +47,7 @@ def sync_to(
             include=include,
             exclude=exclude,
             progress_callback=_on_progress,
+            profile=profile,
         )
 
         if events == 0:
