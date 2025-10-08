@@ -58,3 +58,24 @@ def test_index_template_preserves_output_whitespace() -> None:
     assert "data.stderr.trim()" not in body
     assert "const trailingNewlinePattern = /\\r?\\n$/;" in body
     assert "cleaned.length > 0 ? cleaned : null;" in body
+
+
+def test_index_honours_asgi_root_path_prefix() -> None:
+    command_path = next(iter(web.COMMAND_LOOKUP))
+    with TestClient(web.app, root_path="/uta") as prefixed_client:
+        response = prefixed_client.get("/uta/")
+
+        assert response.status_code == 200
+        body = response.text
+        assert 'data-root-path="/uta"' in body
+        assert 'iframe src="/uta/dashboard/"' in body
+        assert 'data-dashboard-root="/uta/dashboard/"' in body
+        assert "const rootPath = document.body.dataset.rootPath" in body
+        assert "fetch(joinWithRoot('/api/run')" in body
+
+        api_response = prefixed_client.post(
+            "/uta/api/run",
+            json={"path": list(command_path), "extra_args": ""},
+        )
+
+    assert api_response.status_code == 200
