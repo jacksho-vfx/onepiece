@@ -325,9 +325,7 @@ async def test_ingest_websocket_receives_events(
 
     runs_list_route = next(r for r in ingest.app.router.routes if r.path == "/runs")
     list_role_dependency = find_role_dependency(runs_list_route.dependant)
-    assert (
-        list_role_dependency
-    ), "Could not locate require_roles dependency for /runs"
+    assert list_role_dependency, "Could not locate require_roles dependency for /runs"
     ingest.app.dependency_overrides[list_role_dependency] = fake_principal
 
     client = TestClient(ingest.app)
