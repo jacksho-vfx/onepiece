@@ -161,6 +161,10 @@ class UploadCheckpointStore:
         return self._directory / f"{digest}.json"
 
 
+def _format_shot_name(episode: str, scene: str, shot: str) -> str:
+    return f"{episode}_{scene}_{shot}"
+
+
 @dataclass(frozen=True)
 class MediaInfo:
     """Metadata parsed from a delivery filename."""
@@ -174,7 +178,7 @@ class MediaInfo:
 
     @property
     def shot_name(self) -> str:
-        return f"{self.episode}_{self.scene}_{self.shot}"
+        return _format_shot_name(self.episode, self.scene, self.shot)
 
     @property
     def version_code(self) -> str:
@@ -248,7 +252,7 @@ class Delivery:
 
     @property
     def shot_name(self) -> str:
-        return f"{self.episode}_{self.scene}_{self.shot}"
+        return _format_shot_name(self.episode, self.scene, self.shot)
 
 
 @dataclass(frozen=True)
