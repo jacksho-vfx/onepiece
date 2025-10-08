@@ -126,7 +126,7 @@
       }
     </style>
   </head>
-  <body data-projects="{{PROJECTS_JSON}}">
+  <body data-projects="{{PROJECTS_JSON}}" data-base-path="{{BASE_PATH}}">
     <h1>OnePiece Production Dashboard</h1>
     <p>Explore production health metrics aggregated from ShotGrid, reconciliation reports, and delivery manifests.</p>
     <nav>
@@ -218,13 +218,30 @@
     </section>
 
     <script>
+      const basePath = document.body.dataset.basePath || '';
+      function joinPath(base, path) {
+        if (!path) {
+          return base || '/';
+        }
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) {
+          return path;
+        }
+        const trimmedBase = base.endsWith('/') ? base.slice(0, -1) : base;
+        const prefixedPath = path.startsWith('/') ? path : `/${path}`;
+        if (!trimmedBase) {
+          return prefixedPath;
+        }
+        return `${trimmedBase}${prefixedPath}`;
+      }
+
       const projectsData = JSON.parse(document.body.dataset.projects || '[]');
       const primaryProject = projectsData.length ? projectsData[0] : null;
 
       async function fetchJson(url) {
-        const response = await fetch(url);
+        const target = joinPath(basePath, url);
+        const response = await fetch(target);
         if (!response.ok) {
-          throw new Error(`Request to ${url} failed: ${response.status}`);
+          throw new Error(`Request to ${target} failed: ${response.status}`);
         }
         return await response.json();
       }
@@ -410,7 +427,7 @@
           const manifestCell = document.createElement('td');
           if (entry.manifest) {
             const link = document.createElement('a');
-            link.href = entry.manifest;
+            link.href = joinPath(basePath, entry.manifest);
             link.textContent = 'Manifest';
             manifestCell.appendChild(link);
           } else {

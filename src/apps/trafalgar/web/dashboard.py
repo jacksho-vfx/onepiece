@@ -1107,7 +1107,7 @@ async def landing_page(request: Request) -> HTMLResponse:
     example_project = projects[0] if projects else None
 
     nav_items: list[str] = [
-        '<li><a href="/status">Project status overview</a></li>',
+        '<li><a href="{{BASE_PATH}}/status">Project status overview</a></li>',
     ]
 
     if example_project:
@@ -1115,12 +1115,12 @@ async def landing_page(request: Request) -> HTMLResponse:
         encoded_project = quote(example_project, safe="")
         nav_items.extend(
             [
-                f'<li><a href="/projects/{encoded_project}">Summary for {safe_project}</a></li>',
-                f'<li><a href="/projects/{encoded_project}/episodes">Episode breakdown for {safe_project}</a></li>',
-                f'<li><a href="/deliveries/{encoded_project}">Deliveries for {safe_project}</a></li>',
+                f'<li><a href="{{BASE_PATH}}/projects/{encoded_project}">Summary for {safe_project}</a></li>',
+                f'<li><a href="{{BASE_PATH}}/projects/{encoded_project}/episodes">Episode breakdown for {safe_project}</a></li>',
+                f'<li><a href="{{BASE_PATH}}/deliveries/{encoded_project}">Deliveries for {safe_project}</a></li>',
             ]
         )
-        review_link = f"/review/projects/{encoded_project}/playlists"
+        review_link = f"{{BASE_PATH}}/review/projects/{encoded_project}/playlists"
     else:
         nav_items.extend(
             [
@@ -1129,12 +1129,12 @@ async def landing_page(request: Request) -> HTMLResponse:
                 "<li><code>/deliveries/&lt;project&gt;</code></li>",
             ]
         )
-        review_link = "/review/projects/example/playlists"
+        review_link = "{{BASE_PATH}}/review/projects/example/playlists"
 
     nav_items.extend(
         [
-            '<li><a href="/errors">Reconciliation mismatches</a></li>',
-            '<li><a href="/errors/summary">Mismatch summary</a></li>',
+            '<li><a href="{{BASE_PATH}}/errors">Reconciliation mismatches</a></li>',
+            '<li><a href="{{BASE_PATH}}/errors/summary">Mismatch summary</a></li>',
             f'<li><a href="{review_link}">Review playlists API</a></li>',
         ]
     )
@@ -1142,8 +1142,13 @@ async def landing_page(request: Request) -> HTMLResponse:
     template = _load_landing_template()
     projects_json = escape(json.dumps(projects))
     nav_html = "\n        ".join(nav_items)
-    html = template.replace("{{PROJECTS_JSON}}", projects_json).replace(
-        "{{NAV_ITEMS}}", nav_html
+    raw_root_path = request.scope.get("root_path") or ""
+    base_path = raw_root_path.rstrip("/") if raw_root_path else ""
+    safe_base_path = escape(base_path, quote=True)
+    html = (
+        template.replace("{{PROJECTS_JSON}}", projects_json)
+        .replace("{{NAV_ITEMS}}", nav_html)
+        .replace("{{BASE_PATH}}", safe_base_path)
     )
     return HTMLResponse(content=html)
 
