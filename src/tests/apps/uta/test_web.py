@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
+from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
 from apps.uta import web
-
+from apps.uta.web import RunCommandResponse
 
 client = TestClient(web.app)
 
 
-def test_run_command_failure_reports_success_flag(monkeypatch):
+def test_run_command_failure_reports_success_flag(monkeypatch: MonkeyPatch) -> None:
     command_path = next(iter(web.COMMAND_LOOKUP))
 
-    def fake_invoke(arguments):
-        # The endpoint should pass the command path through unchanged when no extra args are provided.
+    def fake_invoke(arguments: Sequence[str]) -> RunCommandResponse:
         assert list(arguments) == list(command_path)
         return web.RunCommandResponse(
             command=list(arguments),
@@ -38,11 +40,10 @@ def test_run_command_failure_reports_success_flag(monkeypatch):
     assert payload["stderr"] == "boom"
 
 
-def test_index_renders_failure_ui_state():
+def test_index_renders_failure_ui_state() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
     body = response.text
     assert "status.textContent = 'Failed';" in body
     assert "status.classList.add('status-error');" in body
-
