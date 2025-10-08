@@ -1191,7 +1191,9 @@ async def status(
         for entry in review_projects_raw
         if isinstance(entry, Mapping) and entry.get("project")
     ]
-    review_totals_raw = review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    review_totals_raw = (
+        review_raw.get("totals", {}) if isinstance(review_raw, Mapping) else {}
+    )
     review_summary = {
         "totals": {
             "projects": _parse_int(
