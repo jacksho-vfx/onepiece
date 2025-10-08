@@ -12,6 +12,7 @@ from apps.trafalgar.web import ingest, render
 from apps.trafalgar.web.events import EventBroadcaster
 from libraries.ingest.registry import IngestRunRecord
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
+from tests.apps.trafalgar.web.security_patches import patch_security
 
 
 class StubJobAdapter:
@@ -147,42 +148,8 @@ async def test_render_job_websocket_receives_updates(
     This patches out all authentication and dependency layers so the
     test runs without real service credentials.
     """
-    import fastapi.security
-    import fastapi.security.api_key
-    import apps.trafalgar.web.security as security
-    from fastapi.security.http import HTTPAuthorizationCredentials
 
-    monkeypatch.setattr(
-        fastapi.security.HTTPBearer,
-        "__call__",
-        lambda self, request=None: HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="test-bearer-token"
-        ),
-    )
-    monkeypatch.setattr(
-        fastapi.security.api_key.APIKeyHeader,
-        "__call__",
-        lambda self, request=None: "test-api-key",
-    )
-
-    class DummyCredentialStore:
-        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
-            return render.AuthenticatedPrincipal(
-                identifier="mock-service",
-                scheme="Bearer",
-                roles={"render.read"},
-            )
-
-        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
-            return render.AuthenticatedPrincipal(
-                identifier="mock-service",
-                scheme="APIKey",
-                roles={"render.read"},
-            )
-
-    monkeypatch.setattr(
-        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
-    )
+    provide_principal = patch_security(monkeypatch, roles={"render:read"})
 
     adapter = StubJobAdapter()
     broadcaster = EventBroadcaster(max_buffer=4)
@@ -205,14 +172,7 @@ async def test_render_job_websocket_receives_updates(
     role_dependency = find_role_dependency(jobs_route.dependant)
     assert role_dependency, "Could not locate require_roles dependency for /jobs/ws"
 
-    def fake_principal() -> render.AuthenticatedPrincipal:
-        return render.AuthenticatedPrincipal(
-            identifier="test-user",
-            scheme="Bearer",
-            roles={"render.read"},
-        )
-
-    render.app.dependency_overrides[role_dependency] = fake_principal
+    render.app.dependency_overrides[role_dependency] = provide_principal
 
     request = render.RenderJobRequest(**_job_payload())
     service.submit_job(request)
@@ -263,42 +223,7 @@ async def test_ingest_websocket_receives_events(
     service = ingest.IngestRunService(provider=provider, broadcaster=broadcaster)
     ingest.app.dependency_overrides[ingest.get_ingest_run_service] = lambda: service
 
-    import fastapi.security
-    import fastapi.security.api_key
-    import apps.trafalgar.web.security as security
-    from fastapi.security.http import HTTPAuthorizationCredentials
-
-    monkeypatch.setattr(
-        fastapi.security.HTTPBearer,
-        "__call__",
-        lambda self, request=None: HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="test-bearer-token"
-        ),
-    )
-    monkeypatch.setattr(
-        fastapi.security.api_key.APIKeyHeader,
-        "__call__",
-        lambda self, request=None: "test-api-key",
-    )
-
-    class DummyCredentialStore:
-        def authenticate_bearer(self, token: str) -> ingest.AuthenticatedPrincipal:
-            return ingest.AuthenticatedPrincipal(
-                identifier="mock-service",
-                scheme="Bearer",
-                roles={"ingest.read"},
-            )
-
-        def authenticate_api_key(self, key: str) -> ingest.AuthenticatedPrincipal:
-            return ingest.AuthenticatedPrincipal(
-                identifier="mock-service",
-                scheme="APIKey",
-                roles={"ingest.read"},
-            )
-
-    monkeypatch.setattr(
-        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
-    )
+    provide_principal = patch_security(monkeypatch, roles={"ingest:read"})
 
     runs_route = next(r for r in ingest.app.router.routes if r.path == "/runs/ws")
 
@@ -314,19 +239,12 @@ async def test_ingest_websocket_receives_events(
     role_dependency = find_role_dependency(runs_route.dependant)
     assert role_dependency, "Could not locate require_roles dependency for /runs/ws"
 
-    def fake_principal() -> ingest.AuthenticatedPrincipal:
-        return ingest.AuthenticatedPrincipal(
-            identifier="test-user",
-            scheme="Bearer",
-            roles={"ingest.read"},
-        )
-
-    ingest.app.dependency_overrides[role_dependency] = fake_principal
+    ingest.app.dependency_overrides[role_dependency] = provide_principal
 
     runs_list_route = next(r for r in ingest.app.router.routes if r.path == "/runs")
     list_role_dependency = find_role_dependency(runs_list_route.dependant)
     assert list_role_dependency, "Could not locate require_roles dependency for /runs"
-    ingest.app.dependency_overrides[list_role_dependency] = fake_principal
+    ingest.app.dependency_overrides[list_role_dependency] = provide_principal
 
     client = TestClient(ingest.app)
     with client.websocket_connect("/runs/ws") as websocket:
