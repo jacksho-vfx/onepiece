@@ -334,7 +334,8 @@ def reset_security_state() -> None:
 
     global _api_key_scheme, _api_secret_scheme
     get_security_settings.cache_clear()
-    get_credential_store.cache_clear()
+    if hasattr(get_credential_store, "cache_clear"):
+        get_credential_store.cache_clear()
     _api_key_scheme = _build_api_key_header()
     _api_secret_scheme = _build_api_secret_header()
 
