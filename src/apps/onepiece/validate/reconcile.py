@@ -35,6 +35,7 @@ ScopeOption = typer.Option(
     show_default=True,
 )
 
+
 def _resolve_project_root(project: str) -> Path:
     base = Path(os.environ.get(PROJECT_ROOT_ENV, DEFAULT_PROJECTS_ROOT))
     return base / project
