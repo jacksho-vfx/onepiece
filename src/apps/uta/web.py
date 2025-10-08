@@ -12,7 +12,7 @@ from typing import Sequence, Any
 from inspect import _empty as INSPECT_EMPTY
 
 import click
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typer.main import get_command
@@ -243,20 +243,35 @@ def _render_page(page: PageSpec, *, is_active: bool) -> str:
     """
 
 
-def _render_dashboard_page(*, is_active: bool) -> str:
+def _normalise_root_path(root_path: str | None) -> str:
+    if not root_path or root_path == "/":
+        return ""
+    return root_path.rstrip("/")
+
+
+def _with_root_path(root_path: str, path: str) -> str:
+    if not path.startswith("/"):
+        return path
+    if not root_path:
+        return path
+    return f"{root_path}{path}"
+
+
+def _render_dashboard_page(*, is_active: bool, root_path: str) -> str:
     active_class = "active" if is_active else ""
+    dashboard_root = _with_root_path(root_path, "/dashboard/")
     return f"""
     <section id=\"page-dashboard\" class=\"page {active_class}\">
       <div class=\"page-header\">
         <h2>Trafalgar Dashboard</h2>
         <p class=\"page-help\">Embedded Trafalgar dashboard served from the existing FastAPI application.</p>
       </div>
-      <iframe src=\"/dashboard/\" data-dashboard-root=\"/dashboard/\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
+      <iframe src=\"{dashboard_root}\" data-dashboard-root=\"{dashboard_root}\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
     </section>
     """
 
 
-def _render_index() -> str:
+def _render_index(root_path: str) -> str:
     nav_items: list[str] = []
     content_sections: list[str] = []
     for index, (name, page) in enumerate(CLI_PAGES.items()):
@@ -269,7 +284,9 @@ def _render_index() -> str:
     nav_items.append(
         '<button class="tab-button" data-target="page-dashboard">Dashboard</button>'
     )
-    content_sections.append(_render_dashboard_page(is_active=not content_sections))
+    content_sections.append(
+        _render_dashboard_page(is_active=not content_sections, root_path=root_path)
+    )
 
     navigation = "".join(nav_items)
     pages_html = "".join(content_sections)
@@ -482,7 +499,7 @@ def _render_index() -> str:
           }}
         </style>
       </head>
-      <body>
+      <body data-root-path=\"{escape(root_path)}\">
         <header class=\"app-header\">
           <h1>Uta Control Center</h1>
           <p>Trigger OnePiece CLI operations through a streamlined interface and explore the Trafalgar dashboard without leaving your browser.</p>
@@ -509,6 +526,8 @@ def _render_index() -> str:
               setActive(button.dataset.target);
             }});
           }});
+          const rootPath = document.body.dataset.rootPath || "";
+          const joinWithRoot = (path) => (rootPath ? `${{rootPath}}${{path}}` : path);
           document.querySelectorAll('.command-form').forEach((form) => {{
             const card = form.closest('.command-card');
             const output = card.querySelector('.command-output');
@@ -524,7 +543,7 @@ def _render_index() -> str:
               output.hidden = true;
               output.textContent = '';
               try {{
-                const response = await fetch('/api/run', {{
+                const response = await fetch(joinWithRoot('/api/run'), {{
                   method: 'POST',
                   headers: {{ 'Content-Type': 'application/json' }},
                   body: JSON.stringify({{ path, extra_args: argsField.value }}),
@@ -597,8 +616,12 @@ class RunCommandResponse(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse:
-    return HTMLResponse(content=_render_index())
+async def index(request: Request) -> HTMLResponse:
+    scope_root = request.scope.get("root_path", "")
+    if not isinstance(scope_root, str):
+        scope_root = ""
+    root_path = _normalise_root_path(scope_root)
+    return HTMLResponse(content=_render_index(root_path))
 
 
 def _invoke_cli(arguments: Sequence[str]) -> RunCommandResponse:
