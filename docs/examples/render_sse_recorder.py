@@ -15,7 +15,9 @@ import httpx
 
 async def capture_events(output: Path, base_url: str, token: str) -> None:
     headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient(base_url=base_url, headers=headers, timeout=None) as client:
+    async with httpx.AsyncClient(
+        base_url=base_url, headers=headers, timeout=None
+    ) as client:
         async with client.stream("GET", "/render/jobs/stream") as response:
             response.raise_for_status()
             with output.open("a", encoding="utf-8") as sink:
