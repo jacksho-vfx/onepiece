@@ -533,13 +533,26 @@ def _render_index() -> str:
                 if (!response.ok) {{
                   throw new Error(data.detail || 'Command failed');
                 }}
+                const trailingNewlinePattern = /\\r?\\n$/;
+                const sanitizeSegment = (value) => {{
+                  if (typeof value !== 'string') {{
+                    return null;
+                  }}
+                  const cleaned = value.replace(trailingNewlinePattern, '');
+                  return cleaned.length > 0 ? cleaned : null;
+                }};
+
                 const segments = [];
-                if (data.stdout) {{
-                  segments.push(data.stdout.trim());
+                const stdoutSegment = sanitizeSegment(data.stdout);
+                if (stdoutSegment !== null) {{
+                  segments.push(stdoutSegment);
                 }}
-                if (data.stderr) {{
-                  segments.push('\n[stderr]\n' + data.stderr.trim());
+
+                const stderrSegment = sanitizeSegment(data.stderr);
+                if (stderrSegment !== null) {{
+                  segments.push('\n[stderr]\n' + stderrSegment);
                 }}
+
                 segments.push(`\n(exit code: ${{data.exit_code}})`);
                 output.textContent = segments.join('\n');
                 output.hidden = false;
