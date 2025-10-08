@@ -57,7 +57,34 @@ can register additional adapters during startup:
 from apps.trafalgar.web.render import get_render_service
 
 service = get_render_service()
-service.register_adapter("studiofarm", submit_to_studio_farm)
+
+
+def get_studio_capabilities() -> dict[str, int | bool]:
+    return {
+        "default_priority": 70,
+        "priority_min": 50,
+        "priority_max": 90,
+        "chunk_size_enabled": True,
+    }
+
+service.register_adapter(
+    "studiofarm",
+    submit_to_studio_farm,
+    capability_provider=get_studio_capabilities,
+)
+
+# Optional: expose static metadata instead of a callable
+service.register_adapter(
+    "studiofarm",
+    submit_to_studio_farm,
+    capabilities={
+        "default_priority": 70,
+        "priority_min": 50,
+        "priority_max": 90,
+        "chunk_size_enabled": True,
+        "default_chunk_size": 5,
+    },
+)
 ```
 
 The API will immediately accept `studiofarm` submissions and expose the key via
