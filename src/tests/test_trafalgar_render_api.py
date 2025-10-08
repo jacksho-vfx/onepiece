@@ -9,16 +9,16 @@ from tests.apps.trafalgar.web.security_patches import patch_security
 
 
 @pytest.fixture(autouse=True)
-def render_security(monkeypatch: pytest.MonkeyPatch) -> None:
+def render_security(monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[misc]
     provider = patch_security(
         monkeypatch,
         roles={"render:read", "render:submit", "render:manage"},
     )
     import apps.trafalgar.web.security as security_module
 
-    render_module.app.dependency_overrides[
-        security_module.authenticate_request
-    ] = provider
+    render_module.app.dependency_overrides[security_module.authenticate_request] = (
+        provider
+    )
 
     yield
 

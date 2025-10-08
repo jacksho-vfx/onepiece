@@ -29,7 +29,9 @@ def patch_security(
         )
 
     class DummyCredentialStore:
-        def authenticate_bearer(self, token: str) -> security.AuthenticatedPrincipal:  # pragma: no cover - simple stub
+        def authenticate_bearer(
+            self, token: str
+        ) -> security.AuthenticatedPrincipal:  # pragma: no cover - simple stub
             return provide_principal()
 
         def authenticate_api_key(
