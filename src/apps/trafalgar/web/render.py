@@ -258,9 +258,7 @@ class RenderJobRequest(BaseModel):
         return text
 
     @classmethod
-    def configure_farm_registry(
-        cls, provider: Callable[[], Collection[str]]
-    ) -> None:
+    def configure_farm_registry(cls, provider: Callable[[], Collection[str]]) -> None:
         """Inject the callable used to resolve registered farm adapters."""
 
         cls._farm_registry_provider = provider
