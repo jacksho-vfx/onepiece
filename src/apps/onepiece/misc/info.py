@@ -112,7 +112,9 @@ def profile(
 ) -> None:
     """Display the resolved configuration profile and its sources."""
 
-    context = load_profile(profile=profile, workspace=workspace, project_root=project_root)
+    context = load_profile(
+        profile=profile, workspace=workspace, project_root=project_root
+    )
 
     typer.echo("=== OnePiece Profile Info ===")
     typer.echo(f"Resolved profile: {context.name}")
