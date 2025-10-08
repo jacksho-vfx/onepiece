@@ -99,6 +99,10 @@ by the dashboard.
 Trafalgar now exposes Server-Sent Events (SSE) and WebSocket feeds so clients
 can react to render job and ingest run lifecycle changes without polling.
 
+For hands-on walkthroughs (including authentication troubleshooting and
+keepalive strategies), see
+[`docs/examples/trafalgar_event_streams.md`](./examples/trafalgar_event_streams.md).
+
 ### Render job streams
 
 - `GET /jobs/stream` – SSE endpoint emitting JSON payloads.
