@@ -204,7 +204,7 @@ async def list_runs(
 
 async def _ingest_event_stream(
     request: Request,
-) -> AsyncGenerator[IngestRunRecord, None]:
+) -> AsyncGenerator[bytes, Any]:
     queue = await INGEST_EVENTS.subscribe()
     try:
         while True:

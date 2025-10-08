@@ -6,7 +6,8 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ## [Unreleased]
 
-_No changes yet._
+- Corrected the ingest event stream typing to align with the byte payloads FastAPI
+  yields to streaming clients, avoiding mismatched annotations during type checks.
 
 ---
 
