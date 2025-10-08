@@ -270,7 +270,6 @@ def auth_generate_token(
     write_to: Optional[Path] = typer.Option(
         None,
         "--write-to",
-        path_type=Path,
         help="Optional path to persist the generated token with 0600 permissions.",
     )
 ) -> None:
@@ -281,10 +280,7 @@ def auth_generate_token(
     typer.echo("Generated Trafalgar dashboard token:\n")
     typer.echo(token)
     typer.echo(
-        "\nExport it with:\n"
-        "  export TRAFALGAR_DASHBOARD_TOKEN='"
-        f"{token}"
-        "'\n"
+        "\nExport it with:\n" "  export TRAFALGAR_DASHBOARD_TOKEN='" f"{token}" "'\n"
     )
 
     if write_to is not None:
