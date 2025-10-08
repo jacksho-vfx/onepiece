@@ -225,7 +225,7 @@ def _render_dashboard_page(*, is_active: bool) -> str:
         <h2>Trafalgar Dashboard</h2>
         <p class=\"page-help\">Embedded Trafalgar dashboard served from the existing FastAPI application.</p>
       </div>
-      <iframe src=\"/dashboard\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
+      <iframe src=\"/dashboard/\" data-dashboard-root=\"/dashboard/\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
     </section>
     """
 
