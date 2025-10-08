@@ -48,7 +48,7 @@ def test_review_accepts_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(review, "fetch_playlist_versions", _dummy_versions)
 
     with TestClient(review.app) as client:
-        client.app.dependency_overrides[review.get_shotgrid_client] = (
+        client.app.dependency_overrides[review.get_shotgrid_client] = (  # type: ignore[attr-defined]
             lambda: DummyClient()
         )
         response = client.get(

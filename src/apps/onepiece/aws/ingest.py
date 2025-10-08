@@ -5,12 +5,14 @@ from __future__ import annotations
 import csv
 import json
 import os
+from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, Literal, cast
+from typing import Any, Dict, Iterable, Literal, Mapping, cast
 
 import typer
 
+from apps.onepiece.config import load_profile
 from apps.onepiece.utils.errors import (
     OnePieceConfigError,
     OnePieceExternalServiceError,
@@ -41,6 +43,14 @@ def _env_flag(name: str, default: bool) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def _validate_source_option(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if value not in {"vendor", "client"}:
+        raise typer.BadParameter("--source must be either 'vendor' or 'client'")
+    return value
+
+
 class _DryRunUploader:
     """Uploader implementation that only logs operations."""
 
@@ -50,56 +60,245 @@ class _DryRunUploader:
         typer.echo(f"[dry-run] Would upload {file_path} -> s3://{bucket}/{key}")
 
 
+@dataclass
+class _IngestResolvedOptions:
+    project: str
+    show_code: str
+    source: Literal["vendor", "client"]
+    vendor_bucket: str
+    client_bucket: str
+    max_workers: int
+    use_asyncio: bool
+    resume: bool
+    checkpoint_dir: Path
+    checkpoint_threshold: int
+    upload_chunk_size: int
+
+
+def _prepare_ingest_options(
+    profile_data: Mapping[str, Any],
+    *,
+    project: str | None,
+    show_code: str | None,
+    source: str | None,
+    vendor_bucket: str | None,
+    client_bucket: str | None,
+    max_workers: int | None,
+    use_asyncio: bool | None,
+    resume: bool | None,
+    checkpoint_dir: Path | None,
+    checkpoint_threshold: int | None,
+    upload_chunk_size: int | None,
+) -> _IngestResolvedOptions:
+    ingest_overrides = profile_data.get("ingest", {})
+    if ingest_overrides and not isinstance(ingest_overrides, Mapping):
+        raise OnePieceConfigError(
+            "Profile 'ingest' configuration must be provided as a table of key/value pairs"
+        )
+
+    ingest_mapping: Mapping[str, Any] = cast(Mapping[str, Any], ingest_overrides)
+
+    resolved_project = project or _optional_str(profile_data.get("project"), "project")
+    if not resolved_project:
+        raise OnePieceConfigError(
+            "A ShotGrid project name must be supplied via --project or the selected profile."
+        )
+
+    resolved_show_code = show_code or _optional_str(
+        profile_data.get("show_code"), "show_code"
+    )
+    if not resolved_show_code:
+        raise OnePieceConfigError(
+            "A show code must be supplied via --show-code or the selected profile."
+        )
+
+    resolved_source = (
+        source or _optional_str(profile_data.get("source"), "source") or "vendor"
+    )
+    if resolved_source not in {"vendor", "client"}:
+        raise OnePieceConfigError(
+            "Ingest profile 'source' must be either 'vendor' or 'client'."
+        )
+
+    resolved_vendor_bucket = (
+        vendor_bucket
+        or _optional_str(profile_data.get("vendor_bucket"), "vendor_bucket")
+        or "vendor_in"
+    )
+
+    resolved_client_bucket = (
+        client_bucket
+        or _optional_str(profile_data.get("client_bucket"), "client_bucket")
+        or "client_in"
+    )
+
+    resolved_max_workers = (
+        max_workers
+        if max_workers is not None
+        else _optional_int(ingest_mapping.get("max_workers"), "ingest.max_workers")
+    )
+    if resolved_max_workers is None:
+        resolved_max_workers = int(os.getenv("INGEST_MAX_WORKERS", "4"))
+
+    resolved_use_asyncio = (
+        use_asyncio
+        if use_asyncio is not None
+        else _optional_bool(ingest_mapping.get("use_asyncio"), "ingest.use_asyncio")
+    )
+    if resolved_use_asyncio is None:
+        resolved_use_asyncio = _env_flag("INGEST_USE_ASYNCIO", False)
+
+    resolved_resume = (
+        resume
+        if resume is not None
+        else _optional_bool(ingest_mapping.get("resume"), "ingest.resume")
+    )
+    if resolved_resume is None:
+        resolved_resume = _env_flag("INGEST_RESUME_ENABLED", False)
+
+    resolved_checkpoint_dir = checkpoint_dir or _optional_path(
+        ingest_mapping.get("checkpoint_dir"), "ingest.checkpoint_dir"
+    )
+    if resolved_checkpoint_dir is None:
+        resolved_checkpoint_dir = Path(
+            os.getenv("INGEST_CHECKPOINT_DIR", ".ingest-checkpoints")
+        )
+
+    resolved_checkpoint_threshold = (
+        checkpoint_threshold
+        if checkpoint_threshold is not None
+        else _optional_int(
+            ingest_mapping.get("checkpoint_threshold"), "ingest.checkpoint_threshold"
+        )
+    )
+    if resolved_checkpoint_threshold is None:
+        resolved_checkpoint_threshold = int(
+            os.getenv("INGEST_CHECKPOINT_THRESHOLD", str(512 * 1024 * 1024))
+        )
+
+    resolved_upload_chunk_size = (
+        upload_chunk_size
+        if upload_chunk_size is not None
+        else _optional_int(
+            ingest_mapping.get("upload_chunk_size"), "ingest.upload_chunk_size"
+        )
+    )
+    if resolved_upload_chunk_size is None:
+        resolved_upload_chunk_size = int(
+            os.getenv("INGEST_UPLOAD_CHUNK_SIZE", str(64 * 1024 * 1024))
+        )
+
+    return _IngestResolvedOptions(
+        project=resolved_project,
+        show_code=resolved_show_code,
+        source=cast(Literal["vendor", "client"], resolved_source),
+        vendor_bucket=resolved_vendor_bucket,
+        client_bucket=resolved_client_bucket,
+        max_workers=resolved_max_workers,
+        use_asyncio=resolved_use_asyncio,
+        resume=resolved_resume,
+        checkpoint_dir=resolved_checkpoint_dir,
+        checkpoint_threshold=resolved_checkpoint_threshold,
+        upload_chunk_size=resolved_upload_chunk_size,
+    )
+
+
+def _optional_str(value: Any, field: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    raise OnePieceConfigError(f"Configuration value '{field}' must be a string.")
+
+
+def _optional_bool(value: Any, field: str) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise OnePieceConfigError(f"Configuration value '{field}' must be a boolean.")
+
+
+def _optional_int(value: Any, field: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise OnePieceConfigError(f"Configuration value '{field}' must be an integer.")
+    if isinstance(value, int):
+        return value
+    raise OnePieceConfigError(f"Configuration value '{field}' must be an integer.")
+
+
+def _optional_path(value: Any, field: str) -> Path | None:
+    if value is None:
+        return None
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str):
+        return Path(value)
+    raise OnePieceConfigError(
+        f"Configuration value '{field}' must be a filesystem path represented as a string."
+    )
+
+
 ReportFormat = Literal["json", "csv"]
 
 
 @app.command("ingest")
 def ingest(
     folder: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
-    project: str = typer.Option(..., "--project", "-p", help="ShotGrid project name"),
-    show_code: str = typer.Option(
-        ..., "--show-code", "-s", help="Show code used in filenames"
+    project: str | None = typer.Option(
+        None, "--project", "-p", help="ShotGrid project name"
     ),
-    source: Literal["vendor", "client"] = typer.Option(
-        "vendor",
+    show_code: str | None = typer.Option(
+        None, "--show-code", "-s", help="Show code used in filenames"
+    ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Configuration profile to load from onepiece.toml files.",
+    ),
+    source: str | None = typer.Option(
+        None,
         "--source",
+        callback=_validate_source_option,
         help="Delivery source. Determines whether vendor_in or client_in bucket is used.",
     ),
-    vendor_bucket: str = typer.Option(
-        "vendor_in", help="S3 bucket for vendor deliveries"
+    vendor_bucket: str | None = typer.Option(
+        None, "--vendor-bucket", help="S3 bucket for vendor deliveries"
     ),
-    client_bucket: str = typer.Option(
-        "client_in", help="S3 bucket for client deliveries"
+    client_bucket: str | None = typer.Option(
+        None, "--client-bucket", help="S3 bucket for client deliveries"
     ),
-    max_workers: int = typer.Option(
-        int(os.getenv("INGEST_MAX_WORKERS", "4")),
+    max_workers: int | None = typer.Option(
+        None,
         "--max-workers",
         help="Maximum number of concurrent uploads when using worker pools.",
     ),
-    use_asyncio: bool = typer.Option(
-        _env_flag("INGEST_USE_ASYNCIO", False),
+    use_asyncio: bool | None = typer.Option(
+        None,
         "--use-asyncio/--no-use-asyncio",
         help="Coordinate uploads with asyncio instead of thread pools.",
     ),
-    resume: bool = typer.Option(
-        _env_flag("INGEST_RESUME_ENABLED", False),
+    resume: bool | None = typer.Option(
+        None,
         "--resume/--no-resume",
         help=(
             "Enable resumable uploads with checkpoint persistence for large media files."
         ),
     ),
-    checkpoint_dir: Path = typer.Option(
-        Path(os.getenv("INGEST_CHECKPOINT_DIR", ".ingest-checkpoints")),
+    checkpoint_dir: Path | None = typer.Option(
+        None,
         "--checkpoint-dir",
         help="Directory used to store upload checkpoint metadata when --resume is active.",
     ),
-    checkpoint_threshold: int = typer.Option(
-        int(os.getenv("INGEST_CHECKPOINT_THRESHOLD", str(512 * 1024 * 1024))),
+    checkpoint_threshold: int | None = typer.Option(
+        None,
         "--checkpoint-threshold",
         help="Minimum file size in bytes that triggers checkpointed uploads.",
     ),
-    upload_chunk_size: int = typer.Option(
-        int(os.getenv("INGEST_UPLOAD_CHUNK_SIZE", str(64 * 1024 * 1024))),
+    upload_chunk_size: int | None = typer.Option(
+        None,
         "--upload-chunk-size",
         help="Chunk size in bytes used for resumable uploads.",
     ),
@@ -134,6 +333,22 @@ def ingest(
         raise typer.BadParameter(
             "Analytics reports are only available when --dry-run is used"
         )
+
+    profile_context = load_profile(profile=profile, workspace=folder)
+    resolved = _prepare_ingest_options(
+        profile_context.data,
+        project=project,
+        show_code=show_code,
+        source=source,
+        vendor_bucket=vendor_bucket,
+        client_bucket=client_bucket,
+        max_workers=max_workers,
+        use_asyncio=use_asyncio,
+        resume=resume,
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_threshold=checkpoint_threshold,
+        upload_chunk_size=upload_chunk_size,
+    )
 
     total_files = sum(1 for path in folder.rglob("*") if path.is_file())
 
@@ -174,20 +389,20 @@ def ingest(
     typed_uploader: UploaderProtocol = cast(UploaderProtocol, uploader)
 
     service = MediaIngestService(
-        project_name=project,
-        show_code=show_code,
-        source=source,
+        project_name=resolved.project,
+        show_code=resolved.show_code,
+        source=resolved.source,
         uploader=typed_uploader,
         shotgrid=shotgrid,
-        vendor_bucket=vendor_bucket,
-        client_bucket=client_bucket,
+        vendor_bucket=resolved.vendor_bucket,
+        client_bucket=resolved.client_bucket,
         dry_run=dry_run,
-        max_workers=max_workers,
-        use_asyncio=use_asyncio,
-        resume_enabled=resume,
-        checkpoint_dir=checkpoint_dir,
-        checkpoint_threshold_bytes=checkpoint_threshold,
-        upload_chunk_size=upload_chunk_size,
+        max_workers=resolved.max_workers,
+        use_asyncio=resolved.use_asyncio,
+        resume_enabled=resolved.resume,
+        checkpoint_dir=resolved.checkpoint_dir,
+        checkpoint_threshold_bytes=resolved.checkpoint_threshold,
+        upload_chunk_size=resolved.upload_chunk_size,
     )
     status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
 

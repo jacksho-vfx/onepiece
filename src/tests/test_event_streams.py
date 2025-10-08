@@ -12,7 +12,7 @@ from apps.trafalgar.web import ingest, render
 from apps.trafalgar.web.events import EventBroadcaster
 from libraries.ingest.registry import IngestRunRecord
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
-from tests.apps.trafalgar.web.security_patches import patch_security
+from tests.security_patches import patch_security
 
 
 class StubJobAdapter:
