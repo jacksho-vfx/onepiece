@@ -346,6 +346,44 @@ async def test_status_endpoint_aggregates_counts() -> None:
     dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (
         lambda: ingest_facade
     )
+    render_summary = {
+        "jobs": 4,
+        "by_status": {"completed": 3, "running": 1},
+        "by_farm": {"farm-a": 2, "farm-b": 2},
+    }
+    render_facade = DummyRenderFacade(render_summary)
+    dashboard.app.dependency_overrides[dashboard.get_render_dashboard_facade] = (
+        lambda: render_facade
+    )
+    review_summary = {
+        "totals": {
+            "projects": 2,
+            "playlists": 3,
+            "clips": 10,
+            "shots": 6,
+            "duration_seconds": 150.0,
+        },
+        "projects": [
+            {
+                "project": "alpha",
+                "playlists": 2,
+                "clips": 6,
+                "shots": 4,
+                "duration_seconds": 120.0,
+            },
+            {
+                "project": "beta",
+                "playlists": 1,
+                "clips": 4,
+                "shots": 2,
+                "duration_seconds": 30.0,
+            },
+        ],
+    }
+    review_facade = DummyReviewFacade(review_summary)
+    dashboard.app.dependency_overrides[dashboard.get_review_dashboard_facade] = (
+        lambda: review_facade
+    )
 
     transport = ASGITransport(app=dashboard.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -359,6 +397,10 @@ async def test_status_endpoint_aggregates_counts() -> None:
     assert data["errors"] == 1
     assert data["ingest"] == ingest_summary
     assert ingest_facade.calls == [10]
+    assert data["render"] == render_summary
+    assert render_facade.calls == 1
+    assert data["review"] == review_summary
+    assert review_facade.project_calls == [["alpha", "beta"]]
 
 
 @pytest.mark.anyio("asyncio")
