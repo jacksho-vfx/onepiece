@@ -35,6 +35,10 @@ from apps.onepiece.render.submit import (
     _get_adapter_capabilities,
     _resolve_priority_and_chunk_size,
 )
+from apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.render.base import (
     AdapterCapabilities,
@@ -467,11 +471,36 @@ class RenderSubmissionService:
                 context={"farm": request.farm},
             )
         resolved_user = request.user or getpass.getuser()
-        resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
-            farm=request.farm,
-            priority=request.priority,
-            chunk_size=request.chunk_size,
-        )
+        try:
+            resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
+                farm=request.farm,
+                priority=request.priority,
+                chunk_size=request.chunk_size,
+            )
+        except OnePieceValidationError as exc:
+            raise RenderSubmissionError(
+                str(exc),
+                code="render.invalid_request",
+                status_code=422,
+                hint="Check the farm capabilities and adjust priority or chunk size values before retrying.",
+                context={
+                    "farm": request.farm,
+                    "priority": request.priority,
+                    "chunk_size": request.chunk_size,
+                },
+            ) from exc
+        except OnePieceExternalServiceError as exc:
+            raise RenderSubmissionError(
+                str(exc),
+                code="render.capabilities_unavailable",
+                status_code=400,
+                hint="Retry once the render farm capabilities endpoint is available or contact an administrator.",
+                context={
+                    "farm": request.farm,
+                    "priority": request.priority,
+                    "chunk_size": request.chunk_size,
+                },
+            ) from exc
         result = adapter(
             scene=request.scene,
             frames=request.frames,
@@ -809,29 +838,30 @@ def farms(
 
 @router.post("/jobs")  # type: ignore[misc]
 async def create_job(
-    request: RenderJobRequest = Depends(parse_render_job_request),
+    http_request: Request,
+    job_request: RenderJobRequest = Depends(parse_render_job_request),
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_SUBMIT)),
 ) -> JSONResponse:
     logger.info(
         "render.api.submit.start",
-        dcc=request.dcc,
-        scene=request.scene,
-        frames=request.frames,
-        output=request.output,
-        farm=request.farm,
-        priority=request.priority,
-        user=request.user,
+        dcc=job_request.dcc,
+        scene=job_request.scene,
+        frames=job_request.frames,
+        output=job_request.output,
+        farm=job_request.farm,
+        priority=job_request.priority,
+        user=job_request.user,
     )
     try:
-        result = service.submit_job(request)
-    except RenderSubmissionError:
-        raise
+        result = service.submit_job(job_request)
+    except RenderSubmissionError as exc:
+        return await render_submission_error_handler(http_request, exc)
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
             "render.api.submit.error",
-            farm=request.farm,
-            scene=request.scene,
+            farm=job_request.farm,
+            scene=job_request.scene,
         )
         raise HTTPException(
             status_code=500,
@@ -841,7 +871,7 @@ async def create_job(
     payload = RenderJobResponse(
         job_id=result.get("job_id", ""),
         status=result.get("status", "unknown"),
-        farm_type=result.get("farm_type", request.farm),
+        farm_type=result.get("farm_type", job_request.farm),
         message=result.get("message"),
     )
 

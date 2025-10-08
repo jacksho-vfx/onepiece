@@ -319,6 +319,44 @@ def test_submit_job_surfaces_adapter_unavailability(
     assert "outage" in error["hint"].lower()
 
 
+def test_submit_job_invalid_priority_returns_api_error(client: TestClient) -> None:
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/projects/show/shot_v005.ma",
+            "output": "/tmp/renders",
+            "farm": "mock",
+            "priority": 200,
+        },
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "render.invalid_request"
+    assert "priority" in error["message"].lower()
+    assert error["context"]["priority"] == 200
+
+
+def test_submit_job_invalid_chunk_size_returns_api_error(client: TestClient) -> None:
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/projects/show/shot_v006.ma",
+            "output": "/tmp/renders",
+            "farm": "mock",
+            "chunk_size": 20,
+        },
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "render.invalid_request"
+    assert "chunk" in error["message"].lower()
+    assert error["context"]["chunk_size"] == 20
+
+
 def test_submit_job_invalid_dcc_returns_validation_error(client: TestClient) -> None:
     response = client.post(
         "/jobs",
