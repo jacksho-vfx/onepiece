@@ -64,3 +64,10 @@ The API will immediately accept `studiofarm` submissions and expose the key via
 `/farms` without requiring code changes. Request validation uses the same
 registry, so bespoke adapters can be surfaced to clients and tests by
 registering them with the shared service instance.
+
+## Streaming walkthroughs
+
+Need end-to-end examples for monitoring render jobs? The
+[event stream walkthroughs](./examples/trafalgar_event_streams.md) demonstrate
+how to subscribe to `/render/jobs/stream` and `/render/jobs/ws` using `curl`,
+`websocat`, and Python clients, including authentication and keepalive tips.
