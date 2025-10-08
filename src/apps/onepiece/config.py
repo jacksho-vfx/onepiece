@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 try:  # Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
+    import tomllib
 except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes.
     import tomli as tomllib  # type: ignore[no-redef]
 
