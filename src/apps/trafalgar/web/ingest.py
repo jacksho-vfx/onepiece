@@ -33,7 +33,7 @@ from apps.trafalgar.web.security import (
 from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
-logger = structlog.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _serialise_media(media: IngestedMedia) -> Mapping[str, Any]:
