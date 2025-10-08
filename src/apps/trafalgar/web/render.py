@@ -423,9 +423,9 @@ class RenderSubmissionService:
         self,
         adapters: Mapping[str, RenderAdapter] | None = None,
         *,
-        capability_registry: Mapping[
-            str, CapabilityProvider | AdapterCapabilities
-        ] | None = None,
+        capability_registry: (
+            Mapping[str, CapabilityProvider | AdapterCapabilities] | None
+        ) = None,
         job_store: JobStore | None = None,
         history_limit: int | None = None,
         broadcaster: EventBroadcaster | None = None,
