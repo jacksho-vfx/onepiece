@@ -17,6 +17,27 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ### Added / Improved
 
+**OnePiece CLI**
+- Resolve layered configuration profiles from user, project, and workspace
+  `onepiece.toml` files before falling back to defaults, and surface the merged
+  context through the `onepiece profile` helper for debugging.
+- Expand `onepiece aws ingest` with asyncio orchestration, worker pool sizing,
+  resumable upload toggles, and checkpoint tuning flags so large deliveries can
+  be retried without restarting from scratch.
+- Teach `onepiece render submit` to query adapter capability metadata, apply
+  sensible default priorities and chunk sizes, and reject invalid combinations
+  before submissions hit the farm.
+
+**Uta Control Center**
+- Introduce a Typer entry point that bootstraps the Uta FastAPI application and
+  optionally opens the browser to the running instance for rapid iteration.
+- Introspect the full OnePiece CLI tree, render each command as an interactive
+  card with parameter context, and group them by command family for quick
+  discovery.
+- Execute CLI invocations on behalf of the browser, capturing stdout/stderr and
+  exit codes so operators can run pipeline tasks without leaving the UI.
+
+**Shared**
 - Align the OnePiece CLI, Trafalgar dashboard, and Uta web interface on
   version 1.0.0, exposing a dedicated `UTA_VERSION` constant so downstream
   integrations can rely on consistent metadata across packages.
@@ -53,6 +74,21 @@ All notable changes to the OnePiece pipeline toolkit.
 - Track submitted render jobs in memory, expose list/detail endpoints, refresh
   adapter status on demand, and allow compatible adapters to cancel jobs via the
   HTTP API for parity with the CLI workflow.
+
+---
+
+## [Uta v1.0.0] – Current Release
+
+### Added / Improved
+
+- Mount the Trafalgar dashboard inside the Uta interface so production metrics
+  and operational tooling live side by side.
+- Provide a `/api/run` endpoint that validates requested command paths and
+  executes them through Typer's testing runner, returning captured output and
+  exit metadata to the caller.
+- Sanitize user-supplied arguments using `shlex.split`, enforce a command
+  allowlist derived from the CLI tree, and present structured error messages so
+  browser-triggered runs stay predictable.
 
 ---
 

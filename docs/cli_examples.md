@@ -4,6 +4,8 @@
 
 The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`, `shotgrid`, and `validate` command groups (including the reconciliation helper) under `python -m apps.onepiece`.
 
+> **Release spotlight (v1.0.0):** Configuration profiles can now be layered across user, project, and workspace scopes, ingest commands expose resumable upload controls, render submissions validate adapter capabilities up-front, and the brand-new Uta Control Center mirrors every CLI command in a browser alongside the Trafalgar dashboard.
+
 ### Core
 - `python -m apps.onepiece info` — print environment and configuration details for the pipeline client.
 
@@ -71,4 +73,10 @@ The Trafalgar Typer app exposes dashboard and ingest helpers under `web` and `in
 - `python -m apps.trafalgar web render [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — expose the render submission API with job listing, inspection, and cancellation endpoints mirroring the CLI payloads.
 - `python -m apps.trafalgar web review [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — start the review API for playlist previews and approvals.
 - `python -m apps.trafalgar ingest [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — start the ingest API directly via the ingest sub-app callback.
+
+## Uta Control Center (`onepiece uta …`)
+
+- `python -m apps.uta serve [--host <host>] [--port <port>] [--reload/--no-reload] [--open-browser/--no-browser]` — launch the browser UI that introspects every OnePiece CLI command, groups them into tabs, and embeds the Trafalgar dashboard within the same session.
+- `python -m apps.uta serve --no-browser` — start the server without opening a browser automatically (useful on headless hosts or when tunnelling the port).
+- `curl -X POST http://127.0.0.1:8050/api/run -H 'Content-Type: application/json' -d '{"path": ["aws", "ingest"], "extra_args": "--help"}'` — invoke a command through the JSON API to integrate the UI runner with automation.
 

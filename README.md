@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest Trafalgar release: v1.0.0.** This update adds render job management endpoints, caches ShotGrid status lookups with configurable TTLs, auto-discovers dashboard projects, and streamlines delivery manifests so the web tooling stays responsive even when upstream systems are slow.
+> **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
 
 ## Quick start
 
@@ -43,7 +43,15 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in Trafalgar v1.0.0
+## What's new in the 1.0.0 release
+
+### OnePiece CLI v1.0.0
+
+- **Layered configuration profiles** – The CLI resolves settings from user, project, and workspace `onepiece.toml` files before honouring command-line overrides, and `onepiece profile` surfaces the merged result for troubleshooting.
+- **Resumable ingest controls** – `onepiece aws ingest` exposes flags and profile keys for asyncio orchestration, worker pools, resumable uploads, and checkpoint tuning so large deliveries can be retried safely.
+- **Capability-aware render submissions** – Render jobs automatically pick sensible priorities and chunk sizes from adapter metadata, with validation to reject values outside the advertised range before a request ever reaches the farm.
+
+### Trafalgar v1.0.0
 
 - **Dashboard data resilience** – Project discovery now combines environment configuration with on-the-fly ShotGrid lookups and caches the results locally so teams can keep browsing known shows even if ShotGrid is offline.
 - **Configurable ShotGrid caching** – Version queries honour TTL and record-count limits, dramatically reducing API pressure for frequently refreshed dashboards while falling back automatically when datasets grow beyond safe cache sizes.
@@ -51,6 +59,12 @@ These resources provide a safe sandbox to explore the command surface before poi
 - **Normalised status metrics** – Dashboard summaries collapse mixed-case and abbreviated ShotGrid statuses into canonical buckets, ensuring the overall status, per-project totals, and episode breakdowns tell the same story.
 - **Delivery manifest optimisation** – Delivery payloads prefer upstream manifest data when provided, regenerate manifests only once per delivery, and gracefully handle packages that arrive without entry lists so operators still get a full audit trail.
 - **Render job management** – The render FastAPI app now tracks submitted jobs in memory, exposes endpoints to list and inspect them, and supports adapter-powered cancellation, mirroring the CLI workflow for real-time follow-up.
+
+### Uta Control Center v1.0.0
+
+- **Interactive CLI catalog** – Uta introspects every Typer command, renders them as cards grouped by command family, and lets operators append ad-hoc arguments before running them from the browser.
+- **Embedded Trafalgar dashboard** – The Trafalgar FastAPI dashboard is mounted directly inside the UI so production metrics stay one click away from operational tooling.
+- **Command execution sandbox** – Requests invoke the real CLI in a background thread, capture stdout/stderr, and stream the exit code back to the page so browser-triggered runs behave like terminal sessions.
 
 ## Render API error handling
 

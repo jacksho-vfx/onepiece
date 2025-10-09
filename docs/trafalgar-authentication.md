@@ -5,6 +5,11 @@ authentication backend that accepts either signed API key/secret pairs or
 OAuth2 bearer tokens. The same dependency stack is used across all services so
 operators only need to provision credentials once.
 
+> **Release spotlight (v1.0.0):** Render job inspection and cancellation endpoints now
+> check for the `render:manage` role, the dashboard cache administration routes reuse
+> the bearer token flow, and the embedded Uta dashboard honours the same credentials
+> when proxied through the browser UI.
+
 ## Configuration
 
 Credentials are loaded at runtime from either an environment variable or a JSON

@@ -4,6 +4,11 @@ The Trafalgar render service exposes the `/farms` endpoint so CLI tools and UI
 widgets can discover registered adapters along with the behaviour they support.
 The response now returns structured capability descriptors for each adapter.
 
+> **Release spotlight (v1.0.0):** Capability descriptors now include
+> cancellation flags and chunking ranges, `/render/health` reports job-history
+> retention metrics, and render job submissions stay in sync with the CLI's
+> adapter-aware validation.
+
 ```json
 {
   "farms": [

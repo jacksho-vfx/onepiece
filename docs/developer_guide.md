@@ -2,6 +2,8 @@
 
 This guide describes how to set up a local development environment for OnePiece, explains how the repository is organised, and captures the day-to-day workflow for contributing changes.
 
+> **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.
+
 ## Prerequisites
 
 - Python 3.11 or newer.
