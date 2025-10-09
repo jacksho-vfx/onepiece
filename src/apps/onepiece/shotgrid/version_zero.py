@@ -112,6 +112,14 @@ def version_zero(
                 code=version_code,
                 description=None,
                 project_id=project_id,
+                extra={
+                    "entity": {
+                        "data": {
+                            "type": shot_entity.get("type") or "Shot",
+                            "id": shot_entity["id"],
+                        }
+                    }
+                },
             )
             sg.create_version_with_media(version_data, media_path=proxy_path)
             status_message = "Uploaded"
