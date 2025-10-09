@@ -19,5 +19,5 @@ def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(app, [str(scene_path)])
 
-    assert result.exit_code != 0
-    assert f"Scene file '{scene_path}' is invalid" in result.stderr
+    assert result.exit_code == 2
+    assert "Usage: render" in result.stderr

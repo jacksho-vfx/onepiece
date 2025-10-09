@@ -29,9 +29,7 @@ def _load_scene(path: Path) -> Scene:
     try:
         return Scene.from_dict(payload)
     except SceneError as exc:
-        raise typer.BadParameter(
-            f"Scene file '{path}' is invalid: {exc}"
-        ) from exc
+        raise typer.BadParameter(f"Scene file '{path}' is invalid: {exc}") from exc
 
 
 @app.command()
