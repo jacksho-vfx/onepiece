@@ -20,9 +20,7 @@ def _invoke(command: list[str]) -> tuple[int, str]:
     return result.exit_code, result.output
 
 
-def _capture_s5_sync(
-    monkeypatch: pytest.MonkeyPatch, module: str
-) -> dict[str, Any]:
+def _capture_s5_sync(monkeypatch: pytest.MonkeyPatch, module: str) -> dict[str, Any]:
     captured: dict[str, Any] = {}
 
     def _fake_s5_sync(**kwargs: Any) -> None:
