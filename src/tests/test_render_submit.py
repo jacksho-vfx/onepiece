@@ -330,3 +330,72 @@ def test_render_preset_crud_flow(
     assert captured["dcc"] == "nuke"
     assert captured["priority"] == 65
     assert captured["chunk_size"] == 3
+
+
+def test_render_submit_requires_existing_scene(tmp_path: Path) -> None:
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    missing_scene = tmp_path / "missing.nk"
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "nuke",
+            "--scene",
+            str(missing_scene),
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, OnePieceValidationError)
+    assert "does not exist" in str(result.exception)
+
+
+def test_render_submit_requires_output_directory(tmp_path: Path) -> None:
+    scene_file = tmp_path / "shot01.nk"
+    scene_file.write_text("print('render')\n")
+
+    output_file = tmp_path / "renders.txt"
+    output_file.write_text("not a directory")
+
+    result_missing = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "nuke",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(tmp_path / "missing"),
+        ],
+    )
+
+    assert result_missing.exit_code != 0
+    assert isinstance(result_missing.exception, OnePieceValidationError)
+    assert "does not exist" in str(result_missing.exception)
+
+    result_not_dir = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "nuke",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_file),
+        ],
+    )
+
+    assert result_not_dir.exit_code != 0
+    assert isinstance(result_not_dir.exception, OnePieceValidationError)
+    assert "not a directory" in str(result_not_dir.exception)
