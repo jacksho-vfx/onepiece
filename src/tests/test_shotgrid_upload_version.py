@@ -66,7 +66,7 @@ def test_upload_missing_project_id(
 ) -> None:
     module = __import__("apps.onepiece.shotgrid.upload_version", fromlist=["upload"])
 
-    stub = StubShotGridClient({"name": "Test"})
+    stub = StubShotGridClient({"id": "", "name": "Test"})
     monkeypatch.setattr(module, "ShotGridClient", lambda: stub)
 
     with pytest.raises(OnePieceValidationError) as excinfo:
