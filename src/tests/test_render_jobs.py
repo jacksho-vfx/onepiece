@@ -81,10 +81,10 @@ class RecordingJobStore:
         self.saved_batches: list[list[str]] = []
         self.stats = JobStoreStats(retention=None)
 
-    def load(self) -> list[render._JobRecord]:  # type: ignore[attr-defined]
+    def load(self) -> list[render._JobRecord]:
         return []
 
-    def save(self, records: Iterable[render._JobRecord]) -> None:  # type: ignore[attr-defined]
+    def save(self, records: Iterable[render._JobRecord]) -> None:
         self.saved_batches.append([record.job_id for record in records])
 
 
@@ -139,7 +139,7 @@ async def test_background_poller_refreshes_jobs_without_requests() -> None:
         adapter.set_status(job_id, "running", "frame 5 of 10")
 
         for _ in range(50):
-            record = service._jobs[job_id]  # type: ignore[attr-defined]
+            record = service._jobs[job_id]
             if record.status == "running" and record.message == "frame 5 of 10":
                 break
             await asyncio.sleep(0.02)

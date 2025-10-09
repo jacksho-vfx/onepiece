@@ -479,7 +479,9 @@ class RenderSubmissionService:
             else DEFAULT_STATUS_POLL_INTERVAL
         )
         self._poll_interval: float | None = (
-            float(poll_interval_value) if poll_interval_value and poll_interval_value > 0 else None
+            float(poll_interval_value)
+            if poll_interval_value and poll_interval_value > 0
+            else None
         )
         self._poll_task: asyncio.Task[None] | None = None
         self._load_jobs()
