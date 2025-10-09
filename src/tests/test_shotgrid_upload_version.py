@@ -78,9 +78,7 @@ def test_upload_sets_entity_relationship(
 
     assert stub.version_payload is not None
     version_data = stub.version_payload["data"]
-    assert version_data.extra["entity"] == {
-        "data": {"type": "Shot", "id": 777}
-    }
+    assert version_data.extra["entity"] == {"data": {"type": "Shot", "id": 777}}  # type: ignore[attr-defined]
 
 
 def test_upload_missing_project_id(
@@ -120,7 +118,7 @@ def test_create_version_merges_entity_relationship() -> None:
         )
         return {"id": 1}
 
-    client._post = fake_post  # type: ignore[method-assign]
+    client._post = fake_post
 
     version = VersionData(
         code="Shot020_V001",
