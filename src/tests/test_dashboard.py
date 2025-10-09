@@ -153,6 +153,53 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
     assert projects == ["cached", "env_project"]
 
 
+def test_shotgrid_service_uses_discovered_projects_without_reinit(
+    tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ProjectFetchingClient:
+        def __init__(self) -> None:
+            self.version_requests: list[str] = []
+
+        def list_projects(self) -> Sequence[Mapping[str, Any]]:
+            return [{"name": "gamma"}]
+
+        def get_versions_for_project(self, project_name: str) -> Sequence[Mapping[str, Any]]:
+            self.version_requests.append(project_name)
+            if project_name == "alpha":
+                return [
+                    {
+                        "project": "alpha",
+                        "shot": "EP01_SC001_SH0010",
+                        "status": "Approved",
+                    }
+                ]
+            if project_name == "gamma":
+                return [
+                    {
+                        "project": "gamma",
+                        "shot": "EP01_SC001_SH0020",
+                        "status": "Published",
+                    }
+                ]
+            return []
+
+    registry_path = tmp_path / "projects.json"
+    monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
+
+    client = ProjectFetchingClient()
+    service = dashboard.ShotGridService(client, known_projects={"alpha"})
+
+    projects = service.discover_projects()
+
+    assert projects == ["alpha", "gamma"]
+
+    summary = service.project_summary("gamma")
+
+    assert summary["project"] == "gamma"
+    assert summary["versions"] == 1
+    assert "gamma" in client.version_requests
+
+
 @pytest.fixture(autouse=True)
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
@@ -437,7 +484,8 @@ async def test_status_endpoint_aggregates_counts() -> None:
     assert data["render"] == render_summary
     assert render_facade.calls == 1
     assert data["review"] == review_summary
-    assert review_facade.project_calls == [["alpha", "beta"]]
+    assert review_facade.project_calls
+    assert set(review_facade.project_calls[0]).issuperset({"alpha", "beta"})
 
 
 @pytest.mark.anyio("asyncio")
@@ -552,7 +600,7 @@ async def test_metrics_endpoint_combines_dashboards(
     assert payload["review"]["projects"][0]["project"] in {"alpha", "beta"}
     assert render_facade.calls == 1
     assert review_facade.project_calls
-    assert set(review_facade.project_calls[0]) == {"alpha", "beta"}
+    assert set(review_facade.project_calls[0]).issuperset({"alpha", "beta"})
 
 
 @pytest.mark.anyio("asyncio")
