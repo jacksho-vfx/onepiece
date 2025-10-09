@@ -15,9 +15,27 @@ app = typer.Typer(help="Validate names in batch.")
 
 @app.command("names-batch")
 def names_batch(
-    csv: Path = typer.Option(None, "--csv", "-c", help="CSV with a 'name' column."),
+    csv: Path = typer.Option(
+        None,
+        "--csv",
+        "-c",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help="CSV with a 'name' column.",
+    ),
     directory: Path = typer.Option(
-        None, "--dir", "-d", help="Directory of files to validate."
+        None,
+        "--dir",
+        "-d",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        help="Directory of files to validate.",
     ),
 ) -> None:
     """
@@ -29,12 +47,18 @@ def names_batch(
         )
 
     if csv:
-        results = validate_names_in_csv(csv)
+        try:
+            results = validate_names_in_csv(csv)
+        except (FileNotFoundError, ValueError, PermissionError) as exc:
+            raise OnePieceValidationError(str(exc)) from exc
         typer.secho(
             f"Validated {len(results)} names from CSV {csv}", fg=typer.colors.CYAN
         )
     else:
-        results = validate_names_in_dir(directory)
+        try:
+            results = validate_names_in_dir(directory)
+        except (FileNotFoundError, NotADirectoryError, PermissionError) as exc:
+            raise OnePieceValidationError(str(exc)) from exc
         typer.secho(
             f"Validated {len(results)} filenames in directory {directory}",
             fg=typer.colors.CYAN,
