@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence, Any
+from typing import Any
 
 Color = tuple[int, int, int]
 
@@ -98,19 +99,43 @@ class SceneObject:
             raise SceneError("Object size must be a length two sequence")
         size = float(size_data[0]), float(size_data[1])
 
-        animation_data: list[dict[str, Any]] = payload.get("animation")  # type: ignore[assignment]
+        animation_data = payload.get("animation")
         animation = None
         if animation_data is not None:
-            animation = Animation(
-                keyframes=[
-                    Keyframe(
-                        frame=int(item["frame"]),
-                        x=float(item.get("x", position[0])),
-                        y=float(item.get("y", position[1])),
+            if not isinstance(animation_data, Iterable):
+                raise SceneError("Object animation must be an iterable of mappings")
+
+            keyframes: list[Keyframe] = []
+            for index, item in enumerate(animation_data):
+                if not isinstance(item, Mapping):
+                    raise SceneError(
+                        f"Object animation entry at index {index} must be a mapping"
                     )
-                    for item in sorted(animation_data, key=lambda it: int(it["frame"]))
-                ]
-            )
+                if "frame" not in item:
+                    raise SceneError(
+                        f"Object animation entry at index {index} is missing a 'frame' value"
+                    )
+
+                try:
+                    frame_value = item["frame"]
+                    frame = int(frame_value)
+                except (TypeError, ValueError) as exc:
+                    raise SceneError(
+                        f"Object animation entry at index {index} has an invalid frame value: {item['frame']!r}"
+                    ) from exc
+
+                try:
+                    x = float(item.get("x", position[0]))
+                    y = float(item.get("y", position[1]))
+                except (TypeError, ValueError) as exc:
+                    raise SceneError(
+                        f"Object animation entry at index {index} has invalid coordinate values"
+                    ) from exc
+
+                keyframes.append(Keyframe(frame=frame, x=x, y=y))
+
+            keyframes.sort(key=lambda keyframe: keyframe.frame)
+            animation = Animation(keyframes=keyframes)
 
         return cls(
             id=str(payload["id"]),
@@ -203,7 +228,13 @@ class Scene:
         if not isinstance(objects_data, Sequence):
             raise SceneError("Scene objects must be supplied as a sequence")
 
-        objects = [SceneObject.from_dict(obj) for obj in objects_data]
+        objects: list[SceneObject] = []
+        for index, obj in enumerate(objects_data):
+            if not isinstance(obj, Mapping):
+                raise SceneError(
+                    f"Scene object at index {index} must be a mapping"
+                )
+            objects.append(SceneObject.from_dict(dict(obj)))
 
         return cls(
             width=width,

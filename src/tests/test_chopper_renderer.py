@@ -98,3 +98,33 @@ def test_scene_serialisation_round_trip(tmp_path: Path) -> None:
     frames = renderer.render()
     assert isinstance(frames[0], Frame)
     assert frames[0].pixels[1][2] == (255, 136, 0)
+
+
+def test_scene_rejects_non_mapping_objects() -> None:
+    payload = build_scene_dict()
+    payload["objects"] = [
+        payload["objects"][0],
+        "not-a-mapping",
+    ]
+
+    with pytest.raises(SceneError, match="index 1"):
+        Scene.from_dict(payload)
+
+
+@pytest.mark.parametrize(
+    "animation_payload, expected_message",
+    [
+        (42, "iterable"),
+        (["not-a-mapping"], "index 0"),
+        ([{"x": 1.0}], "missing"),
+    ],
+)
+def test_scene_object_rejects_invalid_animation(
+    animation_payload: object, expected_message: str
+) -> None:
+    payload = build_scene_dict()
+    hero = payload["objects"][1]
+    hero["animation"] = animation_payload
+
+    with pytest.raises(SceneError, match=expected_message):
+        Scene.from_dict(payload)
