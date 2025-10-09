@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import getpass
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-import asyncio
 import json
 from typing import (
     Any,
@@ -414,6 +414,11 @@ class _JobRecord:
 JOB_STORE_PATH_ENV = "TRAFALGAR_RENDER_JOBS_PATH"
 JOB_HISTORY_LIMIT_ENV = "TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT"
 JOB_RETENTION_HOURS_ENV = "TRAFALGAR_RENDER_JOBS_RETENTION_HOURS"
+JOB_STATUS_POLL_INTERVAL_ENV = "TRAFALGAR_RENDER_STATUS_POLL_INTERVAL"
+JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
+
+DEFAULT_STATUS_POLL_INTERVAL = 5.0
+DEFAULT_STORE_PERSIST_INTERVAL = 1.0
 
 
 class RenderSubmissionService:
@@ -429,6 +434,8 @@ class RenderSubmissionService:
         job_store: JobStore | None = None,
         history_limit: int | None = None,
         broadcaster: EventBroadcaster | None = None,
+        status_poll_interval: float | None = None,
+        store_persist_interval: float | None = None,
     ) -> None:
         initial_adapters = adapters or FARM_ADAPTERS
         self._adapters = {
@@ -456,6 +463,25 @@ class RenderSubmissionService:
         self._history_pruned_total = 0
         self._last_history_prune_at: datetime | None = None
         self._last_history_prune_count = 0
+        persist_interval_value = (
+            store_persist_interval
+            if store_persist_interval is not None
+            else DEFAULT_STORE_PERSIST_INTERVAL
+        )
+        self._persist_throttle: timedelta | None = None
+        if persist_interval_value and persist_interval_value > 0:
+            self._persist_throttle = timedelta(seconds=float(persist_interval_value))
+        self._last_persist_at: datetime | None = None
+        self._persist_pending = False
+        poll_interval_value = (
+            status_poll_interval
+            if status_poll_interval is not None
+            else DEFAULT_STATUS_POLL_INTERVAL
+        )
+        self._poll_interval: float | None = (
+            float(poll_interval_value) if poll_interval_value and poll_interval_value > 0 else None
+        )
+        self._poll_task: asyncio.Task[None] | None = None
         self._load_jobs()
 
     def list_farms(self) -> list[FarmInfo]:
@@ -599,7 +625,7 @@ class RenderSubmissionService:
         if job_id:
             self._jobs[job_id] = record
             self._enforce_history_limit()
-            self._persist_jobs()
+            self._persist_jobs(force=True)
             self._emit_event("job.created", record)
         return result
 
@@ -610,7 +636,7 @@ class RenderSubmissionService:
             dirty = self._refresh_job(record) or dirty
             jobs.append(record.snapshot())
         if dirty:
-            self._persist_jobs()
+            self._persist_jobs(force=True)
         return jobs
 
     def get_job(self, job_id: str) -> RenderJobMetadata:
@@ -618,7 +644,7 @@ class RenderSubmissionService:
         if record is None:
             raise KeyError(job_id)
         if self._refresh_job(record):
-            self._persist_jobs()
+            self._persist_jobs(force=True)
         return record.snapshot()
 
     def cancel_job(self, job_id: str) -> RenderJobMetadata:
@@ -655,7 +681,7 @@ class RenderSubmissionService:
                 context={"farm": record.farm, "job_id": job_id},
             ) from exc
         if self._update_record_from_result(record, result):
-            self._persist_jobs()
+            self._persist_jobs(force=True)
         return record.snapshot()
 
     def _refresh_job(self, record: _JobRecord) -> bool:
@@ -709,12 +735,24 @@ class RenderSubmissionService:
         previous_count = len(self._jobs)
         self._enforce_history_limit()
         if self._history_limit is not None and len(self._jobs) < previous_count:
-            self._persist_jobs()
+            self._persist_jobs(force=True)
 
-    def _persist_jobs(self) -> None:
+    def _persist_jobs(self, *, force: bool = False) -> None:
         if not self._store:
+            self._persist_pending = False
+            return
+        now = _utcnow()
+        if (
+            not force
+            and self._persist_throttle is not None
+            and self._last_persist_at is not None
+            and now - self._last_persist_at < self._persist_throttle
+        ):
+            self._persist_pending = True
             return
         self._store.save(self._jobs.values())
+        self._last_persist_at = now
+        self._persist_pending = False
 
     def _enforce_history_limit(self) -> None:
         if self._history_limit is None:
@@ -732,6 +770,45 @@ class RenderSubmissionService:
             self._last_history_prune_at = _utcnow()
             self._last_history_prune_count = removed
             self._history_pruned_total += removed
+
+    def start_background_polling(self) -> None:
+        """Launch the asynchronous poller that refreshes job statuses."""
+
+        if self._poll_interval is None:
+            return
+        if self._poll_task and not self._poll_task.done():
+            return
+        loop = asyncio.get_running_loop()
+        self._poll_task = loop.create_task(self._run_status_poller())
+
+    async def stop_background_polling(self) -> None:
+        """Stop the poller if it is running and flush pending persistence."""
+
+        if not self._poll_task:
+            return
+        task = self._poll_task
+        self._poll_task = None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _run_status_poller(self) -> None:
+        assert self._poll_interval is not None
+        try:
+            while True:
+                dirty = False
+                for record in list(self._jobs.values()):
+                    dirty = self._refresh_job(record) or dirty
+                if dirty or self._persist_pending:
+                    self._persist_jobs()
+                await asyncio.sleep(self._poll_interval)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._persist_pending:
+                self._persist_jobs(force=True)
 
     def get_metrics(self) -> dict[str, Any]:
         store_metrics: dict[str, Any] | None = None
@@ -774,6 +851,8 @@ def get_render_service() -> (
     store_path = os.environ.get(JOB_STORE_PATH_ENV)
     history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)
     retention_hours_value = os.environ.get(JOB_RETENTION_HOURS_ENV)
+    poll_interval_value = os.environ.get(JOB_STATUS_POLL_INTERVAL_ENV)
+    persist_interval_value = os.environ.get(JOB_STORE_PERSIST_THROTTLE_ENV)
 
     retention: timedelta | None = None
     if retention_hours_value:
@@ -808,10 +887,50 @@ def get_render_service() -> (
                 env=JOB_HISTORY_LIMIT_ENV,
             )
 
+    poll_interval_override: float | None = None
+    if poll_interval_value is not None:
+        try:
+            poll_interval_override = float(poll_interval_value)
+        except ValueError:
+            logger.warning(
+                "render.job.poll_interval.invalid",
+                value=poll_interval_value,
+                env=JOB_STATUS_POLL_INTERVAL_ENV,
+            )
+            poll_interval_override = None
+        else:
+            if poll_interval_override <= 0:
+                logger.warning(
+                    "render.job.poll_interval.disabled",
+                    value=poll_interval_value,
+                    env=JOB_STATUS_POLL_INTERVAL_ENV,
+                )
+
+    persist_interval_override: float | None = None
+    if persist_interval_value is not None:
+        try:
+            persist_interval_override = float(persist_interval_value)
+        except ValueError:
+            logger.warning(
+                "render.job.store_interval.invalid",
+                value=persist_interval_value,
+                env=JOB_STORE_PERSIST_THROTTLE_ENV,
+            )
+            persist_interval_override = None
+        else:
+            if persist_interval_override <= 0:
+                logger.warning(
+                    "render.job.store_interval.disabled",
+                    value=persist_interval_value,
+                    env=JOB_STORE_PERSIST_THROTTLE_ENV,
+                )
+
     service = RenderSubmissionService(
         job_store=job_store,
         history_limit=history_limit,
         broadcaster=JOB_EVENTS,
+        status_poll_interval=poll_interval_override,
+        store_persist_interval=persist_interval_override,
     )
 
     RenderJobRequest.configure_farm_registry(service.adapter_keys)
@@ -836,6 +955,18 @@ def parse_render_job_request(
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 router = create_protected_router()
+
+
+@app.on_event("startup")
+async def start_render_status_poller() -> None:
+    service = get_render_service()
+    service.start_background_polling()
+
+
+@app.on_event("shutdown")
+async def stop_render_status_poller() -> None:
+    service = get_render_service()
+    await service.stop_background_polling()
 
 
 @app.exception_handler(RenderSubmissionError)
