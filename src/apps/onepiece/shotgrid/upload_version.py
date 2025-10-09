@@ -39,26 +39,32 @@ def upload(
             f"Project '{project_name}' not found. Verify the project name and try again."
         )
 
-    shot = sg_client.get_shot(project["code"], shot_name)
+    project_id = project.get("id")
+    if not project_id:
+        raise OnePieceValidationError(
+            "Project returned from ShotGrid is missing an ID. "
+            f"Cannot look up shots for project '{project_name}'."
+        )
+
+    shot = sg_client.get_shot(project_id, shot_name)
     if not shot:
         raise OnePieceValidationError(
             f"Shot '{shot_name}' not found in project '{project_name}'."
         )
 
     try:
-        version_name = f"{shot_name}_V00)"
+        version_name = f"{shot_name}_V001"
         version_data = VersionData(
-            entity_type="Version", code=version_name, project_id=project["id"]
+            entity_type="Version",
+            code=version_name,
+            project_id=project["id"],
+            extra={
+                "linked_entity_type": shot.get("type") or "Shot",
+                "linked_entity_id": shot["id"],
+            },
         )
-        version = sg_client.create_version(version_data)
-        typer.echo(
-            f"Successfully uploaded version '{version['id']}' for shot '{shot_name}'"
-        )
-        log.info(
-            "upload_version_success",
-            project=project_name,
-            shot=shot_name,
-            file=str(file_path),
+        version = sg_client.create_version_with_media(
+            version_data, media_path=file_path
         )
     except Exception as e:  # noqa: BLE001 - surfaced to the CLI.
         log.error(
@@ -71,3 +77,13 @@ def upload(
         raise OnePieceExternalServiceError(
             f"Failed to upload version for shot '{shot_name}': {e}"
         ) from e
+
+    typer.echo(
+        f"Successfully uploaded version '{version['id']}' for shot '{shot_name}'"
+    )
+    log.info(
+        "upload_version_success",
+        project=project_name,
+        shot=shot_name,
+        file=str(file_path),
+    )

@@ -6,6 +6,7 @@ from upath import UPath
 import structlog
 import typer
 
+from apps.onepiece.utils.errors import OnePieceValidationError
 from libraries.handlers.filepath_handler import FilepathHandler
 from libraries.media.transformations import create_1080p_proxy_from_exrs
 from libraries.shotgrid.api import ShotGridClient
@@ -43,8 +44,9 @@ def version_zero(
     project_id = sg.get_project_id_by_name(project_name)
 
     if not project_id:
-        log.error("No project found.", project=project_name)
-        return
+        raise OnePieceValidationError(
+            f"Project '{project_name}' not found. Verify the project name and try again."
+        )
 
     total_shots = len(shot_names)
     successes = 0
