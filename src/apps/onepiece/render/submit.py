@@ -240,13 +240,9 @@ def submit(
     dcc = dcc.lower()
 
     if not scene.exists():
-        raise OnePieceValidationError(
-            f"Scene file '{scene}' does not exist (--scene)."
-        )
+        raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
     if not scene.is_file():
-        raise OnePieceValidationError(
-            f"Scene path '{scene}' is not a file (--scene)."
-        )
+        raise OnePieceValidationError(f"Scene path '{scene}' is not a file (--scene).")
 
     if not output.exists():
         raise OnePieceValidationError(
