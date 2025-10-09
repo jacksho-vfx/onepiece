@@ -231,9 +231,7 @@ class Scene:
         objects: list[SceneObject] = []
         for index, obj in enumerate(objects_data):
             if not isinstance(obj, Mapping):
-                raise SceneError(
-                    f"Scene object at index {index} must be a mapping"
-                )
+                raise SceneError(f"Scene object at index {index} must be a mapping")
             objects.append(SceneObject.from_dict(dict(obj)))
 
         return cls(

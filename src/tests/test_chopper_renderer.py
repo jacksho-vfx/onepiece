@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -101,7 +102,7 @@ def test_scene_serialisation_round_trip(tmp_path: Path) -> None:
 
 
 def test_scene_rejects_non_mapping_objects() -> None:
-    payload = build_scene_dict()
+    payload: dict[str, Any] = build_scene_dict()
     payload["objects"] = [
         payload["objects"][0],
         "not-a-mapping",
@@ -122,7 +123,7 @@ def test_scene_rejects_non_mapping_objects() -> None:
 def test_scene_object_rejects_invalid_animation(
     animation_payload: object, expected_message: str
 ) -> None:
-    payload = build_scene_dict()
+    payload: dict[str, Any] = build_scene_dict()
     hero = payload["objects"][1]
     hero["animation"] = animation_payload
 
