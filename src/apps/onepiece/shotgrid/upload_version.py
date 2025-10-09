@@ -59,8 +59,12 @@ def upload(
             code=version_name,
             project_id=project["id"],
             extra={
-                "linked_entity_type": shot.get("type") or "Shot",
-                "linked_entity_id": shot["id"],
+                "entity": {
+                    "data": {
+                        "type": shot.get("type") or "Shot",
+                        "id": shot["id"],
+                    }
+                }
             },
         )
         version = sg_client.create_version_with_media(
