@@ -2,7 +2,7 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Latest Trafalgar release: v0.7.0.** This update adds render job management endpoints, caches ShotGrid status lookups with configurable TTLs, auto-discovers dashboard projects, and streamlines delivery manifests so the web tooling stays responsive even when upstream systems are slow.
+> **Latest Trafalgar release: v1.0.0.** This update adds render job management endpoints, caches ShotGrid status lookups with configurable TTLs, auto-discovers dashboard projects, and streamlines delivery manifests so the web tooling stays responsive even when upstream systems are slow.
 
 ## Quick start
 
@@ -43,7 +43,7 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
-## What's new in Trafalgar v0.7.0
+## What's new in Trafalgar v1.0.0
 
 - **Dashboard data resilience** – Project discovery now combines environment configuration with on-the-fly ShotGrid lookups and caches the results locally so teams can keep browsing known shows even if ShotGrid is offline.
 - **Configurable ShotGrid caching** – Version queries honour TTL and record-count limits, dramatically reducing API pressure for frequently refreshed dashboards while falling back automatically when datasets grow beyond safe cache sizes.

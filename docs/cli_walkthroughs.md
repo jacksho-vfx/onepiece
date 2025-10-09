@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in Trafalgar v0.7.0:** The Trafalgar dashboard now auto-discovers projects, caches ShotGrid queries with configurable TTLs, and exposes render job management endpoints so you can rehearse full production flows locally even when upstream systems are unavailable.
+> **New in Trafalgar v1.0.0:** The Trafalgar dashboard now auto-discovers projects, caches ShotGrid queries with configurable TTLs, and exposes render job management endpoints so you can rehearse full production flows locally even when upstream systems are unavailable.
 
 ### Adjusting dashboard cache behaviour
 
@@ -260,7 +260,7 @@ MediaShuttle-ready package.
 
 ## 7. Exercise the DCC scaffolding stubs
 
-The Trafalgar v0.7.0 release focuses on keeping the web suite responsive: the
+The Trafalgar v1.0.0 release focuses on keeping the web suite responsive: the
 dashboard auto-caches version lookups, gracefully handles sparse delivery
 manifests, and the render API now mirrors the CLI's job lifecycle so you can
 list, inspect, and cancel submissions via HTTP. Launch the services with the

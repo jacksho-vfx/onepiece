@@ -13,7 +13,17 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ---
 
-## [Trafalgar v0.7.0] – Current Release
+## [v1.0.0] – Current Release
+
+### Added / Improved
+
+- Align the OnePiece CLI, Trafalgar dashboard, and Uta web interface on
+  version 1.0.0, exposing a dedicated `UTA_VERSION` constant so downstream
+  integrations can rely on consistent metadata across packages.
+
+---
+
+## [Trafalgar v1.0.0] – Current Release
 
 ### Added / Improved
 
