@@ -324,9 +324,7 @@ async def test_list_jobs_supports_limit_and_filters(
     assert [job["job_id"] for job in farm_payload["jobs"]] == [created_jobs[1][1]]
 
     combined_payload = combined.json()
-    assert [job["job_id"] for job in combined_payload["jobs"]] == [
-        created_jobs[2][1]
-    ]
+    assert [job["job_id"] for job in combined_payload["jobs"]] == [created_jobs[2][1]]
 
 
 @pytest.mark.anyio("asyncio")
