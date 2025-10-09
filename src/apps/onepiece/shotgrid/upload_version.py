@@ -39,7 +39,14 @@ def upload(
             f"Project '{project_name}' not found. Verify the project name and try again."
         )
 
-    shot = sg_client.get_shot(project["code"], shot_name)
+    project_id = project.get("id")
+    if not project_id:
+        raise OnePieceValidationError(
+            "Project returned from ShotGrid is missing an ID. "
+            f"Cannot look up shots for project '{project_name}'."
+        )
+
+    shot = sg_client.get_shot(project_id, shot_name)
     if not shot:
         raise OnePieceValidationError(
             f"Shot '{shot_name}' not found in project '{project_name}'."
