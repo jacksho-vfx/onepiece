@@ -239,6 +239,20 @@ def submit(
     farm = farm.lower()
     dcc = dcc.lower()
 
+    if not scene.exists():
+        raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
+    if not scene.is_file():
+        raise OnePieceValidationError(f"Scene path '{scene}' is not a file (--scene).")
+
+    if not output.exists():
+        raise OnePieceValidationError(
+            f"Output directory '{output}' does not exist (--output)."
+        )
+    if not output.is_dir():
+        raise OnePieceValidationError(
+            f"Output path '{output}' is not a directory (--output)."
+        )
+
     resolved_priority, resolved_chunk, capabilities = _resolve_priority_and_chunk_size(
         farm=farm,
         priority=priority,
