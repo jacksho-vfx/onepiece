@@ -5,6 +5,8 @@ provide defaults for commands like `aws ingest`. Profiles are defined in
 `onepiece.toml` files and merged in the following order (lowest precedence
 first):
 
+> **Release spotlight (v1.0.0):** Profile resolution now includes workspace-level overrides, the active profile can be inspected with `onepiece profile`, and ingest commands honour new keys for resumable uploads, checkpoint tuning, and asyncio orchestration.
+
 1. **User configuration** – files located at:
    - `$XDG_CONFIG_HOME/onepiece/onepiece.toml` when `XDG_CONFIG_HOME` is set.
    - `~/.config/onepiece/onepiece.toml`

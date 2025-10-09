@@ -5,6 +5,11 @@ status information across ingest, render, and review systems. The endpoint is
 protected with bearer token authentication so the aggregated production data can
 be shared securely.
 
+> **Release spotlight (v1.0.0):** Dashboard requests now respect configurable
+> cache TTLs and capacity limits, discovered projects are persisted locally for
+> offline resilience, and `/admin/cache` endpoints let authenticated operators
+> inspect or adjust cache behaviour without redeploying the service.
+
 ## Authentication
 
 Set the `TRAFALGAR_DASHBOARD_TOKEN` environment variable before starting the

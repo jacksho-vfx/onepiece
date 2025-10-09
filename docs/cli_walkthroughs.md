@@ -2,7 +2,7 @@
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
-> **New in Trafalgar v1.0.0:** The Trafalgar dashboard now auto-discovers projects, caches ShotGrid queries with configurable TTLs, and exposes render job management endpoints so you can rehearse full production flows locally even when upstream systems are unavailable.
+> **Release spotlight (v1.0.0):** The CLI honours layered configuration profiles and resumable ingest toggles, Trafalgar introduces cache-tunable dashboards with job inspection endpoints, and the new Uta Control Center renders the command surface in your browser alongside the embedded dashboard.
 
 ### Adjusting dashboard cache behaviour
 
@@ -290,6 +290,26 @@ returns a dictionary that mirrors the file content. Replace `BlenderClient` with
 another client from `libraries.dcc.client` to rehearse the workflow for other
 applications. When you are ready to wire up a real integration, override the
 stub methods with application-specific logic and keep the CLI commands intact.
+
+## 8. Orchestrate CLI runs from the Uta Control Center
+
+1. Launch the browser UI alongside the Trafalgar dashboard:
+
+   ```bash
+   onepiece uta serve --host 127.0.0.1 --port 8050
+   ```
+
+   The command starts the FastAPI app, opens your default browser (unless you opt
+   out with `--no-browser`), and mounts the Trafalgar dashboard under the same
+   host for quick switching between metrics and operations.
+
+2. Browse the command tabs. Each Typer command is rendered as a card that lists
+   its summary and parameters. Add extra CLI flags in the *Additional arguments*
+   field, then click **Run command** to invoke it without leaving the page.
+
+3. Review the captured output and exit code that appears beneath the card. Use
+   this feedback loop to rehearse ingest, render, or validation flows in the
+   same browser window that displays live production telemetry.
 
 ---
 
