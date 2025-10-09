@@ -1161,7 +1161,7 @@ async def landing_page(request: Request) -> HTMLResponse:
     )
 
     template = _load_landing_template()
-    projects_json = escape(json.dumps(projects))
+    projects_json = escape(json.dumps(projects), quote=True)
     nav_html = "\n        ".join(nav_items)
     raw_root_path = request.scope.get("root_path") or ""
     base_path = raw_root_path.rstrip("/") if raw_root_path else ""
