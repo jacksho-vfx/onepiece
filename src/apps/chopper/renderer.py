@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Sequence, Any
 
 Color = tuple[int, int, int]
 
@@ -98,7 +98,7 @@ class SceneObject:
             raise SceneError("Object size must be a length two sequence")
         size = float(size_data[0]), float(size_data[1])
 
-        animation_data = payload.get("animation")
+        animation_data: list[dict[str, Any]] = payload.get("animation")  # type: ignore[assignment]
         animation = None
         if animation_data is not None:
             animation = Animation(
@@ -184,7 +184,7 @@ class Scene:
     objects: list[SceneObject] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "Scene":
+    def from_dict(cls, payload: dict[str, Any]) -> "Scene":
         """Create a :class:`Scene` instance from ``payload``."""
 
         required = {"width", "height", "frames"}
@@ -260,7 +260,9 @@ class Renderer:
 
         frames: list[Frame] = []
         for index in range(self.scene.frame_count):
-            frame = Frame.blank(index, self.scene.width, self.scene.height, self.scene.background)
+            frame = Frame.blank(
+                index, self.scene.width, self.scene.height, self.scene.background
+            )
             for obj in self.scene.objects:
                 obj.render(frame, index)
             frames.append(frame)
