@@ -24,7 +24,7 @@ def sync_to(
     include = include or []
     exclude = exclude or []
 
-    destination = f"s3://{bucket}/{show_code}"
+    destination = f"s3://{bucket}/{show_code}/{folder}"
 
     with progress_tracker(
         "S3 Upload",
