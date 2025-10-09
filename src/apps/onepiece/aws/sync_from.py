@@ -24,7 +24,7 @@ def sync_from(
     include = include or []
     exclude = exclude or []
 
-    source = f"s3://{bucket}/{show_code}"
+    source = f"s3://{bucket}/{show_code}/{folder}"
     destination = local_path / folder
 
     with progress_tracker(
