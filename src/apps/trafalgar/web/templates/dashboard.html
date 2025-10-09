@@ -736,9 +736,10 @@
           createdCell.textContent = entry.created_at || '—';
           row.appendChild(createdCell);
           const manifestCell = document.createElement('td');
-          if (entry.manifest) {
+          const manifestTarget = entry.manifest_api || entry.manifest;
+          if (manifestTarget) {
             const link = document.createElement('a');
-            link.href = joinPath(basePath, entry.manifest);
+            link.href = joinPath(basePath, manifestTarget);
             link.textContent = 'Manifest';
             manifestCell.appendChild(link);
           } else {

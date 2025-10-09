@@ -214,6 +214,26 @@ Both routes require the standard dashboard bearer token and respond with
 these endpoints sparingly in production—force-flushing large caches can spike
 load on ShotGrid or other backing APIs until the cache repopulates.
 
+### Endpoint: `GET /deliveries/{project}/{delivery_id}`
+
+Authenticated operators can inspect an individual delivery manifest without
+leaving the dashboard by calling the manifest endpoint. The
+`delivery_id` segment accepts either the provider's delivery identifier (for
+example `12345` or `vendor-drop-2024-05-01`) or the manifest path returned by
+`GET /deliveries/{project}`. Because manifest paths can include directory
+separators, URL-encode the value when constructing the request URL.
+
+```bash
+curl \
+  -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+  "http://localhost:8000/deliveries/alpha/%2Fmnt%2Fmanifests%2Falpha.json"
+```
+
+Responses are normalised to the cached manifest schema used by the dashboard
+and always contain a `files` list. When the manifest has not been cached yet the
+service loads and normalises it on demand, then stores the result so follow-up
+requests avoid reprocessing.
+
 ### Delivery manifest cache
 
 `DeliveryService` memoises delivery manifests so repeated requests for the same
