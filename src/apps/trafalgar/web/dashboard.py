@@ -414,10 +414,22 @@ class ShotGridService:
         return discovered
 
     def _filter_versions(self, project_name: str) -> list[Mapping[str, Any]]:
+        target_name = _coerce_project_name(project_name) or str(project_name).strip()
+
         versions = [
             version
             for version in self._fetch_versions()
-            if str(version.get("project")) == project_name
+            if (
+                (
+                    _coerce_project_name(version.get("project"))
+                    or (
+                        str(version.get("project")).strip()
+                        if version.get("project") is not None
+                        else None
+                    )
+                )
+                == target_name
+            )
         ]
 
         if not versions and project_name not in self._configured_projects:
@@ -475,7 +487,11 @@ class ShotGridService:
                         )
                         continue
                     if isinstance(results, Sequence):
-                        all_versions.extend(dict(item) for item in results)
+                        for item in results:
+                            record = dict(item)
+                            if not record.get("project"):
+                                record["project"] = name
+                            all_versions.append(record)
             versions_result = all_versions
 
         can_cache = self._cache_ttl > 0
