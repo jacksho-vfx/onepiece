@@ -219,8 +219,18 @@ class Scene:
             raise SceneError(f"Scene is missing required key(s): {joined}")
 
         width = int(payload["width"])
+        if width <= 0:
+            raise SceneError(f"Scene width must be greater than zero (got {width})")
+
         height = int(payload["height"])
+        if height <= 0:
+            raise SceneError(f"Scene height must be greater than zero (got {height})")
+
         frame_count = int(payload["frames"])
+        if frame_count <= 0:
+            raise SceneError(
+                f"Scene frame count must be greater than zero (got {frame_count})"
+            )
 
         background = parse_color(payload.get("background", "#000000"))
 

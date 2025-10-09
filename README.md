@@ -33,6 +33,13 @@ Once installed, the CLI exposes a number of subcommands:
 
 Use `onepiece COMMAND --help` to inspect options for any command.
 
+### Rendering standalone scenes with Chopper
+
+The lightweight `chopper` CLI renders self-contained JSON scene descriptions. A
+scene must declare positive, non-zero `width`, `height`, and `frames` fields in
+addition to any objects. Scenes with zero or negative dimensions are rejected
+before rendering so frame buffers are always valid.
+
 ### Onboarding resources
 
 If you are new to the toolkit, start with the dedicated onboarding material bundled in this repository:

@@ -113,6 +113,27 @@ def test_scene_rejects_non_mapping_objects() -> None:
 
 
 @pytest.mark.parametrize(
+    "field,value,expected_message",
+    [
+        ("width", 0, "width must be greater than zero"),
+        ("width", -8, "width must be greater than zero"),
+        ("height", 0, "height must be greater than zero"),
+        ("height", -3, "height must be greater than zero"),
+        ("frames", 0, "frame count must be greater than zero"),
+        ("frames", -1, "frame count must be greater than zero"),
+    ],
+)
+def test_scene_rejects_non_positive_dimensions(
+    field: str, value: int, expected_message: str
+) -> None:
+    payload = build_scene_dict()
+    payload[field] = value
+
+    with pytest.raises(SceneError, match=expected_message):
+        Scene.from_dict(payload)
+
+
+@pytest.mark.parametrize(
     "animation_payload, expected_message",
     [
         (42, "iterable"),
