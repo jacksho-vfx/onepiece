@@ -1041,7 +1041,9 @@ class DeliveryService:
             )
         return result
 
-    def get_delivery_manifest(self, project_name: str, identifier: str) -> dict[str, Any]:
+    def get_delivery_manifest(
+        self, project_name: str, identifier: str
+    ) -> dict[str, Any]:
         lookup = identifier.strip()
         if not lookup:
             raise KeyError("Empty delivery identifier")
@@ -1521,7 +1523,9 @@ async def delivery_manifest(
     delivery_service: DeliveryService = Depends(get_delivery_service),
 ) -> JSONResponse:
     try:
-        manifest = delivery_service.get_delivery_manifest(project_name, delivery_identifier)
+        manifest = delivery_service.get_delivery_manifest(
+            project_name, delivery_identifier
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Delivery not found") from exc
     return JSONResponse(content=manifest)
