@@ -117,6 +117,7 @@ async def test_render_job_stream_emits_created_events(
     broadcaster = EventBroadcaster(max_buffer=4)
     monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
     service = render.RenderSubmissionService({"mock": adapter}, broadcaster=broadcaster)
+    monkeypatch.setattr(render, "get_render_service", lambda: service)
 
     class _Request:
         async def is_disconnected(self) -> bool:  # pragma: no cover - simple stub
@@ -124,7 +125,16 @@ async def test_render_job_stream_emits_created_events(
 
     stream = render._job_event_stream(_Request())
     event_task = asyncio.create_task(stream.__anext__())
-    await asyncio.sleep(0)
+    snapshot_chunk = await asyncio.wait_for(event_task, timeout=1)
+
+    assert snapshot_chunk.startswith(b"event: jobs.snapshot")
+    snapshot_lines = [line for line in snapshot_chunk.split(b"\n") if line]
+    snapshot_data = next(line for line in snapshot_lines if line.startswith(b"data: "))
+    snapshot_payload = json.loads(snapshot_data.split(b": ", 1)[1].strip())
+    assert snapshot_payload["event"] == "jobs.snapshot"
+    assert snapshot_payload["jobs"] == []
+
+    event_task = asyncio.create_task(stream.__anext__())
 
     request = render.RenderJobRequest(**_job_payload())
     service.submit_job(request)
@@ -133,8 +143,11 @@ async def test_render_job_stream_emits_created_events(
     chunk = await asyncio.wait_for(event_task, timeout=1)
     await stream.aclose()
 
-    assert chunk.startswith(b"data: ")
-    payload = json.loads(chunk.split(b": ", 1)[1].strip())
+    assert chunk.startswith(b"event: job.created")
+    payload_line = next(
+        line for line in chunk.split(b"\n") if line.startswith(b"data: ")
+    )
+    payload = json.loads(payload_line.split(b": ", 1)[1].strip())
     assert payload["event"] == "job.created"
     assert payload["job"]["job_id"] == "stub-1"
 
@@ -182,8 +195,8 @@ async def test_render_job_websocket_receives_updates(
     with client.websocket_connect("/jobs/ws") as websocket:
         msg = websocket.receive_json()
         assert msg["type"] == "connected"
-        assert msg["event"] == "job.created"
-        assert msg["job"]["job_id"] == "stub-1"
+        assert msg["snapshot"]["event"] == "jobs.snapshot"
+        assert [job["job_id"] for job in msg["snapshot"]["jobs"]] == ["stub-1"]
 
 
 @pytest.mark.anyio("asyncio")

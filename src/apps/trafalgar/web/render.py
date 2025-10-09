@@ -1099,19 +1099,37 @@ def list_jobs(
     return JobsListResponse(jobs=jobs)
 
 
+def _format_sse_chunk(event_name: str | None, payload: bytes) -> bytes:
+    lines: list[bytes] = []
+    if event_name:
+        lines.append(b"event: " + event_name.encode("utf-8"))
+    lines.append(b"data: " + payload)
+    return b"\n".join(lines) + b"\n\n"
+
+
 async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
+    service = get_render_service()
     queue = await JOB_EVENTS.subscribe()
     try:
+        jobs_snapshot = [job.model_dump(mode="json") for job in service.list_jobs()]
+        snapshot_event = {"event": "jobs.snapshot", "jobs": jobs_snapshot}
+        snapshot_payload = json.dumps(snapshot_event).encode("utf-8")
+        yield _format_sse_chunk("jobs.snapshot", snapshot_payload)
+
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=30)
             except asyncio.TimeoutError:
                 if await request.is_disconnected():
                     break
-                yield b"data: {}\n\n"
+                yield _format_sse_chunk(None, b"{}")
                 continue
             payload = json.dumps(event).encode("utf-8")
-            yield b"data: " + payload + b"\n\n"
+            event_name = event.get("event") if isinstance(event, Mapping) else None
+            chunk = _format_sse_chunk(
+                event_name if isinstance(event_name, str) else None, payload
+            )
+            yield chunk
     finally:
         await JOB_EVENTS.unsubscribe(queue)
 
@@ -1133,16 +1151,11 @@ async def jobs_websocket(
     await websocket.accept()
     queue = await JOB_EVENTS.subscribe()
     try:
-        jobs = service.list_jobs()
-        handshake: dict[str, Any] = {"type": "connected"}
-        if jobs:
-            latest_job = jobs[-1]
-            handshake.update(
-                {
-                    "event": "job.created",
-                    "job": latest_job.model_dump(mode="json"),
-                }
-            )
+        jobs_snapshot = [job.model_dump(mode="json") for job in service.list_jobs()]
+        handshake: dict[str, Any] = {
+            "type": "connected",
+            "snapshot": {"event": "jobs.snapshot", "jobs": jobs_snapshot},
+        }
         await websocket.send_json(handshake)
 
         while True:

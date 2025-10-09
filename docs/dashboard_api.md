@@ -113,17 +113,22 @@ keepalive strategies), see
 - `GET /jobs/stream` – SSE endpoint emitting JSON payloads.
 - `GET /jobs/ws` – WebSocket endpoint sending JSON frames.
 
-Each event payload includes an `event` string describing the lifecycle stage and
-`job` metadata mirroring `RenderJobMetadata`. Example SSE subscription using
-`curl`:
+Each connection begins with a `jobs.snapshot` payload so clients can seed their
+state before consuming incremental updates. Subsequent events include an
+`event` string describing the lifecycle stage and `job` metadata mirroring
+`RenderJobMetadata`. Example SSE subscription using `curl`:
 
 ```bash
 curl -N http://localhost:8000/jobs/stream
 ```
 
-Sample event:
+Sample events:
 
 ```text
+event: jobs.snapshot
+data: {"event": "jobs.snapshot", "jobs": []}
+
+event: job.created
 data: {"event": "job.created", "job": {"job_id": "stub-1", "status": "queued", "farm": "mock", "farm_type": "stub", "message": null, "request": {...}}}
 ```
 
