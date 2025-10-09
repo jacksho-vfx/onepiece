@@ -299,7 +299,7 @@ def test_shotgrid_service_manual_invalidation_clears_cache() -> None:
 
 
 def test_shotgrid_service_overall_status_handles_mapping_projects() -> None:
-    versions = [
+    versions: Sequence[dict[str, Any]] = [
         {"project": {"name": "alpha"}},
         {"project": {"name": {"value": "beta"}}},
         {"project": "alpha"},
@@ -341,7 +341,7 @@ async def test_landing_page_uses_discovered_projects(
 
 @pytest.mark.anyio("asyncio")
 async def test_status_endpoint_aggregates_counts() -> None:
-    versions = [
+    versions: Sequence[dict[str, Any]] = [
         {
             "project": "alpha",
             "shot": "EP01_SC001_SH0010",

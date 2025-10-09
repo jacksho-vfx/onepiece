@@ -503,9 +503,7 @@ class ShotGridService:
 
     def _project_names(self, versions: Iterable[Mapping[str, Any]]) -> set[str]:
         names = {
-            name
-            for v in versions
-            if (name := _coerce_project_name(v.get("project")))
+            name for v in versions if (name := _coerce_project_name(v.get("project")))
         }
         names.update(self._configured_projects)
         return {name for name in names if name}
