@@ -163,7 +163,9 @@ def test_shotgrid_service_uses_discovered_projects_without_reinit(
         def list_projects(self) -> Sequence[Mapping[str, Any]]:
             return [{"name": "gamma"}]
 
-        def get_versions_for_project(self, project_name: str) -> Sequence[Mapping[str, Any]]:
+        def get_versions_for_project(
+            self, project_name: str
+        ) -> Sequence[Mapping[str, Any]]:
             self.version_requests.append(project_name)
             if project_name == "alpha":
                 return [
