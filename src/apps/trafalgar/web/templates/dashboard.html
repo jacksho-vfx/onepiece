@@ -167,6 +167,57 @@
       </div>
     </section>
 
+    <section id="review-overview">
+      <h2>Review playlists</h2>
+      <p>
+        Aggregate playlist activity from the
+        <a id="review-api-link" href="#">review API</a> for deeper drill-downs.
+      </p>
+      <div class="grid" id="review-totals">
+        <div class="metric">
+          <h3>Projects</h3>
+          <p class="metric-value" id="review-total-projects">–</p>
+          <p class="metric-detail">Projects with playlists in scope.</p>
+        </div>
+        <div class="metric">
+          <h3>Playlists</h3>
+          <p class="metric-value" id="review-total-playlists">–</p>
+          <p class="metric-detail">Total playlists retrieved from ShotGrid.</p>
+        </div>
+        <div class="metric">
+          <h3>Clips</h3>
+          <p class="metric-value" id="review-total-clips">–</p>
+          <p class="metric-detail">Individual clips across all playlists.</p>
+        </div>
+        <div class="metric">
+          <h3>Shots</h3>
+          <p class="metric-value" id="review-total-shots">–</p>
+          <p class="metric-detail">Unique shots represented in playlists.</p>
+        </div>
+        <div class="metric">
+          <h3>Duration</h3>
+          <p class="metric-value" id="review-total-duration">–</p>
+          <p class="metric-detail" id="review-total-duration-detail">Total runtime of reviewed clips.</p>
+        </div>
+      </div>
+      <p id="review-projects-placeholder" class="placeholder">
+        No review playlist activity has been recorded yet.
+      </p>
+      <table id="review-projects-table" hidden>
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Playlists</th>
+            <th>Clips</th>
+            <th>Shots</th>
+            <th>Duration</th>
+            <th>API</th>
+          </tr>
+        </thead>
+        <tbody id="review-projects-body"></tbody>
+      </table>
+    </section>
+
     <section id="project-summary">
       <h2>Project status totals</h2>
       <p id="project-summary-placeholder" class="placeholder">Select a project via the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to see per-project totals.</p>
@@ -249,6 +300,11 @@
         return `${trimmedBase}${prefixedPath}`;
       }
 
+      const reviewApiLinkElement = document.getElementById('review-api-link');
+      if (reviewApiLinkElement) {
+        reviewApiLinkElement.href = joinPath(basePath, '/review/projects');
+      }
+
       const projectsData = JSON.parse(document.body.dataset.projects || '[]');
       const primaryProject = projectsData.length ? projectsData[0] : null;
 
@@ -309,6 +365,35 @@
           })
           .filter(Boolean);
         return entries.length ? entries.join(' • ') : fallbackText;
+      }
+
+      function formatDurationSeconds(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return 0;
+        }
+        return Math.round(numeric);
+      }
+
+      function formatDuration(value) {
+        const totalSeconds = formatDurationSeconds(value);
+        if (totalSeconds === 0) {
+          return '0s';
+        }
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const parts = [];
+        if (hours) {
+          parts.push(`${hours}h`);
+        }
+        if (minutes) {
+          parts.push(`${minutes}m`);
+        }
+        if (seconds || parts.length === 0) {
+          parts.push(`${seconds}s`);
+        }
+        return parts.join(' ');
       }
 
       function formatLastSuccess(value) {
@@ -422,6 +507,119 @@
           ? failureStreakValue
           : `${streakNumber} run${streakNumber === 1 ? '' : 's'}`;
         document.getElementById('metric-ingest-failure-streak').textContent = failureText;
+
+        renderReviewSummary(data && data.review);
+      }
+
+      function renderReviewSummary(review) {
+        const totals = (review && review.totals) || {};
+        const projectsMetric = document.getElementById('review-total-projects');
+        if (projectsMetric) {
+          projectsMetric.textContent = normaliseCount(totals.projects, '0');
+        }
+        const playlistsMetric = document.getElementById('review-total-playlists');
+        if (playlistsMetric) {
+          playlistsMetric.textContent = normaliseCount(totals.playlists, '0');
+        }
+        const clipsMetric = document.getElementById('review-total-clips');
+        if (clipsMetric) {
+          clipsMetric.textContent = normaliseCount(totals.clips, '0');
+        }
+        const shotsMetric = document.getElementById('review-total-shots');
+        if (shotsMetric) {
+          shotsMetric.textContent = normaliseCount(totals.shots, '0');
+        }
+        const durationMetric = document.getElementById('review-total-duration');
+        const durationDetail = document.getElementById('review-total-duration-detail');
+        if (durationMetric) {
+          durationMetric.textContent = formatDuration(totals.duration_seconds);
+        }
+        if (durationDetail) {
+          const secondsTotal = formatDurationSeconds(totals.duration_seconds);
+          durationDetail.textContent =
+            secondsTotal > 0
+              ? `Approx. ${formatDuration(secondsTotal)} of clips reviewed.`
+              : 'Total runtime of reviewed clips.';
+        }
+
+        const projects = Array.isArray(review && review.projects)
+          ? review.projects
+          : [];
+        const table = document.getElementById('review-projects-table');
+        const body = document.getElementById('review-projects-body');
+        const placeholder = document.getElementById('review-projects-placeholder');
+        if (!table || !body || !placeholder) {
+          return;
+        }
+        body.innerHTML = '';
+        if (!projects.length) {
+          table.hidden = true;
+          placeholder.hidden = false;
+          return;
+        }
+
+        placeholder.hidden = true;
+        table.hidden = false;
+
+        projects
+          .slice()
+          .sort((left, right) => {
+            const leftProject = String(left.project || '').toLocaleLowerCase();
+            const rightProject = String(right.project || '').toLocaleLowerCase();
+            return leftProject.localeCompare(rightProject);
+          })
+          .forEach((entry) => {
+            const row = document.createElement('tr');
+
+            const projectCell = document.createElement('td');
+            const projectName = entry.project ? String(entry.project) : '';
+            if (projectName) {
+              const projectLink = document.createElement('a');
+              projectLink.textContent = projectName;
+              projectLink.href = joinPath(
+                basePath,
+                `/review/projects/${encodeURIComponent(projectName)}/playlists`,
+              );
+              projectLink.rel = 'noopener noreferrer';
+              projectCell.appendChild(projectLink);
+            } else {
+              projectCell.textContent = '—';
+            }
+            row.appendChild(projectCell);
+
+            const playlistsCell = document.createElement('td');
+            playlistsCell.textContent = normaliseCount(entry.playlists, '0');
+            row.appendChild(playlistsCell);
+
+            const clipsCell = document.createElement('td');
+            clipsCell.textContent = normaliseCount(entry.clips, '0');
+            row.appendChild(clipsCell);
+
+            const shotsCell = document.createElement('td');
+            shotsCell.textContent = normaliseCount(entry.shots, '0');
+            row.appendChild(shotsCell);
+
+            const durationCell = document.createElement('td');
+            durationCell.textContent = formatDuration(entry.duration_seconds);
+            row.appendChild(durationCell);
+
+            const apiCell = document.createElement('td');
+            if (projectName) {
+              const apiLink = document.createElement('a');
+              apiLink.textContent = 'Playlists API';
+              apiLink.href = joinPath(
+                basePath,
+                `/review/projects/${encodeURIComponent(projectName)}/playlists`,
+              );
+              apiLink.rel = 'noopener noreferrer';
+              apiCell.appendChild(apiLink);
+            } else {
+              apiCell.textContent = '—';
+            }
+            row.appendChild(apiCell);
+
+            body.appendChild(row);
+          });
       }
 
       function renderProjectSummary(statusTotals) {
