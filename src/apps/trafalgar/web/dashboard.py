@@ -408,7 +408,10 @@ class ShotGridService:
         if projects:
             _store_project_registry(projects)
 
-        return sorted(projects)
+        discovered = sorted(projects)
+        self._configured_projects = set(discovered)
+
+        return discovered
 
     def _filter_versions(self, project_name: str) -> list[Mapping[str, Any]]:
         versions = [
