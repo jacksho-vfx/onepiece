@@ -272,12 +272,21 @@ class ShotGridClient:
         return self.get_version(version_data)
 
     def create_version(self, data: VersionData) -> Any:
-        attributes = {"code": data.code, **data.extra}
+        extra = dict(data.extra)
+        entity_relationship = extra.pop("entity", None)
+
+        attributes: Dict[str, Any] = {"code": data.code, **extra}
+        if attributes.get("code") is None:
+            attributes.pop("code")
+
         relationships: Dict[str, Any] = {}
         if data.project_id:
             relationships["project"] = {
                 "data": {"type": "Project", "id": data.project_id}
             }
+        if entity_relationship:
+            relationships["entity"] = entity_relationship
+
         return self._post(data.entity_type, attributes, relationships or None)
 
     def create_version_with_media(
