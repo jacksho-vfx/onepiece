@@ -97,6 +97,25 @@ The API will immediately accept `studiofarm` submissions and expose the key via
 registry, so bespoke adapters can be surfaced to clients and tests by
 registering them with the shared service instance.
 
+## Listing render jobs
+
+Use `GET /render/jobs` to inspect the in-memory job history maintained by the
+service. The endpoint now supports optional query parameters so dashboards and
+CLI tools can narrow the response without post-processing:
+
+- `limit` – maximum number of jobs to return. The response is truncated after
+  the requested number of entries while preserving the default order.
+- `status` – repeatable parameter that filters the list to jobs matching any of
+  the supplied status values. Filtering happens after the service refreshes job
+  statuses from their adapters so callers always receive the latest state.
+- `farm` – repeatable parameter that restricts results to jobs submitted to the
+  specified farm identifiers. Values match the adapter keys exposed by
+  `/render/farms`.
+
+All filters are optional and can be combined. For example, `GET
+/render/jobs?status=running&farm=mock&limit=5` returns at most five jobs that
+are currently running on the `mock` adapter.
+
 ## Streaming walkthroughs
 
 Need end-to-end examples for monitoring render jobs? The

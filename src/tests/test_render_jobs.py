@@ -250,6 +250,86 @@ async def test_list_jobs_reflects_latest_status(
 
 
 @pytest.mark.anyio("asyncio")
+async def test_list_jobs_supports_limit_and_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles={render.ROLE_RENDER_READ, render.ROLE_RENDER_SUBMIT},
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles={render.ROLE_RENDER_READ, render.ROLE_RENDER_SUBMIT},
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
+    adapter = StubJobAdapter()
+    service = render.RenderSubmissionService({"mock": adapter, "tractor": adapter})
+    render.app.dependency_overrides[render.get_render_service] = lambda: service
+
+    transport = ASGITransport(app=render.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        created_jobs: list[tuple[str, str]] = []
+        for farm in ("mock", "tractor", "mock"):
+            response = await client.post("/jobs", json=_job_payload(farm=farm))
+            assert response.status_code == 201, response.text
+            job_id = response.json()["job_id"]
+            created_jobs.append((farm, job_id))
+
+        adapter.set_status(created_jobs[0][1], "running")
+        adapter.set_status(created_jobs[1][1], "completed")
+        adapter.set_status(created_jobs[2][1], "failed")
+
+        limited = await client.get("/jobs", params={"limit": 2})
+        status_filtered = await client.get("/jobs", params=[("status", "running")])
+        farm_filtered = await client.get("/jobs", params=[("farm", "tractor")])
+        combined = await client.get(
+            "/jobs",
+            params=[("farm", "mock"), ("status", "failed"), ("limit", "1")],
+        )
+
+    limited_payload = limited.json()
+    assert len(limited_payload["jobs"]) == 2
+    assert [job["job_id"] for job in limited_payload["jobs"]] == [
+        created_jobs[0][1],
+        created_jobs[1][1],
+    ]
+
+    status_payload = status_filtered.json()
+    assert [job["job_id"] for job in status_payload["jobs"]] == [created_jobs[0][1]]
+
+    farm_payload = farm_filtered.json()
+    assert [job["job_id"] for job in farm_payload["jobs"]] == [created_jobs[1][1]]
+
+    combined_payload = combined.json()
+    assert [job["job_id"] for job in combined_payload["jobs"]] == [
+        created_jobs[2][1]
+    ]
+
+
+@pytest.mark.anyio("asyncio")
 async def test_get_job_returns_detail_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure GET /jobs/{job_id} returns the correct detailed job info."""
     monkeypatch.setattr(

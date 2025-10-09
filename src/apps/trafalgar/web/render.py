@@ -22,7 +22,7 @@ from typing import (
 )
 
 import structlog
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import Body, Depends, FastAPI, HTTPException, Request, WebSocket, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
@@ -631,12 +631,48 @@ class RenderSubmissionService:
             self._emit_event("job.created", record)
         return result
 
-    def list_jobs(self) -> list[RenderJobMetadata]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        status: Collection[str] | None = None,
+        farm: Collection[str] | None = None,
+    ) -> list[RenderJobMetadata]:
+        """Return the cached job list filtered by farm and status."""
+
+        if limit is not None and limit <= 0:
+            return []
+
+        status_filter: set[str] | None = None
+        if status:
+            normalised = {value.strip().lower() for value in status if value}
+            status_filter = normalised or None
+
+        farm_filter: set[str] | None = None
+        if farm:
+            normalised = {value.strip().lower() for value in farm if value}
+            farm_filter = normalised or None
+
         jobs: list[RenderJobMetadata] = []
         dirty = False
         for record in self._jobs.values():
             dirty = self._refresh_job(record) or dirty
+
+            if status_filter is not None:
+                record_status = (record.status or "").strip().lower()
+                if record_status not in status_filter:
+                    continue
+
+            if farm_filter is not None:
+                record_farm = (record.farm or "").strip().lower()
+                if record_farm not in farm_filter:
+                    continue
+
             jobs.append(record.snapshot())
+
+            if limit is not None and len(jobs) >= limit:
+                break
+
         if dirty:
             self._persist_jobs(force=True)
         return jobs
@@ -1094,8 +1130,21 @@ async def create_job(
 def list_jobs(
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+    limit: int | None = Query(
+        None,
+        gt=0,
+        description="Maximum number of jobs to return.",
+    ),
+    status: list[str] | None = Query(
+        None,
+        description="Filter by one or more job status values.",
+    ),
+    farm: list[str] | None = Query(
+        None,
+        description="Filter by one or more farm identifiers.",
+    ),
 ) -> JobsListResponse:
-    jobs = service.list_jobs()
+    jobs = service.list_jobs(limit=limit, status=status, farm=farm)
     return JobsListResponse(jobs=jobs)
 
 
