@@ -298,6 +298,20 @@ def test_shotgrid_service_manual_invalidation_clears_cache() -> None:
     assert client.calls == 2
 
 
+def test_shotgrid_service_overall_status_handles_mapping_projects() -> None:
+    versions: Sequence[dict[str, Any]] = [
+        {"project": {"name": "alpha"}},
+        {"project": {"name": {"value": "beta"}}},
+        {"project": "alpha"},
+    ]
+
+    service = dashboard.ShotGridService(DummyShotgridClient(versions))
+
+    summary = service.overall_status()
+
+    assert summary["projects"] == 2
+
+
 @pytest.mark.anyio("asyncio")
 async def test_landing_page_uses_discovered_projects(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -327,7 +341,7 @@ async def test_landing_page_uses_discovered_projects(
 
 @pytest.mark.anyio("asyncio")
 async def test_status_endpoint_aggregates_counts() -> None:
-    versions = [
+    versions: Sequence[dict[str, Any]] = [
         {
             "project": "alpha",
             "shot": "EP01_SC001_SH0010",
@@ -341,7 +355,7 @@ async def test_status_endpoint_aggregates_counts() -> None:
             "status": "pub",
         },
         {
-            "project": "beta",
+            "project": {"name": {"value": "beta"}},
             "shot": "EP99_SC100_SH0500",
             "version": "v010",
             "status": "rev",

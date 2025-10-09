@@ -39,7 +39,7 @@ def upload(
             f"Project '{project_name}' not found. Verify the project name and try again."
         )
 
-    project_id = project.get("id")
+    project_id = project["id"]
     if not project_id:
         raise OnePieceValidationError(
             "Project returned from ShotGrid is missing an ID. "
