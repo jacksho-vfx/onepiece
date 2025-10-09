@@ -32,16 +32,19 @@ dependencies = [
 onepiece = "apps.onepiece.__main__:main"
 trafalgar = "apps.trafalgar.__main__:main"
 uta = "apps.uta.__main__:main"
+chopper = "apps.chopper.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
     "apps.onepiece",
     "apps.onepiece.*",
-    "apps.trafalgar", 
-    "apps.trafalgar.*", 
-    "apps.uta", 
-    "apps.uta.*", 
+    "apps.trafalgar",
+    "apps.trafalgar.*",
+    "apps.chopper",
+    "apps.chopper.*",
+    "apps.uta",
+    "apps.uta.*",
     "libraries",
     "libraries.*",
 ]
