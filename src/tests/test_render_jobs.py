@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import asyncio
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.trafalgar.web.job_store import JobStore
+from apps.trafalgar.web.job_store import JobStore, JobStoreStats
 
 import fastapi.security
 import fastapi.security.api_key
@@ -73,6 +74,20 @@ class StubStatusOnlyAdapter(StubJobAdapter):
     cancel_job = None  # type: ignore[assignment]
 
 
+class RecordingJobStore:
+    """In-memory JobStore replacement that records persisted batches."""
+
+    def __init__(self) -> None:
+        self.saved_batches: list[list[str]] = []
+        self.stats = JobStoreStats(retention=None)
+
+    def load(self) -> list[render._JobRecord]:
+        return []
+
+    def save(self, records: Iterable[render._JobRecord]) -> None:
+        self.saved_batches.append([record.job_id for record in records])
+
+
 @pytest.fixture(autouse=True)
 def clear_overrides() -> Iterator[None]:
     render.app.dependency_overrides.clear()
@@ -95,6 +110,84 @@ def _job_payload(farm: str = "mock") -> dict[str, Any]:
         "priority": 75,
         "user": "tester",
     }
+
+
+@pytest.mark.anyio("asyncio")
+async def test_background_poller_refreshes_jobs_without_requests() -> None:
+    adapter = StubJobAdapter()
+    store = RecordingJobStore()
+    service = render.RenderSubmissionService(
+        {"mock": adapter},
+        job_store=store,
+        status_poll_interval=0.01,
+        store_persist_interval=0.2,
+    )
+    request = render.RenderJobRequest(
+        dcc="maya",
+        scene="/projects/demo/scene.ma",
+        frames="1-10",
+        output="/tmp/output",
+        farm="mock",
+        priority=50,
+        user="tester",
+    )
+    result = service.submit_job(request)
+    job_id = result["job_id"]
+
+    service.start_background_polling()
+    try:
+        adapter.set_status(job_id, "running", "frame 5 of 10")
+
+        for _ in range(50):
+            record = service._jobs[job_id]
+            if record.status == "running" and record.message == "frame 5 of 10":
+                break
+            await asyncio.sleep(0.02)
+        else:
+            pytest.fail("Background poller did not refresh job status")
+    finally:
+        await service.stop_background_polling()
+
+
+@pytest.mark.anyio("asyncio")
+async def test_background_poller_throttles_persist_operations() -> None:
+    adapter = StubJobAdapter()
+    store = RecordingJobStore()
+    service = render.RenderSubmissionService(
+        {"mock": adapter},
+        job_store=store,
+        status_poll_interval=0.01,
+        store_persist_interval=0.3,
+    )
+    request = render.RenderJobRequest(
+        dcc="maya",
+        scene="/projects/demo/scene.ma",
+        frames="1-10",
+        output="/tmp/output",
+        farm="mock",
+        priority=50,
+        user="tester",
+    )
+    result = service.submit_job(request)
+    job_id = result["job_id"]
+
+    assert len(store.saved_batches) == 1
+
+    service.start_background_polling()
+    try:
+        adapter.set_status(job_id, "running")
+
+        await asyncio.sleep(0.05)
+        assert len(store.saved_batches) == 1
+
+        for _ in range(40):
+            if len(store.saved_batches) > 1:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail("Persisted records were not flushed after throttle interval")
+    finally:
+        await service.stop_background_polling()
 
 
 @pytest.mark.anyio("asyncio")
