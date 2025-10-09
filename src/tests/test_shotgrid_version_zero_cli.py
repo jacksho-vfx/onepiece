@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -84,7 +85,9 @@ def test_version_zero_sets_version_entity_relationship(
         def get_task(self, entity_id: int, task_name: object) -> dict[str, object]:
             return {"id": 123}
 
-        def create_task(self, *, data: object, step: object) -> None:  # noqa: D401 - stub
+        def create_task(
+            self, *, data: object, step: object
+        ) -> None:  # noqa: D401 - stub
             return None
 
         def create_version_with_media(
@@ -104,7 +107,7 @@ def test_version_zero_sets_version_entity_relationship(
     stub_client = _StubShotGridClient()
 
     @contextmanager
-    def _progress_factory(*args: object, **kwargs: object):
+    def _progress_factory(*args: object, **kwargs: object) -> Any:
         yield _ProgressStub()
 
     class _StubClientFactory:
@@ -118,9 +121,7 @@ def test_version_zero_sets_version_entity_relationship(
     def _create_proxy(_: Path, proxy_path: Path, *, fps: int) -> None:
         proxy_path.write_bytes(b"mov")
 
-    monkeypatch.setattr(
-        version_zero, "create_1080p_proxy_from_exrs", _create_proxy
-    )
+    monkeypatch.setattr(version_zero, "create_1080p_proxy_from_exrs", _create_proxy)
     monkeypatch.setattr(version_zero, "progress_tracker", _progress_factory)
 
     result = runner.invoke(
