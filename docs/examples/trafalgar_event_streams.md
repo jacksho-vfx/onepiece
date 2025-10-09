@@ -17,7 +17,9 @@ inspect job progress locally or forward the events into automation.
 
 ## Render job SSE (`GET /render/jobs/stream`)
 
-The SSE stream emits JSON payloads describing each render job transition.
+The SSE stream emits JSON payloads describing each render job transition. Every
+connection begins with a `jobs.snapshot` event containing the full in-memory job
+list before incremental updates such as `job.created` or `job.updated` arrive.
 
 ### Using `curl`
 
@@ -27,10 +29,14 @@ curl -N \
   http://localhost:8000/render/jobs/stream
 ```
 
-The `-N` flag disables buffering so events appear as soon as they arrive. Each
-message is delivered as a `data:` line:
+The `-N` flag disables buffering so events appear as soon as they arrive. The
+first message includes an explicit event name:
 
 ```
+event: jobs.snapshot
+data: {"event": "jobs.snapshot", "jobs": []}
+
+event: job.updated
 data: {"event": "job.updated", "job": {"job_id": "mock-42", "status": "running"}}
 ```
 
@@ -48,11 +54,15 @@ async def consume_render_events():
     async with httpx.AsyncClient(base_url="http://localhost:8000", headers=headers) as client:
         async with client.stream("GET", "/render/jobs/stream", timeout=None) as response:
             response.raise_for_status()
+            current_event = None
             async for line in response.aiter_lines():
+                if line.startswith("event: "):
+                    current_event = line[7:].strip()
+                    continue
                 if line.startswith("data: "):
                     payload = line[6:].strip()
                     if payload:
-                        print(payload)
+                        print(current_event, payload)
 
 
 asyncio.run(consume_render_events())
@@ -87,6 +97,10 @@ async def consume_render_ws():
     async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as ws:
         async for message in ws:
             event = json.loads(message)
+            if event.get("type") == "connected":
+                snapshot = event.get("snapshot", {})
+                print("snapshot", snapshot)
+                continue
             print(event)
 
 
