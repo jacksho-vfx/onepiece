@@ -936,6 +936,16 @@ class DeliveryService:
                 return value
         return None
 
+    def _delivery_cache_keys(self, delivery: Mapping[str, Any]) -> list[Hashable]:
+        keys: list[Hashable] = []
+        cache_key = self._manifest_cache_key(delivery)
+        if cache_key is not None:
+            keys.append(cache_key)
+        manifest_path = delivery.get("manifest")
+        if isinstance(manifest_path, str) and manifest_path:
+            keys.append(manifest_path)
+        return keys
+
     @staticmethod
     def _clone_manifest_data(manifest: Mapping[str, Any]) -> dict[str, Any]:
         files = manifest.get("files", [])
@@ -992,28 +1002,36 @@ class DeliveryService:
             if manifest_data is None:
                 manifest_data = self._normalise_manifest_payload(delivery.get("items"))
 
-            cache_key = self._manifest_cache_key(delivery)
-            if manifest_data is None and cache_key is not None:
-                manifest_data = self._lookup_manifest(cache_key)
+            cache_keys = self._delivery_cache_keys(delivery)
+            cached_from: Hashable | None = None
+            if manifest_data is None:
+                for key in cache_keys:
+                    cached_manifest = self._lookup_manifest(key)
+                    if cached_manifest is not None:
+                        manifest_data = cached_manifest
+                        cached_from = key
+                        break
 
             if manifest_data is None:
                 if entries:
                     manifest_data = get_manifest_data(entries)
                 else:
                     manifest_data = {"files": []}
-                if cache_key is not None:
-                    self._store_manifest(cache_key, manifest_data)
-            else:
-                if cache_key is not None:
-                    self._store_manifest(cache_key, manifest_data)
+
+            for key in cache_keys:
+                if cached_from is not None and key == cached_from:
+                    continue
+                self._store_manifest(key, manifest_data)
 
             files = manifest_data.get("files", [])
+            cache_key = self._manifest_cache_key(delivery)
             result.append(
                 {
                     "project": project_name,
                     "name": delivery.get("name"),
                     "archive": delivery.get("archive"),
                     "manifest": delivery.get("manifest"),
+                    "delivery_id": str(cache_key) if cache_key is not None else None,
                     "created_at": _parse_datetime(
                         delivery.get("created_at") or delivery.get("timestamp")
                     ),
@@ -1022,6 +1040,42 @@ class DeliveryService:
                 }
             )
         return result
+
+    def get_delivery_manifest(
+        self, project_name: str, identifier: str
+    ) -> dict[str, Any]:
+        lookup = identifier.strip()
+        if not lookup:
+            raise KeyError("Empty delivery identifier")
+
+        deliveries = self._provider.list_deliveries(project_name)
+        for delivery in deliveries:
+            cache_keys = self._delivery_cache_keys(delivery)
+            if not any(str(key) == lookup for key in cache_keys):
+                continue
+
+            for key in cache_keys:
+                cached_manifest = self._lookup_manifest(key)
+                if cached_manifest is not None:
+                    return cached_manifest
+
+            entries = delivery.get("entries") or []
+            manifest_data = self._normalise_manifest_payload(
+                delivery.get("manifest_data")
+            )
+            if manifest_data is None:
+                manifest_data = self._normalise_manifest_payload(delivery.get("items"))
+            if manifest_data is None:
+                if entries:
+                    manifest_data = get_manifest_data(entries)
+                else:
+                    manifest_data = {"files": []}
+
+            for key in cache_keys:
+                self._store_manifest(key, manifest_data)
+            return manifest_data
+
+        raise KeyError(f"Delivery not found: {identifier}")
 
 
 # ---------------------------------------------------------------------------
@@ -1435,6 +1489,43 @@ async def error_summary(
 async def deliveries(
     project_name: str,
     delivery_service: DeliveryService = Depends(get_delivery_service),
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
 ) -> JSONResponse:
+    include_manifest_api = False
+    try:
+        require_dashboard_auth(credentials)
+    except HTTPException as exc:
+        if exc.status_code not in (401, 503):
+            raise
+    else:
+        include_manifest_api = True
+
     payload = delivery_service.list_deliveries(project_name)
+    if include_manifest_api:
+        project_fragment = quote(project_name, safe="")
+        for entry in payload:
+            identifier = entry.get("delivery_id") or entry.get("manifest")
+            if not identifier:
+                continue
+            entry["manifest_api"] = (
+                f"/deliveries/{project_fragment}/{quote(str(identifier), safe='')}"
+            )
     return JSONResponse(content=payload)
+
+
+@app.get(
+    "/deliveries/{project_name}/{delivery_identifier:path}",
+    dependencies=[Depends(require_dashboard_auth)],
+)
+async def delivery_manifest(
+    project_name: str,
+    delivery_identifier: str,
+    delivery_service: DeliveryService = Depends(get_delivery_service),
+) -> JSONResponse:
+    try:
+        manifest = delivery_service.get_delivery_manifest(
+            project_name, delivery_identifier
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Delivery not found") from exc
+    return JSONResponse(content=manifest)

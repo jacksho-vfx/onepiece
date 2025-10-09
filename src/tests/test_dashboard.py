@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence, Protocol, Mapping, Generator, Iterable, Callable
+from urllib.parse import quote
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -919,6 +920,124 @@ async def test_deliveries_endpoint_handles_missing_entries() -> None:
     assert data[0]["file_count"] == 0
 
 
+@pytest.mark.anyio("asyncio")
+async def test_deliveries_endpoint_includes_manifest_api_when_authorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "secret-token")
+
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-3",
+            "manifest": "/tmp/alpha_manifest.json",
+            "entries": [],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+    dashboard.app.dependency_overrides[dashboard.get_delivery_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/deliveries/alpha",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["delivery_id"] == "delivery-3"
+    assert data[0]["manifest_api"].endswith("/deliveries/alpha/delivery-3")
+
+
+@pytest.mark.anyio("asyncio")
+async def test_delivery_manifest_endpoint_requires_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "secret-token")
+
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-4",
+            "manifest": "/tmp/alpha.json",
+            "entries": [],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+    dashboard.app.dependency_overrides[dashboard.get_delivery_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/deliveries/alpha/delivery-4")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio("asyncio")
+async def test_delivery_manifest_endpoint_returns_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "secret-token")
+
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-5",
+            "manifest": "/tmp/alpha.json",
+            "entries": [
+                {
+                    "show": "Alpha",
+                    "episode": "EP01",
+                    "scene": "SC001",
+                    "shot": "SH0010",
+                    "asset": "comp",
+                    "version": 1,
+                    "source_path": "/tmp/source.mov",
+                    "delivery_path": "media/clip.mov",
+                    "checksum": "abc",
+                }
+            ],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+    dashboard.app.dependency_overrides[dashboard.get_delivery_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    encoded_identifier = quote("/tmp/alpha.json", safe="")
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            f"/deliveries/alpha/{encoded_identifier}",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["files"][0]["delivery_path"] == "media/clip.mov"
+
+
+@pytest.mark.anyio("asyncio")
+async def test_delivery_manifest_endpoint_returns_404_for_missing_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "secret-token")
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider([]))
+    dashboard.app.dependency_overrides[dashboard.get_delivery_service] = lambda: service
+
+    transport = ASGITransport(app=dashboard.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/deliveries/alpha/missing",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+
+    assert response.status_code == 404
+
+
 def test_delivery_service_prefers_provider_manifest_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -962,6 +1081,7 @@ def test_delivery_service_prefers_provider_manifest_data(
                     "version": 1,
                     "source_path": "/tmp/source.mov",
                     "delivery_path": "media/clip.mov",
+                    "checksum": "abc",
                 }
             ],
         }
@@ -1017,6 +1137,7 @@ def test_delivery_service_caches_recomputed_manifest(
                     "version": 1,
                     "source_path": "/tmp/source.mov",
                     "delivery_path": "media/clip.mov",
+                    "checksum": "abc",
                 }
             ],
         }
@@ -1030,6 +1151,48 @@ def test_delivery_service_caches_recomputed_manifest(
     assert len(calls) == 1
     assert first == second
     assert first[0]["file_count"] == 1
+
+
+def test_delivery_service_get_manifest_supports_multiple_identifiers() -> None:
+    deliveries = [
+        {
+            "project": "alpha",
+            "id": "delivery-2",
+            "manifest": "/tmp/alpha.json",
+            "entries": [
+                {
+                    "show": "Alpha",
+                    "episode": "EP01",
+                    "scene": "SC001",
+                    "shot": "SH0010",
+                    "asset": "comp",
+                    "version": 1,
+                    "source_path": "/tmp/source.mov",
+                    "delivery_path": "media/clip.mov",
+                    "checksum": "abc",
+                }
+            ],
+        }
+    ]
+
+    service = dashboard.DeliveryService(DummyDeliveryProvider(deliveries))
+
+    manifest = service.get_delivery_manifest("alpha", "/tmp/alpha.json")
+    assert manifest["files"][0]["delivery_path"] == "media/clip.mov"
+
+    manifest["files"].append({"delivery_path": "mutated.mov"})
+    manifest["files"][0]["delivery_path"] = "tampered.mov"
+
+    cached = service.get_delivery_manifest("alpha", "delivery-2")
+    assert cached["files"][0]["delivery_path"] == "media/clip.mov"
+    assert cached["files"][0] is not manifest["files"][0]
+
+
+def test_delivery_service_get_manifest_raises_for_unknown_delivery() -> None:
+    service = dashboard.DeliveryService(DummyDeliveryProvider([]))
+
+    with pytest.raises(KeyError):
+        service.get_delivery_manifest("alpha", "missing")
 
 
 def test_delivery_service_reuses_cached_manifest_and_returns_deep_copy(
