@@ -202,6 +202,34 @@ def test_shotgrid_service_uses_discovered_projects_without_reinit(
     assert "gamma" in client.version_requests
 
 
+def test_shotgrid_service_injects_project_name_for_fetched_versions() -> None:
+    class ProjectFetchingClient:
+        def __init__(self) -> None:
+            self.requests: list[str] = []
+
+        def get_versions_for_project(
+            self, project_name: str
+        ) -> Sequence[Mapping[str, Any]]:
+            self.requests.append(project_name)
+            if project_name == "alpha":
+                return [
+                    {
+                        "shot": "EP01_SC001_SH0010",
+                        "version": "v001",
+                        "status": "Published",
+                    }
+                ]
+            return []
+
+    client = ProjectFetchingClient()
+    service = dashboard.ShotGridService(client, known_projects={"alpha"})
+
+    summary = service.project_summary("alpha")
+
+    assert summary["versions"] == 1
+    assert client.requests == ["alpha"]
+
+
 @pytest.fixture(autouse=True)
 def _clear_overrides() -> Generator[None, None, None]:
     dashboard.app.dependency_overrides.clear()
