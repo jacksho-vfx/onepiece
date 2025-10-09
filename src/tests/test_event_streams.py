@@ -129,9 +129,7 @@ async def test_render_job_stream_emits_created_events(
 
     assert snapshot_chunk.startswith(b"event: jobs.snapshot")
     snapshot_lines = [line for line in snapshot_chunk.split(b"\n") if line]
-    snapshot_data = next(
-        line for line in snapshot_lines if line.startswith(b"data: ")
-    )
+    snapshot_data = next(line for line in snapshot_lines if line.startswith(b"data: "))
     snapshot_payload = json.loads(snapshot_data.split(b": ", 1)[1].strip())
     assert snapshot_payload["event"] == "jobs.snapshot"
     assert snapshot_payload["jobs"] == []

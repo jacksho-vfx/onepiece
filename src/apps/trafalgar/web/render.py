@@ -1126,7 +1126,9 @@ async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
                 continue
             payload = json.dumps(event).encode("utf-8")
             event_name = event.get("event") if isinstance(event, Mapping) else None
-            chunk = _format_sse_chunk(event_name if isinstance(event_name, str) else None, payload)
+            chunk = _format_sse_chunk(
+                event_name if isinstance(event_name, str) else None, payload
+            )
             yield chunk
     finally:
         await JOB_EVENTS.unsubscribe(queue)
