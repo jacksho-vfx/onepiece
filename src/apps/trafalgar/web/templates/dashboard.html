@@ -143,6 +143,21 @@
         <div class="metric"><h3>Versions</h3><p class="metric-value" id="metric-versions">–</p></div>
         <div class="metric"><h3>Open errors</h3><p class="metric-value" id="metric-errors">–</p></div>
         <div class="metric">
+          <h3>Render jobs</h3>
+          <p class="metric-value" id="metric-render-jobs">–</p>
+          <p class="metric-detail" id="metric-render-jobs-detail">Tracking submissions across all farms.</p>
+        </div>
+        <div class="metric">
+          <h3>Jobs by status</h3>
+          <p class="metric-value" id="metric-render-status-total">–</p>
+          <p class="metric-detail" id="metric-render-status-breakdown">No render status data yet.</p>
+        </div>
+        <div class="metric">
+          <h3>Jobs by farm</h3>
+          <p class="metric-value" id="metric-render-farm-total">–</p>
+          <p class="metric-detail" id="metric-render-farm-breakdown">No render farm data yet.</p>
+        </div>
+        <div class="metric">
           <h3>Ingest runs (last 10)</h3>
           <p class="metric-value" id="metric-ingest-total">–</p>
           <p class="metric-detail" id="metric-ingest-breakdown">Successful: – • Failed: – • Running: –</p>
@@ -264,6 +279,38 @@
         return fallback;
       }
 
+      function sumNumericValues(mapLike) {
+        if (!mapLike || typeof mapLike !== 'object') {
+          return null;
+        }
+        let total = 0;
+        let hasNumeric = false;
+        Object.values(mapLike).forEach((value) => {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric)) {
+            total += numeric;
+            hasNumeric = true;
+          }
+        });
+        return hasNumeric ? total : null;
+      }
+
+      function formatBreakdown(mapLike, fallbackText) {
+        if (!mapLike || typeof mapLike !== 'object') {
+          return fallbackText;
+        }
+        const entries = Object.keys(mapLike)
+          .filter((key) => Object.prototype.hasOwnProperty.call(mapLike, key))
+          .sort((left, right) => left.localeCompare(right))
+          .map((key) => {
+            const label = key || 'unknown';
+            const value = normaliseCount(mapLike[key], '0');
+            return `${label}: ${value}`;
+          })
+          .filter(Boolean);
+        return entries.length ? entries.join(' • ') : fallbackText;
+      }
+
       function formatLastSuccess(value) {
         if (!value) {
           return 'No successful runs yet';
@@ -287,6 +334,72 @@
         document.getElementById('metric-shots').textContent = data.shots ?? '0';
         document.getElementById('metric-versions').textContent = data.versions ?? '0';
         document.getElementById('metric-errors').textContent = data.errors ?? '0';
+
+        const renderSummary = (data && data.render) || {};
+        const renderJobs = normaliseCount(renderSummary.jobs, '0');
+        const renderJobsElement = document.getElementById('metric-render-jobs');
+        if (renderJobsElement) {
+          renderJobsElement.textContent = renderJobs;
+        }
+        const renderJobsDetailElement = document.getElementById(
+          'metric-render-jobs-detail',
+        );
+        if (renderJobsDetailElement) {
+          renderJobsDetailElement.textContent =
+            renderJobs !== '0'
+              ? `${renderJobs} job${renderJobs === '1' ? '' : 's'} tracked across all farms.`
+              : 'No render jobs tracked yet.';
+        }
+
+        const renderStatusMap =
+          renderSummary && typeof renderSummary.by_status === 'object'
+            ? renderSummary.by_status
+            : {};
+        const renderStatusTotalValue = sumNumericValues(renderStatusMap);
+        const renderStatusTotal =
+          renderStatusTotalValue === null
+            ? '–'
+            : normaliseCount(renderStatusTotalValue, '–');
+        const renderStatusTotalElement = document.getElementById(
+          'metric-render-status-total',
+        );
+        if (renderStatusTotalElement) {
+          renderStatusTotalElement.textContent = renderStatusTotal;
+        }
+        const renderStatusBreakdownElement = document.getElementById(
+          'metric-render-status-breakdown',
+        );
+        if (renderStatusBreakdownElement) {
+          renderStatusBreakdownElement.textContent = formatBreakdown(
+            renderStatusMap,
+            'No render status data yet.',
+          );
+        }
+
+        const renderFarmMap =
+          renderSummary && typeof renderSummary.by_farm === 'object'
+            ? renderSummary.by_farm
+            : {};
+        const renderFarmTotalValue = sumNumericValues(renderFarmMap);
+        const renderFarmTotal =
+          renderFarmTotalValue === null
+            ? '–'
+            : normaliseCount(renderFarmTotalValue, '–');
+        const renderFarmTotalElement = document.getElementById(
+          'metric-render-farm-total',
+        );
+        if (renderFarmTotalElement) {
+          renderFarmTotalElement.textContent = renderFarmTotal;
+        }
+        const renderFarmBreakdownElement = document.getElementById(
+          'metric-render-farm-breakdown',
+        );
+        if (renderFarmBreakdownElement) {
+          renderFarmBreakdownElement.textContent = formatBreakdown(
+            renderFarmMap,
+            'No render farm data yet.',
+          );
+        }
 
         const ingest = (data && data.ingest) || {};
         const counts = ingest.counts || {};
