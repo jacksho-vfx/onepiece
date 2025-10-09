@@ -12,11 +12,14 @@ from apps.onepiece.utils.errors import OnePieceValidationError
 class StubShotGridClient:
     """Stub ShotGrid client used to capture upload interactions."""
 
-    def __init__(self, project: dict[str, object], shot: dict[str, object] | None = None) -> None:
+    def __init__(
+        self, project: dict[str, object], shot: dict[str, object] | None = None
+    ) -> None:
         self._project = project
         self._shot = shot or {"id": 101, "code": "shot"}
         self.version_payload: dict[str, object] | None = None
         self.get_shot_args: tuple[object, object] | None = None
+        self.media_path: Path | None = None
 
     def get_project(self, project_name: str) -> dict[str, object]:
         return self._project
@@ -29,6 +32,13 @@ class StubShotGridClient:
         self.version_payload = {"data": version_data}
         return {"id": 999}
 
+    def create_version_with_media(
+        self, version_data: object, media_path: Path
+    ) -> dict[str, object]:
+        self.version_payload = {"data": version_data}
+        self.media_path = media_path
+        return {"id": 999}
+
 
 def _make_media_file(tmp_path: Path) -> Path:
     file_path = tmp_path / "clip.mov"
@@ -36,18 +46,24 @@ def _make_media_file(tmp_path: Path) -> Path:
     return file_path
 
 
-def test_upload_uses_project_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_upload_uses_project_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     module = __import__("apps.onepiece.shotgrid.upload_version", fromlist=["upload"])
 
     stub = StubShotGridClient({"id": 55, "name": "Test"})
     monkeypatch.setattr(module, "ShotGridClient", lambda: stub)
 
-    module.upload(project_name="Demo", shot_name="Shot010", file_path=_make_media_file(tmp_path))
+    module.upload(
+        project_name="Demo", shot_name="Shot010", file_path=_make_media_file(tmp_path)
+    )
 
     assert stub.get_shot_args == (55, "Shot010")
 
 
-def test_upload_missing_project_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_upload_missing_project_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     module = __import__("apps.onepiece.shotgrid.upload_version", fromlist=["upload"])
 
     stub = StubShotGridClient({"name": "Test"})
