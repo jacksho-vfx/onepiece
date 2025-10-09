@@ -8,7 +8,7 @@ from typing import Any
 
 import typer
 
-from .renderer import Renderer, Scene
+from .renderer import Renderer, Scene, SceneError
 
 app = typer.Typer(help="Render self-contained scene descriptions using Chopper.")
 
@@ -26,7 +26,12 @@ def _load_scene(path: Path) -> Scene:
     except json.JSONDecodeError as exc:  # pragma: no cover - defensive
         raise typer.BadParameter(f"Scene file '{path}' is not valid JSON") from exc
 
-    return Scene.from_dict(payload)
+    try:
+        return Scene.from_dict(payload)
+    except SceneError as exc:
+        raise typer.BadParameter(
+            f"Scene file '{path}' is invalid: {exc}"
+        ) from exc
 
 
 @app.command()
