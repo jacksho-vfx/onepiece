@@ -4,12 +4,13 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 from apps.trafalgar.web import ingest, render
-from apps.trafalgar.web.events import EventBroadcaster
+from apps.trafalgar.web.events import EventBroadcaster, clear_keepalive_caches
 from libraries.ingest.registry import IngestRunRecord
 from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
 from tests.security_patches import patch_security
@@ -99,9 +100,44 @@ def _ingest_record(run_id: str = "run-001") -> IngestRunRecord:
 def clear_overrides() -> Iterator[None]:
     render.app.dependency_overrides.clear()
     ingest.app.dependency_overrides.clear()
+    clear_keepalive_caches()
     yield
     render.app.dependency_overrides.clear()
     ingest.app.dependency_overrides.clear()
+    clear_keepalive_caches()
+
+
+def _request_with_app_state(**state: Any) -> Any:
+    app = SimpleNamespace(state=SimpleNamespace(**state))
+    return SimpleNamespace(app=app)
+
+
+def test_render_keepalive_interval_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(render.RENDER_SSE_KEEPALIVE_INTERVAL_ENV, "12.5")
+    clear_keepalive_caches()
+    request = SimpleNamespace()
+    assert render._resolve_render_keepalive_interval(request) == 12.5
+
+
+def test_render_keepalive_interval_state_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(render.RENDER_SSE_KEEPALIVE_INTERVAL_ENV, raising=False)
+    clear_keepalive_caches()
+    request = _request_with_app_state(render_sse_keepalive_interval="7.5")
+    assert render._resolve_render_keepalive_interval(request) == 7.5
+
+
+def test_ingest_keepalive_interval_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ingest.INGEST_SSE_KEEPALIVE_INTERVAL_ENV, "9.75")
+    clear_keepalive_caches()
+    request = SimpleNamespace()
+    assert ingest._resolve_ingest_keepalive_interval(request) == 9.75
+
+
+def test_ingest_keepalive_interval_state_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(ingest.INGEST_SSE_KEEPALIVE_INTERVAL_ENV, raising=False)
+    clear_keepalive_caches()
+    request = _request_with_app_state(ingest_sse_keepalive_interval=4)
+    assert ingest._resolve_ingest_keepalive_interval(request) == 4.0
 
 
 @pytest.fixture
