@@ -39,9 +39,7 @@ def render(
         Path("frames"),
         "--output",
         "-o",
-        help=(
-            "Directory for per-frame exports or file path for bundled animations."
-        ),
+        help=("Directory for per-frame exports or file path for bundled animations."),
     ),
     export: str = typer.Option(
         "ppm",
@@ -53,7 +51,9 @@ def render(
             " or 'gif'/'mp4' for bundled animations."
         ),
     ),
-    fps: int = typer.Option(24, help="Frames per second used when encoding animations."),
+    fps: int = typer.Option(
+        24, help="Frames per second used when encoding animations."
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 

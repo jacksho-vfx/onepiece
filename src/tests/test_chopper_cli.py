@@ -61,7 +61,9 @@ def test_render_png_frames(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     contents = list(output_dir.glob("*.png"))
-    assert len(contents) == Scene.from_dict(json.loads(scene_path.read_text())).frame_count
+    assert (
+        len(contents) == Scene.from_dict(json.loads(scene_path.read_text())).frame_count
+    )
 
 
 def test_render_gif_animation(tmp_path: Path) -> None:

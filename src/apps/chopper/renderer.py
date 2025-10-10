@@ -5,32 +5,18 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
-
-try:  # pragma: no cover - imported lazily in helpers
-    from PIL import Image as PILImage
-except ImportError:  # pragma: no cover - optional dependency
-    PILImage = None  # type: ignore[assignment]
+from typing import Any
+from PIL import Image as PILImage
 
 try:  # pragma: no cover - imported lazily in helpers
     import imageio.v3 as iio
 except ImportError:  # pragma: no cover - optional dependency
     iio = None  # type: ignore[assignment]
 
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from PIL import Image as _PillowModule
-    from PIL.Image import Image as _PillowImage
-
-Color = tuple[int, int, int] | tuple[int, int, int, int]
+Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
 
-def _require_pillow() -> "_PillowModule":
-    """Return the :mod:`Pillow` image class or raise a helpful error."""
-
-    if PILImage is None:  # pragma: no cover - exercised in integration tests
-        raise RuntimeError(
-            "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
-        )
+def _require_pillow() -> Any:
     return PILImage
 
 
@@ -325,7 +311,7 @@ class Frame:
                 values = " ".join("{} {} {}".format(*pixel[:3]) for pixel in row)
                 stream.write(values + "\n")
 
-    def to_image(self, *, mode: str | None = None) -> "_PillowImage":
+    def to_image(self, *, mode: str | None = None) -> PILImage.Image:
         """Return the frame as a Pillow :class:`~PIL.Image.Image` instance."""
 
         pillow = _require_pillow()
@@ -347,11 +333,13 @@ class Frame:
                 else:
                     pixels.append((r, g, b, a))
 
-        image = pillow.new(resolved_mode, (self.width, self.height))
+        image: PILImage.Image = pillow.new(resolved_mode, (self.width, self.height))
         image.putdata(pixels)
         return image
 
-    def save_png(self, destination: Path, *, mode: str | None = None, **options: Any) -> None:
+    def save_png(
+        self, destination: Path, *, mode: str | None = None, **options: Any
+    ) -> None:
         """Write the frame to ``destination`` as a PNG file."""
 
         image = self.to_image(mode=mode)
@@ -393,7 +381,12 @@ class AnimationWriter:
         return list(self.frames)
 
     def write_gif(
-        self, destination: Path, *, loop: int = 0, optimize: bool = True, duration_ms: int | None = None
+        self,
+        destination: Path,
+        *,
+        loop: int = 0,
+        optimize: bool = True,
+        duration_ms: int | None = None,
     ) -> None:
         """Write the frames to ``destination`` as an animated GIF."""
 
@@ -401,7 +394,11 @@ class AnimationWriter:
         images = [frame.to_image(mode="RGBA") for frame in frames]
         first = images[0]
         rest = images[1:]
-        duration = duration_ms if duration_ms is not None else max(int(round(1000 / self.fps)), 1)
+        duration = (
+            duration_ms
+            if duration_ms is not None
+            else max(int(round(1000 / self.fps)), 1)
+        )
         first.save(
             destination,
             format="GIF",
@@ -424,12 +421,18 @@ class AnimationWriter:
         """Encode the frames into an MP4 container using :mod:`imageio`."""
 
         module = _require_imageio()
-        kwargs: dict[str, Any] = {"fps": self.fps, "codec": codec, "pixelformat": pixelformat}
+        kwargs: dict[str, Any] = {
+            "fps": self.fps,
+            "codec": codec,
+            "pixelformat": pixelformat,
+        }
         if bitrate is not None:
             kwargs["bitrate"] = bitrate
 
         frames = self._ensure_frames()
-        with module.get_writer(destination, format="ffmpeg", mode="I", **kwargs) as stream:
+        with module.get_writer(
+            destination, format="ffmpeg", mode="I", **kwargs
+        ) as stream:
             for frame in frames:
                 stream.append_data(frame.to_image(mode="RGB"))
 
@@ -471,7 +474,7 @@ def parse_color(value: object) -> Color:
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
         if len(components) == 4:
-            return cast(tuple[int, int, int, int], components)
+            return components
         r, g, b = components
         return r, g, b
 

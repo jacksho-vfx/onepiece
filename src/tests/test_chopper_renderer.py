@@ -128,7 +128,9 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
     pytest.importorskip("imageio")
 
     frames = [
-        Frame(index=idx, width=1, height=1, pixels=[[(idx * 20, 0, 255 - idx * 20, 255)]])
+        Frame(
+            index=idx, width=1, height=1, pixels=[[(idx * 20, 0, 255 - idx * 20, 255)]]
+        )
         for idx in range(3)
     ]
 
