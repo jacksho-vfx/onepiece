@@ -5,6 +5,7 @@ from pathlib import Path
 
 from importlib import import_module
 
+from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
 open_shot_module = import_module("apps.onepiece.dcc.open_shot")
@@ -14,7 +15,9 @@ class DummyDCC(Enum):
     MAYA = "maya"
 
 
-def test_open_shot_invokes_dcc_open_scene(monkeypatch, tmp_path: Path) -> None:
+def test_open_shot_invokes_dcc_open_scene(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     """The CLI should resolve the DCC and invoke :func:`open_scene`."""
 
     shot_path = tmp_path / "example.ma"
@@ -48,4 +51,3 @@ def test_open_shot_invokes_dcc_open_scene(monkeypatch, tmp_path: Path) -> None:
     assert received["dcc"] is DummyDCC.MAYA
     assert received["path"] == shot_path
     assert isinstance(received["path"], Path)
-
