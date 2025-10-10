@@ -96,7 +96,9 @@ def dashboard(
     """Launch the OnePiece web dashboard using uvicorn."""
 
     if demo_port is not None and demo_port == port:
-        raise typer.BadParameter("Demo port must differ from the primary dashboard port.")
+        raise typer.BadParameter(
+            "Demo port must differ from the primary dashboard port."
+        )
 
     demo_process: Process | None = None
     if demo_port is not None:

@@ -254,7 +254,9 @@ class DemoReconcileService:
                 group["shots"].add(str(shot))
 
         summary: list[dict[str, Any]] = []
-        for (_, _), payload in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1])):
+        for (_, _), payload in sorted(
+            grouped.items(), key=lambda item: (item[0][0], item[0][1])
+        ):
             summary.append(
                 {
                     "type": payload["type"],
@@ -322,7 +324,12 @@ class DemoReviewFacade:
 
     def summarise_projects(self, project_names: Iterable[str]) -> dict[str, Any]:
         projects = []
-        totals = Counter({"playlists": 0, "clips": 0, "shots": 0, "duration_seconds": 0.0})
+        totals: dict[str, float] = {
+            "playlists": 0.0,
+            "clips": 0.0,
+            "shots": 0.0,
+            "duration_seconds": 0.0,
+        }
         seen: set[str] = set()
         for name in project_names:
             data = self._SUMMARY.get(name)
@@ -450,7 +457,9 @@ class DemoDeliveryService:
             payload.append(record)
         return payload
 
-    def get_delivery_manifest(self, project_name: str, identifier: str) -> dict[str, Any]:
+    def get_delivery_manifest(
+        self, project_name: str, identifier: str
+    ) -> dict[str, Any]:
         deliveries = self._DELIVERIES.get(project_name)
         if not deliveries:
             raise KeyError(identifier)
@@ -496,4 +505,3 @@ def _apply_demo_overrides(app: FastAPI) -> FastAPI:
 
 
 app: FastAPI = _apply_demo_overrides(dashboard.app)
-
