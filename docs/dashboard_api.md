@@ -190,6 +190,12 @@ submission volume without issuing a second request. The summary includes
 `total_jobs`, `active_jobs`, a status breakdown, and rolling submission window
 totals that align with `/jobs/metrics`.
 
+A richer sample payload lives in
+[`docs/examples/trafalgar_render_metrics.json`](./examples/trafalgar_render_metrics.json).
+The Uta Control Center consumes this endpoint directly, prompting operators for
+API credentials and rendering responsive Chart.js dashboards for the status
+breakdown, throughput windows, and adapter utilisation views.
+
 ### Ingest run streams
 
 - `GET /runs/stream` – SSE endpoint emitting ingest run updates.

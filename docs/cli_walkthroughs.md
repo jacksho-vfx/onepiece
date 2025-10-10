@@ -321,6 +321,15 @@ stub methods with application-specific logic and keep the CLI commands intact.
    validation flows in the same browser window that displays live production
    telemetry.
 
+5. Switch to the **Dashboard** tab to explore live analytics. The credentials
+   card persists either an API key/secret pair or bearer token in your browser
+   so subsequent refreshes can call Trafalgar's protected
+   `/render/jobs/metrics` endpoint. Once authenticated the interface renders
+   Chart.js doughnut, line, and horizontal bar charts that mirror the fixture in
+   [`docs/examples/trafalgar_render_metrics.json`](./examples/trafalgar_render_metrics.json),
+   highlighting status distribution, submission throughput windows, and adapter
+   utilisation trends.
+
 ---
 
 Experimenting with these scenarios builds intuition for how the CLI behaves and gives you realistic command lines to adapt for production.

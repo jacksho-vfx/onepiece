@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 
 from apps.onepiece.app import app as cli_app
 from apps.trafalgar.web.dashboard import app as dashboard_app
+from apps.trafalgar.web.render import app as render_app
 
 
 @dataclass
@@ -320,30 +321,64 @@ def _render_dashboard_page(*, is_active: bool, root_path: str) -> str:
     active_class = "active" if is_active else ""
     dashboard_root = _with_root_path(root_path, "/dashboard/")
     return f"""
-    <section id=\"page-dashboard\" class=\"page {active_class}\">
+    <section id=\"page-dashboard\" class=\"page {active_class}\" data-dashboard-root=\"{dashboard_root}\">
       <div class=\"page-header\">
         <h2>Trafalgar Dashboard</h2>
-        <p class=\"page-help\">Embedded Trafalgar dashboard served from the existing FastAPI application.</p>
+        <p class=\"page-help\">Live Trafalgar analytics rendered alongside the OnePiece command surface.</p>
       </div>
+      <article class=\"dashboard-auth-card\" data-dashboard-auth>
+        <div class=\"dashboard-auth-header\">
+          <h3>Dashboard credentials</h3>
+          <p>Provide Trafalgar API credentials so the charts below can fetch protected analytics.</p>
+        </div>
+        <form class=\"dashboard-auth-form\" autocomplete=\"off\">
+          <div class=\"dashboard-auth-grid\">
+            <label class=\"dashboard-field\" for=\"dashboard-api-key\">
+              <span>API key</span>
+              <input id=\"dashboard-api-key\" name=\"dashboard-api-key\" type=\"text\" inputmode=\"text\" placeholder=\"X-API-Key\" data-dashboard-api-key />
+            </label>
+            <label class=\"dashboard-field\" for=\"dashboard-api-secret\">
+              <span>API secret</span>
+              <input id=\"dashboard-api-secret\" name=\"dashboard-api-secret\" type=\"password\" placeholder=\"X-API-Secret\" data-dashboard-api-secret />
+            </label>
+            <label class=\"dashboard-field\" for=\"dashboard-bearer-token\">
+              <span>Bearer token</span>
+              <input id=\"dashboard-bearer-token\" name=\"dashboard-bearer-token\" type=\"password\" placeholder=\"Authorization token\" data-dashboard-bearer />
+            </label>
+          </div>
+          <div class=\"dashboard-auth-actions\">
+            <button type=\"button\" class=\"dashboard-auth-clear\" data-dashboard-auth-clear>Clear credentials</button>
+            <p class=\"dashboard-auth-note\">Stored securely in local storage; nothing is sent until a chart request is made.</p>
+          </div>
+        </form>
+      </article>
       <div class=\"dashboard-charts\" data-dashboard-charts>
-        <article class=\"chart-card\" data-chart-id=\"render-status\" data-empty-message=\"No render job data yet.\" data-error-message=\"Unable to load render metrics.\">
+        <article class=\"chart-card\" data-chart-id=\"render-status\" data-empty-message=\"No render job history yet.\" data-error-message=\"Unable to load render analytics.\">
           <div>
             <h3>Render jobs by status</h3>
             <p>Snapshot of render submissions across all farms.</p>
           </div>
           <canvas id=\"dashboard-chart-render-status\" class=\"chart-canvas\" role=\"img\" aria-label=\"Render jobs by status\" height=\"220\" hidden></canvas>
-          <p class=\"chart-placeholder\">No render job data yet.</p>
+          <p class=\"chart-placeholder\">No render job history yet.</p>
         </article>
-        <article class=\"chart-card\" data-chart-id=\"ingest-outcome\" data-empty-message=\"No ingest runs tracked yet.\" data-error-message=\"Unable to load ingest metrics.\">
+        <article class=\"chart-card\" data-chart-id=\"render-throughput\" data-empty-message=\"No recent submissions.\" data-error-message=\"Unable to load throughput analytics.\">
           <div>
-            <h3>Ingest run outcomes</h3>
-            <p>Summary of the last ten ingest runs processed by OnePiece.</p>
+            <h3>Submission throughput</h3>
+            <p>Rolling submission windows highlighting busy render periods.</p>
           </div>
-          <canvas id=\"dashboard-chart-ingest-outcome\" class=\"chart-canvas\" role=\"img\" aria-label=\"Ingest run outcomes\" height=\"220\" hidden></canvas>
-          <p class=\"chart-placeholder\">No ingest runs tracked yet.</p>
+          <canvas id=\"dashboard-chart-render-throughput\" class=\"chart-canvas\" role=\"img\" aria-label=\"Render submission throughput\" height=\"220\" hidden></canvas>
+          <p class=\"chart-placeholder\">No recent submissions.</p>
+        </article>
+        <article class=\"chart-card\" data-chart-id=\"render-adapters\" data-empty-message=\"No adapter utilisation recorded.\" data-error-message=\"Unable to load adapter analytics.\">
+          <div>
+            <h3>Adapter utilisation</h3>
+            <p>Compare job totals across configured render adapters.</p>
+          </div>
+          <canvas id=\"dashboard-chart-render-adapters\" class=\"chart-canvas\" role=\"img\" aria-label=\"Render adapter utilisation\" height=\"220\" hidden></canvas>
+          <p class=\"chart-placeholder\">No adapter utilisation recorded.</p>
         </article>
       </div>
-      <iframe src=\"{dashboard_root}\" data-dashboard-root=\"{dashboard_root}\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
+      <p class=\"dashboard-link\"><a href=\"{dashboard_root}\" target=\"_blank\" rel=\"noreferrer noopener\">Open the full Trafalgar dashboard</a></p>
     </section>
     """
 
@@ -794,6 +829,99 @@ def _render_index(root_path: str) -> str:
             font-style: italic;
             color: var(--uta-text-subtle);
           }}
+          .dashboard-auth-card {{
+            margin-bottom: 1.5rem;
+            padding: 1.25rem;
+            border-radius: 16px;
+            border: 1px solid var(--uta-border);
+            background: rgba(15, 23, 42, 0.9);
+            box-shadow: 0 18px 32px rgba(15, 23, 42, 0.45);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }}
+          .dashboard-auth-card[data-auth-state=\"error\"] {{
+            border-color: rgba(248, 113, 113, 0.75);
+            box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+          }}
+          .dashboard-auth-card[data-auth-state=\"ready\"] {{
+            border-color: var(--uta-border-strong);
+            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.3);
+          }}
+          .dashboard-auth-header h3 {{
+            margin: 0 0 0.25rem;
+            font-size: 1.1rem;
+            color: var(--uta-text);
+          }}
+          .dashboard-auth-header p {{
+            margin: 0;
+            color: var(--uta-text-subtle);
+            font-size: 0.9rem;
+          }}
+          .dashboard-auth-form {{
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+          }}
+          .dashboard-auth-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+          }}
+          .dashboard-field {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-size: 0.85rem;
+            color: var(--uta-text-muted);
+          }}
+          .dashboard-field span {{
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+          }}
+          .dashboard-field input {{
+            border-radius: 10px;
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.95rem;
+            background: rgba(9, 14, 28, 0.85);
+            color: var(--uta-text);
+          }}
+          .dashboard-field input::placeholder {{
+            color: rgba(148, 163, 184, 0.5);
+          }}
+          .dashboard-auth-actions {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem 1rem;
+            justify-content: space-between;
+          }}
+          .dashboard-auth-clear {{
+            appearance: none;
+            border: 1px solid rgba(96, 165, 250, 0.45);
+            background: transparent;
+            color: var(--uta-text);
+            padding: 0.55rem 1rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+          }}
+          .dashboard-auth-clear:hover,
+          .dashboard-auth-clear:focus-visible {{
+            background: rgba(96, 165, 250, 0.12);
+            border-color: rgba(96, 165, 250, 0.7);
+          }}
+          .dashboard-auth-note {{
+            margin: 0;
+            font-size: 0.8rem;
+            color: var(--uta-text-subtle);
+            flex: 1 1 16rem;
+          }}
           .dashboard-charts {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -844,13 +972,19 @@ def _render_index(root_path: str) -> str:
             font-size: 0.85rem;
             color: var(--uta-text-muted);
           }}
-          iframe {{
-            width: 100%;
-            min-height: 70vh;
-            border: 1px solid rgba(96, 165, 250, 0.4);
-            border-radius: 16px;
-            background: rgba(15, 23, 42, 0.75);
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.45);
+          .dashboard-link {{
+            margin: 0;
+            text-align: right;
+          }}
+          .dashboard-link a {{
+            color: var(--uta-accent);
+            text-decoration: none;
+            font-weight: 600;
+          }}
+          .dashboard-link a:hover,
+          .dashboard-link a:focus-visible {{
+            color: var(--uta-accent-strong);
+            text-decoration: underline;
           }}
           @keyframes spin {{
             to {{
@@ -1054,6 +1188,111 @@ def _render_index(root_path: str) -> str:
 
           const rootPath = document.body.dataset.rootPath || "";
           const joinWithRoot = (path) => (rootPath ? `${{rootPath}}${{path}}` : path);
+          const DASHBOARD_API_KEY_KEY = 'uta:dashboard:apiKey';
+          const DASHBOARD_API_SECRET_KEY = 'uta:dashboard:apiSecret';
+          const DASHBOARD_BEARER_KEY = 'uta:dashboard:bearerToken';
+          const requireCredentialsMessage = 'Add Trafalgar credentials above to load analytics.';
+          const authFailureMessage = 'Authentication failed. Verify the credentials above.';
+          const dashboardAuthCard = document.querySelector('[data-dashboard-auth]');
+          const apiKeyInput = dashboardAuthCard ? dashboardAuthCard.querySelector('[data-dashboard-api-key]') : null;
+          const apiSecretInput = dashboardAuthCard ? dashboardAuthCard.querySelector('[data-dashboard-api-secret]') : null;
+          const bearerInput = dashboardAuthCard ? dashboardAuthCard.querySelector('[data-dashboard-bearer]') : null;
+          const clearCredentialsButton = dashboardAuthCard ? dashboardAuthCard.querySelector('[data-dashboard-auth-clear]') : null;
+          const sanitizeCredential = (value) => (typeof value === 'string' ? value.trim() : '');
+          let dashboardCredentials = {{
+            apiKey: sanitizeCredential(storage.get(DASHBOARD_API_KEY_KEY, '')),
+            apiSecret: sanitizeCredential(storage.get(DASHBOARD_API_SECRET_KEY, '')),
+            bearerToken: sanitizeCredential(storage.get(DASHBOARD_BEARER_KEY, '')),
+          }};
+          const persistDashboardCredentials = () => {{
+            storage.set(DASHBOARD_API_KEY_KEY, dashboardCredentials.apiKey);
+            storage.set(DASHBOARD_API_SECRET_KEY, dashboardCredentials.apiSecret);
+            storage.set(DASHBOARD_BEARER_KEY, dashboardCredentials.bearerToken);
+          }};
+          const updateAuthCardState = (stateOverride) => {{
+            if (!dashboardAuthCard) {{
+              return;
+            }}
+            if (stateOverride) {{
+              dashboardAuthCard.dataset.authState = stateOverride;
+              return;
+            }}
+            if (dashboardCredentials.bearerToken || dashboardCredentials.apiKey) {{
+              dashboardAuthCard.dataset.authState = 'ready';
+            }} else {{
+              delete dashboardAuthCard.dataset.authState;
+            }}
+          }};
+          const requestDashboardRefresh = () => {{
+            if (typeof window.triggerDashboardRefresh === 'function') {{
+              window.triggerDashboardRefresh();
+            }}
+          }};
+          const resolveDashboardHeaders = () => {{
+            if (dashboardCredentials.bearerToken) {{
+              return {{
+                Authorization: `Bearer ${{dashboardCredentials.bearerToken}}`,
+              }};
+            }}
+            if (dashboardCredentials.apiKey) {{
+              const headers = {{
+                'X-API-Key': dashboardCredentials.apiKey,
+              }};
+              if (dashboardCredentials.apiSecret) {{
+                headers['X-API-Secret'] = dashboardCredentials.apiSecret;
+              }}
+              return headers;
+            }}
+            return null;
+          }};
+          updateAuthCardState();
+          if (apiKeyInput) {{
+            apiKeyInput.value = dashboardCredentials.apiKey;
+            apiKeyInput.addEventListener('input', () => {{
+              dashboardCredentials.apiKey = sanitizeCredential(apiKeyInput.value);
+              persistDashboardCredentials();
+              updateAuthCardState();
+            }});
+            apiKeyInput.addEventListener('change', requestDashboardRefresh);
+          }}
+          if (apiSecretInput) {{
+            apiSecretInput.value = dashboardCredentials.apiSecret;
+            apiSecretInput.addEventListener('input', () => {{
+              dashboardCredentials.apiSecret = sanitizeCredential(apiSecretInput.value);
+              persistDashboardCredentials();
+            }});
+            apiSecretInput.addEventListener('change', requestDashboardRefresh);
+          }}
+          if (bearerInput) {{
+            bearerInput.value = dashboardCredentials.bearerToken;
+            bearerInput.addEventListener('input', () => {{
+              dashboardCredentials.bearerToken = sanitizeCredential(bearerInput.value);
+              persistDashboardCredentials();
+              updateAuthCardState();
+            }});
+            bearerInput.addEventListener('change', requestDashboardRefresh);
+          }}
+          if (clearCredentialsButton) {{
+            clearCredentialsButton.addEventListener('click', () => {{
+              dashboardCredentials = {{
+                apiKey: '',
+                apiSecret: '',
+                bearerToken: '',
+              }};
+              if (apiKeyInput) {{
+                apiKeyInput.value = '';
+              }}
+              if (apiSecretInput) {{
+                apiSecretInput.value = '';
+              }}
+              if (bearerInput) {{
+                bearerInput.value = '';
+              }}
+              persistDashboardCredentials();
+              updateAuthCardState();
+              requestDashboardRefresh();
+            }});
+          }}
           document.querySelectorAll('.command-form').forEach((form) => {{
             const card = form.closest('.command-card');
             const output = card.querySelector('.command-output');
@@ -1141,11 +1380,6 @@ def _render_index(root_path: str) -> str:
 
           (function setupDashboardCharts() {{
             const chartCards = Array.from(document.querySelectorAll('#page-dashboard [data-chart-id]'));
-            if (!chartCards.length) {{
-              window.triggerDashboardRefresh = () => {{}};
-              return;
-            }}
-
             const chartInstances = new Map();
             const colourPalette = ['#60a5fa', '#34d399', '#fbbf24', '#f97316', '#a855f7', '#f472b6'];
             const pendingRefreshes = [];
@@ -1214,15 +1448,33 @@ def _render_index(root_path: str) -> str:
               setCardState(card, 'ready');
             }};
 
-            const buildRenderStatusConfig = (summary) => {{
-              const entries = Object.entries(summary || {{}})
+            const normaliseWindowLabel = (label) => {{
+              const value = String(label || '').toLowerCase();
+              switch (value) {{
+                case '1h':
+                  return 'Past hour';
+                case '6h':
+                  return 'Past 6 hours';
+                case '24h':
+                  return 'Past day';
+                case '7d':
+                  return 'Past week';
+                default:
+                  return label || 'Window';
+              }}
+            }};
+
+            const buildStatusBreakdownConfig = (statuses) => {{
+              const entries = Object.entries(statuses || {{}})
                 .map(([key, value]) => {{
+                  const record = value && typeof value === 'object' ? value : {{ count: value }};
+                  const count = Number(record.count);
                   return {{
                     label: key || 'unknown',
-                    value: Number(value),
+                    value: Number.isFinite(count) ? count : 0,
                   }};
                 }})
-                .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
+                .filter((entry) => entry.value > 0)
                 .sort((left, right) => left.label.localeCompare(right.label));
               if (!entries.length) {{
                 return null;
@@ -1249,38 +1501,47 @@ def _render_index(root_path: str) -> str:
                   plugins: {{
                     legend: {{
                       position: 'bottom',
-                      labels: {{
-                        color: '#cbd5f5',
-                      }},
+                      labels: {{ color: '#cbd5f5' }},
                     }},
                   }},
                 }},
               }};
             }};
 
-            const buildIngestOutcomeConfig = (ingest) => {{
-              const counts = ingest && typeof ingest === 'object' ? ingest.counts || ingest : {{}};
-              const entries = [
-                {{ label: 'Successful', value: Number(counts.successful) }},
-                {{ label: 'Failed', value: Number(counts.failed) }},
-                {{ label: 'Running', value: Number(counts.running) }},
-              ].filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
+            const buildThroughputConfig = (windows) => {{
+              const keys = Object.keys(windows || {{}});
+              const entries = keys
+                .map((key) => {{
+                  const record = windows ? windows[key] : null;
+                  const total =
+                    record && typeof record === 'object'
+                      ? Number(record.total_jobs ?? record)
+                      : Number(record);
+                  return {{
+                    label: normaliseWindowLabel(key),
+                    value: Number.isFinite(total) ? total : 0,
+                  }};
+                }})
+                .filter((entry) => entry.value > 0);
               if (!entries.length) {{
                 return null;
               }}
               const labels = entries.map((entry) => entry.label);
               const data = entries.map((entry) => entry.value);
-              const colours = entries.map((_, index) => colourPalette[(index + 2) % colourPalette.length]);
               return {{
-                type: 'bar',
+                type: 'line',
                 data: {{
                   labels,
                   datasets: [
                     {{
-                      label: 'Ingest runs',
+                      label: 'Jobs submitted',
                       data,
-                      backgroundColor: colours,
-                      borderRadius: 8,
+                      borderColor: '#60a5fa',
+                      backgroundColor: 'rgba(96, 165, 250, 0.25)',
+                      tension: 0.35,
+                      fill: true,
+                      pointBackgroundColor: '#2563eb',
+                      pointRadius: 4,
                     }},
                   ],
                 }},
@@ -1289,14 +1550,11 @@ def _render_index(root_path: str) -> str:
                   scales: {{
                     x: {{
                       ticks: {{ color: '#cbd5f5' }},
-                      grid: {{ color: 'rgba(148, 163, 184, 0.25)' }},
+                      grid: {{ color: 'rgba(148, 163, 184, 0.2)' }},
                     }},
                     y: {{
                       beginAtZero: true,
-                      ticks: {{
-                        stepSize: 1,
-                        color: '#cbd5f5',
-                      }},
+                      ticks: {{ color: '#cbd5f5', precision: 0 }},
                       grid: {{ color: 'rgba(148, 163, 184, 0.2)' }},
                     }},
                   }},
@@ -1307,23 +1565,114 @@ def _render_index(root_path: str) -> str:
               }};
             }};
 
+            const buildAdapterUtilisationConfig = (adapters) => {{
+              const entries = Object.entries(adapters || {{}})
+                .map(([key, value]) => {{
+                  const record = value && typeof value === 'object' ? value : {{ total_jobs: value }};
+                  const total = Number(record.total_jobs);
+                  return {{
+                    label: key || 'unknown',
+                    value: Number.isFinite(total) ? total : 0,
+                  }};
+                }})
+                .filter((entry) => entry.value > 0)
+                .sort((left, right) => right.value - left.value);
+              if (!entries.length) {{
+                return null;
+              }}
+              const labels = entries.map((entry) => entry.label);
+              const data = entries.map((entry) => entry.value);
+              const colours = labels.map((_, index) => colourPalette[(index + 1) % colourPalette.length]);
+              return {{
+                type: 'bar',
+                data: {{
+                  labels,
+                  datasets: [
+                    {{
+                      label: 'Jobs',
+                      data,
+                      backgroundColor: colours,
+                      borderRadius: 10,
+                    }},
+                  ],
+                }},
+                options: {{
+                  indexAxis: 'y',
+                  responsive: true,
+                  scales: {{
+                    x: {{
+                      beginAtZero: true,
+                      ticks: {{ color: '#cbd5f5', precision: 0 }},
+                      grid: {{ color: 'rgba(148, 163, 184, 0.18)' }},
+                    }},
+                    y: {{
+                      ticks: {{ color: '#cbd5f5' }},
+                      grid: {{ display: false }},
+                    }},
+                  }},
+                  plugins: {{
+                    legend: {{ display: false }},
+                  }},
+                }},
+              }};
+            }};
+
+            window.utaDashboardTestHooks = {{
+              buildStatusBreakdownConfig,
+              buildThroughputConfig,
+              buildAdapterUtilisationConfig,
+              normaliseWindowLabel,
+            }};
+
+            if (!chartCards.length) {{
+              window.triggerDashboardRefresh = () => {{}};
+              return;
+            }}
+
             chartCards.forEach((card) => setCardState(card, 'empty'));
 
             const refreshCharts = async () => {{
-              const statusUrl = joinWithRoot('/dashboard/status');
+              const hasCredentials = Boolean(dashboardCredentials.bearerToken || dashboardCredentials.apiKey);
+              if (!hasCredentials) {{
+                chartInstances.forEach((chart) => chart.destroy());
+                chartInstances.clear();
+                updateAuthCardState();
+                chartCards.forEach((card) => {{
+                  card.classList.remove('is-loading');
+                  setCardState(card, 'empty', requireCredentialsMessage);
+                }});
+                return;
+              }}
+              const metricsUrl = joinWithRoot('/render/jobs/metrics');
+              const headers = resolveDashboardHeaders();
+              const options = {{ credentials: 'same-origin' }};
+              if (headers) {{
+                options.headers = headers;
+              }}
               chartCards.forEach((card) => card.classList.add('is-loading'));
               try {{
-                const response = await fetch(statusUrl);
+                const response = await fetch(metricsUrl, options);
+                if ([401, 403, 503].includes(response.status)) {{
+                  updateAuthCardState('error');
+                  chartCards.forEach((card) => {{
+                    setCardState(card, 'error', authFailureMessage);
+                  }});
+                  return;
+                }}
                 if (!response.ok) {{
-                  throw new Error(`Failed to load dashboard status (${{response.status}})`);
+                  throw new Error(`Failed to load render analytics (${{response.status}})`);
                 }}
                 const payload = await response.json();
-                const renderSummary = payload && payload.render ? payload.render.by_status : null;
-                const ingestSummary = payload ? payload.ingest : null;
-                createOrUpdateChart('render-status', buildRenderStatusConfig(renderSummary));
-                createOrUpdateChart('ingest-outcome', buildIngestOutcomeConfig(ingestSummary));
+                const statuses = payload ? payload.statuses : null;
+                const windows = payload ? payload.submission_windows : null;
+                const adapters = payload ? payload.adapters : null;
+                createOrUpdateChart('render-status', buildStatusBreakdownConfig(statuses));
+                createOrUpdateChart('render-throughput', buildThroughputConfig(windows));
+                createOrUpdateChart('render-adapters', buildAdapterUtilisationConfig(adapters));
+                updateAuthCardState();
               }} catch (error) {{
                 console.error('dashboard.refresh.failed', error);
+                updateAuthCardState('error');
                 chartCards.forEach((card) => {{
                   setCardState(card, 'error', card.dataset.errorMessage || 'Unable to load data.');
                 }});
@@ -1365,6 +1714,7 @@ def _render_index(root_path: str) -> str:
                 () => {{
                   chartsReady = true;
                   window.triggerDashboardRefresh = () => {{}};
+                  updateAuthCardState('error');
                   chartCards.forEach((card) => {{
                     card.classList.remove('is-loading');
                     setCardState(card, 'error', card.dataset.errorMessage || 'Unable to load data.');
@@ -1390,6 +1740,7 @@ def _render_index(root_path: str) -> str:
 
 app = FastAPI(title="Uta Control Center", docs_url=None, redoc_url=None)
 app.mount("/dashboard", dashboard_app)
+app.mount("/render", render_app)
 
 
 class RunCommandRequest(BaseModel):

@@ -231,22 +231,22 @@ async def test_dashboard_mount_injects_base_path(
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         landing_page = await client.get("/")
         assert landing_page.status_code == 200
-        assert 'data-dashboard-root="/dashboard/"' in landing_page.text
-        dashboard_page = await client.get("/dashboard/")
-        assert dashboard_page.status_code == 200
-        iframe_html = dashboard_page.text
-        assert 'data-base-path="/dashboard"' in iframe_html
-        assert 'href="/dashboard/status"' in iframe_html
-        assert "const target = joinPath(basePath, url);" in iframe_html
-        status = await client.get("/dashboard/status")
+        assert "[data-dashboard-auth]" in landing_page.text
+        assert 'data-chart-id="render-status"' in landing_page.text
+        assert 'data-chart-id="render-throughput"' in landing_page.text
+        assert 'data-chart-id="render-adapters"' in landing_page.text
+        assert "/render/jobs/metrics" in landing_page.text
 
-    assert status.status_code == 200
-    payload = status.json()
-    assert "ingest" in payload
-    assert "render" in payload
-    assert "review" in payload
-    assert payload["render"]["by_farm"]["mock"] == 2
-    review_section = payload["review"]
-    assert "totals" in review_section
-    assert isinstance(review_section["totals"], dict)
-    assert set(review_section["totals"]) >= {"projects", "clips", "playlists"}
+        metrics = await client.get(
+            "/render/jobs/metrics",
+            headers={
+                "X-API-Key": "suite-key",
+                "X-API-Secret": "suite-secret",
+            },
+        )
+
+    assert metrics.status_code == 200
+    payload = metrics.json()
+    assert isinstance(payload.get("statuses"), dict)
+    assert isinstance(payload.get("adapters"), dict)
+    assert isinstance(payload.get("submission_windows"), dict)

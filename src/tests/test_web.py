@@ -68,7 +68,7 @@ def test_index_honours_asgi_root_path_prefix() -> None:
         assert response.status_code == 200
         body = response.text
         assert 'data-root-path="/uta"' in body
-        assert 'iframe src="/uta/dashboard/"' in body
+        assert 'id="uta-dashboard-chartjs"' in body
         assert 'data-dashboard-root="/uta/dashboard/"' in body
         assert "const rootPath = document.body.dataset.rootPath" in body
         assert "fetch(joinWithRoot('/api/run')" in body
@@ -96,7 +96,7 @@ def test_dashboard_refresh_bootstrap_exposes_callable() -> None:
     body = response.text
     assert 'id="uta-dashboard-chartjs"' in body
     assert 'data-chart-id="render-status"' in body
-    assert 'data-chart-id="ingest-outcome"' in body
+    assert 'data-chart-id="render-throughput"' in body
     assert "window.triggerDashboardRefresh = () => {};" in body
     assert "chartScript.addEventListener('load', markReady" in body
 
