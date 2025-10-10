@@ -95,8 +95,8 @@ def test_dashboard_refresh_bootstrap_exposes_callable() -> None:
     assert response.status_code == 200
     body = response.text
     assert 'id="uta-dashboard-chartjs"' in body
-    assert "data-chart-id=\"render-status\"" in body
-    assert "data-chart-id=\"ingest-outcome\"" in body
+    assert 'data-chart-id="render-status"' in body
+    assert 'data-chart-id="ingest-outcome"' in body
     assert "window.triggerDashboardRefresh = () => {};" in body
     assert "chartScript.addEventListener('load', markReady" in body
 
