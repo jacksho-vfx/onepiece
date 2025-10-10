@@ -6,6 +6,8 @@ black
 fastapi
 httpx
 imageio
+js2py
+py-mini-racer
 mypy
 pre-commit
 pydantic

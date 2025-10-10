@@ -1,0 +1,101 @@
+{
+  "generated_at": "2024-09-01T12:30:00Z",
+  "total_jobs": 18,
+  "statuses": {
+    "queued": {
+      "count": 4,
+      "active": 3,
+      "last_updated_at": "2024-09-01T12:25:00Z",
+      "durations": {
+        "total_seconds": 4800.0,
+        "average_seconds": 1200.0
+      }
+    },
+    "running": {
+      "count": 7,
+      "active": 5,
+      "last_updated_at": "2024-09-01T12:28:00Z",
+      "durations": {
+        "total_seconds": 8640.0,
+        "average_seconds": 1728.0
+      }
+    },
+    "completed": {
+      "count": 6,
+      "active": 0,
+      "last_updated_at": "2024-09-01T11:55:00Z",
+      "durations": {
+        "total_seconds": 5400.0,
+        "average_seconds": 900.0
+      }
+    },
+    "failed": {
+      "count": 1,
+      "active": 0,
+      "last_updated_at": "2024-09-01T10:12:00Z",
+      "durations": {
+        "total_seconds": 600.0,
+        "average_seconds": 600.0
+      }
+    }
+  },
+  "adapters": {
+    "mock": {
+      "total_jobs": 9,
+      "statuses": {
+        "queued": 2,
+        "running": 4,
+        "completed": 3
+      },
+      "completed_jobs": 3,
+      "average_completion_seconds": 780.0,
+      "first_submission_at": "2024-08-31T18:05:00Z",
+      "last_submission_at": "2024-09-01T12:20:00Z"
+    },
+    "deadline": {
+      "total_jobs": 5,
+      "statuses": {
+        "running": 2,
+        "completed": 3
+      },
+      "completed_jobs": 3,
+      "average_completion_seconds": 1100.0,
+      "first_submission_at": "2024-08-30T09:00:00Z",
+      "last_submission_at": "2024-09-01T11:48:00Z"
+    },
+    "tractor": {
+      "total_jobs": 4,
+      "statuses": {
+        "queued": 2,
+        "failed": 1,
+        "completed": 1
+      },
+      "completed_jobs": 1,
+      "average_completion_seconds": 1440.0,
+      "first_submission_at": "2024-08-29T07:15:00Z",
+      "last_submission_at": "2024-09-01T10:10:00Z"
+    }
+  },
+  "submission_windows": {
+    "1h": {
+      "total_jobs": 3,
+      "completed_jobs": 1,
+      "average_completion_seconds": null
+    },
+    "6h": {
+      "total_jobs": 7,
+      "completed_jobs": 3,
+      "average_completion_seconds": 980.0
+    },
+    "24h": {
+      "total_jobs": 14,
+      "completed_jobs": 6,
+      "average_completion_seconds": 1020.0
+    },
+    "7d": {
+      "total_jobs": 18,
+      "completed_jobs": 16,
+      "average_completion_seconds": 890.0
+    }
+  }
+}
