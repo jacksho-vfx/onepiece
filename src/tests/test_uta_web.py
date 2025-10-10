@@ -29,7 +29,8 @@ def test_required_option_omits_placeholder_default() -> None:
     assert parameter.default is None
 
     rendered = web._render_parameters(
-        web.CommandSpec(path=["cli"], summary="", parameters=parameters)
+        web.CommandSpec(path=["cli"], summary="", parameters=parameters),
+        command_id="cli",
     )
 
     assert "required" in rendered
