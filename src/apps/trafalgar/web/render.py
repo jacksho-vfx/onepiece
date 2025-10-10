@@ -1194,12 +1194,14 @@ def _format_sse_chunk(event_name: str | None, payload: bytes) -> bytes:
 
 
 def _resolve_render_keepalive_interval(request: Request) -> float:
-    return resolve_keepalive_interval(
-        request,
-        env_name=RENDER_SSE_KEEPALIVE_INTERVAL_ENV,
-        state_attr=_RENDER_SSE_STATE_ATTR,
-        log_key="render.sse.keepalive",
-        default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+    return float(
+        resolve_keepalive_interval(
+            request,
+            env_name=RENDER_SSE_KEEPALIVE_INTERVAL_ENV,
+            state_attr=_RENDER_SSE_STATE_ATTR,
+            log_key="render.sse.keepalive",
+            default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+        )
     )
 
 

@@ -120,14 +120,10 @@ class EventBroadcaster:
         Returns ``True`` if the payload was enqueued or ``False`` when the
         subscriber was dropped because it could not keep up with the stream.
         """
-
         try:
             queue.put_nowait(payload)
             return True
         except asyncio.QueueFull:
-            # Drop the oldest item and retry once. If the queue is still full the
-            # consumer is too slow and the subscription is removed to avoid
-            # accumulating unbounded work.
             try:
                 queue.get_nowait()
             except asyncio.QueueEmpty:  # pragma: no cover - defensive guard
@@ -143,6 +139,16 @@ class EventBroadcaster:
                     "trafalgar.events.backpressure", queue_id=id(queue), action="drop"
                 )
                 return False
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        loop = self._loop or asyncio.get_event_loop()
+        self._loop = loop
+        return loop
 
 
 def _parse_keepalive_value(
@@ -167,7 +173,9 @@ def _parse_keepalive_value(
     return interval
 
 
-def _keepalive_interval_from_state(app: Any, *, attr: str, log_key: str) -> float | None:
+def _keepalive_interval_from_state(
+    app: Any, *, attr: str, log_key: str
+) -> float | None:
     """Return an override stored on ``app.state`` if available."""
 
     state = getattr(app, "state", None)
@@ -230,7 +238,9 @@ def resolve_keepalive_interval(
 
     app = getattr(request, "app", None)
     if app is not None:
-        state_interval = _keepalive_interval_from_state(app, attr=state_attr, log_key=log_key)
+        state_interval = _keepalive_interval_from_state(
+            app, attr=state_attr, log_key=log_key
+        )
         if state_interval is not None:
             return state_interval
 
@@ -246,14 +256,3 @@ def clear_keepalive_caches() -> None:
 
     _KEEPALIVE_ENV_CACHE.clear()
     _KEEPALIVE_STATE_CACHE.clear()
-    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
-        loop = self._loop
-        if loop is None:
-            raise RuntimeError("EventBroadcaster has not been bound to an event loop")
-        return loop
-
-    def _ensure_lock(self) -> asyncio.Lock:
-        lock = self._lock
-        if lock is None:
-            raise RuntimeError("EventBroadcaster lock is not initialized")
-        return lock

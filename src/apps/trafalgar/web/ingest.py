@@ -207,12 +207,14 @@ async def list_runs(
 
 
 def _resolve_ingest_keepalive_interval(request: Request) -> float:
-    return resolve_keepalive_interval(
-        request,
-        env_name=INGEST_SSE_KEEPALIVE_INTERVAL_ENV,
-        state_attr=_INGEST_SSE_STATE_ATTR,
-        log_key="ingest.sse.keepalive",
-        default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+    return float(
+        resolve_keepalive_interval(
+            request,
+            env_name=INGEST_SSE_KEEPALIVE_INTERVAL_ENV,
+            state_attr=_INGEST_SSE_STATE_ATTR,
+            log_key="ingest.sse.keepalive",
+            default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+        )
     )
 
 

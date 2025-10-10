@@ -113,28 +113,36 @@ def _request_with_app_state(**state: Any) -> Any:
     return SimpleNamespace(app=app)
 
 
-def test_render_keepalive_interval_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_keepalive_interval_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv(render.RENDER_SSE_KEEPALIVE_INTERVAL_ENV, "12.5")
     clear_keepalive_caches()
     request = SimpleNamespace()
     assert render._resolve_render_keepalive_interval(request) == 12.5
 
 
-def test_render_keepalive_interval_state_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_keepalive_interval_state_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv(render.RENDER_SSE_KEEPALIVE_INTERVAL_ENV, raising=False)
     clear_keepalive_caches()
     request = _request_with_app_state(render_sse_keepalive_interval="7.5")
     assert render._resolve_render_keepalive_interval(request) == 7.5
 
 
-def test_ingest_keepalive_interval_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_keepalive_interval_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv(ingest.INGEST_SSE_KEEPALIVE_INTERVAL_ENV, "9.75")
     clear_keepalive_caches()
     request = SimpleNamespace()
     assert ingest._resolve_ingest_keepalive_interval(request) == 9.75
 
 
-def test_ingest_keepalive_interval_state_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_keepalive_interval_state_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv(ingest.INGEST_SSE_KEEPALIVE_INTERVAL_ENV, raising=False)
     clear_keepalive_caches()
     request = _request_with_app_state(ingest_sse_keepalive_interval=4)
