@@ -417,7 +417,9 @@ class RenderStatusAnalytics(BaseModel):
 class RenderAdapterAnalytics(BaseModel):
     """Analytics summarising job activity for a render adapter."""
 
-    total_jobs: int = Field(0, description="Total number of jobs tracked for the adapter.")
+    total_jobs: int = Field(
+        0, description="Total number of jobs tracked for the adapter."
+    )
     statuses: dict[str, int] = Field(
         default_factory=dict,
         description="Current job counts grouped by status.",
@@ -430,7 +432,8 @@ class RenderAdapterAnalytics(BaseModel):
         description="Average submission-to-completion duration for completed jobs.",
     )
     first_submission_at: datetime | None = Field(
-        None, description="Timestamp of the earliest recorded submission for the adapter."
+        None,
+        description="Timestamp of the earliest recorded submission for the adapter.",
     )
     last_submission_at: datetime | None = Field(
         None, description="Timestamp of the most recent submission for the adapter."
@@ -458,7 +461,9 @@ class RenderAnalyticsResponse(BaseModel):
     generated_at: datetime = Field(
         ..., description="UTC timestamp indicating when the analytics were computed."
     )
-    total_jobs: int = Field(..., description="Total number of jobs tracked by the service.")
+    total_jobs: int = Field(
+        ..., description="Total number of jobs tracked by the service."
+    )
     statuses: dict[str, RenderStatusAnalytics] = Field(
         default_factory=dict,
         description="Aggregated analytics grouped by job status.",
@@ -582,9 +587,7 @@ class _JobRecord:
         updated_at = _parse_timestamp(updated_at_raw) if updated_at_raw else created_at
         completed_at_raw = payload.get("completed_at")
         completed_at = (
-            _parse_timestamp(completed_at_raw)
-            if completed_at_raw is not None
-            else None
+            _parse_timestamp(completed_at_raw) if completed_at_raw is not None else None
         )
         history_payload = payload.get("status_history") or []
         history: list[tuple[str, datetime]] = []
@@ -1169,11 +1172,7 @@ class RenderSubmissionService:
             active = entry["active"]
             total_duration = entry["total_duration"]
             effective_count = count or active
-            average = (
-                (total_duration / effective_count)
-                if effective_count
-                else None
-            )
+            average = (total_duration / effective_count) if effective_count else None
             status_payload[status_name] = RenderStatusAnalytics(
                 count=count,
                 active=active,
