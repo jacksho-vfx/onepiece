@@ -54,7 +54,6 @@ def test_index_template_preserves_output_whitespace() -> None:
 
     assert response.status_code == 200
     body = response.text
-    print(body)
     assert "data.stdout.trim()" not in body
     assert "data.stderr.trim()" not in body
     assert "const cleaned = value.replace(trailingNewlinePattern, '');" in body
@@ -88,3 +87,27 @@ def test_split_extra_args_windows_path_preserved() -> None:
     )
 
     assert arguments == ["--script", r"C:\projects\shot\scene.nk"]
+
+
+def test_dashboard_refresh_bootstrap_exposes_callable() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'id="uta-dashboard-chartjs"' in body
+    assert "data-chart-id=\"render-status\"" in body
+    assert "data-chart-id=\"ingest-outcome\"" in body
+    assert "window.triggerDashboardRefresh = () => {};" in body
+    assert "chartScript.addEventListener('load', markReady" in body
+
+
+def test_dashboard_tab_activation_triggers_refresh() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    assert (
+        "targetId === 'page-dashboard' && typeof window.triggerDashboardRefresh === 'function'"
+        in body
+    )
+    assert "window.triggerDashboardRefresh();" in body

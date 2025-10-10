@@ -325,6 +325,24 @@ def _render_dashboard_page(*, is_active: bool, root_path: str) -> str:
         <h2>Trafalgar Dashboard</h2>
         <p class=\"page-help\">Embedded Trafalgar dashboard served from the existing FastAPI application.</p>
       </div>
+      <div class=\"dashboard-charts\" data-dashboard-charts>
+        <article class=\"chart-card\" data-chart-id=\"render-status\" data-empty-message=\"No render job data yet.\" data-error-message=\"Unable to load render metrics.\">
+          <div>
+            <h3>Render jobs by status</h3>
+            <p>Snapshot of render submissions across all farms.</p>
+          </div>
+          <canvas id=\"dashboard-chart-render-status\" class=\"chart-canvas\" role=\"img\" aria-label=\"Render jobs by status\" height=\"220\" hidden></canvas>
+          <p class=\"chart-placeholder\">No render job data yet.</p>
+        </article>
+        <article class=\"chart-card\" data-chart-id=\"ingest-outcome\" data-empty-message=\"No ingest runs tracked yet.\" data-error-message=\"Unable to load ingest metrics.\">
+          <div>
+            <h3>Ingest run outcomes</h3>
+            <p>Summary of the last ten ingest runs processed by OnePiece.</p>
+          </div>
+          <canvas id=\"dashboard-chart-ingest-outcome\" class=\"chart-canvas\" role=\"img\" aria-label=\"Ingest run outcomes\" height=\"220\" hidden></canvas>
+          <p class=\"chart-placeholder\">No ingest runs tracked yet.</p>
+        </article>
+      </div>
       <iframe src=\"{dashboard_root}\" data-dashboard-root=\"{dashboard_root}\" title=\"Trafalgar dashboard\" loading=\"lazy\"></iframe>
     </section>
     """
@@ -776,6 +794,56 @@ def _render_index(root_path: str) -> str:
             font-style: italic;
             color: var(--uta-text-subtle);
           }}
+          .dashboard-charts {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+          }}
+          .chart-card {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 1.25rem;
+            border-radius: 16px;
+            border: 1px solid var(--uta-border);
+            background: rgba(15, 23, 42, 0.88);
+            box-shadow: 0 18px 32px rgba(15, 23, 42, 0.5);
+            position: relative;
+          }}
+          .chart-card h3 {{
+            margin: 0;
+            font-size: 1.1rem;
+            color: var(--uta-text);
+          }}
+          .chart-card p {{
+            margin: 0;
+            color: var(--uta-text-subtle);
+            font-size: 0.9rem;
+          }}
+          .chart-canvas {{
+            width: 100%;
+            height: 220px;
+          }}
+          .chart-placeholder {{
+            font-style: italic;
+            text-align: center;
+          }}
+          .chart-card canvas[hidden] {{
+            display: none;
+          }}
+          .chart-card.is-loading::after {{
+            content: 'Fetching latest metrics…';
+            position: absolute;
+            inset: 1.25rem;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px dashed rgba(96, 165, 250, 0.35);
+            display: grid;
+            place-items: center;
+            font-size: 0.85rem;
+            color: var(--uta-text-muted);
+          }}
           iframe {{
             width: 100%;
             min-height: 70vh;
@@ -806,6 +874,7 @@ def _render_index(root_path: str) -> str:
             }}
           }}
         </style>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" id="uta-dashboard-chartjs" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
       </head>
       <body data-root-path=\"{escape(root_path)}\">
         <header class=\"app-header\">
@@ -838,6 +907,9 @@ def _render_index(root_path: str) -> str:
             pages.forEach((page) => {{
               page.classList.toggle('active', page.id === targetId);
             }});
+            if (targetId === 'page-dashboard' && typeof window.triggerDashboardRefresh === 'function') {{
+              window.triggerDashboardRefresh();
+            }}
           }}
           tabs.forEach((button) => {{
             button.addEventListener('click', () => {{
@@ -1066,6 +1138,250 @@ def _render_index(root_path: str) -> str:
               }}
             }});
           }});
+
+          (function setupDashboardCharts() {{
+            const chartCards = Array.from(document.querySelectorAll('#page-dashboard [data-chart-id]'));
+            if (!chartCards.length) {{
+              window.triggerDashboardRefresh = () => {{}};
+              return;
+            }}
+
+            const chartInstances = new Map();
+            const colourPalette = ['#60a5fa', '#34d399', '#fbbf24', '#f97316', '#a855f7', '#f472b6'];
+            const pendingRefreshes = [];
+            let chartsReady = false;
+
+            const setCardState = (card, state, overrideMessage) => {{
+              const placeholder = card.querySelector('.chart-placeholder');
+              const canvas = card.querySelector('canvas');
+              if (placeholder) {{
+                if (state === 'ready') {{
+                  placeholder.hidden = true;
+                }} else {{
+                  placeholder.hidden = false;
+                  if (overrideMessage) {{
+                    placeholder.textContent = overrideMessage;
+                  }} else if (state === 'error') {{
+                    placeholder.textContent = card.dataset.errorMessage || 'Unable to load data.';
+                  }} else {{
+                    placeholder.textContent = card.dataset.emptyMessage || 'No data available yet.';
+                  }}
+                }}
+              }}
+              if (canvas) {{
+                canvas.hidden = state !== 'ready';
+              }}
+              card.classList.toggle('is-ready', state === 'ready');
+              card.classList.toggle('is-error', state === 'error');
+              card.classList.toggle('is-empty', state === 'empty');
+            }};
+
+            const destroyChart = (id) => {{
+              const existing = chartInstances.get(id);
+              if (existing) {{
+                existing.destroy();
+                chartInstances.delete(id);
+              }}
+            }};
+
+            const findCard = (id) => chartCards.find((element) => element.dataset.chartId === id);
+
+            const createOrUpdateChart = (id, config) => {{
+              const card = findCard(id);
+              if (!card) {{
+                return;
+              }}
+              const canvas = card.querySelector('canvas');
+              if (!canvas) {{
+                return;
+              }}
+              if (!config) {{
+                destroyChart(id);
+                setCardState(card, 'empty');
+                return;
+              }}
+              let chart = chartInstances.get(id);
+              if (!chart) {{
+                chart = new Chart(canvas, config);
+                chartInstances.set(id, chart);
+              }} else {{
+                chart.config.type = config.type;
+                chart.options = config.options;
+                chart.data.labels = config.data.labels;
+                chart.data.datasets = config.data.datasets;
+                chart.update();
+              }}
+              setCardState(card, 'ready');
+            }};
+
+            const buildRenderStatusConfig = (summary) => {{
+              const entries = Object.entries(summary || {{}})
+                .map(([key, value]) => {{
+                  return {{
+                    label: key || 'unknown',
+                    value: Number(value),
+                  }};
+                }})
+                .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
+                .sort((left, right) => left.label.localeCompare(right.label));
+              if (!entries.length) {{
+                return null;
+              }}
+              const labels = entries.map((entry) => entry.label);
+              const data = entries.map((entry) => entry.value);
+              const colours = labels.map((_, index) => colourPalette[index % colourPalette.length]);
+              return {{
+                type: 'doughnut',
+                data: {{
+                  labels,
+                  datasets: [
+                    {{
+                      label: 'Render jobs',
+                      data,
+                      backgroundColor: colours,
+                      borderColor: '#0f172a',
+                      borderWidth: 1,
+                    }},
+                  ],
+                }},
+                options: {{
+                  responsive: true,
+                  plugins: {{
+                    legend: {{
+                      position: 'bottom',
+                      labels: {{
+                        color: '#cbd5f5',
+                      }},
+                    }},
+                  }},
+                }},
+              }};
+            }};
+
+            const buildIngestOutcomeConfig = (ingest) => {{
+              const counts = ingest && typeof ingest === 'object' ? ingest.counts || ingest : {{}};
+              const entries = [
+                {{ label: 'Successful', value: Number(counts.successful) }},
+                {{ label: 'Failed', value: Number(counts.failed) }},
+                {{ label: 'Running', value: Number(counts.running) }},
+              ].filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
+              if (!entries.length) {{
+                return null;
+              }}
+              const labels = entries.map((entry) => entry.label);
+              const data = entries.map((entry) => entry.value);
+              const colours = entries.map((_, index) => colourPalette[(index + 2) % colourPalette.length]);
+              return {{
+                type: 'bar',
+                data: {{
+                  labels,
+                  datasets: [
+                    {{
+                      label: 'Ingest runs',
+                      data,
+                      backgroundColor: colours,
+                      borderRadius: 8,
+                    }},
+                  ],
+                }},
+                options: {{
+                  responsive: true,
+                  scales: {{
+                    x: {{
+                      ticks: {{ color: '#cbd5f5' }},
+                      grid: {{ color: 'rgba(148, 163, 184, 0.25)' }},
+                    }},
+                    y: {{
+                      beginAtZero: true,
+                      ticks: {{
+                        stepSize: 1,
+                        color: '#cbd5f5',
+                      }},
+                      grid: {{ color: 'rgba(148, 163, 184, 0.2)' }},
+                    }},
+                  }},
+                  plugins: {{
+                    legend: {{ display: false }},
+                  }},
+                }},
+              }};
+            }};
+
+            chartCards.forEach((card) => setCardState(card, 'empty'));
+
+            const refreshCharts = async () => {{
+              const statusUrl = joinWithRoot('/dashboard/status');
+              chartCards.forEach((card) => card.classList.add('is-loading'));
+              try {{
+                const response = await fetch(statusUrl);
+                if (!response.ok) {{
+                  throw new Error(`Failed to load dashboard status (${{response.status}})`);
+                }}
+                const payload = await response.json();
+                const renderSummary = payload && payload.render ? payload.render.by_status : null;
+                const ingestSummary = payload ? payload.ingest : null;
+                createOrUpdateChart('render-status', buildRenderStatusConfig(renderSummary));
+                createOrUpdateChart('ingest-outcome', buildIngestOutcomeConfig(ingestSummary));
+              }} catch (error) {{
+                console.error('dashboard.refresh.failed', error);
+                chartCards.forEach((card) => {{
+                  setCardState(card, 'error', card.dataset.errorMessage || 'Unable to load data.');
+                }});
+              }} finally {{
+                chartCards.forEach((card) => card.classList.remove('is-loading'));
+              }}
+            }};
+
+            const runRefresh = () => {{
+              refreshCharts().catch((error) => {{
+                console.error('dashboard.refresh.unhandled', error);
+              }});
+            }};
+
+            window.triggerDashboardRefresh = () => {{
+              if (chartsReady) {{
+                runRefresh();
+              }} else {{
+                pendingRefreshes.push(runRefresh);
+              }}
+            }};
+
+            const chartScript = document.getElementById('uta-dashboard-chartjs');
+            const markReady = () => {{
+              if (chartsReady || typeof window.Chart !== 'function') {{
+                return;
+              }}
+              chartsReady = true;
+              window.triggerDashboardRefresh = runRefresh;
+              pendingRefreshes.splice(0).forEach((fn) => fn());
+            }};
+
+            if (typeof window.Chart === 'function') {{
+              markReady();
+            }} else if (chartScript) {{
+              chartScript.addEventListener('load', markReady, {{ once: true }});
+              chartScript.addEventListener(
+                'error',
+                () => {{
+                  chartsReady = true;
+                  window.triggerDashboardRefresh = () => {{}};
+                  chartCards.forEach((card) => {{
+                    card.classList.remove('is-loading');
+                    setCardState(card, 'error', card.dataset.errorMessage || 'Unable to load data.');
+                  }});
+                  pendingRefreshes.length = 0;
+                }},
+                {{ once: true }},
+              );
+            }} else {{
+              document.addEventListener('DOMContentLoaded', markReady, {{ once: true }});
+            }}
+          }})();
+
+          const dashboardPage = document.getElementById('page-dashboard');
+          if (dashboardPage && dashboardPage.classList.contains('active') && typeof window.triggerDashboardRefresh === 'function') {{
+            window.triggerDashboardRefresh();
+          }}
         </script>
       </body>
     </html>
