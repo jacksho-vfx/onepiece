@@ -69,6 +69,7 @@ def test_sync_from_cli_forwards_profile(
     assert exit_code == 0
     assert captured["profile"] == "studio-prod"
     assert captured["source"] == "s3://bucket/SHOW/plates"
+    assert captured["destination"] == tmp_path
 
 
 def test_sync_to_cli_forwards_profile(
@@ -92,3 +93,4 @@ def test_sync_to_cli_forwards_profile(
     assert exit_code == 0
     assert captured["profile"] == "studio-prod"
     assert captured["destination"] == "s3://bucket/SHOW/plates"
+    assert captured["source"] == tmp_path
