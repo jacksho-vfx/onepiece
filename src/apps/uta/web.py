@@ -390,11 +390,11 @@ def _render_index(root_path: str) -> str:
         page_id = f"page-{_slugify(name)}"
         active_class = "active" if index == 0 else ""
         nav_items.append(
-            f'<button class="tab-button {active_class}" data-target="{page_id}">{escape(name.title())}</button>'
+            f'<button type="button" class="tab-button {active_class}" data-target="{page_id}">{escape(name.title())}</button>'
         )
         content_sections.append(_render_page(page, is_active=index == 0))
     nav_items.append(
-        '<button class="tab-button" data-target="page-dashboard">Dashboard</button>'
+        '<button type="button" class="tab-button" data-target="page-dashboard">Dashboard</button>'
     )
     content_sections.append(
         _render_dashboard_page(is_active=not content_sections, root_path=root_path)
@@ -1035,6 +1035,14 @@ def _render_index(root_path: str) -> str:
           const tabs = Array.from(document.querySelectorAll('.tab-button'));
           const pages = Array.from(document.querySelectorAll('.page'));
           function setActive(targetId) {{
+            if (!targetId) {{
+              return;
+            }}
+            const targetPage = pages.find((page) => page.id === targetId);
+            if (!targetPage) {{
+              console.warn('tab.change.missing-page', targetId);
+              return;
+            }}
             tabs.forEach((button) => {{
               button.classList.toggle('active', button.dataset.target === targetId);
             }});
@@ -1047,7 +1055,12 @@ def _render_index(root_path: str) -> str:
           }}
           tabs.forEach((button) => {{
             button.addEventListener('click', () => {{
-              setActive(button.dataset.target);
+              const targetId = button.dataset.target;
+              if (!targetId) {{
+                console.warn('tab.change.unknown-target', button);
+                return;
+              }}
+              setActive(targetId);
             }});
           }});
 
