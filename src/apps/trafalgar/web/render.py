@@ -6,8 +6,8 @@ import asyncio
 import getpass
 import os
 import re
-from collections import OrderedDict
-from dataclasses import dataclass
+from collections import OrderedDict, defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import json
@@ -97,6 +97,16 @@ FARM_DESCRIPTIONS: Mapping[str, str] = {
     "tractor": "Pixar Tractor render farm (stub).",
     "opencue": "OpenCue render manager (stub).",
     "mock": "Mock render farm for testing and demos.",
+}
+
+
+TERMINAL_STATUSES: set[str] = {
+    "completed",
+    "failed",
+    "cancelled",
+    "aborted",
+    "errored",
+    "error",
 }
 
 
@@ -375,6 +385,94 @@ class JobsListResponse(BaseModel):
     jobs: Sequence[RenderJobMetadata]
 
 
+class DurationMetrics(BaseModel):
+    """Summarise accumulated and average durations in seconds."""
+
+    total_seconds: float = Field(
+        0.0, description="Total seconds accumulated across matching records."
+    )
+    average_seconds: float | None = Field(
+        None, description="Average duration per record if available."
+    )
+
+
+class RenderStatusAnalytics(BaseModel):
+    """Analytics describing job activity for a particular status."""
+
+    count: int = Field(
+        0, description="Number of jobs that have entered this status at least once."
+    )
+    active: int = Field(
+        0, description="Number of jobs currently reporting this status."
+    )
+    last_updated_at: datetime | None = Field(
+        None, description="Most recent update timestamp for jobs in this status."
+    )
+    durations: DurationMetrics = Field(
+        default_factory=DurationMetrics,
+        description="Aggregated timing information for the status.",
+    )
+
+
+class RenderAdapterAnalytics(BaseModel):
+    """Analytics summarising job activity for a render adapter."""
+
+    total_jobs: int = Field(0, description="Total number of jobs tracked for the adapter.")
+    statuses: dict[str, int] = Field(
+        default_factory=dict,
+        description="Current job counts grouped by status.",
+    )
+    completed_jobs: int = Field(
+        0, description="Number of jobs that have reached a terminal status."
+    )
+    average_completion_seconds: float | None = Field(
+        None,
+        description="Average submission-to-completion duration for completed jobs.",
+    )
+    first_submission_at: datetime | None = Field(
+        None, description="Timestamp of the earliest recorded submission for the adapter."
+    )
+    last_submission_at: datetime | None = Field(
+        None, description="Timestamp of the most recent submission for the adapter."
+    )
+
+
+class RenderWindowAnalytics(BaseModel):
+    """Analytics summarising submissions within a rolling window."""
+
+    total_jobs: int = Field(
+        0, description="Number of jobs submitted within the time window."
+    )
+    completed_jobs: int = Field(
+        0, description="Number of jobs submitted in the window that have completed."
+    )
+    average_completion_seconds: float | None = Field(
+        None,
+        description="Average completion duration for jobs submitted in the window.",
+    )
+
+
+class RenderAnalyticsResponse(BaseModel):
+    """Aggregated analytics derived from render job history."""
+
+    generated_at: datetime = Field(
+        ..., description="UTC timestamp indicating when the analytics were computed."
+    )
+    total_jobs: int = Field(..., description="Total number of jobs tracked by the service.")
+    statuses: dict[str, RenderStatusAnalytics] = Field(
+        default_factory=dict,
+        description="Aggregated analytics grouped by job status.",
+    )
+    adapters: dict[str, RenderAdapterAnalytics] = Field(
+        default_factory=dict,
+        description="Aggregated analytics grouped by render adapter.",
+    )
+    submission_windows: dict[str, RenderWindowAnalytics] = Field(
+        default_factory=dict,
+        description="Aggregated analytics grouped by submission time window.",
+    )
+
+
 class APIErrorDetail(BaseModel):
     """Standardised error payload returned by the render API."""
 
@@ -407,6 +505,43 @@ class _JobRecord:
     message: str | None
     request: RenderJobRequest
     created_at: datetime
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+    status_history: list[tuple[str, datetime]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.updated_at is None:
+            self.updated_at = self.created_at
+        if not self.status_history:
+            self.status_history.append((self.status, self.created_at))
+        else:
+            # Ensure history is sorted for consistent duration calculations.
+            self.status_history.sort(key=lambda entry: entry[1])
+            last_status, last_timestamp = self.status_history[-1]
+            if last_status != self.status:
+                marker = self.updated_at or last_timestamp
+                self.status_history.append((self.status, marker))
+        status_key = (self.status or "").strip().lower()
+        if self.completed_at is None and status_key in TERMINAL_STATUSES:
+            self.completed_at = self.updated_at
+
+    def status_durations(self, *, now: datetime | None = None) -> dict[str, float]:
+        """Return the total seconds spent in each status."""
+
+        if not self.status_history:
+            return {}
+
+        durations: dict[str, float] = defaultdict(float)
+        moment = now or _utcnow()
+        for index, (status, start) in enumerate(self.status_history):
+            if index + 1 < len(self.status_history):
+                end = self.status_history[index + 1][1]
+            else:
+                end = self.completed_at or moment
+            if end < start:
+                continue
+            durations[status] += (end - start).total_seconds()
+        return dict(durations)
 
     def snapshot(self) -> RenderJobMetadata:
         return RenderJobMetadata(
@@ -428,12 +563,44 @@ class _JobRecord:
             "message": self.message,
             "request": self.request.model_dump(),
             "created_at": self.created_at.astimezone(timezone.utc).isoformat(),
+            "updated_at": _serialise_datetime(self.updated_at),
+            "completed_at": _serialise_datetime(self.completed_at),
+            "status_history": [
+                {
+                    "status": status,
+                    "timestamp": timestamp.astimezone(timezone.utc).isoformat(),
+                }
+                for status, timestamp in self.status_history
+            ],
         }
 
     @classmethod
     def from_storage(cls, payload: Mapping[str, Any]) -> "_JobRecord":
         created_at_raw = payload.get("created_at")
         created_at = _parse_timestamp(created_at_raw)
+        updated_at_raw = payload.get("updated_at")
+        updated_at = _parse_timestamp(updated_at_raw) if updated_at_raw else created_at
+        completed_at_raw = payload.get("completed_at")
+        completed_at = (
+            _parse_timestamp(completed_at_raw)
+            if completed_at_raw is not None
+            else None
+        )
+        history_payload = payload.get("status_history") or []
+        history: list[tuple[str, datetime]] = []
+        for entry in history_payload:
+            if not isinstance(entry, Mapping):
+                continue
+            status_value = str(entry.get("status", payload.get("status", "unknown")))
+            timestamp_raw = entry.get("timestamp")
+            timestamp = (
+                _parse_timestamp(timestamp_raw)
+                if timestamp_raw is not None
+                else created_at
+            )
+            history.append((status_value, timestamp))
+        if not history:
+            history.append((str(payload.get("status", "unknown")), created_at))
         return cls(
             job_id=str(payload["job_id"]),
             farm=str(payload["farm"]),
@@ -442,6 +609,9 @@ class _JobRecord:
             message=payload.get("message"),
             request=RenderJobRequest(**payload["request"]),
             created_at=created_at,
+            updated_at=updated_at,
+            completed_at=completed_at,
+            status_history=history,
         )
 
 
@@ -457,6 +627,13 @@ DEFAULT_STORE_PERSIST_INTERVAL = 1.0
 
 class RenderSubmissionService:
     """Submit render jobs using the shared adapter registry."""
+
+    DEFAULT_SUBMISSION_WINDOWS: ClassVar[Mapping[str, timedelta]] = {
+        "1h": timedelta(hours=1),
+        "6h": timedelta(hours=6),
+        "24h": timedelta(hours=24),
+        "7d": timedelta(days=7),
+    }
 
     def __init__(
         self,
@@ -784,18 +961,31 @@ class RenderSubmissionService:
         self, record: _JobRecord, result: SubmissionResult
     ) -> bool:
         changed = False
+        moment: datetime | None = None
         status = result.get("status")
         if status and status != record.status:
+            moment = _utcnow()
             record.status = status
+            record.status_history.append((status, moment))
+            status_key = status.strip().lower()
+            if status_key in TERMINAL_STATUSES:
+                record.completed_at = moment
+            else:
+                record.completed_at = None
             changed = True
         if "message" in result and result.get("message") != record.message:
             record.message = result.get("message")
+            moment = moment or _utcnow()
             changed = True
         farm_type = result.get("farm_type")
         if farm_type and farm_type != record.farm_type:
             record.farm_type = farm_type
+            moment = moment or _utcnow()
             changed = True
         if changed:
+            if moment is None:
+                moment = _utcnow()
+            record.updated_at = moment
             self._emit_event("job.updated", record)
         return changed
 
@@ -894,6 +1084,149 @@ class RenderSubmissionService:
             "last_history_pruned": self._last_history_prune_count,
             "store": store_metrics,
         }
+
+    def get_render_analytics(
+        self, *, now: datetime | None = None
+    ) -> RenderAnalyticsResponse:
+        """Compute aggregated analytics for render job history."""
+
+        moment = now or _utcnow()
+        records = list(self._jobs.values())
+
+        status_totals: dict[str, dict[str, Any]] = {}
+        adapter_totals: dict[str, Any] = {}
+
+        for record in records:
+            record_updated = record.updated_at or record.created_at
+            durations = record.status_durations(now=moment)
+            for status_name, duration_seconds in durations.items():
+                status_entry = status_totals.setdefault(
+                    status_name,
+                    {
+                        "count": 0,
+                        "total_duration": 0.0,
+                        "active": 0,
+                        "last_updated": None,
+                    },
+                )
+                status_entry["count"] += 1
+                status_entry["total_duration"] += max(duration_seconds, 0.0)
+                if record_updated is not None:
+                    last_updated: datetime | None = status_entry["last_updated"]
+                    if last_updated is None or record_updated > last_updated:
+                        status_entry["last_updated"] = record_updated
+
+            status_entry = status_totals.setdefault(
+                record.status,
+                {
+                    "count": 0,
+                    "total_duration": 0.0,
+                    "active": 0,
+                    "last_updated": None,
+                },
+            )
+            status_entry["active"] += 1
+            if record_updated is not None:
+                last_updated = status_entry["last_updated"]
+                if last_updated is None or record_updated > last_updated:
+                    status_entry["last_updated"] = record_updated
+
+            adapter_entry = adapter_totals.setdefault(
+                record.farm,
+                {
+                    "total_jobs": 0,
+                    "statuses": defaultdict(int),
+                    "completed_jobs": 0,
+                    "total_completion": 0.0,
+                    "first_submission": None,
+                    "last_submission": None,
+                },
+            )
+            adapter_entry["total_jobs"] += 1
+            adapter_entry["statuses"][record.status] += 1
+
+            created_at = record.created_at
+            first_submission: datetime | None = adapter_entry["first_submission"]
+            if first_submission is None or created_at < first_submission:
+                adapter_entry["first_submission"] = created_at
+            last_submission: datetime | None = adapter_entry["last_submission"]
+            if last_submission is None or created_at > last_submission:
+                adapter_entry["last_submission"] = created_at
+
+            if record.completed_at is not None:
+                adapter_entry["completed_jobs"] += 1
+                completion_seconds = (
+                    record.completed_at - record.created_at
+                ).total_seconds()
+                adapter_entry["total_completion"] += max(completion_seconds, 0.0)
+
+        status_payload: dict[str, RenderStatusAnalytics] = {}
+        for status_name, entry in status_totals.items():
+            count = entry["count"]
+            active = entry["active"]
+            total_duration = entry["total_duration"]
+            effective_count = count or active
+            average = (
+                (total_duration / effective_count)
+                if effective_count
+                else None
+            )
+            status_payload[status_name] = RenderStatusAnalytics(
+                count=count,
+                active=active,
+                last_updated_at=entry["last_updated"],
+                durations=DurationMetrics(
+                    total_seconds=total_duration,
+                    average_seconds=average,
+                ),
+            )
+
+        adapter_payload: dict[str, RenderAdapterAnalytics] = {}
+        for adapter_name, entry in adapter_totals.items():
+            completed = entry["completed_jobs"]
+            total_completion = entry["total_completion"]
+            adapter_payload[adapter_name] = RenderAdapterAnalytics(
+                total_jobs=entry["total_jobs"],
+                statuses=dict(entry["statuses"]),
+                completed_jobs=completed,
+                average_completion_seconds=(
+                    total_completion / completed if completed else None
+                ),
+                first_submission_at=entry["first_submission"],
+                last_submission_at=entry["last_submission"],
+            )
+
+        window_payload: dict[str, RenderWindowAnalytics] = {}
+        for label, window in self.DEFAULT_SUBMISSION_WINDOWS.items():
+            cutoff = moment - window
+            total = 0
+            completed = 0
+            total_completion = 0.0
+            for record in records:
+                if record.created_at < cutoff:
+                    continue
+                total += 1
+                if record.completed_at is not None:
+                    completed += 1
+                    completion_seconds = (
+                        record.completed_at - record.created_at
+                    ).total_seconds()
+                    total_completion += max(completion_seconds, 0.0)
+            window_payload[label] = RenderWindowAnalytics(
+                total_jobs=total,
+                completed_jobs=completed,
+                average_completion_seconds=(
+                    total_completion / completed if completed else None
+                ),
+            )
+
+        return RenderAnalyticsResponse(
+            generated_at=moment,
+            total_jobs=len(records),
+            statuses=status_payload,
+            adapters=adapter_payload,
+            submission_windows=window_payload,
+        )
 
     def _emit_event(
         self,
@@ -1099,7 +1432,30 @@ def health(
     service: RenderSubmissionService = Depends(get_render_service),
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
 ) -> Mapping[str, Any]:
-    return {"status": "ok", "render_history": service.get_metrics()}
+    analytics = service.get_render_analytics()
+    status_summary = {
+        name: {
+            "count": metrics.count,
+            "active": metrics.active,
+            "average_duration_seconds": metrics.durations.average_seconds,
+        }
+        for name, metrics in analytics.statuses.items()
+    }
+    recent_submissions = {
+        window: window_metrics.total_jobs
+        for window, window_metrics in analytics.submission_windows.items()
+    }
+    active_jobs = sum(metric.active for metric in analytics.statuses.values())
+    return {
+        "status": "ok",
+        "render_history": service.get_metrics(),
+        "render_summary": {
+            "total_jobs": analytics.total_jobs,
+            "active_jobs": active_jobs,
+            "by_status": status_summary,
+            "submission_windows": recent_submissions,
+        },
+    }
 
 
 @router.get("/farms", response_model=FarmsResponse)  # type: ignore[misc]
@@ -1180,6 +1536,14 @@ def list_jobs(
 ) -> JobsListResponse:
     jobs = service.list_jobs(limit=limit, status=status, farm=farm)
     return JobsListResponse(jobs=jobs)
+
+
+@router.get("/jobs/metrics", response_model=RenderAnalyticsResponse)  # type: ignore[misc]
+def job_metrics(
+    service: RenderSubmissionService = Depends(get_render_service),
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
+) -> RenderAnalyticsResponse:
+    return service.get_render_analytics()
 
 
 def _format_sse_chunk(event_name: str | None, payload: bytes) -> bytes:
