@@ -37,6 +37,8 @@ def test_health_reports_history_and_pruning(
         response = client.get("/health", headers=headers)
         payload = response.json()
         assert payload["render_history"]["history_size"] == 0
+        assert payload["render_summary"]["total_jobs"] == 0
+        assert payload["render_summary"]["submission_windows"]["1h"] == 0
 
         job_payload = {
             "dcc": "nuke",
@@ -55,6 +57,10 @@ def test_health_reports_history_and_pruning(
         response = client.get("/health", headers=headers)
         payload = response.json()
         assert payload["render_history"]["history_size"] == 1
+        summary = payload["render_summary"]
+        assert summary["total_jobs"] == 1
+        assert summary["active_jobs"] >= 0
+        assert summary["by_status"]
 
         data = json.loads(store_path.read_text())
         assert len(data) == 1
@@ -71,5 +77,6 @@ def test_health_reports_history_and_pruning(
         assert metrics["history_size"] == 0
         assert metrics["store"]["total_pruned"] >= 1
         assert metrics["store"]["last_pruned_count"] >= 1
+        assert payload["render_summary"]["total_jobs"] == 0
 
     get_render_service.cache_clear()

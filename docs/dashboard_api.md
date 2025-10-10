@@ -132,6 +132,64 @@ event: job.created
 data: {"event": "job.created", "job": {"job_id": "stub-1", "status": "queued", "farm": "mock", "farm_type": "stub", "message": null, "request": {...}}}
 ```
 
+### Render analytics
+
+Operators frequently ask for a consolidated view of render throughput without
+scraping the job history API. Trafalgar now exposes `GET /jobs/metrics`, which
+returns a structured payload summarising job counts and durations by status,
+adapter, and rolling submission windows. The response matches the
+`RenderAnalyticsResponse` Pydantic model and includes a `generated_at` timestamp
+so dashboards can display when the metrics were last refreshed.
+
+Example excerpt:
+
+```json
+{
+  "generated_at": "2024-05-08T12:00:00+00:00",
+  "total_jobs": 12,
+  "statuses": {
+    "running": {
+      "count": 4,
+      "active": 4,
+      "last_updated_at": "2024-05-08T11:58:42+00:00",
+      "durations": {
+        "total_seconds": 5420.0,
+        "average_seconds": 1355.0
+      }
+    },
+    "completed": {
+      "count": 6,
+      "active": 6,
+      "last_updated_at": "2024-05-08T11:47:03+00:00",
+      "durations": {
+        "total_seconds": 0.0,
+        "average_seconds": 0.0
+      }
+    }
+  },
+  "adapters": {
+    "mock": {
+      "total_jobs": 9,
+      "statuses": {"running": 4, "completed": 5},
+      "completed_jobs": 5,
+      "average_completion_seconds": 860.0,
+      "first_submission_at": "2024-05-08T09:10:00+00:00",
+      "last_submission_at": "2024-05-08T11:55:00+00:00"
+    }
+  },
+  "submission_windows": {
+    "1h": {"total_jobs": 3, "completed_jobs": 1, "average_completion_seconds": 915.0},
+    "6h": {"total_jobs": 12, "completed_jobs": 6, "average_completion_seconds": 874.0}
+  }
+}
+```
+
+The health check (`GET /health`) now embeds a `render_summary` object alongside
+the existing store metrics so operators can spot active job counts and recent
+submission volume without issuing a second request. The summary includes
+`total_jobs`, `active_jobs`, a status breakdown, and rolling submission window
+totals that align with `/jobs/metrics`.
+
 ### Ingest run streams
 
 - `GET /runs/stream` – SSE endpoint emitting ingest run updates.
