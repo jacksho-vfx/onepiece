@@ -6,6 +6,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import (
     Any,
+    AsyncGenerator,
     Awaitable,
     Callable,
     Dict,
@@ -13,7 +14,6 @@ from typing import (
     Mapping,
     Sequence,
     cast,
-    AsyncGenerator,
 )
 
 import structlog
@@ -23,7 +23,7 @@ from starlette.responses import Response
 from starlette.websockets import WebSocketDisconnect
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
-from apps.trafalgar.web.events import EventBroadcaster
+from apps.trafalgar.web.events import EventBroadcaster, resolve_keepalive_interval
 from apps.trafalgar.web.security import (
     AuthenticatedPrincipal,
     ROLE_INGEST_READ,
@@ -34,6 +34,10 @@ from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
 from libraries.ingest.service import IngestReport, IngestedMedia
 
 logger = structlog.get_logger(__name__)
+
+INGEST_SSE_KEEPALIVE_INTERVAL_ENV = "TRAFALGAR_INGEST_SSE_KEEPALIVE_INTERVAL"
+_INGEST_SSE_STATE_ATTR = "ingest_sse_keepalive_interval"
+_DEFAULT_SSE_KEEPALIVE_INTERVAL = 30.0
 
 
 def _serialise_media(media: IngestedMedia) -> Mapping[str, Any]:
@@ -202,6 +206,18 @@ async def list_runs(
     return JSONResponse(content=payload)
 
 
+def _resolve_ingest_keepalive_interval(request: Request) -> float:
+    return float(
+        resolve_keepalive_interval(
+            request,
+            env_name=INGEST_SSE_KEEPALIVE_INTERVAL_ENV,
+            state_attr=_INGEST_SSE_STATE_ATTR,
+            log_key="ingest.sse.keepalive",
+            default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+        )
+    )
+
+
 async def _ingest_event_stream(
     request: Request,
 ) -> AsyncGenerator[bytes, Any]:
@@ -209,7 +225,8 @@ async def _ingest_event_stream(
     try:
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=30)
+                interval = _resolve_ingest_keepalive_interval(request)
+                event = await asyncio.wait_for(queue.get(), timeout=interval)
             except asyncio.TimeoutError:
                 if await request.is_disconnected():
                     break

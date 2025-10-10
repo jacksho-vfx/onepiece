@@ -50,7 +50,7 @@ from libraries.render.base import (
 )
 from libraries.render.models import CapabilityProvider, RenderAdapter
 
-from apps.trafalgar.web.events import EventBroadcaster
+from apps.trafalgar.web.events import EventBroadcaster, resolve_keepalive_interval
 from apps.trafalgar.web.job_store import JobStore
 from apps.trafalgar.web.security import (
     AuthenticatedPrincipal,
@@ -450,6 +450,9 @@ JOB_HISTORY_LIMIT_ENV = "TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT"
 JOB_RETENTION_HOURS_ENV = "TRAFALGAR_RENDER_JOBS_RETENTION_HOURS"
 JOB_STATUS_POLL_INTERVAL_ENV = "TRAFALGAR_RENDER_STATUS_POLL_INTERVAL"
 JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
+RENDER_SSE_KEEPALIVE_INTERVAL_ENV = "TRAFALGAR_RENDER_SSE_KEEPALIVE_INTERVAL"
+_RENDER_SSE_STATE_ATTR = "render_sse_keepalive_interval"
+_DEFAULT_SSE_KEEPALIVE_INTERVAL = 30.0
 
 DEFAULT_STATUS_POLL_INTERVAL = 5.0
 DEFAULT_STORE_PERSIST_INTERVAL = 1.0
@@ -1190,6 +1193,18 @@ def _format_sse_chunk(event_name: str | None, payload: bytes) -> bytes:
     return b"\n".join(lines) + b"\n\n"
 
 
+def _resolve_render_keepalive_interval(request: Request) -> float:
+    return float(
+        resolve_keepalive_interval(
+            request,
+            env_name=RENDER_SSE_KEEPALIVE_INTERVAL_ENV,
+            state_attr=_RENDER_SSE_STATE_ATTR,
+            log_key="render.sse.keepalive",
+            default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
+        )
+    )
+
+
 async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
     service = get_render_service()
     queue = await JOB_EVENTS.subscribe()
@@ -1201,7 +1216,8 @@ async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
 
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=30)
+                interval = _resolve_render_keepalive_interval(request)
+                event = await asyncio.wait_for(queue.get(), timeout=interval)
             except asyncio.TimeoutError:
                 if await request.is_disconnected():
                     break

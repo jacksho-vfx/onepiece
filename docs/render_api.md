@@ -134,6 +134,7 @@ history with the following environment variables:
 | `TRAFALGAR_RENDER_JOBS_PATH` | `/var/lib/trafalgar/render_jobs.json` | Enables the on-disk job store. When set, the service reloads job history on startup and writes updates after each submission or status change. |
 | `TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT` | `500` | Caps the in-memory history. When the limit is exceeded, the oldest records are pruned, SSE subscribers receive a `job.removed` event, and the `/render/health` metrics update their prune counters. Use this to bound memory usage when farms submit thousands of jobs. |
 | `TRAFALGAR_RENDER_JOBS_RETENTION_HOURS` | `168` | Applies age-based pruning to the persistent store. Entries older than the configured number of hours are removed during each save as well as on service startup. For example, `168` keeps a rolling seven-day window of historical jobs on disk. |
+| `TRAFALGAR_RENDER_SSE_KEEPALIVE_INTERVAL` | `30` | Adjusts the idle keepalive cadence (in seconds) for `/render/jobs/stream`. Increase the value when proxies or load balancers disconnect long-lived responses too aggressively; decrease it on high-latency links that need more frequent keepalives. |
 
 Omitting the limit or retention variables leaves the in-memory store unbounded
 and keeps all persisted records, respectively. Negative or zero values are
