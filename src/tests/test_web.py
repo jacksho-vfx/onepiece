@@ -87,7 +87,8 @@ def test_index_template_preserves_output_whitespace() -> None:
     body = response.text
     assert "data.stdout.trim()" not in body
     assert "data.stderr.trim()" not in body
-    assert "const cleaned = value.replace(trailingNewlinePattern, '');" in body
+    assert "const stripTrailingLineBreak = (text) => {" in body
+    assert "const cleaned = stripTrailingLineBreak(value);" in body
     assert "cleaned.length > 0 ? cleaned : null;" in body
 
 

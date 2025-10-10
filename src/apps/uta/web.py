@@ -1453,11 +1453,15 @@ def _render_index(root_path: str) -> str:
               return fallback;
             }}
           }};
+          const backslashChar = String.fromCharCode(92);
+          const carriageReturn = String.fromCharCode(13);
+          const lineFeed = String.fromCharCode(10);
           const quoteArgument = (segment) => {{
             if (typeof segment !== 'string' || segment.length === 0) {{
               return "''";
             }}
-            if (!/[ \t\n\r\f\v"'\\]/.test(segment)) {{
+            const hasWhitespaceOrQuotes = /[\s"']/.test(segment);
+            if (!hasWhitespaceOrQuotes && !segment.includes(backslashChar)) {{
               return segment;
             }}
             return `'${{segment.replace(/'/g, "'\\''")}}'`;
@@ -1472,7 +1476,8 @@ def _render_index(root_path: str) -> str:
             }}
             if (input.dataset.allowMultiple === 'true') {{
               return trimmed
-                .split(/\r?\n/)
+                .replaceAll(carriageReturn, lineFeed)
+                .split(lineFeed)
                 .map((value) => value.trim())
                 .filter((value) => value.length > 0);
             }}
@@ -1507,10 +1512,8 @@ def _render_index(root_path: str) -> str:
             const baseSegments = preview && preview.dataset.commandBase
               ? safeParseJson(preview.dataset.commandBase, [])
               : [];
-            const commandPath = (card.dataset.commandPath || '')
-              .trim()
-              .split(/[\t\n\r\f\v ]+/)
-              .filter(Boolean);
+            const commandPathRaw = (card.dataset.commandPath || '').trim();
+            const commandPath = commandPathRaw ? commandPathRaw.split(/\s+/) : [];
             const parameterInputs = Array.from(
               form.querySelectorAll('.command-parameter'),
             );
@@ -1624,12 +1627,26 @@ def _render_index(root_path: str) -> str:
                 if (!response.ok) {{
                   throw new Error(data.detail || 'Command failed');
                 }}
-                const trailingNewlinePattern = /\r?\n$/;
+            const stripTrailingLineBreak = (text) => {{
+              if (typeof text !== 'string' || text.length === 0) {{
+                return '';
+              }}
+              let result = text;
+              if (result.endsWith(lineFeed)) {{
+                result = result.slice(0, -1);
+                if (result.endsWith(carriageReturn)) {{
+                  result = result.slice(0, -1);
+                }}
+              }} else if (result.endsWith(carriageReturn)) {{
+                result = result.slice(0, -1);
+              }}
+              return result;
+            }};
                 const sanitizeSegment = (value) => {{
                   if (typeof value !== 'string') {{
                     return null;
                   }}
-                  const cleaned = value.replace(trailingNewlinePattern, '');
+                  const cleaned = stripTrailingLineBreak(value);
                   return cleaned.length > 0 ? cleaned : null;
                 }};
 
@@ -1641,11 +1658,11 @@ def _render_index(root_path: str) -> str:
 
                 const stderrSegment = sanitizeSegment(data.stderr);
                 if (stderrSegment !== null) {{
-                  segments.push('\n[stderr]\n' + stderrSegment);
+                  segments.push('\\n[stderr]\\n' + stderrSegment);
                 }}
 
                 segments.push(`\n(exit code: ${{data.exit_code}})`);
-                output.textContent = segments.join('\n');
+                output.textContent = segments.join('\\n');
                 output.hidden = false;
                 if (data.success) {{
                   status.textContent = 'Completed';
