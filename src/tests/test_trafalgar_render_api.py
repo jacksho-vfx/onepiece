@@ -165,7 +165,7 @@ def test_submit_job_success(
         json={
             "dcc": "nuke",
             "scene": "/projects/show/shot_v001.nk",
-            "frames": "1-5",
+            "frames": "1-5x2, 7, 10-12",
             "output": "/tmp/renders",
             "farm": "mock",
             "priority": 75,
@@ -181,7 +181,7 @@ def test_submit_job_success(
     assert payload["message"] == "Queued for processing."
 
     assert called["scene"] == "/projects/show/shot_v001.nk"
-    assert called["frames"] == "1-5"
+    assert called["frames"] == "1-5x2,7,10-12"
     assert called["output"] == "/tmp/renders"
     assert called["dcc"] == "nuke"
     assert called["priority"] == 75
@@ -230,6 +230,26 @@ def test_submit_job_accepts_runtime_registered_adapter(
     assert payload["farm_type"] == "bespoke"
 
     assert custom_called["farm"] == "bespoke"
+
+
+def test_submit_job_invalid_frame_range_returns_validation_error(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/jobs",
+        json={
+            "dcc": "maya",
+            "scene": "/projects/show/shot_v_invalid.ma",
+            "frames": "1-10x0,foo",
+            "output": "/tmp/renders",
+            "farm": "mock",
+        },
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert detail["loc"][-1] == "frames"
+    assert "frame range" in detail["msg"].lower()
 
 
 def test_submit_job_resolves_capabilities_for_registered_adapter(
