@@ -41,7 +41,7 @@ def sync_to(
             progress.advance(description=description)
 
         s5_sync(
-            source=local_path / folder,
+            source=local_path,
             destination=destination,
             dry_run=dry_run,
             include=include,
@@ -55,5 +55,5 @@ def sync_to(
 
         progress.update_total(max(events, 1))
         progress.succeed(
-            f"Synchronized {local_path / folder} → {destination} (dry-run={dry_run!s})."
+            f"Synchronized {local_path} → {destination} (dry-run={dry_run!s})."
         )

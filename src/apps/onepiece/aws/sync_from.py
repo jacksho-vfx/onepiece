@@ -25,7 +25,7 @@ def sync_from(
     exclude = exclude or []
 
     source = f"s3://{bucket}/{show_code}/{folder}"
-    destination = local_path / folder
+    destination = local_path
 
     with progress_tracker(
         "S3 Download",
