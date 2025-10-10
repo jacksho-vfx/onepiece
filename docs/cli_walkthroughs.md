@@ -303,13 +303,23 @@ stub methods with application-specific logic and keep the CLI commands intact.
    out with `--no-browser`), and mounts the Trafalgar dashboard under the same
    host for quick switching between metrics and operations.
 
-2. Browse the command tabs. Each Typer command is rendered as a card that lists
-   its summary and parameters. Add extra CLI flags in the *Additional arguments*
-   field, then click **Run command** to invoke it without leaving the page.
+2. Browse the command tabs or start typing in the global filter bar (press `/`
+   to focus it from anywhere). Cards collapse in-place as you search, and the
+   favourite toggle (click the ★ badge or hit `Shift+F`) sticks in
+   `localStorage` so the commands you reach for most are one switch away on
+   your next session.
 
-3. Review the captured output and exit code that appears beneath the card. Use
-   this feedback loop to rehearse ingest, render, or validation flows in the
-   same browser window that displays live production telemetry.
+3. Each card highlights parameter density and required flags with new badges so
+   you can size up complex invocations at a glance. Add extra CLI flags in the
+   *Additional arguments* field, then click **Run command** to invoke it without
+   leaving the page—the run button now surfaces a spinner while the request is
+   in flight.
+
+4. Review the captured output and exit code that appears beneath the card. The
+   status chip beside the button calls out success or failure with iconography
+   and accessible contrast, making it easy to rehearse ingest, render, or
+   validation flows in the same browser window that displays live production
+   telemetry.
 
 ---
 

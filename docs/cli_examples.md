@@ -76,7 +76,7 @@ The Trafalgar Typer app exposes dashboard and ingest helpers under `web` and `in
 
 ## Uta Control Center (`onepiece uta …`)
 
-- `python -m apps.uta serve [--host <host>] [--port <port>] [--reload/--no-reload] [--open-browser/--no-browser]` — launch the browser UI that introspects every OnePiece CLI command, groups them into tabs, and embeds the Trafalgar dashboard within the same session.
+- `python -m apps.uta serve [--host <host>] [--port <port>] [--reload/--no-reload] [--open-browser/--no-browser]` — launch the browser UI that introspects every OnePiece CLI command, groups them into tabs, and embeds the Trafalgar dashboard within the same session. The interface now ships with a persistent search/favourites bar, density badges for parameter-heavy commands, and clearer status chips for long-running jobs.
 - `python -m apps.uta serve --no-browser` — start the server without opening a browser automatically (useful on headless hosts or when tunnelling the port).
 - `curl -X POST http://127.0.0.1:8050/api/run -H 'Content-Type: application/json' -d '{"path": ["aws", "ingest"], "extra_args": "--help"}'` — invoke a command through the JSON API to integrate the UI runner with automation.
 

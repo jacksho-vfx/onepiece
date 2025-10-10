@@ -45,8 +45,8 @@ def test_index_renders_failure_ui_state() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "status.textContent = 'Failed';" in body
-    assert "status.classList.add('status-error');" in body
+    assert "status.textContent = 'Request error';" in body
+    assert "status.textContent = `Failed (exit code ${data.exit_code})`;" in body
 
 
 def test_index_template_preserves_output_whitespace() -> None:
@@ -54,9 +54,10 @@ def test_index_template_preserves_output_whitespace() -> None:
 
     assert response.status_code == 200
     body = response.text
+    print(body)
     assert "data.stdout.trim()" not in body
     assert "data.stderr.trim()" not in body
-    assert "const trailingNewlinePattern = /\\r?\\n$/;" in body
+    assert "const cleaned = value.replace(trailingNewlinePattern, '');" in body
     assert "cleaned.length > 0 ? cleaned : null;" in body
 
 
