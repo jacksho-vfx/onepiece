@@ -252,19 +252,17 @@ def _render_parameters(command: CommandSpec, *, command_id: str) -> str:
             checked = " checked" if parameter.default_bool else ""
             checkbox_attrs = common_attrs
             if parameter.default_bool is not None:
-                checkbox_attrs += (
-                    f' data-default-state="{"true" if parameter.default_bool else "false"}"'
-                )
+                checkbox_attrs += f' data-default-state="{"true" if parameter.default_bool else "false"}"'
             control_html = (
                 f'<input id="{field_id}" name="{escape(parameter.name)}"'
                 f' type="checkbox" class="command-parameter"{checkbox_attrs}{checked} />'
             )
             field_html = (
-                "<div class=\"parameter-field parameter-flag\">"
-                f"  <label for=\"{field_id}\" class=\"parameter-flag-label\">"
+                '<div class="parameter-field parameter-flag">'
+                f'  <label for="{field_id}" class="parameter-flag-label">'
                 f"    {control_html}"
-                f"    <span class=\"parameter-flag-text\">"
-                f"      <span class=\"param-label\">{label_html}</span>"
+                f'    <span class="parameter-flag-text">'
+                f'      <span class="param-label">{label_html}</span>'
                 f"      {meta_html}"
                 f"    </span>"
                 f"  </label>"
@@ -288,9 +286,9 @@ def _render_parameters(command: CommandSpec, *, command_id: str) -> str:
                     f' placeholder="{escape(placeholder)}" autocomplete="off" />'
                 )
             field_html = (
-                "<div class=\"parameter-field\">"
-                f"  <label for=\"{field_id}\" class=\"parameter-label\">"
-                f"    <span class=\"param-label\">{label_html}</span>"
+                '<div class="parameter-field">'
+                f'  <label for="{field_id}" class="parameter-label">'
+                f'    <span class="param-label">{label_html}</span>'
                 f"    {meta_html}"
                 f"  </label>"
                 f"  {control_html}"
