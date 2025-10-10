@@ -15,6 +15,21 @@ inspect job progress locally or forward the events into automation.
 > placeholder with a real value or export the environment variable before
 > running the commands.
 
+## Configuring keepalive intervals
+
+Trafalgar emits `{}` keepalive messages every 30 seconds by default so idle
+connections stay open. Operators can tune the cadence when fronting the APIs
+with strict proxies or when clients need more frequent pings:
+
+- `TRAFALGAR_RENDER_SSE_KEEPALIVE_INTERVAL` controls the `/render/jobs/stream`
+  interval.
+- `TRAFALGAR_INGEST_SSE_KEEPALIVE_INTERVAL` controls the `/ingest/runs/stream`
+  interval.
+
+Values are expressed in seconds and must be positive numbers. The settings can
+also be applied programmatically by assigning ``app.state.render_sse_keepalive_interval``
+or ``app.state.ingest_sse_keepalive_interval`` before the application starts.
+
 ## Render job SSE (`GET /render/jobs/stream`)
 
 The SSE stream emits JSON payloads describing each render job transition. Every
