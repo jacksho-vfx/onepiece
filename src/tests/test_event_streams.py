@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -107,6 +108,24 @@ def clear_overrides() -> Iterator[None]:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.mark.anyio("asyncio")
+async def test_publish_from_thread_without_running_loop() -> None:
+    broadcaster = EventBroadcaster(max_buffer=4)
+    queue = await broadcaster.subscribe()
+
+    def _emit() -> None:
+        broadcaster.publish({"event": "thread"})
+
+    thread = threading.Thread(target=_emit)
+    thread.start()
+    thread.join()
+
+    message = await asyncio.wait_for(queue.get(), timeout=1)
+    await broadcaster.unsubscribe(queue)
+
+    assert message == {"event": "thread"}
 
 
 @pytest.mark.anyio("asyncio")
