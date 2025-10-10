@@ -17,20 +17,36 @@ class EventBroadcaster:
     def __init__(self, max_buffer: int = 32) -> None:
         self._max_buffer = max_buffer
         self._subscribers: set[asyncio.Queue[Any]] = set()
-        self._lock = asyncio.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock: asyncio.Lock | None = None
 
     async def subscribe(self) -> asyncio.Queue[Any]:
         """Register a new subscriber and return its queue."""
 
         queue: asyncio.Queue[Any] = asyncio.Queue(self._max_buffer)
-        async with self._lock:
+        loop = asyncio.get_running_loop()
+
+        if self._loop is None:
+            self._loop = loop
+            self._lock = asyncio.Lock()
+        elif self._loop is not loop:
+            raise RuntimeError("EventBroadcaster is bound to a different event loop")
+
+        lock = self._ensure_lock()
+
+        async with lock:
             self._subscribers.add(queue)
         return queue
 
     async def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Remove a subscriber queue from the broadcast set."""
 
-        async with self._lock:
+        lock = self._lock
+        if lock is None:
+            self._subscribers.discard(queue)
+            return
+
+        async with lock:
             self._subscribers.discard(queue)
 
     async def iter(self) -> AsyncIterator[Any]:
@@ -46,17 +62,34 @@ class EventBroadcaster:
     def publish(self, payload: Any) -> None:
         """Schedule an event for delivery to all subscribers."""
 
+        loop = self._loop
+        if loop is None:
+            return
+
         try:
-            loop = asyncio.get_running_loop()
+            running_loop = asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(self._publish(payload))
-        else:
+            running_loop = None
+
+        if running_loop is loop:
             loop.create_task(self._publish(payload))
+        else:
+            loop.call_soon_threadsafe(self._schedule_publish, payload)
+
+    def _schedule_publish(self, payload: Any) -> None:
+        """Enqueue a publish task from the broadcaster's event loop thread."""
+
+        loop = self._ensure_loop()
+        loop.create_task(self._publish(payload))
 
     async def _publish(self, payload: Any) -> None:
         """Dispatch payload to all subscribers respecting backpressure."""
 
-        async with self._lock:
+        lock = self._lock
+        if lock is None:
+            return
+
+        async with lock:
             subscribers = list(self._subscribers)
 
         if not subscribers:
@@ -68,7 +101,7 @@ class EventBroadcaster:
                 to_remove.append(queue)
 
         if to_remove:
-            async with self._lock:
+            async with lock:
                 for queue in to_remove:
                     removed = queue in self._subscribers
                     self._subscribers.discard(queue)
@@ -106,3 +139,15 @@ class EventBroadcaster:
                     "trafalgar.events.backpressure", queue_id=id(queue), action="drop"
                 )
                 return False
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        loop = self._loop
+        if loop is None:
+            raise RuntimeError("EventBroadcaster has not been bound to an event loop")
+        return loop
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        lock = self._lock
+        if lock is None:
+            raise RuntimeError("EventBroadcaster lock is not initialized")
+        return lock
