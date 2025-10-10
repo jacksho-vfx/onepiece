@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shlex
 from dataclasses import dataclass, field
@@ -32,6 +33,14 @@ class ParameterSpec:
     help_text: str
     required: bool
     default: str | None
+    name: str
+    cli_names: list[str]
+    kind: str
+    accepts_value: bool
+    is_flag: bool
+    allows_multiple: bool
+    nargs: int
+    default_bool: bool | None = None
 
 
 @dataclass
@@ -112,12 +121,41 @@ def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
             default = None
         else:
             default = str(default_value)
+        if isinstance(parameter, click.Option):
+            cli_names = list(parameter.opts) + list(parameter.secondary_opts)
+            kind = "option"
+            is_flag = bool(getattr(parameter, "is_flag", False)) or bool(
+                getattr(parameter, "is_bool_flag", False)
+            )
+            accepts_value = not is_flag
+            allows_multiple = bool(getattr(parameter, "multiple", False)) or bool(
+                getattr(parameter, "nargs", 1) != 1
+            )
+            nargs = int(getattr(parameter, "nargs", 1))
+        else:
+            cli_names = [parameter.human_readable_name]
+            kind = "argument"
+            is_flag = False
+            accepts_value = True
+            nargs = int(getattr(parameter, "nargs", 1))
+            allows_multiple = nargs != 1
+        default_bool: bool | None = None
+        if is_flag and isinstance(default_value, bool):
+            default_bool = default_value
         specs.append(
             ParameterSpec(
                 label=_format_parameter_label(parameter) or "",
                 help_text=(getattr(parameter, "help", "") or "").strip(),
                 required=getattr(parameter, "required", False),
                 default=default,
+                name=getattr(parameter, "name", ""),
+                cli_names=cli_names,
+                kind=kind,
+                accepts_value=accepts_value,
+                is_flag=is_flag,
+                allows_multiple=allows_multiple,
+                nargs=nargs,
+                default_bool=default_bool,
             )
         )
     return specs
@@ -175,33 +213,102 @@ def _slugify(name: str) -> str:
     return "-".join(name.lower().split())
 
 
-def _render_parameters(command: CommandSpec) -> str:
+def _render_parameters(command: CommandSpec, *, command_id: str) -> str:
     if not command.parameters:
-        return '<p class="parameters-empty">No additional options.</p>'
-    items = []
-    for parameter in command.parameters:
-        parts = [f'<span class="param-label">{escape(parameter.label)}</span>']
-        if parameter.help_text:
-            parts.append(
-                f'<span class="param-help">{escape(parameter.help_text)}</span>'
-            )
-        meta = []
-        if parameter.required:
-            meta.append("required")
+        return '<p class="parameters-empty">No configurable parameters.</p>'
+
+    fields: list[str] = []
+    for index, parameter in enumerate(command.parameters):
+        field_id = f"{command_id}-param-{index}"
+        label_html = escape(parameter.label)
+        help_html = (
+            f'<p class="param-help">{escape(parameter.help_text)}</p>'
+            if parameter.help_text
+            else ""
+        )
+        meta_bits: list[str] = []
+        if parameter.required and not parameter.is_flag:
+            meta_bits.append("required")
         if parameter.default is not None:
-            meta.append(f"default: {escape(parameter.default)}")
-        if meta:
-            parts.append(
-                f"<span class=\"param-meta\">({' | '.join(escape(bit) for bit in meta)})</span>"
+            meta_bits.append(f"default: {escape(parameter.default)}")
+        if parameter.allows_multiple:
+            meta_bits.append("multiple values allowed")
+        meta_html = (
+            f"<span class=\"param-meta\">({' | '.join(escape(bit) for bit in meta_bits)})</span>"
+            if meta_bits
+            else ""
+        )
+
+        cli_names_json = escape(json.dumps(parameter.cli_names), quote=True)
+        common_attrs = (
+            f' data-cli-names="{cli_names_json}"'
+            f' data-parameter-kind="{escape(parameter.kind, quote=True)}"'
+            f' data-accepts-value="{"true" if parameter.accepts_value else "false"}"'
+            f' data-is-flag="{"true" if parameter.is_flag else "false"}"'
+            f' data-allow-multiple="{"true" if parameter.allows_multiple else "false"}"'
+        )
+
+        if parameter.is_flag:
+            checked = " checked" if parameter.default_bool else ""
+            checkbox_attrs = common_attrs
+            if parameter.default_bool is not None:
+                checkbox_attrs += (
+                    f' data-default-state="{"true" if parameter.default_bool else "false"}"'
+                )
+            control_html = (
+                f'<input id="{field_id}" name="{escape(parameter.name)}"'
+                f' type="checkbox" class="command-parameter"{checkbox_attrs}{checked} />'
             )
-        items.append(f"<li>{' '.join(parts)}</li>")
-    return '<ul class="parameters">' + "".join(items) + "</ul>"
+            field_html = (
+                "<div class=\"parameter-field parameter-flag\">"
+                f"  <label for=\"{field_id}\" class=\"parameter-flag-label\">"
+                f"    {control_html}"
+                f"    <span class=\"parameter-flag-text\">"
+                f"      <span class=\"param-label\">{label_html}</span>"
+                f"      {meta_html}"
+                f"    </span>"
+                f"  </label>"
+                f"  {help_html}"
+                "</div>"
+            )
+        else:
+            required_attr = " required" if parameter.required else ""
+            placeholder = "Required value" if parameter.required else "Optional value"
+            if parameter.allows_multiple:
+                control_html = (
+                    f'<textarea id="{field_id}" name="{escape(parameter.name)}"'
+                    f' class="command-parameter command-parameter-multivalue" rows="3"'
+                    f'{common_attrs}{required_attr} placeholder="{escape(placeholder)}"'
+                    ' autocomplete="off" spellcheck="false"></textarea>'
+                )
+            else:
+                control_html = (
+                    f'<input id="{field_id}" name="{escape(parameter.name)}"'
+                    f' type="text" class="command-parameter"{common_attrs}{required_attr}'
+                    f' placeholder="{escape(placeholder)}" autocomplete="off" />'
+                )
+            field_html = (
+                "<div class=\"parameter-field\">"
+                f"  <label for=\"{field_id}\" class=\"parameter-label\">"
+                f"    <span class=\"param-label\">{label_html}</span>"
+                f"    {meta_html}"
+                f"  </label>"
+                f"  {control_html}"
+                f"  {help_html}"
+                "</div>"
+            )
+        fields.append(field_html)
+
+    return '<div class="parameter-fields">' + "".join(fields) + "</div>"
 
 
 def _render_command(command: CommandSpec) -> str:
-    parameters_html = _render_parameters(command)
+    command_id = "-".join(command.path)
+    parameters_html = _render_parameters(command, command_id=command_id)
     summary = escape(command.summary or "")
-    invocation = escape(command.invocation)
+    command_base_segments = ["onepiece", *command.path]
+    invocation_display = escape(" ".join(command_base_segments))
+    command_base_json = escape(json.dumps(command_base_segments), quote=True)
     output_id = f"output-{'-'.join(command.path)}"
     parameter_count = len(command.parameters)
     required_count = sum(1 for parameter in command.parameters if parameter.required)
@@ -237,7 +344,6 @@ def _render_command(command: CommandSpec) -> str:
             + "</span>"
         )
     metadata_html = "".join(metadata_parts)
-    command_id = "-".join(command.path)
     keyword_bits: list[str] = [
         command.display_name,
         command.summary or "",
@@ -258,15 +364,12 @@ def _render_command(command: CommandSpec) -> str:
             <span class=\"favourite-text\">Favourite</span>
           </button>
         </div>
-        <code class=\"command-invocation\">{invocation}</code>
+        <code class=\"command-invocation\" data-command-base=\"{command_base_json}\" aria-live=\"polite\">{invocation_display}</code>
         <div class=\"command-meta\">{metadata_html}</div>
       </header>
       <p class=\"command-summary\">{summary}</p>
-      {parameters_html}
       <form class=\"command-form\">
-        <label class=\"args-label\">Additional arguments
-          <input name=\"args\" type=\"text\" autocomplete=\"off\" placeholder=\"e.g. --shot /path/to/file\" />
-        </label>
+        {parameters_html}
         <div class=\"form-actions\">
           <button type=\"submit\" class=\"run-command\" aria-keyshortcuts=\"Enter\">
             <span class=\"button-icon\" aria-hidden=\"true\">▶</span>
@@ -688,23 +791,56 @@ def _render_index(root_path: str) -> str:
             margin-bottom: 0.75rem;
             color: var(--uta-text-muted);
           }}
-          .parameters {{
-            padding-left: 1.2rem;
-            margin-top: 0;
-            margin-bottom: 0.85rem;
-            color: var(--uta-text-subtle);
-          }}
           .parameters-empty {{
             font-style: italic;
             color: rgba(148, 163, 184, 0.85);
+            margin: 0;
+          }}
+          .parameter-fields {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+          }}
+          .parameter-field {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(11, 18, 32, 0.55);
+          }}
+          .parameter-flag {{
+            gap: 0.5rem;
+            background: rgba(11, 18, 32, 0.45);
+          }}
+          .parameter-label {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-weight: 600;
+            color: rgba(219, 234, 254, 0.9);
+          }}
+          .parameter-flag-label {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-weight: 600;
+            color: rgba(219, 234, 254, 0.9);
+            cursor: pointer;
+          }}
+          .parameter-flag-text {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
           }}
           .param-label {{
             font-weight: 600;
             color: #bfdbfe;
           }}
           .param-help {{
-            display: block;
-            margin-left: 0.25rem;
+            margin: 0;
+            color: var(--uta-text-subtle);
           }}
           .param-meta {{
             display: block;
@@ -714,25 +850,31 @@ def _render_index(root_path: str) -> str:
           .command-form {{
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
+            gap: 1rem;
           }}
-          .command-form .args-label {{
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-            font-weight: 600;
-            color: rgba(219, 234, 254, 0.9);
-          }}
-          .command-form input {{
+          .command-form .command-parameter:not([type="checkbox"]) {{
             padding: 0.55rem 0.8rem;
             border-radius: 10px;
             border: 1px solid var(--uta-border);
             background: rgba(11, 18, 32, 0.85);
             color: inherit;
           }}
-          .command-form input:focus {{
+          .command-form .command-parameter:not([type="checkbox"]):focus {{
             outline: 2px solid var(--uta-border-strong);
             outline-offset: 1px;
+          }}
+          .command-form .command-parameter-multivalue {{
+            min-height: 4.5rem;
+            resize: vertical;
+            line-height: 1.4;
+          }}
+          .parameter-flag-label input {{
+            width: 1.1rem;
+            height: 1.1rem;
+            border-radius: 0.35rem;
+            border: 1px solid var(--uta-border);
+            background: rgba(15, 23, 42, 0.4);
+            accent-color: var(--uta-accent);
           }}
           .form-actions {{
             display: flex;
@@ -1306,21 +1448,163 @@ def _render_index(root_path: str) -> str:
               requestDashboardRefresh();
             }});
           }}
+          const safeParseJson = (value, fallback) => {{
+            try {{
+              return JSON.parse(value);
+            }} catch (error) {{
+              return fallback;
+            }}
+          }};
+          const quoteArgument = (segment) => {{
+            if (typeof segment !== 'string' || segment.length === 0) {{
+              return "''";
+            }}
+            if (!/[ \t\n\r\f\v"'\\]/.test(segment)) {{
+              return segment;
+            }}
+            return `'${{segment.replace(/'/g, "'\\''")}}'`;
+          }};
+          const expandMultiValue = (input, raw) => {{
+            if (typeof raw !== 'string') {{
+              return [];
+            }}
+            const trimmed = raw.trim();
+            if (!trimmed) {{
+              return [];
+            }}
+            if (input.dataset.allowMultiple === 'true') {{
+              return trimmed
+                .split(/\r?\n/)
+                .map((value) => value.trim())
+                .filter((value) => value.length > 0);
+            }}
+            return [trimmed];
+          }};
+          const pickPreferredOptionName = (names) => {{
+            if (!Array.isArray(names)) {{
+              return '';
+            }}
+            for (const name of names) {{
+              if (typeof name === 'string' && !name.startsWith('--no-')) {{
+                return name;
+              }}
+            }}
+            return names.find((name) => typeof name === 'string') || '';
+          }};
+          const pickNegativeOptionName = (names) => {{
+            if (!Array.isArray(names)) {{
+              return '';
+            }}
+            return (
+              names.find((name) => typeof name === 'string' && name.startsWith('--no-')) ||
+              ''
+            );
+          }};
           document.querySelectorAll('.command-form').forEach((form) => {{
             const card = form.closest('.command-card');
             const output = card.querySelector('.command-output');
             const status = form.querySelector('.status');
             const progress = form.querySelector('.progress-indicator');
+            const preview = card.querySelector('.command-invocation');
+            const baseSegments = preview && preview.dataset.commandBase
+              ? safeParseJson(preview.dataset.commandBase, [])
+              : [];
+            const commandPath = (card.dataset.commandPath || '')
+              .trim()
+              .split(/[\t\n\r\f\v ]+/)
+              .filter(Boolean);
+            const parameterInputs = Array.from(
+              form.querySelectorAll('.command-parameter'),
+            );
+            const buildArgumentSegments = () => {{
+              const segments = [];
+              parameterInputs.forEach((input) => {{
+                const isFlag = input.dataset.isFlag === 'true';
+                const kind = input.dataset.parameterKind;
+                const names = safeParseJson(input.dataset.cliNames || '[]', []);
+                if (isFlag) {{
+                  const defaultStateAttr = input.dataset.defaultState;
+                  const defaultState =
+                    defaultStateAttr === 'true'
+                      ? true
+                      : defaultStateAttr === 'false'
+                      ? false
+                      : null;
+                  const negativeName = pickNegativeOptionName(names);
+                  if (defaultState === null) {{
+                    if (input.checked) {{
+                      const name = pickPreferredOptionName(names);
+                      if (name) {{
+                        segments.push(name);
+                      }}
+                    }}
+                    return;
+                  }}
+                  if (input.checked === defaultState) {{
+                    return;
+                  }}
+                  if (input.checked) {{
+                    const name = pickPreferredOptionName(names);
+                    if (name) {{
+                      segments.push(name);
+                    }}
+                    return;
+                  }}
+                  if (!input.checked && negativeName) {{
+                    segments.push(negativeName);
+                  }}
+                  return;
+                }}
+                if (kind === 'option') {{
+                  const values = expandMultiValue(input, input.value);
+                  if (!values.length) {{
+                    return;
+                  }}
+                  const optionName = pickPreferredOptionName(names);
+                  if (!optionName) {{
+                    values.forEach((value) => segments.push(value));
+                    return;
+                  }}
+                  values.forEach((value) => {{
+                    segments.push(optionName);
+                    segments.push(value);
+                  }});
+                  return;
+                }}
+                const values = expandMultiValue(input, input.value);
+                values.forEach((value) => segments.push(value));
+              }});
+              return segments;
+            }};
+            const updatePreview = () => {{
+              if (!preview) {{
+                return;
+              }}
+              const base = Array.isArray(baseSegments) && baseSegments.length
+                ? baseSegments
+                : ['onepiece', ...commandPath];
+              const previewSegments = [...base, ...buildArgumentSegments()];
+              preview.textContent = previewSegments.map(quoteArgument).join(' ');
+            }};
+            parameterInputs.forEach((input) => {{
+              const eventName = input.type === 'checkbox' ? 'change' : 'input';
+              input.addEventListener(eventName, updatePreview);
+            }});
+            updatePreview();
             form.addEventListener('submit', async (event) => {{
               event.preventDefault();
               const button = form.querySelector('.run-command');
-              const argsField = form.querySelector('[name=\"args\"]');
-              const path = (card.dataset.commandPath || '').trim().split(/[\t\n\r\f\v ]+/).filter(Boolean);
+              if (!button) {{
+                return;
+              }}
+              const path = commandPath.slice();
               if (!path.length) {{
                 status.textContent = 'Unknown command';
                 status.dataset.state = 'error';
                 return;
               }}
+              const argumentSegments = buildArgumentSegments();
+              const extraArgsString = argumentSegments.map(quoteArgument).join(' ');
               button.disabled = true;
               card.classList.add('is-busy');
               status.removeAttribute('data-state');
@@ -1336,7 +1620,7 @@ def _render_index(root_path: str) -> str:
                 const response = await fetch(joinWithRoot('/api/run'), {{
                   method: 'POST',
                   headers: {{ 'Content-Type': 'application/json' }},
-                  body: JSON.stringify({{ path, extra_args: argsField.value }}),
+                  body: JSON.stringify({{ path, arguments: argumentSegments, extra_args: extraArgsString }}),
                 }});
                 const data = await response.json();
                 if (!response.ok) {{
@@ -1758,7 +2042,16 @@ app.mount("/render", render_app)
 
 class RunCommandRequest(BaseModel):
     path: list[str] = Field(..., description="CLI command segments to execute")
-    extra_args: str = Field("", description="Raw CLI arguments appended to the command")
+    extra_args: str = Field(
+        "",
+        description=(
+            "Raw CLI arguments appended to the command (deprecated in favour of the "
+            "structured 'arguments' payload)"
+        ),
+    )
+    arguments: list[str] | None = Field(
+        None, description="Structured CLI arguments appended to the command"
+    )
 
 
 class RunCommandResponse(BaseModel):
@@ -1805,10 +2098,13 @@ async def run_command(payload: RunCommandRequest) -> RunCommandResponse:
     command_path = tuple(payload.path)
     if command_path not in COMMAND_LOOKUP:
         raise HTTPException(status_code=404, detail="Unknown command path")
-    try:
-        extra_args = _split_extra_args(payload.extra_args)
-    except ValueError as exc:  # pragma: no cover - user facing error
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.arguments is not None:
+        extra_args = list(payload.arguments)
+    else:
+        try:
+            extra_args = _split_extra_args(payload.extra_args)
+        except ValueError as exc:  # pragma: no cover - user facing error
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     arguments = [*command_path, *extra_args]
     result = await asyncio.to_thread(_invoke_cli, arguments)

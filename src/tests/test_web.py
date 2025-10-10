@@ -30,7 +30,7 @@ def test_run_command_failure_reports_success_flag(monkeypatch: MonkeyPatch) -> N
 
     response = client.post(
         "/api/run",
-        json={"path": list(command_path), "extra_args": ""},
+        json={"path": list(command_path), "arguments": []},
     )
 
     assert response.status_code == 200
@@ -38,6 +38,37 @@ def test_run_command_failure_reports_success_flag(monkeypatch: MonkeyPatch) -> N
     assert payload["success"] is False
     assert payload["exit_code"] == 2
     assert payload["stderr"] == "boom"
+
+
+def test_run_command_accepts_structured_arguments(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    command_path = next(iter(web.COMMAND_LOOKUP))
+
+    def fake_invoke(arguments: Sequence[str]) -> RunCommandResponse:
+        assert list(arguments) == [*command_path, "--flag", "value", "--toggle"]
+        return web.RunCommandResponse(
+            command=list(arguments),
+            exit_code=0,
+            stdout="done",
+            stderr="",
+            success=True,
+        )
+
+    monkeypatch.setattr(web, "_invoke_cli", fake_invoke)
+
+    response = client.post(
+        "/api/run",
+        json={
+            "path": list(command_path),
+            "arguments": ["--flag", "value", "--toggle"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["stdout"] == "done"
 
 
 def test_index_renders_failure_ui_state() -> None:
@@ -75,7 +106,7 @@ def test_index_honours_asgi_root_path_prefix() -> None:
 
         api_response = prefixed_client.post(
             "/uta/api/run",
-            json={"path": list(command_path), "extra_args": ""},
+            json={"path": list(command_path), "arguments": []},
         )
 
     assert api_response.status_code == 200
