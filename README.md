@@ -40,6 +40,26 @@ scene must declare positive, non-zero `width`, `height`, and `frames` fields in
 addition to any objects. Scenes with zero or negative dimensions are rejected
 before rendering so frame buffers are always valid.
 
+Use the new `--format` flag to control how frames are exported:
+
+- `--format ppm` (default) dumps each frame as a human-readable plain PPM file.
+- `--format png` outputs lossless RGBA PNGs while preserving alpha.
+- `--format gif` / `--format mp4` bundle the render into a single animation.
+
+PNG and animation outputs rely on optional encoders. Install them when needed:
+
+```bash
+# Enable PNG helpers
+pip install 'onepiece[chopper-images]'
+
+# Enable GIF/MP4 helpers (requires an ffmpeg binary on PATH for MP4)
+pip install 'onepiece[chopper-anim]'
+```
+
+When encoding animations you can tweak `--fps` to match the desired playback
+speed. The writer stitches frames into GIFs directly via Pillow or shells out to
+FFmpeg through `imageio-ffmpeg` for MP4 containers.
+
 ### Onboarding resources
 
 If you are new to the toolkit, start with the dedicated onboarding material bundled in this repository:

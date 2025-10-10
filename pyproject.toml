@@ -28,6 +28,16 @@ dependencies = [
     "mypy>=1.11.1",
 ]
 
+[project.optional-dependencies]
+"chopper-images" = [
+    "Pillow>=10.4.0",
+]
+"chopper-anim" = [
+    "Pillow>=10.4.0",
+    "imageio>=2.35",
+    "imageio-ffmpeg>=0.5.1",
+]
+
 [project.scripts]
 onepiece = "apps.onepiece.__main__:main"
 trafalgar = "apps.trafalgar.__main__:main"

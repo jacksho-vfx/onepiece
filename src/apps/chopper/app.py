@@ -8,7 +8,7 @@ from typing import Any
 
 import typer
 
-from .renderer import Renderer, Scene, SceneError
+from .renderer import AnimationWriter, Renderer, Scene, SceneError
 
 app = typer.Typer(help="Render self-contained scene descriptions using Chopper.")
 
@@ -39,8 +39,21 @@ def render(
         Path("frames"),
         "--output",
         "-o",
-        help="Directory where rendered frames will be written as PPM files.",
+        help=(
+            "Directory for per-frame exports or file path for bundled animations."
+        ),
     ),
+    export: str = typer.Option(
+        "ppm",
+        "--format",
+        "-f",
+        case_sensitive=False,
+        help=(
+            "Output format: 'ppm' for plain-text dumps, 'png' for per-frame PNGs,"
+            " or 'gif'/'mp4' for bundled animations."
+        ),
+    ),
+    fps: int = typer.Option(24, help="Frames per second used when encoding animations."),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
@@ -48,13 +61,35 @@ def render(
     renderer = Renderer(parsed_scene)
     frames = renderer.render()
 
-    output.mkdir(parents=True, exist_ok=True)
+    export_normalized = export.lower()
 
-    for frame in frames:
-        frame_path = output / f"frame_{frame.index:04d}.ppm"
-        frame.save_ppm(frame_path)
+    if export_normalized not in {"ppm", "png", "gif", "mp4"}:
+        raise typer.BadParameter("format must be one of: ppm, png, gif, mp4")
 
-    typer.echo(f"Rendered {len(frames)} frame(s) to {output}")
+    if export_normalized in {"ppm", "png"}:
+        output.mkdir(parents=True, exist_ok=True)
+        for frame in frames:
+            frame_path = output / f"frame_{frame.index:04d}.{export_normalized}"
+            if export_normalized == "ppm":
+                frame.save_ppm(frame_path)
+            else:
+                frame.save_png(frame_path)
+        typer.echo(f"Rendered {len(frames)} frame(s) to {output}")
+        return
+
+    destination = output
+    suffix = f".{export_normalized}"
+    if destination.suffix.lower() != suffix:
+        destination = destination.with_suffix(suffix)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    writer = AnimationWriter(frames=frames, fps=fps)
+    if export_normalized == "gif":
+        writer.write_gif(destination)
+    else:
+        writer.write_mp4(destination)
+
+    typer.echo(f"Rendered {len(frames)} frame(s) to {destination}")
 
 
 __all__ = ["app", "render"]

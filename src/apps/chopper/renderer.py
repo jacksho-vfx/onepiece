@@ -5,9 +5,43 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
-Color = tuple[int, int, int]
+try:  # pragma: no cover - imported lazily in helpers
+    from PIL import Image as PILImage
+except ImportError:  # pragma: no cover - optional dependency
+    PILImage = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - imported lazily in helpers
+    import imageio.v3 as iio
+except ImportError:  # pragma: no cover - optional dependency
+    iio = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from PIL import Image as _PillowModule
+    from PIL.Image import Image as _PillowImage
+
+Color = tuple[int, int, int] | tuple[int, int, int, int]
+
+
+def _require_pillow() -> "_PillowModule":
+    """Return the :mod:`Pillow` image class or raise a helpful error."""
+
+    if PILImage is None:  # pragma: no cover - exercised in integration tests
+        raise RuntimeError(
+            "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
+        )
+    return PILImage
+
+
+def _require_imageio() -> Any:
+    """Return the :mod:`imageio.v3` module or raise a helpful error."""
+
+    if iio is None:  # pragma: no cover - exercised in integration tests
+        raise RuntimeError(
+            "imageio is required for animation export. Install the 'onepiece[chopper-anim]' extra."
+        )
+    return iio
 
 
 class SceneError(ValueError):
@@ -269,12 +303,16 @@ class Frame:
         pixels = [[color for _ in range(width)] for _ in range(height)]
         return cls(index=index, width=width, height=height, pixels=pixels)
 
+    def _has_alpha(self) -> bool:
+        return any(len(pixel) == 4 for row in self.pixels for pixel in row)
+
     def to_bytes(self) -> bytes:
         """Return the frame encoded as 24-bit RGB bytes."""
 
         raw = bytearray()
         for row in self.pixels:
-            for r, g, b in row:
+            for pixel in row:
+                r, g, b = pixel[:3]
                 raw.extend((r, g, b))
         return bytes(raw)
 
@@ -284,8 +322,40 @@ class Frame:
         with destination.open("w", encoding="ascii") as stream:
             stream.write(f"P3\n{self.width} {self.height}\n255\n")
             for row in self.pixels:
-                values = " ".join("{} {} {}".format(*pixel) for pixel in row)
+                values = " ".join("{} {} {}".format(*pixel[:3]) for pixel in row)
                 stream.write(values + "\n")
+
+    def to_image(self, *, mode: str | None = None) -> "_PillowImage":
+        """Return the frame as a Pillow :class:`~PIL.Image.Image` instance."""
+
+        pillow = _require_pillow()
+        has_alpha = self._has_alpha()
+        resolved_mode = mode or ("RGBA" if has_alpha else "RGB")
+        if resolved_mode not in {"RGB", "RGBA"}:  # pragma: no cover - defensive
+            raise ValueError(f"Unsupported image mode: {resolved_mode}")
+
+        pixels: list[tuple[int, ...]] = []
+        for row in self.pixels:
+            for pixel in row:
+                if len(pixel) == 4:
+                    r, g, b, a = pixel
+                else:
+                    r, g, b = pixel
+                    a = 255
+                if resolved_mode == "RGB":
+                    pixels.append((r, g, b))
+                else:
+                    pixels.append((r, g, b, a))
+
+        image = pillow.new(resolved_mode, (self.width, self.height))
+        image.putdata(pixels)
+        return image
+
+    def save_png(self, destination: Path, *, mode: str | None = None, **options: Any) -> None:
+        """Write the frame to ``destination`` as a PNG file."""
+
+        image = self.to_image(mode=mode)
+        image.save(destination, format="PNG", **options)
 
 
 class Renderer:
@@ -308,28 +378,101 @@ class Renderer:
         return frames
 
 
+@dataclass(slots=True)
+class AnimationWriter:
+    """Utility for encoding a sequence of :class:`Frame` objects."""
+
+    frames: Sequence[Frame]
+    fps: int = 24
+
+    def _ensure_frames(self) -> list[Frame]:
+        if not self.frames:
+            raise ValueError("Cannot encode an empty frame sequence")
+        if self.fps <= 0:
+            raise ValueError("Frames per second must be greater than zero")
+        return list(self.frames)
+
+    def write_gif(
+        self, destination: Path, *, loop: int = 0, optimize: bool = True, duration_ms: int | None = None
+    ) -> None:
+        """Write the frames to ``destination`` as an animated GIF."""
+
+        frames = self._ensure_frames()
+        images = [frame.to_image(mode="RGBA") for frame in frames]
+        first = images[0]
+        rest = images[1:]
+        duration = duration_ms if duration_ms is not None else max(int(round(1000 / self.fps)), 1)
+        first.save(
+            destination,
+            format="GIF",
+            save_all=True,
+            append_images=rest,
+            duration=duration,
+            loop=loop,
+            disposal=2,
+            optimize=optimize,
+        )
+
+    def write_mp4(
+        self,
+        destination: Path,
+        *,
+        codec: str = "libx264",
+        bitrate: str | None = None,
+        pixelformat: str = "yuv420p",
+    ) -> None:
+        """Encode the frames into an MP4 container using :mod:`imageio`."""
+
+        module = _require_imageio()
+        kwargs: dict[str, Any] = {"fps": self.fps, "codec": codec, "pixelformat": pixelformat}
+        if bitrate is not None:
+            kwargs["bitrate"] = bitrate
+
+        frames = self._ensure_frames()
+        with module.get_writer(destination, format="ffmpeg", mode="I", **kwargs) as stream:
+            for frame in frames:
+                stream.append_data(frame.to_image(mode="RGB"))
+
+    def write(self, destination: Path) -> None:
+        """Auto-detect the output format based on ``destination``'s suffix."""
+
+        suffix = destination.suffix.lower()
+        if suffix == ".gif":
+            self.write_gif(destination)
+        elif suffix in {".mp4", ".m4v"}:
+            self.write_mp4(destination)
+        else:  # pragma: no cover - defensive
+            raise ValueError(f"Unsupported animation format for '{destination}'")
+
+
 def parse_color(value: object) -> Color:
     """Parse ``value`` into an RGB tuple."""
 
     if isinstance(value, str):
         text = value.lstrip("#")
-        if len(text) == 3:
+        if len(text) in {3, 4}:
             text = "".join(ch * 2 for ch in text)
-        if len(text) != 6:
+        if len(text) not in {6, 8}:
             raise SceneError(f"Could not parse colour value: {value!r}")
         try:
             r = int(text[0:2], 16)
             g = int(text[2:4], 16)
             b = int(text[4:6], 16)
+            if len(text) == 8:
+                a = int(text[6:8], 16)
+                return r, g, b, a
         except ValueError as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
         return r, g, b
 
-    if isinstance(value, Sequence) and len(value) == 3:
+    if isinstance(value, Sequence) and len(value) in {3, 4}:
         try:
-            r, g, b = (int(component) for component in value)
+            components = tuple(int(component) for component in value)
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
+        if len(components) == 4:
+            return cast(tuple[int, int, int, int], components)
+        r, g, b = components
         return r, g, b
 
     raise SceneError(f"Could not parse colour value: {value!r}")
@@ -337,6 +480,7 @@ def parse_color(value: object) -> Color:
 
 __all__ = [
     "Animation",
+    "AnimationWriter",
     "Frame",
     "Keyframe",
     "Renderer",

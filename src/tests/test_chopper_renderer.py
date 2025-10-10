@@ -6,7 +6,14 @@ from typing import Any
 
 import pytest
 
-from apps.chopper.renderer import Frame, Renderer, Scene, SceneError, parse_color
+from apps.chopper.renderer import (
+    AnimationWriter,
+    Frame,
+    Renderer,
+    Scene,
+    SceneError,
+    parse_color,
+)
 
 
 def build_scene_dict() -> dict[str, object]:
@@ -55,6 +62,8 @@ def test_parse_color_accepts_various_inputs() -> None:
     assert parse_color("#fff") == (255, 255, 255)
     assert parse_color("336699") == (0x33, 0x66, 0x99)
     assert parse_color((1, 2, 3)) == (1, 2, 3)
+    assert parse_color("#11223344") == (0x11, 0x22, 0x33, 0x44)
+    assert parse_color((1, 2, 3, 4)) == (1, 2, 3, 4)
 
     with pytest.raises(SceneError):
         parse_color("#12")
@@ -87,6 +96,58 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[0] == "P3"
     assert contents[1] == f"{scene.width} {scene.height}"
     assert contents[2] == "255"
+
+
+def test_frame_png_export_preserves_alpha(tmp_path: Path) -> None:
+    pytest.importorskip("PIL.Image")
+
+    frame = Frame(
+        index=0,
+        width=2,
+        height=1,
+        pixels=[[(255, 0, 0, 128), (0, 0, 255, 255)]],
+    )
+
+    path = tmp_path / "frame.png"
+    frame.save_png(path)
+
+    contents = path.read_bytes()
+    assert contents.startswith(b"\x89PNG\r\n\x1a\n")
+
+    from PIL import Image
+
+    with Image.open(path) as image:
+        assert image.mode == "RGBA"
+        assert image.size == (2, 1)
+        assert image.getpixel((0, 0)) == (255, 0, 0, 128)
+        assert image.getpixel((1, 0)) == (0, 0, 255, 255)
+
+
+def test_animation_writer_creates_gif(tmp_path: Path) -> None:
+    pytest.importorskip("PIL.Image")
+    pytest.importorskip("imageio")
+
+    frames = [
+        Frame(index=idx, width=1, height=1, pixels=[[(idx * 20, 0, 255 - idx * 20, 255)]])
+        for idx in range(3)
+    ]
+
+    destination = tmp_path / "animation.gif"
+    AnimationWriter(frames=frames, fps=12).write_gif(destination)
+
+    data = destination.read_bytes()
+    assert data.startswith(b"GIF89a")
+
+    from PIL import Image
+
+    with Image.open(destination) as image:
+        assert image.n_frames == len(frames)
+        image.seek(0)
+        first = image.convert("RGBA")
+        assert first.getpixel((0, 0))[2] == 255
+        image.seek(1)
+        second = image.convert("RGBA")
+        assert second.getpixel((0, 0))[0] == 20
 
 
 def test_scene_serialisation_round_trip(tmp_path: Path) -> None:
