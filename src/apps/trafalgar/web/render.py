@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import os
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -227,6 +228,10 @@ class RenderJobRequest(BaseModel):
         lambda: tuple(FARM_ADAPTERS)
     )
 
+    _FRAME_SEGMENT_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"^(?P<start>-?\d+)(?:-(?P<end>-?\d+)(?:x(?P<step>\d+))?)?$"
+    )
+
     dcc: str = Field(
         ..., description="Digital content creation package (e.g. maya, nuke)."
     )
@@ -297,6 +302,35 @@ class RenderJobRequest(BaseModel):
         if not text:
             raise ValueError("Value cannot be empty.")
         return text
+
+    @field_validator("frames")
+    @classmethod
+    def _validate_frames(cls, value: str) -> str:
+        segments = [segment.strip() for segment in value.split(",")]
+        if not segments or any(not segment for segment in segments):
+            raise ValueError(
+                "Frame range must be a comma separated list of frames or ranges (e.g. 1-10,20-30x2)."
+            )
+        for segment in segments:
+            match = cls._FRAME_SEGMENT_PATTERN.match(segment)
+            if match is None:
+                raise ValueError(
+                    "Frame range must use Deadline notation (e.g. 1-10,20-30x2)."
+                )
+            end_text = match.group("end")
+            if end_text is not None:
+                start = int(match.group("start"))
+                end = int(end_text)
+                if end < start:
+                    raise ValueError(
+                        f"Frame range segment '{segment}' must have the end greater than or equal to the start."
+                    )
+                step_text = match.group("step")
+                if step_text is not None and int(step_text) <= 0:
+                    raise ValueError(
+                        f"Frame range segment '{segment}' must use a positive step."
+                    )
+        return ",".join(segments)
 
 
 class RenderJobResponse(BaseModel):
