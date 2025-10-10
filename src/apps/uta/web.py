@@ -218,26 +218,30 @@ def _render_command(command: CommandSpec) -> str:
         density_key = "dense"
     metadata_parts: list[str] = []
     metadata_parts.append(
-        "<span class=\"badge badge-density badge-density-"
+        '<span class="badge badge-density badge-density-'
         + density_key
-        + f"\"><span aria-hidden=\"true\">⚙️</span>{escape(density_label)}</span>"
+        + f'"><span aria-hidden="true">⚙️</span>{escape(density_label)}</span>'
     )
     metadata_parts.append(
-        "<span class=\"badge badge-parameters\"><span aria-hidden=\"true\">🧾</span>"
+        '<span class="badge badge-parameters"><span aria-hidden="true">🧾</span>'
         + escape(str(parameter_count))
         + (" params" if parameter_count != 1 else " param")
         + "</span>"
     )
     if required_count:
         metadata_parts.append(
-            "<span class=\"badge badge-required\"><span aria-hidden=\"true\">❗</span>"
+            '<span class="badge badge-required"><span aria-hidden="true">❗</span>'
             + escape(str(required_count))
             + (" required" if required_count != 1 else " required")
             + "</span>"
         )
     metadata_html = "".join(metadata_parts)
     command_id = "-".join(command.path)
-    keyword_bits: list[str] = [command.display_name, command.summary or "", " ".join(command.path)]
+    keyword_bits: list[str] = [
+        command.display_name,
+        command.summary or "",
+        " ".join(command.path),
+    ]
     for parameter in command.parameters:
         keyword_bits.append(parameter.label)
         keyword_bits.append(parameter.help_text)
@@ -276,6 +280,7 @@ def _render_command(command: CommandSpec) -> str:
       <pre id=\"{output_id}\" class=\"command-output\" hidden></pre>
     </article>
     """
+
 
 def _render_page(page: PageSpec, *, is_active: bool) -> str:
     commands_html = "".join(_render_command(command) for command in page.commands)
@@ -1065,6 +1070,8 @@ def _render_index(root_path: str) -> str:
       </body>
     </html>
     """
+
+
 app = FastAPI(title="Uta Control Center", docs_url=None, redoc_url=None)
 app.mount("/dashboard", dashboard_app)
 
