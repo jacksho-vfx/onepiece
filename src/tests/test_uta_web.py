@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 
 import click
-from py_mini_racer import py_mini_racer
+import pytest
+from py_mini_racer.py_mini_racer import MiniRacer
 
 from apps.uta import web
 
@@ -46,15 +47,24 @@ def test_dashboard_chart_builders() -> None:
 
     assert "window.utaDashboardTestHooks" in inline_script
 
-    context = py_mini_racer.MiniRacer()
+    try:
+        from py_mini_racer import py_mini_racer
+
+        context: MiniRacer = py_mini_racer.MiniRacer()
+    except (RuntimeError, ImportError) as exc:
+        pytest.skip(f"MiniRacer native binary not available: {exc}")
+
     context.eval(
         "var window = this;"
         "window.window = window;"
         "window.console = { log: function(){}, warn: function(){}, error: function(){} };"
     )
-    functions_snippet = "const colourPalette" + inline_script.split("const colourPalette", 1)[1].split(
-        "window.utaDashboardTestHooks", 1
-    )[0]
+    functions_snippet = (
+        "const colourPalette"
+        + inline_script.split("const colourPalette", 1)[1].split(
+            "window.utaDashboardTestHooks", 1
+        )[0]
+    )
     context.eval(functions_snippet)
     context.eval(
         "window.utaDashboardTestHooks = {"
@@ -93,7 +103,12 @@ def test_dashboard_chart_builders() -> None:
     assert normalised == "Past hour"
 
     assert status_config["type"] == "doughnut"
-    assert status_config["data"]["labels"] == ["completed", "failed", "queued", "running"]
+    assert status_config["data"]["labels"] == [
+        "completed",
+        "failed",
+        "queued",
+        "running",
+    ]
     assert status_config["data"]["datasets"][0]["data"] == [6, 1, 4, 7]
 
     assert throughput_config["type"] == "line"
