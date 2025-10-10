@@ -265,7 +265,12 @@ dashboard auto-caches version lookups, gracefully handles sparse delivery
 manifests, and the render API now mirrors the CLI's job lifecycle so you can
 list, inspect, and cancel submissions via HTTP. Launch the services with the
 Typer commands described above (`trafalgar web dashboard`, `trafalgar web
-ingest`, `trafalgar web review`, and `trafalgar web render`) and use the snippet
+ingest`, `trafalgar web review`, and `trafalgar web render`). When you want to
+demo the interface without live data, add `--demo-port <port>` to `trafalgar web
+dashboard` to spin up a parallel instance loaded with studio-style sample
+metrics.
+
+Use the snippet
 below to export placeholder metadata with the existing DCC stubs while the web
 services provide context for show-level analytics:
 

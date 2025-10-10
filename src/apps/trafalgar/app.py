@@ -1,6 +1,7 @@
 """Typer CLI entry points for the Trafalgar dashboard services."""
 
 from importlib import import_module
+from multiprocessing import Process
 from pathlib import Path
 from typing import Any, Optional
 
@@ -11,6 +12,7 @@ import typer
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
+DEMO_DASHBOARD_TOKEN = "demo-dashboard-token"
 
 app = typer.Typer(
     name="trafalgar",
@@ -33,6 +35,20 @@ def _load_uvicorn() -> Any:
     """Dynamically import uvicorn to keep it optional for non-web commands."""
 
     return import_module("uvicorn")
+
+
+def _run_demo_dashboard(host: str, port: int, log_level: str) -> None:
+    """Launch the demo dashboard with curated sample data."""
+
+    os.environ.setdefault("TRAFALGAR_DASHBOARD_TOKEN", DEMO_DASHBOARD_TOKEN)
+    uvicorn = _load_uvicorn()
+    uvicorn.run(
+        "apps.trafalgar.web.demo:app",
+        host=host,
+        port=port,
+        reload=False,
+        log_level=log_level,
+    )
 
 
 @web_app.command()
@@ -65,18 +81,53 @@ def dashboard(
         help="Log level passed to uvicorn.",
         show_default=True,
     ),
+    demo_port: Optional[int] = typer.Option(
+        None,
+        "--demo-port",
+        min=1,
+        max=65535,
+        help=(
+            "Launch a second dashboard instance populated with demo data on the "
+            "specified port. The demo service reuses the same host and "
+            "disables auto-reload."
+        ),
+    ),
 ) -> None:
     """Launch the OnePiece web dashboard using uvicorn."""
 
+    if demo_port is not None and demo_port == port:
+        raise typer.BadParameter(
+            "Demo port must differ from the primary dashboard port."
+        )
+
+    demo_process: Process | None = None
+    if demo_port is not None:
+        typer.echo(
+            "Starting Trafalgar demo dashboard on "
+            f"http://{host}:{demo_port} (token: {DEMO_DASHBOARD_TOKEN})"
+        )
+        demo_process = Process(
+            target=_run_demo_dashboard,
+            args=(host, demo_port, log_level),
+            daemon=True,
+        )
+        demo_process.start()
+
     typer.echo(f"Starting OnePiece dashboard on http://{host}:{port}")
     uvicorn = _load_uvicorn()
-    uvicorn.run(
-        "apps.trafalgar.web.dashboard:app",
-        host=host,
-        port=port,
-        reload=reload,
-        log_level=log_level,
-    )
+    try:
+        uvicorn.run(
+            "apps.trafalgar.web.dashboard:app",
+            host=host,
+            port=port,
+            reload=reload,
+            log_level=log_level,
+        )
+    finally:
+        if demo_process is not None:
+            typer.echo("Stopping Trafalgar demo dashboard")
+            demo_process.terminate()
+            demo_process.join(timeout=5)
 
 
 def _serve_ingest(*, host: str, port: int, reload: bool, log_level: str) -> None:
