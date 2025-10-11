@@ -5,13 +5,17 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 from PIL import Image as PILImage
 
-try:  # pragma: no cover - imported lazily in helpers
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
     import imageio.v3 as iio
-except ImportError:  # pragma: no cover - optional dependency
-    iio = None
+else:
+    try:
+        import imageio.v3 as iio
+    except ImportError:
+        iio = None  # type: ignore[assignment]
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
