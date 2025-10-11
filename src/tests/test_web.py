@@ -143,3 +143,33 @@ def test_dashboard_tab_activation_triggers_refresh() -> None:
         in body
     )
     assert "window.triggerDashboardRefresh();" in body
+
+
+def test_tab_query_parameter_sets_cli_section_active() -> None:
+    response = client.get("/?tab=render")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'class="tab-button active" data-target="page-render"' in body
+    assert 'id="page-render" class="page active"' in body
+
+
+def test_dashboard_query_parameter_activates_dashboard() -> None:
+    response = client.get("/?tab=dashboard")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'class="tab-button active" data-target="page-dashboard"' in body
+    assert 'id="page-dashboard" class="page active"' in body
+
+
+def test_invalid_tab_query_defaults_to_first_section() -> None:
+    default_page = next(iter(web.CLI_PAGES))
+    default_slug = web._slugify(default_page)
+
+    response = client.get("/?tab=unknown")
+
+    assert response.status_code == 200
+    body = response.text
+    assert f'class="tab-button active" data-target="page-{default_slug}"' in body
+    assert f'id="page-{default_slug}" class="page active"' in body
