@@ -484,21 +484,47 @@ def _render_dashboard_page(*, is_active: bool, root_path: str) -> str:
     """
 
 
-def _render_index(root_path: str) -> str:
+def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
     nav_items: list[str] = []
     content_sections: list[str] = []
-    for index, (name, page) in enumerate(CLI_PAGES.items()):
+
+    page_order: list[tuple[str, PageSpec]] = list(CLI_PAGES.items())
+    default_slug: str | None = None
+    slug_lookup: dict[str, str] = {}
+    for name, _ in page_order:
+        slug = _slugify(name)
+        slug_lookup[slug] = name
+        if default_slug is None:
+            default_slug = slug
+
+    selected_slug = active_slug
+    if not page_order:
+        dashboard_active = selected_slug in (None, "dashboard")
+        selected_slug = None
+    elif selected_slug == "dashboard":
+        dashboard_active = True
+    elif selected_slug and selected_slug in slug_lookup:
+        dashboard_active = False
+    else:
+        selected_slug = default_slug
+        dashboard_active = False
+
+    for index, (name, page) in enumerate(page_order):
         page_id = f"page-{_slugify(name)}"
-        active_class = "active" if index == 0 else ""
+        slug = _slugify(name)
+        is_active = slug == selected_slug if selected_slug else index == 0
+        active_class = "active" if is_active else ""
+        default_flag = "true" if index == 0 else "false"
         nav_items.append(
-            f'<button type="button" class="tab-button {active_class}" data-target="{page_id}">{escape(name.title())}</button>'
+            f'<button type="button" class="tab-button {active_class}" data-target="{page_id}" data-tab="{slug}" data-default-tab="{default_flag}">{escape(name.title())}</button>'
         )
-        content_sections.append(_render_page(page, is_active=index == 0))
+        content_sections.append(_render_page(page, is_active=is_active))
+    dashboard_class = "active" if dashboard_active else ""
     nav_items.append(
-        '<button type="button" class="tab-button" data-target="page-dashboard">Dashboard</button>'
+        f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">Dashboard</button>'
     )
     content_sections.append(
-        _render_dashboard_page(is_active=not content_sections, root_path=root_path)
+        _render_dashboard_page(is_active=dashboard_active, root_path=root_path)
     )
 
     navigation = "".join(nav_items)
@@ -1150,7 +1176,7 @@ def _render_index(root_path: str) -> str:
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" id="uta-dashboard-chartjs" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
       </head>
-      <body data-root-path=\"{escape(root_path)}\">
+      <body data-root-path=\"{escape(root_path)}\" data-default-tab=\"{escape(default_slug or '')}\">
         <header class=\"app-header\">
           <h1>Uta Control Center</h1>
           <p>Trigger OnePiece CLI operations through a streamlined interface and explore the Trafalgar dashboard without leaving your browser.</p>
@@ -1188,6 +1214,14 @@ def _render_index(root_path: str) -> str:
 
           const tabs = toArray(document.querySelectorAll('.tab-button'));
           const pages = toArray(document.querySelectorAll('.page'));
+          const body = document.body || null;
+          let defaultTabSlug = body && typeof body.getAttribute === 'function'
+            ? body.getAttribute('data-default-tab') || ''
+            : '';
+          const slugToTarget = new Map();
+          const targetToSlug = new Map();
+          const dashboardTargetId = 'page-dashboard';
+          let defaultTargetId = '';
 
           const setSelectedState = (button, isActive) => {{
             if (!button) {{
@@ -1214,9 +1248,81 @@ def _render_index(root_path: str) -> str:
           }};
 
           tabs.forEach((button) => {{
-            const isActive = Boolean(button && button.classList.contains('active'));
+            if (!button) {{
+              return;
+            }}
+            const targetId = button.getAttribute('data-target') || '';
+            const slug = button.getAttribute('data-tab') || '';
+            const isDefault = button.getAttribute('data-default-tab') === 'true';
+            if (slug && targetId) {{
+              slugToTarget.set(slug, targetId);
+              targetToSlug.set(targetId, slug);
+            }}
+            if (isDefault && targetId) {{
+              defaultTargetId = targetId;
+              if (!defaultTabSlug) {{
+                defaultTabSlug = slug;
+              }}
+            }}
+            const isActive = button.classList.contains('active');
             setSelectedState(button, isActive);
           }});
+
+          if (!defaultTargetId && tabs.length) {{
+            const fallback = tabs[0];
+            if (fallback) {{
+              defaultTargetId = fallback.getAttribute('data-target') || '';
+              const fallbackSlug = fallback.getAttribute('data-tab') || '';
+              if (!defaultTabSlug && fallbackSlug) {{
+                defaultTabSlug = fallbackSlug;
+              }}
+            }}
+          }}
+
+          const resolveTargetFromSlug = (slug) => {{
+            if (!slug) {{
+              return '';
+            }}
+            if (slug === 'dashboard') {{
+              return dashboardTargetId;
+            }}
+            return slugToTarget.get(slug) || '';
+          }};
+
+          const buildUrlForTarget = (targetId) => {{
+            const url = new URL(window.location.href);
+            if (targetId === dashboardTargetId) {{
+              url.searchParams.set('tab', 'dashboard');
+            }} else {{
+              const slug = targetToSlug.get(targetId) || '';
+              if (!slug || slug === defaultTabSlug) {{
+                url.searchParams.delete('tab');
+              }} else {{
+                url.searchParams.set('tab', slug);
+              }}
+            }}
+            return url;
+          }};
+
+          const updateBrowserHistory = (targetId, {{ push }} = {{}}) => {{
+            if (!window.history || typeof window.history.replaceState !== 'function') {{
+              return;
+            }}
+            const url = buildUrlForTarget(targetId);
+            const current = new URL(window.location.href);
+            if (
+              current.pathname === url.pathname &&
+              current.search === url.search &&
+              current.hash === url.hash
+            ) {{
+              return;
+            }}
+            const method = push ? 'pushState' : 'replaceState';
+            if (typeof window.history[method] !== 'function') {{
+              return;
+            }}
+            window.history[method]({{ targetId }}, '', url);
+          }};
 
           function setActive(targetId) {{
             if (!targetId) {{
@@ -1250,17 +1356,51 @@ def _render_index(root_path: str) -> str:
               window.triggerDashboardRefresh();
             }}
           }}
+
+          const activateTab = (targetId, {{ pushHistory = false, syncHistory = true }} = {{}}) => {{
+            if (!targetId) {{
+              return;
+            }}
+            setActive(targetId);
+            if (syncHistory) {{
+              updateBrowserHistory(targetId, {{ push: pushHistory }});
+            }}
+          }};
+
+          const syncToLocation = ({{ updateHistory }} = {{}}) => {{
+            const url = new URL(window.location.href);
+            const slug = url.searchParams.get('tab') || '';
+            let targetId = resolveTargetFromSlug(slug);
+            const hadSlug = Boolean(slug);
+            const recognised = Boolean(targetId);
+            if (!targetId) {{
+              targetId = defaultTargetId || dashboardTargetId;
+            }}
+            if (!targetId) {{
+              targetId = dashboardTargetId;
+            }}
+            const shouldSyncHistory = Boolean(updateHistory) || (hadSlug && !recognised);
+            activateTab(targetId, {{ pushHistory: false, syncHistory: shouldSyncHistory }});
+          }};
+
+          syncToLocation({{ updateHistory: true }});
+
+          window.addEventListener('popstate', () => {{
+            syncToLocation({{ updateHistory: false }});
+          }});
+
           tabs.forEach((button) => {{
-            button.addEventListener('click', () => {{
-              if (!button) {{
-                return;
-              }}
+            if (!button) {{
+              return;
+            }}
+            button.addEventListener('click', (event) => {{
+              event.preventDefault();
               const targetId = button.getAttribute('data-target');
               if (!targetId) {{
                 console.warn('tab.change.unknown-target', button);
                 return;
               }}
-              setActive(targetId);
+              activateTab(targetId, {{ pushHistory: true, syncHistory: true }});
             }});
           }});
 
@@ -2145,7 +2285,11 @@ async def index(request: Request) -> HTMLResponse:
     if not isinstance(scope_root, str):
         scope_root = ""
     root_path = _normalise_root_path(scope_root)
-    return HTMLResponse(content=_render_index(root_path))
+    query_tab = request.query_params.get("tab")
+    active_slug = query_tab.lower() if isinstance(query_tab, str) else None
+    if active_slug == "":
+        active_slug = None
+    return HTMLResponse(content=_render_index(root_path, active_slug=active_slug))
 
 
 def _invoke_cli(arguments: Sequence[str]) -> RunCommandResponse:
