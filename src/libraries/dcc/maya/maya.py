@@ -23,15 +23,15 @@ _exportAll = cast(Callable[..., None], pm.exportAll)
 
 
 def _save(**kwargs: Any) -> None:
-    pm.saveFile(**kwargs)
+    pm.saveFile(**kwargs)  # type: ignore[no-untyped-call]
 
 
 def _open(path: UPath, **kwargs: Any) -> None:
-    pm.openFile(str(path), **kwargs)
+    pm.openFile(str(path), **kwargs)  # type: ignore[no-untyped-call]
 
 
 def _import(path: UPath, **kwargs: Any) -> None:
-    pm.importFile(str(path), **kwargs)
+    pm.importFile(str(path), **kwargs)  # type: ignore[no-untyped-call]
 
 
 def _export_all(path: UPath, **kwargs: Any) -> None:
@@ -58,7 +58,7 @@ def _remove_unused_references() -> Dict[str, int]:
             continue
 
         try:
-            reference.remove()
+            reference.remove()  # type: ignore[no-untyped-call]
             removed += 1
             log.info("maya_reference_removed", reference=str(reference))
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
@@ -97,7 +97,7 @@ def _cleanup_namespaces() -> Dict[str, int]:
     removed = 0
     failed = 0
 
-    namespaces = pm.listNamespaces(recurse=True, absolute=True) or []
+    namespaces = pm.listNamespaces(recursive=True)
     # Remove deeper namespaces first so parents become empty.
     namespaces = sorted(namespaces, key=lambda ns: ns.count(":"), reverse=True)
 
@@ -157,7 +157,7 @@ def _remove_empty_layers() -> Dict[str, int]:
             continue
 
         try:
-            members = layer.listMembers()
+            members: list[Any] = layer.listMembers() or []
         except RuntimeError:  # pragma: no cover - depends on Maya state
             members = []
 
@@ -177,7 +177,7 @@ def _remove_empty_layers() -> Dict[str, int]:
             continue
 
         try:
-            members = layer.listMembers()
+            members = layer.listMembers() or []
         except RuntimeError:  # pragma: no cover - depends on Maya state
             members = []
 

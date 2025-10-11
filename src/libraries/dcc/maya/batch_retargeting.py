@@ -55,7 +55,7 @@ def _import_clip(path: UPath, namespace: str) -> None:
     if not path.exists():
         raise FileNotFoundError(path)
 
-    pm.importFile(
+    pm.importFile(  # type: ignore[no-untyped-call]
         str(path),
         namespace=namespace,
         mergeNamespacesOnClash=False,
@@ -76,7 +76,9 @@ def _apply_constraints(
 
     for target_joint, source_joint in mapping.items():
         source_name = f"{source_ns}:{source_joint}"
-        target_name = f"{target_joint}" if target_ns is None else f"{target_ns}:{target_joint}"
+        target_name = (
+            f"{target_joint}" if target_ns is None else f"{target_ns}:{target_joint}"
+        )
 
         try:
             source_node = pm.PyNode(source_name)
@@ -97,11 +99,11 @@ def _apply_constraints(
             maintainOffset=False,
             weight=1.0,
         )
-        constraints.append((constraint, target_node))
+        constraints.append((constraint, target_node))  # type: ignore[arg-type]
         log.debug(
             "maya_retarget_constraint_created",
-            source=source_node.name(),
-            target=target_node.name(),
+            source=source_node.name(),  # type: ignore[attr-defined]
+            target=target_node.name(),  # type: ignore[attr-defined]
             constraint=constraint.name(),
         )
 
@@ -115,7 +117,7 @@ def _clear_namespace(namespace: str) -> None:
     if nodes:
         try:
             pm.delete(nodes)
-        except pm.MayaCommandError as exc:
+        except pm.MayaCommandError as exc:  # type: ignore[attr-defined]
             log.warning(
                 "maya_namespace_delete_failed",
                 namespace=namespace,
@@ -126,7 +128,7 @@ def _clear_namespace(namespace: str) -> None:
         try:
             pm.namespace(removeNamespace=namespace, mergeNamespaceWithRoot=False)
             log.debug("maya_namespace_removed", namespace=namespace)
-        except pm.MayaCommandError as exc:
+        except pm.MayaCommandError as exc:  # type: ignore[attr-defined]
             log.warning(
                 "maya_namespace_remove_failed",
                 namespace=namespace,
@@ -134,7 +136,9 @@ def _clear_namespace(namespace: str) -> None:
             )
 
 
-def _bake_animation(nodes: Iterable[pm.nt.DependNode], frame_range: tuple[float, float] | None) -> List[str]:
+def _bake_animation(
+    nodes: Iterable[pm.nt.DependNode], frame_range: tuple[float, float] | None
+) -> List[str]:
     """Bake animation from constraints onto the target nodes."""
 
     node_names = [node.name() for node in nodes]
@@ -216,8 +220,8 @@ class BatchRetargetingTool:
         if not clip.exists():
             raise FileNotFoundError(clip)
 
-        pm.newFile(force=True)
-        pm.openFile(str(self._rig_scene), force=True)
+        pm.newFile(force=True)  # type: ignore[no-untyped-call]
+        pm.openFile(str(self._rig_scene), force=True)  # type: ignore[no-untyped-call]
         log.info("maya_rig_scene_loaded", path=str(self._rig_scene))
 
         mocap_namespace = _create_namespace("mocap")
