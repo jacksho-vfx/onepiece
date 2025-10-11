@@ -30,6 +30,15 @@ from .batch_retargeting import (  # noqa: F401
     RetargetMapping,
     RetargetResult,
 )
+from .auto_rig_validator import (  # noqa: F401
+    DEFAULT_CONTROL_PREFIXES,
+    DEFAULT_JOINT_PREFIXES,
+    DEFAULT_REQUIRED_CONTROL_ATTRIBUTES,
+    DEFAULT_REQUIRED_HIERARCHY,
+    RigValidationIssue,
+    RigValidationReport,
+    validate_rig_import,
+)
 from .unreal_export_checker import (  # noqa: F401
     DEFAULT_ALLOWED_PREFIXES,
     DEFAULT_EXPECTED_ROOT,
@@ -46,6 +55,13 @@ __all__ = [
     "RetargetError",
     "RetargetMapping",
     "RetargetResult",
+    "DEFAULT_CONTROL_PREFIXES",
+    "DEFAULT_JOINT_PREFIXES",
+    "DEFAULT_REQUIRED_CONTROL_ATTRIBUTES",
+    "DEFAULT_REQUIRED_HIERARCHY",
+    "RigValidationIssue",
+    "RigValidationReport",
+    "validate_rig_import",
     "DEFAULT_ALLOWED_PREFIXES",
     "DEFAULT_EXPECTED_ROOT",
     "DEFAULT_EXPECTED_SCALE",
