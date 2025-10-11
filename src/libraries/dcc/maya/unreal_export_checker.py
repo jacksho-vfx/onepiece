@@ -69,9 +69,7 @@ def _check_scale(
         issues.append(
             UnrealExportIssue(
                 code="SCALE_NON_POSITIVE",
-                message=(
-                    "Scene scale must be greater than zero to export to Unreal"
-                ),
+                message=("Scene scale must be greater than zero to export to Unreal"),
             )
         )
         return False, issues
