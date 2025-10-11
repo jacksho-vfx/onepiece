@@ -1,4 +1,4 @@
-.PHONY: format lint typecheck test precommit install-precommit check
+.PHONY: setup format lint typecheck test precommit install-precommit check
 
 VENV := .venv/bin
 PYTHON ?= $(VENV)/python
@@ -6,7 +6,10 @@ PIP ?= .venv/bin/pip
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 PRE_COMMIT_CONFIG ?= .pre-commit-config.yaml
 
-setup:
+.venv/bin/python:
+	python3 -m venv .venv
+
+setup: .venv/bin/python
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements.txt
 
