@@ -64,8 +64,12 @@ class RecordingResumableUploader:
         self.initial_state: tuple[int, list[tuple[int, str]], str | None] | None = None
         self.completed: list[tuple[Path, str, str]] = []
 
-    def upload(self, file_path: Path, bucket: str, key: str) -> None:  # pragma: no cover - protocol compliance
-        raise AssertionError("Resumable uploads should be used when checkpoints are available")
+    def upload(
+        self, file_path: Path, bucket: str, key: str
+    ) -> None:  # pragma: no cover - protocol compliance
+        raise AssertionError(
+            "Resumable uploads should be used when checkpoints are available"
+        )
 
     def upload_resumable(
         self,
@@ -209,4 +213,6 @@ def test_resume_discards_stale_checkpoint_metadata(tmp_path: Path) -> None:
     assert uploader.initial_state == (0, [], None)
     assert report.processed_count == 1
     assert uploader.completed == [(media_path, bucket, key)]
-    assert not list(checkpoint_dir.glob("*.json")), "Stale checkpoints should be cleared after upload"
+    assert not list(
+        checkpoint_dir.glob("*.json")
+    ), "Stale checkpoints should be cleared after upload"
