@@ -182,7 +182,9 @@ class EntityStore:
 
     def next_id(self, entity_type: str) -> int:
         store = self._ensure_type(entity_type)
-        return len(store) + 1
+        if not store:
+            return 1
+        return max(store.keys()) + 1
 
     def list(self, entity_type: str) -> list[EntityPayload]:
         return list(self._entities.get(entity_type, {}).values())
