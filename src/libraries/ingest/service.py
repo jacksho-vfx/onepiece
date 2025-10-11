@@ -806,6 +806,22 @@ class MediaIngestService:
                     file_size=job.size,
                 )
             else:
+                if (
+                    checkpoint.file_size != job.size
+                    or checkpoint.bytes_transferred > job.size
+                ):
+                    log.warning(
+                        "ingest.checkpoint_reset",
+                        file=str(job.path),
+                        bucket=job.bucket,
+                        key=job.key,
+                        previous_size=checkpoint.file_size,
+                        current_size=job.size,
+                        transferred=checkpoint.bytes_transferred,
+                    )
+                    checkpoint.bytes_transferred = 0
+                    checkpoint.parts.clear()
+                    checkpoint.upload_id = None
                 checkpoint.file_path = job.path
                 checkpoint.file_size = job.size
 
