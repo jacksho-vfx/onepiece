@@ -76,9 +76,9 @@ def _namespace_is_removable(namespace: str) -> bool:
     """Return True if the namespace has no dependency nodes."""
 
     try:
-        dependency_nodes = pm.namespaceInfo(
-            namespace, listOnlyDependencyNodes=True
-        ) or []
+        dependency_nodes = (
+            pm.namespaceInfo(namespace, listOnlyDependencyNodes=True) or []
+        )
         child_namespaces = pm.namespaceInfo(namespace, listNamespace=True) or []
     except RuntimeError:  # pragma: no cover - requires Maya environment
         return False
@@ -128,7 +128,7 @@ def _delete_unknown_nodes() -> Dict[str, int]:
 
     unknown_types = ["unknown", "unknownDag", "unknownTransform"]
     try:
-        unknown_nodes = pm.ls(type=unknown_types)  # type: ignore[arg-type]
+        unknown_nodes = pm.ls(type=unknown_types)
     except RuntimeError:  # pragma: no cover - depends on Maya state
         unknown_nodes = []
 

@@ -11,7 +11,7 @@ from PIL import Image as PILImage
 try:  # pragma: no cover - imported lazily in helpers
     import imageio.v3 as iio
 except ImportError:  # pragma: no cover - optional dependency
-    iio = None
+    iio = None  # type: ignore[assignment]
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
