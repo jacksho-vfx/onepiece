@@ -4,7 +4,11 @@ from typing import Any
 
 import pytest
 
-from libraries.ingest.service import MediaIngestService, UploadCheckpoint
+from libraries.ingest.service import (
+    MediaIngestService,
+    UploadCheckpoint,
+    UploadCheckpointStore,
+)
 from libraries.shotgrid.client import ShotgridClient
 
 
@@ -50,6 +54,42 @@ class FlakyResumableUploader:
                     self.remaining_failures -= 1
                     raise RuntimeError("Simulated interruption")
                 part_number += 1
+        self.completed.append((file_path, bucket, key))
+
+
+class RecordingResumableUploader:
+    """Uploader that records the initial checkpoint state for assertions."""
+
+    def __init__(self) -> None:
+        self.initial_state: tuple[int, list[tuple[int, str]], str | None] | None = None
+        self.completed: list[tuple[Path, str, str]] = []
+
+    def upload(
+        self, file_path: Path, bucket: str, key: str
+    ) -> None:  # pragma: no cover - protocol compliance
+        raise AssertionError(
+            "Resumable uploads should be used when checkpoints are available"
+        )
+
+    def upload_resumable(
+        self,
+        file_path: Path,
+        bucket: str,
+        key: str,
+        checkpoint: UploadCheckpoint,
+        chunk_size: int,
+        progress_callback: Any | None = None,
+    ) -> None:
+        self.initial_state = (
+            checkpoint.bytes_transferred,
+            list(checkpoint.parts),
+            checkpoint.upload_id,
+        )
+        checkpoint.bytes_transferred = file_path.stat().st_size
+        checkpoint.parts = [(1, "etag-1")]
+        checkpoint.upload_id = None
+        if progress_callback is not None:
+            progress_callback(checkpoint)
         self.completed.append((file_path, bucket, key))
 
 
@@ -130,3 +170,49 @@ def test_asyncio_concurrency_handles_multiple_files(tmp_path: Path) -> None:
 
     assert report.processed_count == 3
     assert len(uploader.completed) == 3
+
+
+def test_resume_discards_stale_checkpoint_metadata(tmp_path: Path) -> None:
+    folder = _create_media(tmp_path)
+    media_path = folder / "SHOW01_ep001_sc01_0001_comp.mov"
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    store = UploadCheckpointStore(checkpoint_dir)
+
+    bucket = "vendor_in"
+    key = f"SHOW01/{media_path.relative_to(folder).as_posix()}"
+    stale_checkpoint = UploadCheckpoint(
+        file_path=media_path,
+        bucket=bucket,
+        key=key,
+        file_size=10_000,
+        bytes_transferred=5_000,
+        parts=[(1, "etag-old")],
+        upload_id="old-upload",
+    )
+    store.save(stale_checkpoint)
+
+    uploader = RecordingResumableUploader()
+    shotgrid = ShotgridClient()
+
+    service = MediaIngestService(
+        project_name="Demo",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        resume_enabled=True,
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_threshold_bytes=0,
+        upload_chunk_size=4,
+        max_workers=1,
+    )
+
+    report = service.ingest_folder(folder, recursive=False)
+
+    assert uploader.initial_state == (0, [], None)
+    assert report.processed_count == 1
+    assert uploader.completed == [(media_path, bucket, key)]
+    assert not list(
+        checkpoint_dir.glob("*.json")
+    ), "Stale checkpoints should be cleared after upload"
