@@ -6,7 +6,7 @@ This guide describes how to set up a local development environment for OnePiece,
 
 ## Prerequisites
 
-- Python 3.11 or newer.
+- Python 3.12 or newer.
 - Git and a GitHub account with access to the project.
 - Access credentials for the services you plan to exercise locally (AWS, ShotGrid, etc.).
 

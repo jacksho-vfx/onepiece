@@ -1,26 +1,5 @@
-pillow
-click
-starlette
-av
-black
-fastapi
-httpx
-imageio
-js2py
 py-mini-racer
-mypy
-pre-commit
-pydantic
-pydantic-settings
+click
 pytest
-requests
-rich
-ruff
-structlog
-types-PyYAML
-types-requests
-typer
-typing-extensions
-universal-pathlib
-uvicorn
--e .
+pillow
+-e .[dev]

@@ -129,7 +129,7 @@ The `/health` endpoint now reports the active history size, the number of jobs p
 
 ## Requirements
 
-- Python 3.11 or newer
+- Python 3.12 or newer
 - Access to the required DCC tools on the machine running the CLI
 - Credentials for any external integrations you plan to use (e.g. AWS profiles, ShotGrid API scripts)
 
