@@ -214,9 +214,10 @@ def test_ingest_folder_matches_manifest_with_windows_paths(
     assert report.processed_count == 1
     processed = report.processed[0]
     assert processed.delivery is not None
-    assert processed.delivery.delivery_path.as_posix() == (
-        relative_dir / media_name
-    ).as_posix()
+    assert (
+        processed.delivery.delivery_path.as_posix()
+        == (relative_dir / media_name).as_posix()
+    )
 
 
 def test_ingest_folder_rejects_manifest_mismatch(
