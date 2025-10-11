@@ -15,7 +15,7 @@ def test_sync_to_bucket_rejects_unknown_show_type(tmp_path: Path) -> None:
             show_code="SHOW",
             folder="plates",
             local_path=local_path,
-            show_type="animation",  # type: ignore[arg-type]
+            show_type="animation",
         )
 
     assert "Unsupported show type" in str(excinfo.value)
@@ -30,7 +30,7 @@ def test_sync_from_bucket_rejects_unknown_show_type(tmp_path: Path) -> None:
             show_code="SHOW",
             folder="plates",
             local_path=local_path,
-            show_type="animation",  # type: ignore[arg-type]
+            show_type="animation",
         )
 
     assert "Unsupported show type" in str(excinfo.value)

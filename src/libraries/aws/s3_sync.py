@@ -35,9 +35,7 @@ def _resolve_context(
         return "vendor_out" if direction == "to" else "vendor_in"
     if show_type == "prod":
         return "client_out" if direction == "to" else "client_in"
-    raise ValueError(
-        f"Unsupported show type '{show_type}'. Expected 'vfx' or 'prod'."
-    )
+    raise ValueError(f"Unsupported show type '{show_type}'. Expected 'vfx' or 'prod'.")
 
 
 def _build_s3_uri(
