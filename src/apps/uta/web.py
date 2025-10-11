@@ -1165,29 +1165,86 @@ def _render_index(root_path: str) -> str:
             <span class=\"favourite-filter-label\"><span aria-hidden=\"true\">★</span>Favourites only</span>
           </label>
         </section>
-        <nav class=\"tab-bar\">
+        <nav class=\"tab-bar\" role=\"tablist\">
           {navigation}
         </nav>
         <main>
           {pages_html}
         </main>
         <script>
-          const tabs = Array.from(document.querySelectorAll('.tab-button'));
-          const pages = Array.from(document.querySelectorAll('.page'));
+          const toArray = (collection) => {{
+            if (!collection) {{
+              return [];
+            }}
+            if (Array.isArray(collection)) {{
+              return collection.slice();
+            }}
+            try {{
+              return Array.from(collection);
+            }} catch (error) {{
+              return [].slice.call(collection);
+            }}
+          }};
+
+          const tabs = toArray(document.querySelectorAll('.tab-button'));
+          const pages = toArray(document.querySelectorAll('.page'));
+
+          const setSelectedState = (button, isActive) => {{
+            if (!button) {{
+              return;
+            }}
+            if (isActive) {{
+              button.classList.add('active');
+              button.setAttribute('aria-selected', 'true');
+            }} else {{
+              button.classList.remove('active');
+              button.setAttribute('aria-selected', 'false');
+            }}
+          }};
+
+          const togglePageVisibility = (page, shouldBeActive) => {{
+            if (!page) {{
+              return;
+            }}
+            if (shouldBeActive) {{
+              page.classList.add('active');
+            }} else {{
+              page.classList.remove('active');
+            }}
+          }};
+
+          tabs.forEach((button) => {{
+            const isActive = Boolean(button && button.classList.contains('active'));
+            setSelectedState(button, isActive);
+          }});
+
           function setActive(targetId) {{
             if (!targetId) {{
               return;
             }}
-            const targetPage = pages.find((page) => page.id === targetId);
+            let targetPage = null;
+            for (const page of pages) {{
+              if (page && page.id === targetId) {{
+                targetPage = page;
+                break;
+              }}
+            }}
             if (!targetPage) {{
               console.warn('tab.change.missing-page', targetId);
               return;
             }}
             tabs.forEach((button) => {{
-              button.classList.toggle('active', button.dataset.target === targetId);
+              if (!button) {{
+                return;
+              }}
+              const buttonTarget = button.getAttribute('data-target') || '';
+              setSelectedState(button, buttonTarget === targetId);
             }});
             pages.forEach((page) => {{
-              page.classList.toggle('active', page.id === targetId);
+              if (!page) {{
+                return;
+              }}
+              togglePageVisibility(page, page.id === targetId);
             }});
             if (targetId === 'page-dashboard' && typeof window.triggerDashboardRefresh === 'function') {{
               window.triggerDashboardRefresh();
@@ -1195,7 +1252,10 @@ def _render_index(root_path: str) -> str:
           }}
           tabs.forEach((button) => {{
             button.addEventListener('click', () => {{
-              const targetId = button.dataset.target;
+              if (!button) {{
+                return;
+              }}
+              const targetId = button.getAttribute('data-target');
               if (!targetId) {{
                 console.warn('tab.change.unknown-target', button);
                 return;
@@ -1328,7 +1388,9 @@ def _render_index(root_path: str) -> str:
             }}
             if (event.key.toLowerCase() === 'f' && event.shiftKey && !(event.ctrlKey || event.metaKey || event.altKey)) {{
               const activeElement = document.activeElement;
-              const card = activeElement ? activeElement.closest('.command-card') : null;
+              const card = activeElement && typeof activeElement.closest === 'function'
+                ? activeElement.closest('.command-card')
+                : null;
               if (card) {{
                 event.preventDefault();
                 const button = card.querySelector('.favourite-toggle');
