@@ -547,13 +547,26 @@ class ShotgridClient:
     ) -> list[dict[str, object]]:
         """Return approved versions filtered by project and optional episodes."""
 
+        episode_filters = (
+            [
+                episode.strip().lower()
+                for episode in episodes
+                if episode and episode.strip()
+            ]
+            if episodes
+            else []
+        )
+
         approved: list[dict[str, object]] = []
         for version in self.list_versions():
             if version.get("project") != project_name:
                 continue
             shot_code = version.get("shot", "")
-            if episodes and not any(ep in str(shot_code) for ep in episodes):
-                continue
+            shot_code_text = str(shot_code)
+            if episode_filters:
+                shot_code_normalized = shot_code_text.lower()
+                if not any(filter_value in shot_code_normalized for filter_value in episode_filters):
+                    continue
             approved.append(
                 {
                     "shot": shot_code,
