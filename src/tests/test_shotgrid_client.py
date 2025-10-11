@@ -1,6 +1,7 @@
 """Tests for the expanded :mod:`libraries.shotgrid.client` helpers."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -117,3 +118,30 @@ def test_apply_hierarchy_template_creates_all_nodes() -> None:
     assert {node["code"] for node in result["Episode"]} == {"ep001"}
     assert {node["code"] for node in result["Scene"]} == {"sc001", "sc002"}
     assert all(node["project_id"] == project["id"] for node in result["Scene"])
+
+
+def test_get_approved_versions_filters_episodes_case_insensitively(
+    tmp_path: Path,
+) -> None:
+    client = ShotgridClient(sleep=lambda _: None)
+
+    media = tmp_path / "clip.mov"
+    media.write_bytes(b"data")
+
+    client.register_version(
+        "Project X",
+        "SHOW_EP01_SC001_SH010_COMP",
+        media,
+        description="Episode 1",
+    )
+    client.register_version(
+        "Project X",
+        "SHOW_EP02_SC010_SH020_COMP",
+        media,
+        description="Episode 2",
+    )
+
+    filtered = client.get_approved_versions("Project X", ["ep01", "  EP02  "])
+
+    shots = [entry["shot"] for entry in filtered]
+    assert shots == ["SHOW_EP01_SC001_SH010_COMP", "SHOW_EP02_SC010_SH020_COMP"]
