@@ -131,10 +131,13 @@ def _extract_duration(attributes: dict[str, object]) -> float | None:
     frame_count = attributes.get("sg_uploaded_movie_frame_count")
     frame_rate = attributes.get("sg_uploaded_movie_frame_rate")
     try:
-        if frame_count and frame_rate:
-            return float(cast(str | float | int, frame_count)) / float(
-                cast(str | float | int, frame_rate)
-            )
+        if frame_count is None or frame_rate is None:
+            return None
+        count = float(cast(str | float | int, frame_count))
+        rate = float(cast(str | float | int, frame_rate))
+        if rate == 0:
+            return None
+        return count / rate
     except (TypeError, ZeroDivisionError, ValueError):  # pragma: no cover - defensive
         return None
     return None
