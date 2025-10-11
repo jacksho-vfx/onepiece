@@ -73,7 +73,7 @@ exclude = []
 line-length = 88
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 mypy_path = ["src"]
 packages = ["apps", "libraries", "tests"]
 
