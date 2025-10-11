@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
-from libraries.review.dailies import DailiesClip
+from libraries.review.dailies import DailiesClip, _extract_duration
 
 runner = CliRunner()
 
@@ -154,3 +154,12 @@ def test_dailies_ffmpeg_failure(
     assert result.exit_code == 2
     assert "FFmpeg failed" in (result.stderr or result.stdout)
     assert not output.exists()
+
+
+def test_extract_duration_handles_zero_frame_count() -> None:
+    attributes: dict[str, object] = {
+        "sg_uploaded_movie_frame_count": 0,
+        "sg_uploaded_movie_frame_rate": 24,
+    }
+
+    assert _extract_duration(attributes) == pytest.approx(0.0)
