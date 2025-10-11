@@ -7,7 +7,7 @@ from libraries.dcc.maya.auto_rig_validator import (
 )
 
 
-def test_validate_rig_import_success():
+def test_validate_rig_import_success() -> None:
     report = validate_rig_import(
         rig_name="HeroRig",
         joints=["JNT_root", "JNT_spine", "JNT_chest"],
@@ -26,7 +26,7 @@ def test_validate_rig_import_success():
     assert report.issues == ()
 
 
-def test_validate_rig_import_reports_bad_naming():
+def test_validate_rig_import_reports_bad_naming() -> None:
     report = validate_rig_import(
         rig_name="HeroRig",
         joints=["root", "JNT_spine"],
@@ -42,8 +42,7 @@ def test_validate_rig_import_reports_bad_naming():
     assert any(issue.code == "CONTROL_BAD_PREFIX" for issue in report.issues)
 
 
-
-def test_validate_rig_import_reports_missing_hierarchy():
+def test_validate_rig_import_reports_missing_hierarchy() -> None:
     report = validate_rig_import(
         rig_name="HeroRig",
         joints=["JNT_root", "JNT_spine"],
@@ -59,8 +58,7 @@ def test_validate_rig_import_reports_missing_hierarchy():
     )
 
 
-
-def test_validate_rig_import_reports_missing_control_attribute():
+def test_validate_rig_import_reports_missing_control_attribute() -> None:
     report = validate_rig_import(
         rig_name="HeroRig",
         joints=["JNT_root", "JNT_spine"],
@@ -70,13 +68,10 @@ def test_validate_rig_import_reports_missing_control_attribute():
     )
 
     assert not report.controls_valid
-    assert any(
-        issue.code == "CONTROL_MISSING_ATTRIBUTE" for issue in report.issues
-    )
+    assert any(issue.code == "CONTROL_MISSING_ATTRIBUTE" for issue in report.issues)
 
 
-
-def test_validate_rig_import_detects_duplicate_names():
+def test_validate_rig_import_detects_duplicate_names() -> None:
     report = validate_rig_import(
         rig_name="HeroRig",
         joints=["JNT_root", "JNT_root"],

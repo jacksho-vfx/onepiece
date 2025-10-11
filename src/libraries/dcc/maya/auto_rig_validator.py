@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Iterable, Mapping, MutableMapping, Sequence
+from typing import Iterable, Mapping, MutableMapping, Sequence, cast
 
 # Typical studio defaults for skeleton and control naming.
 DEFAULT_JOINT_PREFIXES: tuple[str, ...] = ("JNT_", "SKL_")
@@ -69,7 +69,9 @@ def _ensure_prefix(name: str, prefixes: Sequence[str]) -> bool:
     return any(name.startswith(prefix) for prefix in prefixes)
 
 
-def _check_for_duplicates(names: Iterable[str], *, kind: str) -> list[RigValidationIssue]:
+def _check_for_duplicates(
+    names: Iterable[str], *, kind: str
+) -> list[RigValidationIssue]:
     """Return issues for any duplicated ``names``."""
 
     issues: list[RigValidationIssue] = []
@@ -138,9 +140,7 @@ def _check_hierarchy(
             issues.append(
                 RigValidationIssue(
                     code="HIERARCHY_MISSING_RELATIONSHIP",
-                    message=(
-                        f"Missing required hierarchy link '{parent} -> {child}'."
-                    ),
+                    message=(f"Missing required hierarchy link '{parent} -> {child}'."),
                 )
             )
 
@@ -184,14 +184,28 @@ def _check_controls(
 def _coerce_controls(
     controls: Mapping[str, Mapping[str, object]] | Sequence[str] | None,
 ) -> tuple[dict[str, MutableMapping[str, object]], tuple[str, ...]]:
-    """Return a mapping of control names and the raw list of names provided."""
+    """Return a mapping of control names and the raw list of names provided.
+
+    Args:
+        controls: Either
+            - a mapping of control names → attribute mappings,
+            - a simple list of control names,
+            - or ``None``.
+
+    Returns:
+        A tuple of:
+            - a dictionary mapping control names to mutable attribute mappings.
+            - a tuple of control names in the order they were provided.
+    """
 
     if controls is None:
         return {}, ()
 
     if isinstance(controls, Mapping):
         mapping = {name: dict(attributes) for name, attributes in controls.items()}
-        return mapping, tuple(mapping.keys())
+        return cast(dict[str, MutableMapping[str, object]], mapping), tuple(
+            mapping.keys()
+        )
 
     coerced: dict[str, MutableMapping[str, object]] = {}
     names: list[str] = []
@@ -210,7 +224,9 @@ def validate_rig_import(
     allowed_joint_prefixes: Sequence[str] = DEFAULT_JOINT_PREFIXES,
     allowed_control_prefixes: Sequence[str] = DEFAULT_CONTROL_PREFIXES,
     required_hierarchy: Sequence[tuple[str, str]] = DEFAULT_REQUIRED_HIERARCHY,
-    required_control_attributes: Mapping[str, Sequence[str]] = DEFAULT_REQUIRED_CONTROL_ATTRIBUTES,
+    required_control_attributes: Mapping[
+        str, Sequence[str]
+    ] = DEFAULT_REQUIRED_CONTROL_ATTRIBUTES,
 ) -> RigValidationReport:
     """Validate a rig on import before allowing it into an animation shot."""
 
