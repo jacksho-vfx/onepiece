@@ -1,4 +1,5 @@
 py-mini-racer
 click
 pytest
+pillow
 -e .[dev]
