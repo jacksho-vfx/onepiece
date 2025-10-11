@@ -21,10 +21,21 @@ def _resolve_context(
     Args:
         show_type: 'vfx' or 'prod'
         direction: 'to' (upload) or 'from' (download)
+
+    Raises:
+        ValueError: If *show_type* or *direction* are not recognised.
     """
+
+    if direction not in {"to", "from"}:
+        raise ValueError(
+            f"Unsupported sync direction '{direction}'. Expected 'to' or 'from'."
+        )
+
     if show_type == "vfx":
         return "vendor_out" if direction == "to" else "vendor_in"
-    return "client_out" if direction == "to" else "client_in"
+    if show_type == "prod":
+        return "client_out" if direction == "to" else "client_in"
+    raise ValueError(f"Unsupported show type '{show_type}'. Expected 'vfx' or 'prod'.")
 
 
 def _build_s3_uri(
