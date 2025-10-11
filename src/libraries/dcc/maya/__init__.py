@@ -1,5 +1,11 @@
 """Maya specific DCC helpers."""
 
+from .batch_retargeting import (  # noqa: F401
+    BatchRetargetingTool,
+    RetargetError,
+    RetargetMapping,
+    RetargetResult,
+)
 from .unreal_export_checker import (  # noqa: F401
     DEFAULT_ALLOWED_PREFIXES,
     DEFAULT_EXPECTED_ROOT,
@@ -12,6 +18,10 @@ from .unreal_export_checker import (  # noqa: F401
 )
 
 __all__ = [
+    "BatchRetargetingTool",
+    "RetargetError",
+    "RetargetMapping",
+    "RetargetResult",
     "DEFAULT_ALLOWED_PREFIXES",
     "DEFAULT_EXPECTED_ROOT",
     "DEFAULT_EXPECTED_SCALE",
