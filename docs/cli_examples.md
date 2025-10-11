@@ -1,4 +1,4 @@
-# CLI Examples
+# CLI Examples 
 
 ## OnePiece CLI (`python -m apps.onepiece …`)
 
