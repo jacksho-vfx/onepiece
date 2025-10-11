@@ -1,3 +1,6 @@
+universal-pathlib
+pymel
+structlog
 py-mini-racer
 click
 pytest
