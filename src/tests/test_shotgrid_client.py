@@ -68,6 +68,17 @@ def test_bulk_create_update_delete_entities() -> None:
         )
 
 
+def test_entity_store_next_id_handles_sparse_ids() -> None:
+    store = EntityStore()
+    store.add("Shot", {"id": 1, "type": "Shot"})
+    store.add("Shot", {"id": 2, "type": "Shot"})
+    store.add("Shot", {"id": 3, "type": "Shot"})
+
+    store.delete("Shot", 2)
+
+    assert store.next_id("Shot") == 4
+
+
 @dataclass
 class FlakyStore(EntityStore):  # type: ignore[misc]
     """Entity store that fails the first ``add`` invocation."""
