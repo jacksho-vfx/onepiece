@@ -94,6 +94,36 @@ def test_load_delivery_manifest_json(tmp_path: Path) -> None:
     assert delivery.checksum is None
 
 
+def test_load_delivery_manifest_normalises_windows_paths(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    media_name = "SHOW01_ep001_sc01_0001_comp_v002.mov"
+    windows_source = "\\".join(["C:", "deliveries", "source.mov"])
+    windows_delivery = "\\".join(["shots", "sc01", media_name])
+    payload = {
+        "deliveries": [
+            {
+                "show": "SHOW01",
+                "episode": "ep001",
+                "scene": "sc01",
+                "shot": "0001",
+                "asset": "comp",
+                "version": 2,
+                "source_path": windows_source,
+                "delivery_path": windows_delivery,
+            }
+        ]
+    }
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    deliveries = load_delivery_manifest(manifest_path)
+
+    assert len(deliveries) == 1
+    delivery = deliveries[0]
+    assert delivery.delivery_path.as_posix() == f"shots/sc01/{media_name}"
+    assert delivery.delivery_path.name == media_name
+    assert delivery.source_path.as_posix() == "C:/deliveries/source.mov"
+
+
 def test_load_delivery_manifest_invalid(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")
@@ -135,6 +165,59 @@ def test_ingest_folder_attaches_manifest_metadata(
     assert processed.delivery.checksum == "abc123"
     assert processed.media_info.shot_name == manifest_entry.shot_name
     assert any("Dry run: would upload" in warning for warning in report.warnings)
+
+
+def test_ingest_folder_matches_manifest_with_windows_paths(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "incoming"
+    folder.mkdir()
+    media_name = "SHOW01_ep001_sc01_0001_comp_v002.mov"
+    relative_dir = Path("shots") / "sc01"
+    media_path = folder / relative_dir / media_name
+    media_path.parent.mkdir(parents=True, exist_ok=True)
+    media_path.write_bytes(b"frames")
+
+    manifest_path = tmp_path / "manifest.json"
+    windows_source = "\\".join(["C:", "deliveries", "source.mov"])
+    windows_delivery = "\\".join(["shots", "sc01", media_name])
+    manifest_payload = {
+        "deliveries": [
+            {
+                "show": "SHOW01",
+                "episode": "ep001",
+                "scene": "sc01",
+                "shot": "0001",
+                "asset": "comp",
+                "version": 2,
+                "source_path": windows_source,
+                "delivery_path": windows_delivery,
+            }
+        ]
+    }
+    manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
+
+    uploader = DummyUploader()
+    shotgrid = ShotgridClient()
+
+    service = MediaIngestService(
+        project_name="Demo",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        dry_run=True,
+    )
+
+    report = service.ingest_folder(folder, manifest=manifest_path)
+
+    assert report.processed_count == 1
+    processed = report.processed[0]
+    assert processed.delivery is not None
+    assert (
+        processed.delivery.delivery_path.as_posix()
+        == (relative_dir / media_name).as_posix()
+    )
 
 
 def test_ingest_folder_rejects_manifest_mismatch(

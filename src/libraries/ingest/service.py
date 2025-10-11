@@ -277,6 +277,18 @@ def _normalise_manifest_entry(
     index: int,
     manifest_path: Path,
 ) -> Delivery:
+    def _normalise_manifest_path(value: object) -> Path:
+        """Return a :class:`Path` that treats ``\\`` as directory separators."""
+
+        text = str(value).strip()
+        # Delivery manifests may be authored on Windows which means relative
+        # paths are delimited by ``\\``.  ``Path`` on POSIX platforms treats
+        # those backslashes as literal characters, so convert them to forward
+        # slashes before constructing the path.  This keeps manifest lookups
+        # consistent regardless of the authoring platform.
+        normalised = text.replace("\\", "/")
+        return Path(normalised)
+
     normalised: dict[str, object] = {
         str(key).lower(): value for key, value in entry.items()
     }
@@ -319,8 +331,8 @@ def _normalise_manifest_entry(
         shot=str(_require("shot")),
         asset=str(_require("asset")),
         version=version,
-        source_path=Path(str(source_path_raw)),
-        delivery_path=Path(str(delivery_path_raw)),
+        source_path=_normalise_manifest_path(source_path_raw),
+        delivery_path=_normalise_manifest_path(delivery_path_raw),
         checksum=checksum,
     )
 
