@@ -1,1 +1,4 @@
+py-mini-racer
+click
+pytest
 -e .[dev]
