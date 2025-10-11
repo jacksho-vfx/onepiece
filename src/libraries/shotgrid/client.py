@@ -565,7 +565,10 @@ class ShotgridClient:
             shot_code_text = str(shot_code)
             if episode_filters:
                 shot_code_normalized = shot_code_text.lower()
-                if not any(filter_value in shot_code_normalized for filter_value in episode_filters):
+                if not any(
+                    filter_value in shot_code_normalized
+                    for filter_value in episode_filters
+                ):
                     continue
             approved.append(
                 {
