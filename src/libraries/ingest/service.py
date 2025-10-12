@@ -35,6 +35,12 @@ from libraries.validations.naming import (
 )
 
 
+def _normalise_identifier(value: str) -> str:
+    """Return a case-insensitive representation of production identifiers."""
+
+    return value.strip().lower()
+
+
 class _StructuredLogger:
     """Very small adapter that mimics :func:`structlog.get_logger`."""
 
@@ -478,6 +484,8 @@ class MediaIngestService:
                 return default
             return value.lower() in {"1", "true", "yes", "on"}
 
+        self._show_code_normalized = _normalise_identifier(self.show_code)
+
         if (env_workers := os.getenv("INGEST_MAX_WORKERS")) is not None:
             try:
                 self.max_workers = int(env_workers)
@@ -589,15 +597,21 @@ class MediaIngestService:
                     report.warnings.append(warning)
                 else:
                     mismatches: list[str] = []
-                    if delivery_entry.show != media_info.show_code:
+                    if _normalise_identifier(
+                        delivery_entry.show
+                    ) != _normalise_identifier(media_info.show_code):
                         mismatches.append(
                             f"show '{delivery_entry.show}' != '{media_info.show_code}'"
                         )
-                    if delivery_entry.episode != media_info.episode:
+                    if _normalise_identifier(
+                        delivery_entry.episode
+                    ) != _normalise_identifier(media_info.episode):
                         mismatches.append(
                             f"episode '{delivery_entry.episode}' != '{media_info.episode}'"
                         )
-                    if delivery_entry.scene != media_info.scene:
+                    if _normalise_identifier(
+                        delivery_entry.scene
+                    ) != _normalise_identifier(media_info.scene):
                         mismatches.append(
                             f"scene '{delivery_entry.scene}' != '{media_info.scene}'"
                         )
@@ -625,7 +639,10 @@ class MediaIngestService:
                         _notify(path, "skipped")
                         continue
 
-            if media_info.show_code != self.show_code:
+            if (
+                _normalise_identifier(media_info.show_code)
+                != self._show_code_normalized
+            ):
                 reason = (
                     f"Show code '{media_info.show_code}' does not match expected "
                     f"'{self.show_code}'"
