@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from pathlib import Path
-from typing import Callable
+from typing import Callable, cast, Any
 
 import pytest
 
@@ -104,7 +104,7 @@ def test_exporter_runs_registered_formats(tmp_path: Path) -> None:
     abc_record = exports[ExportFormat.ALEMBIC]
     assert abc_record.output_path.suffix == ".abc"
     assert abc_record.settings["uv_write"] is True
-    assert abc.calls[0]["settings"]["world_space"] is True
+    assert cast("dict[str, Any]", abc.calls[0])["settings"]["world_space"] is True
 
     usd_record = exports[ExportFormat.USD]
     assert usd_record.output_path.suffix == ".usd"
@@ -149,4 +149,3 @@ def test_missing_exporter_raises(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError):
         exporter.export([item])
-
