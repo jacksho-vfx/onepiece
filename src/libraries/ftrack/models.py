@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Typed pydantic models that mirror common Ftrack entities."""
+
+from __future__ import annotations
 
 from typing import Any
 
