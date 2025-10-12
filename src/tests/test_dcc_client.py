@@ -10,6 +10,7 @@ from libraries.dcc.dcc_client import (
     DCC_ASSET_REQUIREMENTS,
     DCCDependencyReport,
     SupportedDCC,
+    _build_launch_command,
     open_scene,
     publish_scene,
     verify_dcc_dependencies,
@@ -31,7 +32,26 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 
     open_scene(SupportedDCC.MAYA, file_path)
 
-    mock_run.assert_called_once_with(["Maya", str(file_path)], check=True)
+    mock_run.assert_called_once_with([
+        SupportedDCC.MAYA.command,
+        str(file_path),
+    ], check=True)
+
+
+@pytest.mark.parametrize(
+    ("os_name", "expected"),
+    (("posix", "maya"), ("nt", "maya.exe")),
+)
+def test_build_launch_command_maya_binary(
+    monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
+) -> None:
+    monkeypatch.setattr(
+        "libraries.dcc.dcc_client.os.name", os_name, raising=False
+    )
+
+    command = _build_launch_command(SupportedDCC.MAYA, Path("/tmp/test_scene.mb"))
+
+    assert command == [expected, "/tmp/test_scene.mb"]
 
 
 def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
