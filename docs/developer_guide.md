@@ -94,6 +94,8 @@ onepiece/
 - `onepiece info` is a quick way to confirm that environment variables, DCC discovery, and AWS profiles are configured properly.
 - Tests inside `src/tests` include fixtures that mock AWS and ShotGrid interactions. Import them in new tests to avoid hitting live services.
 - Use the `--dry-run` flags offered by the `aws` and `publish` commands to inspect their behaviour without transferring data.
+- Enable structured logging by exporting `ONEPIECE_LOG_LEVEL=DEBUG` and `ONEPIECE_LOG_FORMAT=json` when you need machine-parseable telemetry for complex ingest or render investigations.
+- The sample manifests under `docs/examples/` cover ingest, ShotGrid hierarchy seeding, render metrics, and Trafalgar event streams. Copy them into a throwaway directory so you can tweak values freely while testing edge cases.
 
 ## Extending delivery integrations
 
@@ -114,3 +116,29 @@ onepiece/
 4. Tag the release in Git and push the tag to the remote repository.
 
 Following this workflow keeps local development predictable and ensures new contributors can ramp up quickly.
+
+## Code review checklist
+
+Before opening a pull request, confirm the following items to keep reviews
+snappy:
+
+- [ ] All new modules include docstrings summarising their intent and expected usage.
+- [ ] CLI help text and option descriptions are clear, concise, and reference configuration profiles where appropriate.
+- [ ] User-facing changes are documented in the README or `docs/` so operators understand the impact.
+- [ ] Tests cover the happy path and representative failure cases, especially around integrations.
+- [ ] `CHANGELOG.md` includes a bullet describing any noteworthy behaviour change.
+
+## Maintaining local data fixtures
+
+Reusable fixtures speed up exploratory development. The repository provides a
+`make fixtures` target that copies canonical CSV manifests, OTIO files, and
+render metrics into `.fixtures/` under your project root. Run it after pulling a
+branch that introduces new example assets:
+
+```bash
+make fixtures
+```
+
+The Makefile task is idempotent and will refresh existing fixtures with the
+latest revisions from `docs/examples/`. Point integration tests or sandbox runs
+at `.fixtures/` to avoid editing files tracked in Git.

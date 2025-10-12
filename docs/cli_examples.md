@@ -38,6 +38,62 @@ If the ingest command exits early, review the CLI heading and take the suggested
 - `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--burnin/--no-burnin --codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest.
 - `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --chunk-size <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging and adapter-aware defaults.
 - `python -m apps.onepiece render preset save <name> --farm <deadline|tractor|…> [--dcc <dcc>] [--scene <scene>] [--frames <range>] [--output <path>] [--priority <n> --chunk-size <n> --user <user>]` — persist a reusable render submission preset to disk.
+
+### Notifications and status tracking
+- `python -m apps.onepiece notify email --to prod@example.com --subject "Daily ingest status" --body-file reports/ingest-summary.md` — send a templated email summary once ingest completes. The body file may contain Markdown; the CLI renders it to HTML automatically.
+- `python -m apps.onepiece notify slack --channel "#pipeline" --message "Render batch completed" --attachments renders/report.json` — post structured status updates to Slack, including optional attachment uploads for manifests or reports.
+- `python -m apps.onepiece review annotate --playlist <playlist-id> --note "Ready for client review" [--frame <frame-number>]` — append a note to a ShotGrid playlist while capturing per-frame context when needed.
+
+### Validation helpers
+- `python -m apps.onepiece validate reconcile ingest --delivery ./deliveries/EP101 --report reports/EP101.json` — compare a delivery folder against the last ingest report and surface deltas before re-running ingest.
+- `python -m apps.onepiece validate otio --file editorial/shot.otio --strict` — confirm that editorial timelines match the schema expected by the publish command.
+- `python -m apps.onepiece validate farm-capabilities --farm mock --preset highprio` — render the adapter capability matrix for the given farm/preset combination so supervisors can review chunking and priority limits.
+
+### Configuration inspection
+- `python -m apps.onepiece profile` — print the active profile name and resolved values.
+- `python -m apps.onepiece profile --show-sources` — list each configuration layer (user, project, workspace, CLI) that contributed to the merged profile, including file paths.
+- `python -m apps.onepiece profile export --profile studio --output profiles/studio.json` — convert a TOML profile into JSON so it can be consumed by external automation tooling.
+
+## Example reports
+
+Many commands can emit machine-readable reports. These snippets show the shape
+of the generated files to help you integrate them with downstream systems.
+
+### Ingest dry-run JSON
+
+```json
+{
+  "delivery": "./deliveries/EP101",
+  "project": "Show XYZ",
+  "show_code": "XYZ",
+  "status": "dry-run",
+  "files": [
+    {
+      "path": "plates/shot010/v001/shot010_v001.mov",
+      "action": "upload",
+      "size_bytes": 104857600,
+      "warnings": []
+    }
+  ]
+}
+```
+
+### Render submission summary
+
+```json
+{
+  "scene": "shots/ep101_seq010_sh010.ma",
+  "farm": "mock",
+  "frames": "1001-1012",
+  "priority": 75,
+  "chunk_size": 4,
+  "user": "janed",
+  "submitted_at": "2024-05-08T12:30:00+00:00"
+}
+```
+
+Feed these reports into your monitoring or communication pipelines to keep the
+team updated without scraping terminal output.
 - `python -m apps.onepiece render preset list` — enumerate discovered render presets with key metadata.
 - `python -m apps.onepiece render preset use <name> [--scene <scene>] [--frames <range>] [--output <path>] [--farm <deadline|tractor|…> --dcc <dcc> --priority <n> --chunk-size <n> --user <user>]` — apply a preset and submit a job with optional overrides.
 

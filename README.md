@@ -33,6 +33,71 @@ Once installed, the CLI exposes a number of subcommands:
 
 Use `onepiece COMMAND --help` to inspect options for any command.
 
+### Configuration essentials
+
+Most commands rely on a handful of shared environment variables and optional
+`onepiece.toml` profiles. The quickest way to confirm your setup is to run the
+diagnostic helpers shown below:
+
+```bash
+# Display the resolved configuration profile and all merged sources
+onepiece profile --show-sources
+
+# Verify that the CLI can talk to AWS, ShotGrid, and the render adapters
+onepiece info --check-integrations
+```
+
+Key environment variables recognised across the CLI surface:
+
+| Variable | Purpose |
+| --- | --- |
+| `ONEPIECE_SHOTGRID_URL` | Base URL of the ShotGrid site the ingest helpers should target. |
+| `ONEPIECE_SHOTGRID_SCRIPT` / `ONEPIECE_SHOTGRID_KEY` | API script credentials used for automation. |
+| `AWS_PROFILE` | AWS profile applied when spawning `s5cmd` or other AWS-powered helpers. |
+| `TRAFALGAR_DASHBOARD_TOKEN` | Bearer token required to query the dashboard and render APIs. |
+| `ONEPIECE_PROJECT_ROOT` | Overrides the project root used when resolving `onepiece.toml` profiles. |
+
+Project and workspace defaults can be captured in `onepiece.toml` files. The
+[configuration profile guide](docs/configuration_profiles.md) includes merging
+rules, advanced examples, and a full key reference.
+
+### Typical workflows
+
+The CLI is designed to string together a handful of repeatable workflows. The
+following snippets demonstrate the most common day-to-day sequences:
+
+#### Validate and ingest a vendor delivery
+
+```bash
+# Dry-run first to inspect the generated report without uploading anything
+onepiece aws ingest ./deliveries/EP101 --project "Show XYZ" --show-code XYZ \
+  --source vendor --dry-run --report-format json --report-path reports/EP101.json
+
+# Promote the report to a real ingest once the issues are resolved
+onepiece aws ingest ./deliveries/EP101 --project "Show XYZ" --show-code XYZ \
+  --source vendor --resume --checkpoint-dir ~/.cache/onepiece/ingest
+```
+
+#### Package and publish a DCC scene
+
+```bash
+onepiece dcc publish --dcc maya --scene-name ep101_seq010_sh010 --renders ./renders \
+  --previews ./playblasts --otio editorial/ep101_seq010_sh010.otio \
+  --metadata metadata/shot.json --destination dist/ep101_seq010_sh010 \
+  --bucket s3://studio-prod-shots --show-code XYZ --dependency-summary
+```
+
+#### Submit a render job with profile defaults
+
+```bash
+# Profiles let you avoid retyping farm defaults each time
+onepiece render submit --profile studio_farm --scene ./shots/shot.ma --frames 1001-1012 \
+  --output ./renders/shot --user janed --priority 80
+```
+
+More step-by-step walkthroughs, including example manifests, are available in
+[`docs/cli_walkthroughs.md`](docs/cli_walkthroughs.md).
+
 ### Rendering standalone scenes with Chopper
 
 The lightweight `chopper` CLI renders self-contained JSON scene descriptions. A
