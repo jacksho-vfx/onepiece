@@ -17,7 +17,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class ShotGridSettings(BaseSettings):
     base_url: str = Field(
-        validation_alias=AliasChoices("ONEPIECE_SHOTGRID_URL", "SHOTGRID_URL", "base_url")
+        validation_alias=AliasChoices(
+            "ONEPIECE_SHOTGRID_URL", "SHOTGRID_URL", "base_url"
+        )
     )
     script_name: str = Field(
         validation_alias=AliasChoices(

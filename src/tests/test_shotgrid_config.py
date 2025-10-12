@@ -7,7 +7,11 @@ from libraries.shotgrid.config import load_config
 
 
 def test_load_config_requires_all_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in ("ONEPIECE_SHOTGRID_URL", "ONEPIECE_SHOTGRID_SCRIPT", "ONEPIECE_SHOTGRID_KEY"):
+    for key in (
+        "ONEPIECE_SHOTGRID_URL",
+        "ONEPIECE_SHOTGRID_SCRIPT",
+        "ONEPIECE_SHOTGRID_KEY",
+    ):
         monkeypatch.delenv(key, raising=False)
 
     with pytest.raises(ValidationError):
