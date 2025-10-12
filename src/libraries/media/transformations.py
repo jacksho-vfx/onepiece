@@ -3,11 +3,27 @@ Transformations: convert and create proxy media using PyAV.
 """
 
 from pathlib import Path
+from typing import Any
 
-import av
 import structlog
 
+
 log = structlog.get_logger(__name__)
+
+
+def _load_av() -> Any:
+    """Import :mod:`av` lazily to keep it optional."""
+
+    try:
+        import av
+    except (
+        ModuleNotFoundError
+    ) as exc:  # pragma: no cover - exercised when optional dep missing
+        raise RuntimeError(
+            "PyAV is required for media transformations. Install the 'av' package."
+        ) from exc
+
+    return av
 
 
 def create_1080p_proxy_from_exrs(
@@ -29,6 +45,8 @@ def create_1080p_proxy_from_exrs(
 
     log.info("creating_proxy", frames=len(pattern), output=str(output_mov))
 
+    av = _load_av()
+
     container = av.open(str(output_mov), mode="w")
     stream = container.add_stream("h264", rate=fps)
     stream.height = 1080
@@ -43,7 +61,7 @@ def create_1080p_proxy_from_exrs(
         if packet:
             container.mux(packet)
 
-    for packet in stream.encode():  # type: ignore[assignment]
+    for packet in stream.encode():
         container.mux(packet)
     container.close()
 
@@ -62,6 +80,8 @@ def convert_mov_to_exrs(
     import imageio.v3 as iio
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    av = _load_av()
 
     container = av.open(str(mov_path))
     video_stream = container.streams.video[0]
