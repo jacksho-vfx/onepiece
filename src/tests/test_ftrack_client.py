@@ -58,7 +58,7 @@ class _StubSession:
         self._queues[key] = queue
         return response
 
-    def post(self, url: str, json: dict[str, Any] | None = None) -> _StubResponse:  # type: ignore[override]
+    def post(self, url: str, json: dict[str, Any] | None = None) -> _StubResponse:
         self.requests.append(("POST", url, json))
         return self._pop("POST", url)
 
@@ -68,12 +68,16 @@ class _StubSession:
         url: str,
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
-    ) -> _StubResponse:  # type: ignore[override]
-        self.requests.append((method.upper(), url, json if json is not None else params))
+    ) -> _StubResponse:
+        self.requests.append(
+            (method.upper(), url, json if json is not None else params)
+        )
         return self._pop(method, url)
 
 
-def _make_auth_session(extra_responses: dict[tuple[str, str], list[_StubResponse]]) -> _StubSession:
+def _make_auth_session(
+    extra_responses: dict[tuple[str, str], list[_StubResponse]]
+) -> _StubSession:
     base_url = "https://server"
     responses = {
         ("POST", f"{base_url}/api/authenticate"): [_StubResponse({"token": "abc123"})]
@@ -89,9 +93,14 @@ def test_authentication_sets_bearer_token() -> None:
         base_url=base_url, api_user="user", api_key="secret", session=session
     )
 
+    assert client.base_url == base_url
     assert session.headers["Accept"] == "application/json"
     assert session.headers["Authorization"] == "Bearer abc123"
-    assert ("POST", f"{base_url}/api/authenticate", {"username": "user", "apiKey": "secret"}) in session.requests
+    assert (
+        "POST",
+        f"{base_url}/api/authenticate",
+        {"username": "user", "apiKey": "secret"},
+    ) in session.requests
 
 
 def test_list_projects_parses_payload_into_models() -> None:

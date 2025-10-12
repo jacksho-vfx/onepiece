@@ -1,8 +1,9 @@
-from __future__ import annotations
-
 """Thin REST client tailored for the Ftrack API."""
 
-import logging
+from __future__ import annotations
+
+import structlog
+
 from typing import Any, Sequence
 from urllib.parse import urljoin
 
@@ -11,7 +12,7 @@ from requests import Session
 
 from .models import FtrackProject, FtrackShot, FtrackTask
 
-log = logging.getLogger(__name__)
+log = structlog.getLogger(__name__)
 
 
 class FtrackError(RuntimeError):
@@ -108,7 +109,10 @@ class FtrackRestClient:
         return self._request("GET", *segments, params=params)
 
     def _post(
-        self, *segments: str, payload: dict[str, Any], params: dict[str, Any] | None = None
+        self,
+        *segments: str,
+        payload: dict[str, Any],
+        params: dict[str, Any] | None = None,
     ) -> Any:
         return self._request("POST", *segments, params=params, payload=payload)
 
@@ -132,7 +136,9 @@ class FtrackRestClient:
         """Return all projects visible to the API user."""
 
         payload = self._get("api", "projects")
-        return [FtrackProject.model_validate(item) for item in self._extract_items(payload)]
+        return [
+            FtrackProject.model_validate(item) for item in self._extract_items(payload)
+        ]
 
     def list_project_shots(self, project_id: str) -> list[FtrackShot]:
         """Return the shots for a project."""
@@ -140,7 +146,9 @@ class FtrackRestClient:
         if not project_id:
             raise ValueError("project_id must be provided")
         payload = self._get("api", "projects", project_id, "shots")
-        return [FtrackShot.model_validate(item) for item in self._extract_items(payload)]
+        return [
+            FtrackShot.model_validate(item) for item in self._extract_items(payload)
+        ]
 
     def list_project_tasks(self, project_id: str) -> list[FtrackTask]:
         """Return all tasks for a project."""
@@ -148,7 +156,9 @@ class FtrackRestClient:
         if not project_id:
             raise ValueError("project_id must be provided")
         payload = self._get("api", "projects", project_id, "tasks")
-        return [FtrackTask.model_validate(item) for item in self._extract_items(payload)]
+        return [
+            FtrackTask.model_validate(item) for item in self._extract_items(payload)
+        ]
 
     # ------------------------------------------------------------------
     # Workflow stubs
@@ -172,4 +182,6 @@ class FtrackRestClient:
     ) -> list[FtrackTask]:
         """Synchronise task assignments and statuses for the given project."""
 
-        raise NotImplementedError("Task assignment synchronisation is pending implementation.")
+        raise NotImplementedError(
+            "Task assignment synchronisation is pending implementation."
+        )
