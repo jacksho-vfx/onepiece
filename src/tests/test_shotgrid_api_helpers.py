@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,23 +25,23 @@ class StubResponse:
         ok: bool,
         status_code: int = 200,
         text: str = "",
-        payload: dict | None = None,
+        payload: dict[Any, Any] | None = None,
     ) -> None:
         self.ok = ok
         self.status_code = status_code
         self.text = text
         self._payload = payload or {}
 
-    def json(self) -> dict:
+    def json(self) -> dict[Any, Any]:
         return self._payload
 
 
 class StubSession:
     def __init__(self, response: StubResponse) -> None:
         self._response = response
-        self.patch_calls: list[tuple[str, dict]] = []
+        self.patch_calls: list[tuple[str, dict[Any, Any]]] = []
 
-    def patch(self, url: str, *, json: dict) -> StubResponse:
+    def patch(self, url: str, *, json: dict[Any, Any]) -> StubResponse:
         self.patch_calls.append((url, json))
         return self._response
 
@@ -192,12 +193,12 @@ def test_update_version_includes_relationships(client: ShotGridClient) -> None:
 
 def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     client = ShotGridClient.__new__(ShotGridClient)
-    captured: dict[str, tuple[int, dict, dict | None]] = {}
+    captured: dict[str, tuple[int, dict[Any, Any], dict[Any, Any] | None]] = {}
 
     def fake_update(
         version_id: int,
-        attributes: dict,
-        relationships: dict | None = None,
+        attributes: dict[Any, Any],
+        relationships: dict[Any, Any] | None = None,
     ) -> None:
         captured["call"] = (version_id, attributes, relationships)
 
