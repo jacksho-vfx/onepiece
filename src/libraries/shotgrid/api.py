@@ -260,26 +260,7 @@ class ShotGridClient:
         )
         records = self._get("Version", filters, fields)
 
-        versions: List[Dict[str, Any]] = []
-        for record in records:
-            attributes = record.get("attributes", {})
-            relationships = record.get("relationships", {})
-            entity_data = relationships.get("entity", {}).get("data", {})
-            shot_name = (
-                entity_data.get("name")
-                or entity_data.get("code")
-                or attributes.get("code")
-            )
-            versions.append(
-                {
-                    "shot": shot_name,
-                    "version_number": attributes.get("version_number"),
-                    "file_path": attributes.get("sg_path_to_movie")
-                    or attributes.get("sg_uploaded_movie"),
-                    "status": attributes.get("sg_status_list"),
-                    "code": attributes.get("code"),
-                }
-            )
+        versions = [self._simplify_version_record(record) for record in records]
 
         log.info(
             "sg.get_versions_for_project",
@@ -287,6 +268,26 @@ class ShotGridClient:
             count=len(versions),
         )
         return versions
+
+    def _simplify_version_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert a ShotGrid Version entity payload into a summary dictionary."""
+
+        attributes = record.get("attributes", {}) or {}
+        relationships = record.get("relationships", {}) or {}
+        entity_data = relationships.get("entity", {}).get("data", {}) or {}
+
+        shot_name = (
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
+        )
+
+        return {
+            "shot": shot_name,
+            "version_number": attributes.get("version_number"),
+            "file_path": attributes.get("sg_path_to_movie")
+            or attributes.get("sg_uploaded_movie"),
+            "status": attributes.get("sg_status_list"),
+            "code": attributes.get("code"),
+        }
 
     def get_version(self, version_data: VersionData) -> Any:
         return self.get_version(version_data)

@@ -76,3 +76,52 @@ def test_get_or_create_shot_skips_creation_without_identifiers(
     result = client.get_or_create_shot(data)
 
     assert result is None
+
+
+def test_simplify_version_record_prefers_entity_name(client: ShotGridClient) -> None:
+    record = {
+        "attributes": {
+            "code": "shot010_v001",
+            "version_number": 1,
+            "sg_path_to_movie": "/path/to/movie.mov",
+            "sg_status_list": "rev",
+        },
+        "relationships": {
+            "entity": {"data": {"name": "SHOT_010", "code": "SHOT_010_CODE"}}
+        },
+    }
+
+    result = client._simplify_version_record(record)
+
+    assert result == {
+        "shot": "SHOT_010",
+        "version_number": 1,
+        "file_path": "/path/to/movie.mov",
+        "status": "rev",
+        "code": "shot010_v001",
+    }
+
+
+def test_simplify_version_record_falls_back_to_uploaded_media(
+    client: ShotGridClient,
+) -> None:
+    record = {
+        "attributes": {
+            "code": "shot020_v002",
+            "version_number": 2,
+            "sg_path_to_movie": None,
+            "sg_uploaded_movie": "/upload/movie.mov",
+            "sg_status_list": None,
+        },
+        "relationships": {"entity": {"data": {}}},
+    }
+
+    result = client._simplify_version_record(record)
+
+    assert result == {
+        "shot": "shot020_v002",
+        "version_number": 2,
+        "file_path": "/upload/movie.mov",
+        "status": None,
+        "code": "shot020_v002",
+    }
