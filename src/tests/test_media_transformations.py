@@ -5,6 +5,7 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Generator
 
 import pytest
 
@@ -28,7 +29,9 @@ class _FakeContainer:
         self._frames = frames
         self.streams = SimpleNamespace(video=[stream])
 
-    def decode(self, stream: _FakeVideoStream):  # pragma: no cover - trivial generator
+    def decode(
+        self, stream: _FakeVideoStream
+    ) -> Generator[_FakeFrame, None, None]:  # pragma: no cover - trivial generator
         yield from self._frames
 
     def close(self) -> None:  # pragma: no cover - trivial
@@ -36,7 +39,7 @@ class _FakeContainer:
 
 
 @pytest.fixture()
-def fake_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+def fake_modules(monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[misc]
     def _fake_imwrite(path: str, data: str) -> None:
         dest = Path(path)
         dest.write_text(data)
@@ -58,7 +61,9 @@ def fake_modules(monkeypatch: pytest.MonkeyPatch) -> None:
         sys.modules.pop(module, None)
 
 
-def test_convert_mov_to_exrs_exports_first_frame(tmp_path: Path, fake_modules: None) -> None:
+def test_convert_mov_to_exrs_exports_first_frame(
+    tmp_path: Path, fake_modules: None
+) -> None:
     sys.modules.pop("libraries.media.transformations", None)
     transformations = importlib.import_module("libraries.media.transformations")
 
