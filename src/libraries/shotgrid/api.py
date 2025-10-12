@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -106,6 +107,22 @@ class ShotGridClient:
         results = self._get(entity, filters, fields)
         return results[0] if results else None
 
+    def _get_or_create_entity(
+        self,
+        fetch_entity: Callable[[], Any],
+        create_entity: Callable[[], Any],
+        *identifiers: object,
+    ) -> Any:
+        """Return an existing entity or create it when identifiers are present."""
+
+        has_identifiers = all(identifiers) if identifiers else True
+        entity = fetch_entity() if has_identifiers else None
+        if entity:
+            return entity
+        if not has_identifiers:
+            return None
+        return create_entity()
+
     # ------------------------------------------------------------------ #
     # External helpers
     # ------------------------------------------------------------------ #
@@ -140,10 +157,11 @@ class ShotGridClient:
         return self._post("Project", {"code": project_name, "template": template})
 
     def get_or_create_project(self, name: str, template: str | None) -> Any:
-        project = self.get_project(name)
-        if project:
-            return project
-        return self.create_project(name, template)
+        return self._get_or_create_entity(
+            lambda: self.get_project(name),
+            lambda: self.create_project(name, template),
+            name,
+        )
 
     # ------------------------------------------------------------------ #
     # Episodes
@@ -161,13 +179,12 @@ class ShotGridClient:
         )
 
     def get_or_create_episode(self, data: EpisodeData) -> Any:
-        if not data.code or not data.project_id:
-            episode = None
-        else:
-            episode = self.get_episode(data.project_id, data.code)
-        if episode:
-            return episode
-        return self.create_episode(data)
+        return self._get_or_create_entity(
+            lambda: self.get_episode(data.project_id, data.code),
+            lambda: self.create_episode(data),
+            data.project_id,
+            data.code,
+        )
 
     # ------------------------------------------------------------------ #
     # Scenes
@@ -183,13 +200,12 @@ class ShotGridClient:
         )
 
     def get_or_create_scene(self, data: SceneData) -> Any:
-        if not data.code or not data.project_id:
-            scene = None
-        else:
-            scene = self.get_scene(data.project_id, data.code)
-        if scene:
-            return scene
-        return self.create_scene(data)
+        return self._get_or_create_entity(
+            lambda: self.get_scene(data.project_id, data.code),
+            lambda: self.create_scene(data),
+            data.project_id,
+            data.code,
+        )
 
     # ------------------------------------------------------------------ #
     # Shots
@@ -208,13 +224,12 @@ class ShotGridClient:
         return self._post(data.entity_type, {"code": data.code, **data.extra}, rel)
 
     def get_or_create_shot(self, data: ShotData) -> Any:
-        if not data.code or not data.project_id:
-            shot = None
-        else:
-            shot = self.get_shot(data.project_id, data.code)
-        if shot:
-            return shot
-        return self.create_shot(data)
+        return self._get_or_create_entity(
+            lambda: self.get_shot(data.project_id, data.code),
+            lambda: self.create_shot(data),
+            data.project_id,
+            data.code,
+        )
 
     # ------------------------------------------------------------------ #
     # Versions
