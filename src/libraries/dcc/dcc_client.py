@@ -56,7 +56,7 @@ class SupportedDCC(Enum):
                 return f"{base_command}.exe"
             return base_command
 
-        return self.value
+        return str(self.value)
 
 
 DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {

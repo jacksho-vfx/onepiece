@@ -32,10 +32,13 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 
     open_scene(SupportedDCC.MAYA, file_path)
 
-    mock_run.assert_called_once_with([
-        SupportedDCC.MAYA.command,
-        str(file_path),
-    ], check=True)
+    mock_run.assert_called_once_with(
+        [
+            SupportedDCC.MAYA.command,
+            str(file_path),
+        ],
+        check=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -45,13 +48,16 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 def test_build_launch_command_maya_binary(
     monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
 ) -> None:
-    monkeypatch.setattr(
-        "libraries.dcc.dcc_client.os.name", os_name, raising=False
-    )
+    monkeypatch.setattr("libraries.dcc.dcc_client.os.name", os_name, raising=False)
 
-    command = _build_launch_command(SupportedDCC.MAYA, Path("/tmp/test_scene.mb"))
+    scene_path = Path("/tmp/test_scene.mb")
+    command = _build_launch_command(SupportedDCC.MAYA, scene_path)
 
-    assert command == [expected, "/tmp/test_scene.mb"]
+    expected_path = str(scene_path)
+    if os_name == "nt":
+        expected_path = str(scene_path).replace("/", "\\")
+
+    assert command == [expected, expected_path]
 
 
 def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
