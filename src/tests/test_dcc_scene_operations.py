@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import types
 from pathlib import Path
@@ -66,10 +65,6 @@ def test_maya_save_scene_defaults_to_current(monkeypatch: pytest.MonkeyPatch) ->
     assert calls == [{"force": True}]
 
 
-def test_nuke_save_scene_with_explicit_path(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Saving with a path should create the directory before ``scriptSaveAs``."""
 def test_maya_export_scene_creates_parent_directories(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -97,7 +92,9 @@ def test_maya_export_scene_creates_parent_directories(
     assert parent.exists()
 
 
-def test_nuke_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_nuke_save_scene_with_explicit_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Saving with a path should delegate to ``nuke.scriptSaveAs``."""
 
     captured: dict[str, str] = {}
@@ -109,7 +106,7 @@ def test_nuke_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
 
-    script_path = UPath(tmp_path / "nested" / "test_script.nk")
+    script_path = Path(tmp_path / "nested" / "test_script.nk")
     assert not script_path.parent.exists()
 
     nuke_module.save_scene(script_path)
