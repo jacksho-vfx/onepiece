@@ -232,12 +232,13 @@ def open_scene(path: UPath) -> None:
     log.info("maya_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath) -> None:
+def save_scene(path: UPath | None = None) -> None:
     """
     Save the current Maya scene.
 
     Args:
-        path (UPath, optional): Path to save the scene. Saves current scene if None.
+        path: Optional path where the scene should be written.  When ``None`` the
+            currently open scene is saved in-place.
     """
     if path:
         pm.saveAs(str(path))

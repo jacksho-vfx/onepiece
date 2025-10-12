@@ -29,12 +29,13 @@ def open_scene(path: UPath) -> None:
     log.info("nuke_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath) -> None:
+def save_scene(path: UPath | None = None) -> None:
     """
     Save the current Nuke script.
 
     Args:
-        path (UPath, optional): Path to save the script. Saves current if None.
+        path: Optional path where the script should be written.  When ``None`` the
+            currently open script is saved in-place.
     """
     if path:
         nuke.scriptSaveAs(str(path))
