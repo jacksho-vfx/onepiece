@@ -3,23 +3,22 @@ Transformations: convert and create proxy media using PyAV.
 """
 
 from pathlib import Path
-
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 
-if TYPE_CHECKING:  # pragma: no cover - only evaluated by type checkers
-    import av as _av_module
 
 log = structlog.get_logger(__name__)
 
 
-def _load_av() -> "_av_module":
+def _load_av() -> Any:
     """Import :mod:`av` lazily to keep it optional."""
 
     try:
-        import av  # type: ignore[import-not-found]
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when optional dep missing
+        import av
+    except (
+        ModuleNotFoundError
+    ) as exc:  # pragma: no cover - exercised when optional dep missing
         raise RuntimeError(
             "PyAV is required for media transformations. Install the 'av' package."
         ) from exc
@@ -62,7 +61,7 @@ def create_1080p_proxy_from_exrs(
         if packet:
             container.mux(packet)
 
-    for packet in stream.encode():  # type: ignore[assignment]
+    for packet in stream.encode():
         container.mux(packet)
     container.close()
 
