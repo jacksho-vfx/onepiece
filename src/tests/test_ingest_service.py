@@ -118,6 +118,31 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert versions[0]["code"] == valid.stem
 
 
+def test_ingest_service_accepts_case_insensitive_show_code(tmp_path: Path) -> None:
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+
+    valid = incoming / "SHOW01_ep001_sc01_0001_comp.mov"
+    valid.write_bytes(b"data")
+
+    uploader = DummyUploader()
+    shotgrid = ShotgridClient()
+
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="show01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+    )
+
+    report = service.ingest_folder(incoming, recursive=False)
+
+    assert report.processed_count == 1
+    assert report.invalid_count == 0
+
 def test_ingest_service_returns_dry_run_report(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
