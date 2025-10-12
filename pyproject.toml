@@ -53,6 +53,11 @@ trafalgar = "apps.trafalgar.__main__:main"
 uta = "apps.uta.__main__:main"
 chopper = "apps.chopper.__main__:main"
 
+[project.entry-points."onepiece.providers"]
+dummy_delivery = "apps.trafalgar.providers:DummyDeliveryProvider"
+s3_delivery = "apps.trafalgar.providers:S3DeliveryProvider"
+default_reconcile = "apps.trafalgar.providers:DefaultReconcileProvider"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
