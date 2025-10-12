@@ -125,3 +125,128 @@ def test_simplify_version_record_falls_back_to_uploaded_media(
         "status": None,
         "code": "shot020_v002",
     }
+
+
+def test_list_playlists_filters_by_project_and_paginates(
+    client: ShotGridClient,
+) -> None:
+    client.base_url = "https://example.com"
+    client.get_project = MagicMock(return_value={"id": 77})
+
+    session = MagicMock()
+    client._session = session
+
+    page_one = MagicMock()
+    page_one.ok = True
+    page_one.status_code = 200
+    page_one.text = ""
+    page_one.json.return_value = {
+        "data": [{"id": 1}, {"id": 2}],
+        "links": {"next": "https://example.com/api/v1/entities/playlists?page[number]=2"},
+    }
+
+    page_two = MagicMock()
+    page_two.ok = True
+    page_two.status_code = 200
+    page_two.text = ""
+    page_two.json.return_value = {
+        "data": [{"id": 3}],
+        "links": {},
+    }
+
+    session.get.side_effect = [page_one, page_two]
+
+    result = client.list_playlists("Project Name")
+
+    assert result == [{"id": 1}, {"id": 2}, {"id": 3}]
+    assert session.get.call_count == 2
+
+    first_call_kwargs = session.get.call_args_list[0].kwargs
+    assert first_call_kwargs["params"]["filter[0][project]"] == 77
+    assert first_call_kwargs["params"]["page[number]"] == 1
+
+    second_call_kwargs = session.get.call_args_list[1].kwargs
+    assert second_call_kwargs["params"]["page[number]"] == 2
+
+
+def test_expand_playlist_versions_fetches_and_normalises(
+    client: ShotGridClient,
+) -> None:
+    playlist = {
+        "relationships": {
+            "versions": {
+                "data": [
+                    {"id": 101},
+                    {"id": "102"},
+                    {"id": None},
+                    "ignored",
+                ]
+            }
+        }
+    }
+
+    version_payloads = [
+        {
+            "id": 101,
+            "attributes": {
+                "code": "shot010_v001",
+                "version_number": 1,
+                "sg_status_list": "rev",
+                "sg_path_to_movie": "/movie.mov",
+                "sg_uploaded_movie": None,
+                "description": "First",
+            },
+            "relationships": {
+                "entity": {"data": {"code": "SHOT_010"}},
+                "project": {"data": {"id": 5}},
+            },
+        },
+        {
+            "id": 102,
+            "attributes": {
+                "code": "shot020_v002",
+                "version_number": 2,
+                "sg_status_list": None,
+                "sg_path_to_movie": None,
+                "sg_uploaded_movie": "/upload.mov",
+                "description": None,
+            },
+            "relationships": {
+                "entity": {"data": {"name": "SHOT_020"}},
+                "project": {"data": {"id": 5}},
+            },
+        },
+    ]
+
+    client._get = MagicMock(return_value=version_payloads)
+
+    result = client.expand_playlist_versions(playlist)
+
+    assert result == [
+        {
+            "id": 101,
+            "code": "shot010_v001",
+            "shot": "SHOT_010",
+            "version_number": 1,
+            "file_path": "/movie.mov",
+            "status": "rev",
+            "description": "First",
+            "project_id": 5,
+        },
+        {
+            "id": 102,
+            "code": "shot020_v002",
+            "shot": "SHOT_020",
+            "version_number": 2,
+            "file_path": "/upload.mov",
+            "status": None,
+            "description": None,
+            "project_id": 5,
+        },
+    ]
+
+    assert client._get.call_count == 1
+    entity, filters, fields = client._get.call_args.args
+    assert entity == "Version"
+    assert filters == [{"id[$in]": "101,102"}]
+    assert "description" in fields
