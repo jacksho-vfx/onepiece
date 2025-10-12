@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from apps.trafalgar.providers.providers import (
     DeliveryProvider,
     ReconcileDataProvider,
-    registry as provider_registry,
+    initialize_providers,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.delivery.manifest import get_manifest_data
@@ -658,9 +658,9 @@ class ReconcileService:
         comparator_fn: Callable[..., Sequence[Mapping[str, Any]]] | None = None,
     ) -> None:
         if isinstance(provider, str):
-            self._provider = provider_registry.create("reconcile", provider)
+            self._provider = initialize_providers()
         else:
-            self._provider = provider or provider_registry.create_default("reconcile")
+            self._provider = provider
         self._comparator = comparator_fn or comparator.compare_datasets
 
     def list_errors(self) -> list[Mapping[str, Any]]:
@@ -908,9 +908,9 @@ class DeliveryService:
         manifest_cache_size: int = 32,
     ) -> None:
         if isinstance(provider, str):
-            self._provider = provider_registry.create("delivery", provider)
+            self._provider = initialize_providers()
         else:
-            self._provider = provider or provider_registry.create_default("delivery")
+            self._provider = provider
         self._manifest_cache: OrderedDict[Hashable, dict[str, Any]] = OrderedDict()
         self._manifest_cache_size = max(0, manifest_cache_size)
 

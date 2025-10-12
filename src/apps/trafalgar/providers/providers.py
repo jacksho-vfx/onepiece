@@ -225,8 +225,11 @@ class S3DeliveryProvider(DeliveryProvider):
         return []
 
 
-registry = ProviderRegistry()
-registry.register(DefaultReconcileProvider, default=True)
-registry.register(DummyDeliveryProvider, default=True)
-registry.register(S3DeliveryProvider)
-registry.load_entry_points()
+def initialize_providers() -> ProviderRegistry:
+    """Initialize provider registry by loading all entry points."""
+    registry = ProviderRegistry()
+    registry.register(DefaultReconcileProvider, default=True)
+    registry.register(DummyDeliveryProvider, default=True)
+    registry.register(S3DeliveryProvider)
+    registry.load_entry_points()
+    return registry
