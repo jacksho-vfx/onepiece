@@ -71,11 +71,7 @@ class AnimationDebuggerReport:
     def issues(self) -> tuple[AnimationDebuggerIssue, ...]:
         """Return all issues discovered across every check."""
 
-        return (
-            self.constraint_issues
-            + self.cache_issues
-            + self.frame_range_issues
-        )
+        return self.constraint_issues + self.cache_issues + self.frame_range_issues
 
     @property
     def has_errors(self) -> bool:
@@ -84,7 +80,9 @@ class AnimationDebuggerReport:
         return any(issue.severity == "error" for issue in self.issues)
 
 
-def _validate_constraints(constraints: Iterable[ConstraintInfo]) -> list[AnimationDebuggerIssue]:
+def _validate_constraints(
+    constraints: Iterable[ConstraintInfo],
+) -> list[AnimationDebuggerIssue]:
     """Return issues detected while examining constraint metadata."""
 
     issues: list[AnimationDebuggerIssue] = []
@@ -118,7 +116,9 @@ def _validate_constraints(constraints: Iterable[ConstraintInfo]) -> list[Animati
     return issues
 
 
-def _validate_cache_links(cache_links: Iterable[CacheLinkInfo]) -> list[AnimationDebuggerIssue]:
+def _validate_cache_links(
+    cache_links: Iterable[CacheLinkInfo],
+) -> list[AnimationDebuggerIssue]:
     """Return issues detected while validating simulation cache links."""
 
     issues: list[AnimationDebuggerIssue] = []
@@ -152,7 +152,9 @@ def _validate_cache_links(cache_links: Iterable[CacheLinkInfo]) -> list[Animatio
     return issues
 
 
-def _validate_frame_ranges(frame_ranges: Iterable[FrameRangeInfo]) -> list[AnimationDebuggerIssue]:
+def _validate_frame_ranges(
+    frame_ranges: Iterable[FrameRangeInfo],
+) -> list[AnimationDebuggerIssue]:
     """Return issues detected while validating animation frame ranges."""
 
     issues: list[AnimationDebuggerIssue] = []
@@ -191,4 +193,3 @@ def debug_animation(
         cache_issues=cache_issues,
         frame_range_issues=frame_range_issues,
     )
-

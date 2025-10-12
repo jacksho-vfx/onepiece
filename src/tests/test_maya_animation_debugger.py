@@ -32,7 +32,10 @@ def test_debug_animation_reports_common_issues() -> None:
     )
 
     constraint_codes = {issue.code for issue in report.constraint_issues}
-    assert constraint_codes == {"CONSTRAINT_TARGET_MISSING", "CONSTRAINT_DRIVEN_MISSING"}
+    assert constraint_codes == {
+        "CONSTRAINT_TARGET_MISSING",
+        "CONSTRAINT_DRIVEN_MISSING",
+    }
 
     cache_codes = [issue.code for issue in report.cache_issues]
     assert cache_codes == ["CACHE_LINK_MISSING", "CACHE_NOT_LOADED"]
@@ -49,7 +52,9 @@ def test_debug_animation_handles_warning_only_scenarios() -> None:
 
     report = debug_animation(
         scene_name="shot020",
-        cache_links=[CacheLinkInfo(node="simMesh", cache_path="simMesh.abc", is_loaded=False)],
+        cache_links=[
+            CacheLinkInfo(node="simMesh", cache_path="simMesh.abc", is_loaded=False)
+        ],
     )
 
     assert report.cache_issues == (
@@ -78,4 +83,3 @@ def test_debug_animation_returns_clean_report_for_valid_data() -> None:
 
     assert report.issues == ()
     assert report.has_errors is False
-
