@@ -1,4 +1,8 @@
-"""Thin REST client tailored for the Ftrack API."""
+"""Thin REST client tailored for the Ftrack API.
+
+The module exposes :class:`FtrackRestClient` which provides typed helpers for
+listing and retrieving common entities such as projects, shots, and tasks.
+"""
 
 from __future__ import annotations
 
@@ -132,6 +136,32 @@ class FtrackRestClient:
                     return value
         raise FtrackError("Unexpected payload structure returned by the API")
 
+    @staticmethod
+    def _extract_item(payload: Any) -> dict[str, Any] | None:
+        if payload is None:
+            return None
+        if isinstance(payload, dict):
+            for key in ("data", "item", "result"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    if not value:
+                        return None
+                    first = value[0]
+                    if not isinstance(first, dict):
+                        break
+                    return first
+                if isinstance(value, dict):
+                    return value
+            if "id" in payload:
+                return payload
+        if isinstance(payload, list):
+            if not payload:
+                return None
+            first = payload[0]
+            if isinstance(first, dict):
+                return first
+        raise FtrackError("Unexpected payload structure returned by the API")
+
     def list_projects(self) -> list[FtrackProject]:
         """Return all projects visible to the API user."""
 
@@ -159,6 +189,41 @@ class FtrackRestClient:
         return [
             FtrackTask.model_validate(item) for item in self._extract_items(payload)
         ]
+
+    def get_project(self, project_id: str) -> FtrackProject | None:
+        """Return a single project if it exists."""
+
+        if not project_id:
+            raise ValueError("project_id must be provided")
+        payload = self._get(
+            "api", "projects", params={"filter": f"id={project_id}"}
+        )
+        item = self._extract_item(payload)
+        if item is None:
+            return None
+        return FtrackProject.model_validate(item)
+
+    def get_shot(self, shot_id: str) -> FtrackShot | None:
+        """Return a single shot if it exists."""
+
+        if not shot_id:
+            raise ValueError("shot_id must be provided")
+        payload = self._get("api", "shots", params={"filter": f"id={shot_id}"})
+        item = self._extract_item(payload)
+        if item is None:
+            return None
+        return FtrackShot.model_validate(item)
+
+    def get_task(self, task_id: str) -> FtrackTask | None:
+        """Return a single task if it exists."""
+
+        if not task_id:
+            raise ValueError("task_id must be provided")
+        payload = self._get("api", "tasks", params={"filter": f"id={task_id}"})
+        item = self._extract_item(payload)
+        if item is None:
+            return None
+        return FtrackTask.model_validate(item)
 
     # ------------------------------------------------------------------
     # Workflow stubs
