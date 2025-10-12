@@ -205,6 +205,42 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
 
 
 @patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_replaces_existing_file_targets(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    existing_package = destination / "ep01_sh012"
+    existing_package.mkdir(parents=True, exist_ok=True)
+    existing_target = existing_package / "previews"
+    existing_target.write_text("stale")
+
+    package_path = publish_scene(
+        SupportedDCC.NUKE,
+        scene_name="ep01_sh012",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+    )
+
+    expected_package = destination / "ep01_sh012"
+    assert package_path == expected_package
+    previews_dir = expected_package / "previews"
+    assert previews_dir.is_dir()
+    assert (previews_dir / "preview.jpg").read_text() == "preview"
+
+    sync_mock.assert_called_once()
+
+
+@patch("libraries.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(
     sync_mock: MagicMock, tmp_path: Path
 ) -> None:
