@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -92,19 +92,26 @@ def test_maya_export_scene_creates_parent_directories(
     assert parent.exists()
 
 
-def test_nuke_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_nuke_save_scene_with_explicit_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Saving with a path should delegate to ``nuke.scriptSaveAs``."""
 
     captured: dict[str, str] = {}
 
     def fake_save_as(path: str) -> None:
+        save_path = UPath(path)
+        assert save_path.parent.exists(), "Parent directory should exist before saving"
         captured["path"] = path
 
     monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
 
-    script_path = UPath("/project/test_script.nk")
+    script_path = Path(tmp_path / "nested" / "test_script.nk")
+    assert not script_path.parent.exists()
+
     nuke_module.save_scene(script_path)
 
+    assert script_path.parent.exists()
     assert captured["path"] == str(script_path)
 
 
@@ -121,3 +128,26 @@ def test_nuke_save_scene_defaults_to_current(monkeypatch: pytest.MonkeyPatch) ->
     nuke_module.save_scene()
 
     assert called == [True]
+
+
+def test_nuke_export_scene_creates_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exporting should create the directory before saving the script."""
+
+    captured: dict[str, str] = {}
+
+    def fake_save_as(path: str) -> None:
+        save_path = UPath(path)
+        assert save_path.parent.exists(), "Parent directory should exist before export"
+        captured["path"] = path
+
+    monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
+
+    export_path = UPath(tmp_path / "output" / "exported.nk")
+    assert not export_path.parent.exists()
+
+    nuke_module.export_scene(export_path)
+
+    assert export_path.parent.exists()
+    assert captured["path"] == str(export_path)
