@@ -21,6 +21,7 @@ def _resolve_pm_callable(name: str) -> Callable[..., None]:
 
     target = getattr(pm, name, None)
     if target is None:  # pragma: no cover - depends on Maya environment
+
         def _missing(*_args: Any, **_kwargs: Any) -> None:
             raise RuntimeError(
                 "pymel.core is missing the expected Maya command "
