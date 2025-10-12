@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from upath import UPath
 
 from libraries.shotgrid.client import ShotgridClient
 from libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
@@ -17,7 +16,7 @@ def sg_client() -> ShotgridClient:
 
 
 def _create_version(
-    sg_client: ShotgridClient, project: str, shot: str, path: UPath
+    sg_client: ShotgridClient, project: str, shot: str, path: Path
 ) -> int:
     version = sg_client.register_version(project, shot, path)
     return cast(int, version["id"])
@@ -27,7 +26,7 @@ def test_package_playlist_for_mediashuttle(
     tmp_path: Path, sg_client: ShotgridClient
 ) -> None:
     project = "OnePiece"
-    media_root = UPath(tmp_path) / "media"
+    media_root = Path(tmp_path) / "media"
     media_root.mkdir()
 
     version_ids: list[int] = []
@@ -45,7 +44,7 @@ def test_package_playlist_for_mediashuttle(
 
     sg_client.register_playlist(project, "Client Review", version_ids)
 
-    destination = UPath(tmp_path) / "packages"
+    destination = Path(tmp_path) / "packages"
     destination.mkdir()
 
     summary = package_playlist_for_mediashuttle(
@@ -78,7 +77,7 @@ def test_package_playlist_for_mediashuttle(
 
 
 def test_package_playlist_missing(tmp_path: Path, sg_client: ShotgridClient) -> None:
-    destination = UPath(tmp_path) / "packages"
+    destination = Path(tmp_path) / "packages"
     destination.mkdir()
 
     with pytest.raises(ValueError):

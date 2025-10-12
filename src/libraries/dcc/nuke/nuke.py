@@ -4,8 +4,9 @@ Nuke DCC integration functions for OnePiece
 Requires Nuke’s Python environment.
 """
 
+from pathlib import Path
+
 import nuke
-from upath import UPath
 import structlog
 
 log = structlog.get_logger(__name__)
@@ -14,7 +15,7 @@ log = structlog.get_logger(__name__)
 # --------------------------------------------------------------------------- #
 # Scene Operations
 # --------------------------------------------------------------------------- #
-def open_scene(path: UPath) -> None:
+def open_scene(path: Path) -> None:
     """
     Open a Nuke script (.nk).
 
@@ -29,7 +30,7 @@ def open_scene(path: UPath) -> None:
     log.info("nuke_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath | None = None) -> None:
+def save_scene(path: Path | None = None) -> None:
     """
     Save the current Nuke script.
 
@@ -45,7 +46,7 @@ def save_scene(path: UPath | None = None) -> None:
         log.info("nuke_scene_saved", path="current")
 
 
-def export_scene(path: UPath) -> None:
+def export_scene(path: Path) -> None:
     """
     Export the current Nuke script to a specific file.
 
@@ -62,7 +63,7 @@ def export_scene(path: UPath) -> None:
 # --------------------------------------------------------------------------- #
 # Asset Operations
 # --------------------------------------------------------------------------- #
-def import_asset(path: UPath) -> None:
+def import_asset(path: Path) -> None:
     """
     Import a Nuke node tree from another .nk script.
 

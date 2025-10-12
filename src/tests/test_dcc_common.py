@@ -77,7 +77,7 @@ def test_export_metadata_creates_json(
 
 
 def test_export_metadata_includes_scene_path(tmp_path: Path) -> None:
-    class FakeClient(BaseDCCClient):
+    class FakeClient(BaseDCCClient):  # type: ignore[misc]
         def __init__(self) -> None:
             super().__init__(dcc=DCC.MAYA)
 

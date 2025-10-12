@@ -1,4 +1,5 @@
-from upath import UPath
+from pathlib import Path
+
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
@@ -12,20 +13,18 @@ def sync_from(
     bucket: str,
     show_code: str,
     folder: str,
-    local_path: UPath,
+    local_path: str,
     dry_run: bool = False,
     include: list[str] | None = typer.Option(None, "--include"),
     exclude: list[str] | None = typer.Option(None, "--exclude"),
     profile: str | None = None,
 ) -> None:
-    """
-    Sync local folder FROM S3 using s5cmd with optional dry-run and filters.
-    """
+    """Sync local folder FROM S3 using s5cmd with optional dry-run and filters."""
     include = include or []
     exclude = exclude or []
 
     source = f"s3://{bucket}/{show_code}/{folder}"
-    destination = local_path
+    destination = Path(local_path)
 
     with progress_tracker(
         "S3 Download",

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
-from upath import UPath
 
 # --------------------------------------------------------------------------- #
 # Provide lightweight stubs for DCC modules when unavailable
@@ -34,7 +34,7 @@ def test_maya_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(maya.pm, "saveAs", fake_save_as, raising=False)
 
-    scene_path = UPath("/project/test_scene.ma")
+    scene_path = Path("/project/test_scene.ma")
     maya.save_scene(scene_path)
 
     assert captured["path"] == str(scene_path)
@@ -65,7 +65,7 @@ def test_nuke_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
 
-    script_path = UPath("/project/test_script.nk")
+    script_path = Path("/project/test_script.nk")
     nuke_module.save_scene(script_path)
 
     assert captured["path"] == str(script_path)

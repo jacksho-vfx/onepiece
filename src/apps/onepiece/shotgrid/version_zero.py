@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from upath import UPath
 import structlog
 import typer
 
@@ -34,7 +33,7 @@ def version_zero(
     """
     Create a 'version zero' MOV proxy for each shot and upload to ShotGrid.
     """
-    csv_path = UPath(csv_file)
+    csv_path = Path(csv_file)
     shot_names = validate_shots_csv(csv_path)
     log.info("starting_version_zero", shots=len(shot_names), project=project_name)
 
@@ -57,7 +56,6 @@ def version_zero(
         task_description="Processing shots",
     ) as progress:
         for shot_name in shot_names:
-            status_message = "Skipped"
             log.info("processing_shot", shot=shot_name)
 
             try:
