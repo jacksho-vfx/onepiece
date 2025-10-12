@@ -1,7 +1,9 @@
 """Tests for the DCC client helpers."""
 
 import json
+import logging
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,8 +11,14 @@ import pytest
 from libraries.dcc.dcc_client import (
     DCC_ASSET_REQUIREMENTS,
     DCCDependencyReport,
+    DCCAssetStatus,
+    DCCPluginStatus,
     SupportedDCC,
+    _assemble_dependency_report,
     _build_launch_command,
+    _prepare_package_contents,
+    _sync_package_to_s3,
+    _write_metadata_and_thumbnails,
     open_scene,
     publish_scene,
     verify_dcc_dependencies,
@@ -48,16 +56,12 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 def test_build_launch_command_maya_binary(
     monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
 ) -> None:
-    monkeypatch.setattr("libraries.dcc.dcc_client.os.name", os_name, raising=False)
+    monkeypatch.setattr("libraries.dcc.dcc_client.os", SimpleNamespace(name=os_name))
 
     scene_path = Path("/tmp/test_scene.mb")
     command = _build_launch_command(SupportedDCC.MAYA, scene_path)
 
-    expected_path = str(scene_path)
-    if os_name == "nt":
-        expected_path = str(scene_path).replace("/", "\\")
-
-    assert command == [expected, expected_path]
+    assert command == [expected, str(scene_path)]
 
 
 def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
@@ -120,6 +124,145 @@ def _create_publish_inputs(
     destination = tmp_path / "published"
 
     return renders, previews, otio, metadata, destination
+
+
+def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    package_dir, render_files, preview_files = _prepare_package_contents(
+        "ep01_sh099", renders, previews, otio, destination
+    )
+
+    expected_package = destination / "ep01_sh099"
+    assert package_dir == expected_package
+    assert render_files == [expected_package / "renders" / "beauty.exr"]
+    assert preview_files == [expected_package / "previews" / "preview.jpg"]
+    assert (expected_package / "otio" / "edit.otio").exists()
+
+
+def test_write_metadata_and_thumbnails_prefers_previews(tmp_path: Path) -> None:
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    previews_dir = package_dir / "previews"
+    previews_dir.mkdir()
+    preview_file = previews_dir / "preview.jpg"
+    preview_file.write_text("preview")
+
+    renders_dir = package_dir / "renders"
+    renders_dir.mkdir()
+    render_file = renders_dir / "beauty.exr"
+    render_file.write_text("beauty")
+
+    metadata_path, thumbnail_path = _write_metadata_and_thumbnails(
+        package_dir,
+        {"shot": "010"},
+        [preview_file],
+        [render_file],
+    )
+
+    assert json.loads(metadata_path.read_text()) == {"shot": "010"}
+    expected_thumbnail = package_dir / "thumbnails" / "preview.jpg"
+    assert thumbnail_path == expected_thumbnail
+    assert expected_thumbnail.exists()
+
+
+def test_write_metadata_and_thumbnails_falls_back_to_renders(
+    tmp_path: Path,
+) -> None:
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    render_file = package_dir / "beauty.exr"
+    render_file.write_text("beauty")
+
+    metadata_path, thumbnail_path = _write_metadata_and_thumbnails(
+        package_dir,
+        {"shot": "020"},
+        [],
+        [render_file],
+    )
+
+    assert json.loads(metadata_path.read_text()) == {"shot": "020"}
+    expected_thumbnail = package_dir / "thumbnails" / "beauty.exr"
+    assert thumbnail_path == expected_thumbnail
+    assert expected_thumbnail.exists()
+
+
+def test_assemble_dependency_report_invokes_callback(
+    tmp_path: Path,
+) -> None:
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    report = DCCDependencyReport(
+        dcc=SupportedDCC.NUKE,
+        plugins=DCCPluginStatus(
+            required=frozenset({"CaraVR"}),
+            available=frozenset({"CaraVR"}),
+            missing=frozenset(),
+        ),
+        assets=DCCAssetStatus(
+            required=(),
+            present=(),
+            missing=(),
+        ),
+    )
+
+    callback = MagicMock()
+
+    with patch(
+        "libraries.dcc.dcc_client.verify_dcc_dependencies",
+        return_value=report,
+    ) as verify_mock:
+        result = _assemble_dependency_report(
+            SupportedDCC.NUKE,
+            package_dir,
+            dependency_callback=callback,
+        )
+
+    assert result is report
+    callback.assert_called_once_with(report)
+    verify_mock.assert_called_once_with(
+        SupportedDCC.NUKE,
+        package_dir,
+        plugin_inventory=None,
+        env=None,
+        required_plugins=None,
+        required_assets=None,
+    )
+
+
+@patch("libraries.dcc.dcc_client.s5_sync")
+def test_sync_package_to_s3_uses_expected_destination(
+    sync_mock: MagicMock, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    with caplog.at_level(logging.INFO):
+        destination = _sync_package_to_s3(
+            package_dir,
+            dcc=SupportedDCC.NUKE,
+            scene_name="ep01_sh030",
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            dry_run=True,
+            profile="artist",
+            direct_s3_path=None,
+        )
+
+    assert destination == "s3://libraries-bucket/ep01_sh030"
+    sync_mock.assert_called_once_with(
+        source=package_dir,
+        destination=destination,
+        dry_run=True,
+        include=None,
+        exclude=None,
+        profile="artist",
+    )
+    assert "publish_scene_packaged" in caplog.text
 
 
 @patch("libraries.dcc.dcc_client.s5_sync")
