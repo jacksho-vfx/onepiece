@@ -142,7 +142,9 @@ def test_list_playlists_filters_by_project_and_paginates(
     page_one.text = ""
     page_one.json.return_value = {
         "data": [{"id": 1}, {"id": 2}],
-        "links": {"next": "https://example.com/api/v1/entities/playlists?page[number]=2"},
+        "links": {
+            "next": "https://example.com/api/v1/entities/playlists?page[number]=2"
+        },
     }
 
     page_two = MagicMock()

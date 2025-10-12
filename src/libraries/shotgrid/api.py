@@ -259,7 +259,9 @@ class ShotGridClient:
     # ------------------------------------------------------------------ #
     # Playlists
     # ------------------------------------------------------------------ #
-    def list_playlists(self, project_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_playlists(
+        self, project_name: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Return playlists optionally filtered by *project_name*."""
 
         filters: List[Dict[str, Any]] = []
