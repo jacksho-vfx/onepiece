@@ -208,9 +208,7 @@ class ShotGridClient:
         attributes: Dict[str, Any],
         relationships: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        url = self._build_url(
-            "api", "v1", f"entity/{entity.lower()}s/{entity_id}"
-        )
+        url = self._build_url("api", "v1", f"entity/{entity.lower()}s/{entity_id}")
         payload: Dict[str, Any] = {
             "data": {
                 "type": entity,
@@ -229,9 +227,7 @@ class ShotGridClient:
                 status=response.status_code,
                 text=response.text,
             )
-            raise ShotGridError(
-                f"PATCH {entity} {entity_id} failed: {response.text}"
-            )
+            raise ShotGridError(f"PATCH {entity} {entity_id} failed: {response.text}")
         return response.json()["data"]
 
     def _build_url(self, *segments: str) -> str:
