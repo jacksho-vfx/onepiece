@@ -10,7 +10,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, cast
 
-import structlog
 import pymel.core as pm
 import structlog
 
