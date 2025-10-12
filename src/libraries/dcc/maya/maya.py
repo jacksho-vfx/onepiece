@@ -16,26 +16,43 @@ import pymel.core as pm
 log = structlog.get_logger(__name__)
 
 
-_saveFile = cast(Callable[..., None], pm.saveFile)
-_openFile = cast(Callable[..., None], pm.openFile)
-_importFile = cast(Callable[..., None], pm.importFile)
-_exportAll = cast(Callable[..., None], pm.exportAll)
+def _resolve_pm_callable(name: str) -> Callable[..., None]:
+    """Return a ``pymel.core`` callable, falling back to a stub when absent."""
+
+    target = getattr(pm, name, None)
+    if target is None:  # pragma: no cover - depends on Maya environment
+
+        def _missing(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError(
+                "pymel.core is missing the expected Maya command "
+                f"'{name}'. Ensure Maya's Python package is available."
+            )
+
+        return _missing
+
+    return cast(Callable[..., None], target)
+
+
+_saveFile = _resolve_pm_callable("saveFile")
+_openFile = _resolve_pm_callable("openFile")
+_importFile = _resolve_pm_callable("importFile")
+_exportAll = _resolve_pm_callable("exportAll")
 
 
 def _save(**kwargs: Any) -> None:
-    pm.saveFile(**kwargs)  # type: ignore[no-untyped-call]
+    _saveFile(**kwargs)
 
 
 def _open(path: UPath, **kwargs: Any) -> None:
-    pm.openFile(str(path), **kwargs)  # type: ignore[no-untyped-call]
+    _openFile(str(path), **kwargs)
 
 
 def _import(path: UPath, **kwargs: Any) -> None:
-    pm.importFile(str(path), **kwargs)  # type: ignore[no-untyped-call]
+    _importFile(str(path), **kwargs)
 
 
 def _export_all(path: UPath, **kwargs: Any) -> None:
-    pm.exportAll(str(path), **kwargs)
+    _exportAll(str(path), **kwargs)
 
 
 def _remove_unused_references() -> Dict[str, int]:
