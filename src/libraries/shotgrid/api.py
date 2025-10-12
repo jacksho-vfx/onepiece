@@ -66,10 +66,7 @@ class ShotGridClient:
 
     def _get(self, entity: str, filters: List[Dict[str, Any]], fields: str) -> Any:
         url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
-        params: Dict[str, Any] = {"fields": fields}
-        for idx, f in enumerate(filters):
-            for key, value in f.items():
-                params[f"filter[{idx}][{key}]"] = value
+        params = self._build_query_params(filters, fields)
         r = self._session.get(url, params=params)
         if not r.ok:
             log.error(
@@ -77,6 +74,45 @@ class ShotGridClient:
             )
             raise ShotGridError(f"GET {entity} failed: {r.text}")
         return r.json().get("data", [])
+
+    def _get_paginated(
+        self,
+        entity: str,
+        filters: List[Dict[str, Any]],
+        fields: str,
+        page_size: int = 100,
+    ) -> List[Dict[str, Any]]:
+        url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
+        results: List[Dict[str, Any]] = []
+        page = 1
+
+        while True:
+            params = self._build_query_params(
+                filters,
+                fields,
+                extra={"page[number]": page, "page[size]": page_size},
+            )
+            response = self._session.get(url, params=params)
+            if not response.ok:
+                log.error(
+                    "http_get_failed",
+                    entity=entity,
+                    status=response.status_code,
+                    text=response.text,
+                )
+                raise ShotGridError(f"GET {entity} failed: {response.text}")
+
+            payload = response.json()
+            page_data = payload.get("data", []) or []
+            results.extend(page_data)
+
+            links = payload.get("links", {})
+            next_link = links.get("next") if isinstance(links, dict) else None
+            if not next_link:
+                break
+            page += 1
+
+        return results
 
     def _post(
         self,
@@ -100,6 +136,20 @@ class ShotGridClient:
         base = self.base_url.rstrip("/")
         path = "/".join(segment.strip("/") for segment in segments)
         return urljoin(f"{base}/", path)
+
+    def _build_query_params(
+        self,
+        filters: List[Dict[str, Any]],
+        fields: str,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"fields": fields}
+        for idx, filter_entry in enumerate(filters):
+            for key, value in filter_entry.items():
+                params[f"filter[{idx}][{key}]"] = value
+        if extra:
+            params.update(extra)
+        return params
 
     @staticmethod
     def _normalize_version(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -205,6 +255,76 @@ class ShotGridClient:
             lambda: self.create_project(name, template),
             name,
         )
+
+    # ------------------------------------------------------------------ #
+    # Playlists
+    # ------------------------------------------------------------------ #
+    def list_playlists(
+        self, project_name: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Return playlists optionally filtered by *project_name*."""
+
+        filters: List[Dict[str, Any]] = []
+        if project_name:
+            project = self.get_project(project_name)
+            if project and project.get("id") is not None:
+                filters.append({"project": project["id"]})
+            else:
+                filters.append({"project": project_name})
+
+        fields = "id,name,code,versions"
+        return self._get_paginated("Playlist", filters, fields)
+
+    def expand_playlist_versions(
+        self, playlist_record: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Return normalised versions referenced by *playlist_record*."""
+
+        relationships = (
+            playlist_record.get("relationships", {})
+            if isinstance(playlist_record, dict)
+            else {}
+        )
+        versions_relationship = (
+            relationships.get("versions", {}) if isinstance(relationships, dict) else {}
+        )
+        version_data = (
+            versions_relationship.get("data", [])
+            if isinstance(versions_relationship, dict)
+            else []
+        )
+
+        version_ids: List[int] = []
+        for entry in version_data or []:
+            if not isinstance(entry, dict):
+                continue
+            identifier = entry.get("id")
+            if identifier is None:
+                continue
+            try:
+                version_ids.append(int(identifier))
+            except (TypeError, ValueError):
+                continue
+
+        if not version_ids:
+            return []
+
+        filters = [{"id[$in]": ",".join(str(version_id) for version_id in version_ids)}]
+        fields = ",".join(
+            [
+                "code",
+                "version_number",
+                "sg_status_list",
+                "sg_path_to_movie",
+                "sg_uploaded_movie",
+                "description",
+                "entity",
+                "project",
+            ]
+        )
+
+        records = self._get("Version", filters, fields)
+        return [self._normalize_version(record) for record in records]
 
     # ------------------------------------------------------------------ #
     # Episodes
