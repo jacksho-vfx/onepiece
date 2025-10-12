@@ -4,12 +4,17 @@ import copy
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence, Protocol, Mapping, Generator, Iterable, Callable
+from typing import Any, Callable, Generator, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from apps.trafalgar.providers import (
+    DeliveryProvider,
+    ProviderMetadata,
+    ReconcileDataProvider,
+)
 from apps.trafalgar.web import dashboard
 
 
@@ -34,19 +39,14 @@ class FakeMonotonic:
         return self._value
 
 
-class ReconcileDataProvider(Protocol):
-    """Return reconciliation datasets used for mismatch detection."""
+class DummyReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
+    metadata = ProviderMetadata(
+        name="test-reconcile",
+        version="1.0",
+        data_schema={},
+        capabilities=("testing",),
+    )
 
-    def load(self) -> dict[str, Any]: ...
-
-
-class DeliveryProvider(Protocol):
-    """Provide delivery metadata for dashboard views."""
-
-    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]: ...
-
-
-class DummyReconcileProvider(ReconcileDataProvider):
     def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
 
@@ -54,7 +54,14 @@ class DummyReconcileProvider(ReconcileDataProvider):
         return self._payload
 
 
-class DummyDeliveryProvider(DeliveryProvider):
+class DummyDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
+    metadata = ProviderMetadata(
+        name="test-delivery",
+        version="1.0",
+        data_schema={},
+        capabilities=("testing",),
+    )
+
     def __init__(self, deliveries: Sequence[dict[str, Any]]) -> None:
         self._deliveries = list(deliveries)
 
@@ -66,7 +73,14 @@ class DummyDeliveryProvider(DeliveryProvider):
         ]
 
 
-class SequencedDeliveryProvider(DeliveryProvider):
+class SequencedDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
+    metadata = ProviderMetadata(
+        name="sequenced-delivery",
+        version="1.0",
+        data_schema={},
+        capabilities=("testing",),
+    )
+
     def __init__(self, responses: Sequence[Sequence[Mapping[str, Any]]]) -> None:
         self._responses = [list(response) for response in responses]
         self.requests: list[str] = []

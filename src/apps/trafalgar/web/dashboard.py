@@ -17,6 +17,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from apps.trafalgar.providers import (
+    DeliveryProvider,
+    ReconcileDataProvider,
+    registry as provider_registry,
+)
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.delivery.manifest import get_manifest_data
 from libraries.reconcile import comparator
@@ -645,26 +650,17 @@ class ShotGridService:
         return payload
 
 
-# ---------------------------------------------------------------------------
-# Reconciliation aggregation
-# ---------------------------------------------------------------------------
-
-
-class ReconcileDataProvider:
-    """Return reconciliation datasets used for mismatch detection."""
-
-    def load(self) -> dict[str, Any]:  # pragma: no cover - default behaviour
-        return {"shotgrid": [], "filesystem": [], "s3": None}
-
-
 class ReconcileService:
     def __init__(
         self,
-        provider: ReconcileDataProvider | None = None,
+        provider: ReconcileDataProvider | str | None = None,
         *,
         comparator_fn: Callable[..., Sequence[Mapping[str, Any]]] | None = None,
     ) -> None:
-        self._provider = provider or ReconcileDataProvider()
+        if isinstance(provider, str):
+            self._provider = provider_registry.create("reconcile", provider)
+        else:
+            self._provider = provider or provider_registry.create_default("reconcile")
         self._comparator = comparator_fn or comparator.compare_datasets
 
     def list_errors(self) -> list[Mapping[str, Any]]:
@@ -709,20 +705,6 @@ class ReconcileService:
             )
 
         return summary
-
-
-# ---------------------------------------------------------------------------
-# Delivery aggregation
-# ---------------------------------------------------------------------------
-
-
-class DeliveryProvider:
-    """Provide delivery metadata for dashboard views."""
-
-    def list_deliveries(
-        self, project_name: str
-    ) -> Sequence[Mapping[str, Any]]:  # pragma: no cover
-        return []
 
 
 class RenderDashboardFacade:
@@ -921,11 +903,14 @@ class CacheSettingsUpdateModel(BaseModel):
 class DeliveryService:
     def __init__(
         self,
-        provider: DeliveryProvider | None = None,
+        provider: DeliveryProvider | str | None = None,
         *,
         manifest_cache_size: int = 32,
     ) -> None:
-        self._provider = provider or DeliveryProvider()
+        if isinstance(provider, str):
+            self._provider = provider_registry.create("delivery", provider)
+        else:
+            self._provider = provider or provider_registry.create_default("delivery")
         self._manifest_cache: OrderedDict[Hashable, dict[str, Any]] = OrderedDict()
         self._manifest_cache_size = max(0, manifest_cache_size)
 
