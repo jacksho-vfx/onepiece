@@ -38,11 +38,23 @@ def _resolve_context(
     raise ValueError(f"Unsupported show type '{show_type}'. Expected 'vfx' or 'prod'.")
 
 
+def _normalise_segment(value: str, *, kind: str) -> str:
+    """Return a safe S3 path segment without surrounding slashes."""
+
+    segment = value.strip().strip("/")
+    if not segment:
+        raise ValueError(f"{kind} must not be empty or only contain slashes.")
+    return segment
+
+
 def _build_s3_uri(
     bucket: str, show_code: str, folder: str, context: ContextFolder
 ) -> str:
     """Return the canonical S3 URI for this show folder."""
-    return f"s3://{bucket}/{context}/{show_code}/{folder}/"
+
+    clean_show_code = _normalise_segment(show_code, kind="show_code")
+    clean_folder = _normalise_segment(folder, kind="folder")
+    return f"s3://{bucket}/{context}/{clean_show_code}/{clean_folder}/"
 
 
 def sync_to_bucket(

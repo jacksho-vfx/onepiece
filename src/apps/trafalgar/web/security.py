@@ -5,11 +5,12 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import os
 from functools import lru_cache
-from typing import Any, Iterable, Mapping, Sequence, Callable
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import structlog
-from fastapi import Depends, HTTPException, Security, status, APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
 
