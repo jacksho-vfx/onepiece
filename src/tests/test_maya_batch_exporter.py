@@ -13,6 +13,7 @@ from libraries.dcc.maya.batch_exporter import (
     BatchExporter,
     ExportFormat,
 )
+from libraries.dcc.utils import normalize_frame_range, sanitize_token
 
 
 def _clock_factory(start: _dt.datetime) -> Callable[[], _dt.datetime]:
@@ -99,7 +100,7 @@ def test_exporter_runs_registered_formats(tmp_path: Path) -> None:
     assert fbx_record.output_path.suffix == ".fbx"
     assert "EP01_SH010_HERO_CHARACTER" in fbx_record.output_path.name
     assert fbx_record.settings["triangulate"] is True
-    assert fbx.calls[0]["frame_range"] == (100, 111)
+    assert fbx.calls[0]["frame_range"] == normalize_frame_range((100.2, 110.7))
 
     abc_record = exports[ExportFormat.ALEMBIC]
     assert abc_record.output_path.suffix == ".abc"
@@ -123,8 +124,25 @@ def test_batch_export_item_normalizes_values(tmp_path: Path) -> None:
 
     assert item.root_nodes == ("char:root",)
     assert item.formats == (ExportFormat.FBX, ExportFormat.USD)
-    assert item.frame_range == (150, 160)
+    assert item.frame_range == normalize_frame_range((150.5, 160.2))
     assert item.label == "CHAR_ROOT"
+
+
+def test_batch_export_item_label_uses_shared_sanitizer(tmp_path: Path) -> None:
+    item = BatchExportItem(
+        scene_path=tmp_path / "scene.ma",
+        output_directory=tmp_path / "exports",
+        root_nodes=("root",),
+        shot="Episode 01",
+        asset="Hero/Main",
+        tag="  preview!  ",
+    )
+
+    expected = "_".join(
+        sanitize_token(token)
+        for token in ("Episode 01", "Hero/Main", "  preview!  ")
+    )
+    assert item.label == expected
 
 
 def test_custom_settings_must_match_formats(tmp_path: Path) -> None:

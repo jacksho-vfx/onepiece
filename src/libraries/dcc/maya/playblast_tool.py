@@ -14,6 +14,8 @@ try:  # pragma: no cover - maya is optional in most environments
 except Exception:  # pragma: no cover - fallback for non-Maya environments
     pm = None  # type: ignore[assignment]
 
+from libraries.dcc.utils import normalize_frame_range, sanitize_token
+
 log = structlog.get_logger(__name__)
 
 
@@ -61,41 +63,20 @@ class PlayblastResult:
     review_id: str | None = None
 
 
-def _sanitize_token(token: str | None) -> str:
-    if not token:
-        return "UNKNOWN"
-    cleaned = "".join(ch if ch.isalnum() else "_" for ch in token.strip())
-    cleaned = cleaned.strip("_")
-    if not cleaned:
-        return "UNKNOWN"
-    return cleaned.upper()
-
-
-def _normalize_frame_range(
-    frame_range: tuple[int | float, int | float]
-) -> tuple[int, int]:
-    start_raw, end_raw = frame_range
-    start = int(round(float(start_raw)))
-    end = int(round(float(end_raw)))
-    if start > end:
-        raise ValueError("frame_range start must be <= end")
-    return (start, end)
-
-
 def build_playblast_filename(request: PlayblastRequest, timestamp: _dt.datetime) -> str:
     """Return a consistently formatted playblast filename for ``request``."""
 
     parts: list[str] = [
-        _sanitize_token(request.project),
+        sanitize_token(request.project, fallback="UNKNOWN"),
     ]
     if request.sequence:
-        parts.append(_sanitize_token(request.sequence))
+        parts.append(sanitize_token(request.sequence, fallback="UNKNOWN"))
     parts.extend(
         [
-            _sanitize_token(request.shot),
-            _sanitize_token(request.camera),
+            sanitize_token(request.shot, fallback="UNKNOWN"),
+            sanitize_token(request.camera, fallback="UNKNOWN"),
             f"V{request.version:03d}",
-            _sanitize_token(request.artist),
+            sanitize_token(request.artist, fallback="UNKNOWN"),
             timestamp.strftime("%Y%m%d"),
         ]
     )
@@ -112,7 +93,7 @@ def _default_timeline_query() -> tuple[int, int]:  # pragma: no cover - requires
         )
     start = pm.playbackOptions(query=True, min=True)
     end = pm.playbackOptions(query=True, max=True)
-    return _normalize_frame_range((start, end))
+    return normalize_frame_range((start, end))
 
 
 def _default_playblast(
@@ -172,8 +153,8 @@ class PlayblastAutomationTool:
 
     def _resolve_frame_range(self, request: PlayblastRequest) -> tuple[int, int]:
         if request.frame_range is not None:
-            return _normalize_frame_range(request.frame_range)
-        return _normalize_frame_range(self._timeline_query())
+            return normalize_frame_range(request.frame_range)
+        return normalize_frame_range(self._timeline_query())
 
     def _ensure_path(self, path_like: Any) -> Path:
         if isinstance(path_like, Path):

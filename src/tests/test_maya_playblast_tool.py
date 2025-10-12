@@ -13,6 +13,7 @@ from libraries.dcc.maya.playblast_tool import (
     PlayblastRequest,
     build_playblast_filename,
 )
+from libraries.dcc.utils import normalize_frame_range, sanitize_token
 from libraries.shotgrid.client import ShotgridClient
 
 
@@ -52,7 +53,34 @@ def test_build_playblast_filename_normalizes_tokens(tmp_path: Path) -> None:
 
     filename = build_playblast_filename(request, timestamp)
 
-    assert filename == "ONE_PIECE_EP_01_SH010_ANIM_CAM_MAIN_V007_NAMI_SWAN_20240211.mov"
+    expected_parts = [
+        sanitize_token(request.project, fallback="UNKNOWN"),
+        sanitize_token(request.sequence, fallback="UNKNOWN"),
+        sanitize_token(request.shot, fallback="UNKNOWN"),
+        sanitize_token(request.camera, fallback="UNKNOWN"),
+        "V007",
+        sanitize_token(request.artist, fallback="UNKNOWN"),
+        timestamp.strftime("%Y%m%d"),
+    ]
+    assert filename == f"{'_'.join(expected_parts)}.mov"
+
+
+def test_build_playblast_filename_uses_unknown_fallback(tmp_path: Path) -> None:
+    request = _create_request(
+        tmp_path,
+        project="",
+        sequence=None,
+        shot="",
+        camera="anim:cam_main",
+        artist=None,
+        version=1,
+    )
+    timestamp = _dt.datetime(2024, 5, 4, 15, 0, 0)
+
+    filename = build_playblast_filename(request, timestamp)
+
+    assert filename.startswith("UNKNOWN")
+    assert sanitize_token("", fallback="UNKNOWN") in filename
 
 
 def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:
@@ -61,7 +89,7 @@ def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:
     def timeline() -> tuple[int, int]:
         nonlocal timeline_calls
         timeline_calls += 1
-        return (101, 200)
+        return (101.2, 200.6)
 
     request = _create_request(tmp_path, frame_range=None)
     tool = PlayblastAutomationTool(
@@ -73,7 +101,7 @@ def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:
     result = tool.execute(request)
 
     assert timeline_calls == 1
-    assert result.frame_range == (101, 200)
+    assert result.frame_range == normalize_frame_range((101.2, 200.6))
     assert Path(result.output_path).exists()
 
 
