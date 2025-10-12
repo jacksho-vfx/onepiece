@@ -39,6 +39,7 @@ def save_scene(path: Path | None = None) -> None:
             currently open script is saved in-place.
     """
     if path:
+        path.parent.mkdir(parents=True, exist_ok=True)
         nuke.scriptSaveAs(str(path))
         log.info("nuke_scene_saved_as", path=str(path))
     else:
@@ -56,6 +57,7 @@ def export_scene(path: Path) -> None:
     if not path:
         raise ValueError("Path must be provided to export Nuke script")
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     nuke.scriptSaveAs(str(path))
     log.info("nuke_scene_exported", path=str(path))
 
