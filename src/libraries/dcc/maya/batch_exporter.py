@@ -10,6 +10,8 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Protocol
 
 import structlog
 
+from libraries.dcc.utils import normalize_frame_range, sanitize_token
+
 log = structlog.get_logger(__name__)
 
 
@@ -68,27 +70,6 @@ class ExportCallback(Protocol):
         """Execute the export and return the path that was written to disk."""
 
 
-def _sanitize_token(token: str | None) -> str:
-    if not token:
-        return "UNTITLED"
-    cleaned = "".join(ch if ch.isalnum() else "_" for ch in token.strip())
-    cleaned = cleaned.strip("_")
-    return cleaned.upper() or "UNTITLED"
-
-
-def _normalize_frame_range(
-    frame_range: tuple[int | float, int | float] | None,
-) -> tuple[int, int] | None:
-    if frame_range is None:
-        return None
-    start_raw, end_raw = frame_range
-    start = int(round(float(start_raw)))
-    end = int(round(float(end_raw)))
-    if start > end:
-        raise ValueError("frame_range start must be <= end")
-    return (start, end)
-
-
 @dataclass(slots=True)
 class BatchExportItem:
     """Describe a single asset or shot that should be exported."""
@@ -120,7 +101,7 @@ class BatchExportItem:
         normalized_formats = tuple(dict.fromkeys(self.formats))
         object.__setattr__(self, "formats", normalized_formats)
 
-        normalized_range = _normalize_frame_range(self.frame_range)
+        normalized_range = normalize_frame_range(self.frame_range, allow_none=True)
         object.__setattr__(self, "frame_range", normalized_range)
 
         invalid_overrides = set(self.custom_settings).difference(self.formats)
@@ -136,7 +117,7 @@ class BatchExportItem:
         fallback = self.root_nodes[0]
         filtered = [token for token in tokens if token]
         base = filtered or [fallback]
-        return "_".join(_sanitize_token(token) for token in base)
+        return "_".join(sanitize_token(token) for token in base)
 
 
 @dataclass(slots=True)
