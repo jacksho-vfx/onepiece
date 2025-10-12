@@ -46,6 +46,14 @@ from .playblast_tool import (  # noqa: F401
     ReviewUploader,
     build_playblast_filename,
 )
+from .animation_debugger import (  # noqa: F401
+    AnimationDebuggerIssue,
+    AnimationDebuggerReport,
+    CacheLinkInfo,
+    ConstraintInfo,
+    FrameRangeInfo,
+    debug_animation,
+)
 from .unreal_export_checker import (  # noqa: F401
     DEFAULT_ALLOWED_PREFIXES,
     DEFAULT_EXPECTED_ROOT,
@@ -74,6 +82,12 @@ __all__ = [
     "PlayblastResult",
     "ReviewUploader",
     "build_playblast_filename",
+    "AnimationDebuggerIssue",
+    "AnimationDebuggerReport",
+    "CacheLinkInfo",
+    "ConstraintInfo",
+    "FrameRangeInfo",
+    "debug_animation",
     "DEFAULT_ALLOWED_PREFIXES",
     "DEFAULT_EXPECTED_ROOT",
     "DEFAULT_EXPECTED_SCALE",
