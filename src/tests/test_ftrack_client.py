@@ -7,7 +7,13 @@ from typing import Any
 
 import pytest
 
-from libraries.ftrack import FtrackProject, FtrackRestClient, FtrackShot, FtrackTask
+from libraries.ftrack import (
+    FtrackError,
+    FtrackProject,
+    FtrackRestClient,
+    FtrackShot,
+    FtrackTask,
+)
 
 
 class _StubResponse:
@@ -128,6 +134,119 @@ def test_list_helpers_validate_required_identifiers() -> None:
         client.list_project_shots("")
     with pytest.raises(ValueError):
         client.list_project_tasks("")
+    with pytest.raises(ValueError):
+        client.get_project("")
+    with pytest.raises(ValueError):
+        client.get_shot("")
+    with pytest.raises(ValueError):
+        client.get_task("")
+
+
+@pytest.mark.parametrize(
+    (
+        "method_name",
+        "identifier",
+        "endpoint",
+        "payload",
+        "expected_type",
+    ),
+    [
+        (
+            "get_project",
+            "P1",
+            "api/projects",
+            {"data": [{"id": "P1", "name": "Demo"}]},
+            FtrackProject,
+        ),
+        (
+            "get_shot",
+            "S1",
+            "api/shots",
+            {"data": [{"id": "S1", "name": "sh010", "project_id": "P1"}]},
+            FtrackShot,
+        ),
+        (
+            "get_task",
+            "T1",
+            "api/tasks",
+            {"data": [{"id": "T1", "name": "Comp"}]},
+            FtrackTask,
+        ),
+    ],
+)
+def test_get_helpers_return_models(
+    method_name: str,
+    identifier: str,
+    endpoint: str,
+    payload: dict[str, Any],
+    expected_type: type[Any],
+) -> None:
+    base_url = "https://server"
+    session = _make_auth_session(
+        {("GET", f"{base_url}/{endpoint}"): [_StubResponse(payload)]}
+    )
+    client = FtrackRestClient(
+        base_url=base_url, api_user="user", api_key="secret", session=session
+    )
+
+    method = getattr(client, method_name)
+    result = method(identifier)
+
+    assert isinstance(result, expected_type)
+    assert result and result.id == identifier
+    assert (
+        "GET",
+        f"{base_url}/{endpoint}",
+        {"filter": f"id={identifier}"},
+    ) in session.requests
+
+
+@pytest.mark.parametrize(
+    ("method_name", "identifier", "endpoint"),
+    [
+        ("get_project", "P1", "api/projects"),
+        ("get_shot", "S1", "api/shots"),
+        ("get_task", "T1", "api/tasks"),
+    ],
+)
+def test_get_helpers_return_none_when_not_found(
+    method_name: str, identifier: str, endpoint: str
+) -> None:
+    base_url = "https://server"
+    session = _make_auth_session(
+        {("GET", f"{base_url}/{endpoint}"): [_StubResponse({"data": []})]}
+    )
+    client = FtrackRestClient(
+        base_url=base_url, api_user="user", api_key="secret", session=session
+    )
+
+    method = getattr(client, method_name)
+    assert method(identifier) is None
+
+
+@pytest.mark.parametrize(
+    ("method_name", "identifier", "endpoint"),
+    [
+        ("get_project", "P1", "api/projects"),
+        ("get_shot", "S1", "api/shots"),
+        ("get_task", "T1", "api/tasks"),
+    ],
+)
+def test_get_helpers_validate_payload_shape(
+    method_name: str, identifier: str, endpoint: str
+) -> None:
+    base_url = "https://server"
+    invalid_payload = {"data": ["unexpected"]}
+    session = _make_auth_session(
+        {("GET", f"{base_url}/{endpoint}"): [_StubResponse(invalid_payload)]}
+    )
+    client = FtrackRestClient(
+        base_url=base_url, api_user="user", api_key="secret", session=session
+    )
+
+    method = getattr(client, method_name)
+    with pytest.raises(FtrackError):
+        method(identifier)
 
 
 def test_workflow_stubs_raise_not_implemented() -> None:
