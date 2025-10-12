@@ -76,6 +76,23 @@ def test_export_metadata_creates_json(
     )
 
 
+def test_export_metadata_includes_scene_path(tmp_path: Path) -> None:
+    class FakeClient(BaseDCCClient):
+        def __init__(self) -> None:
+            super().__init__(dcc=DCC.MAYA)
+
+        def get_current_scene(self) -> str | None:
+            return "/projects/ep01/ep01_sh010.ma"
+
+    client = FakeClient()
+    output = tmp_path / "metadata.json"
+
+    metadata = client.export_metadata(str(output))
+
+    assert metadata["scene_path"] == "/projects/ep01/ep01_sh010.ma"
+    assert metadata["scene_file"] == "ep01_sh010.ma"
+
+
 @pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
 def test_check_plugins_returns_false_map(
     dcc: DCC, client_cls: type[BaseDCCClient]

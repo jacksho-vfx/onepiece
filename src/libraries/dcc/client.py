@@ -107,7 +107,10 @@ class BaseDCCClient:
         """
 
         self._log.info("dcc.export_metadata", output_path=output_path)
-        scene_path = None
+        try:
+            scene_path = self.get_current_scene()
+        except NotImplementedError:
+            scene_path = None
         metadata = self._build_metadata_template(scene_path)
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
