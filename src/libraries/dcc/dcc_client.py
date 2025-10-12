@@ -50,7 +50,13 @@ class SupportedDCC(Enum):
     def command(self) -> str:
         """Return the executable name associated with the DCC."""
 
-        return self.value
+        if self is SupportedDCC.MAYA:
+            base_command = "maya"
+            if os.name == "nt":
+                return f"{base_command}.exe"
+            return base_command
+
+        return str(self.value)
 
 
 DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
