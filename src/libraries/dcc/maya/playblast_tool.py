@@ -86,7 +86,7 @@ def build_playblast_filename(request: PlayblastRequest, timestamp: _dt.datetime)
     return f"{basename}.{extension}"
 
 
-def _default_timeline_query() -> tuple[int, int]:  # pragma: no cover - requires Maya
+def _default_timeline_query() -> Any:  # pragma: no cover - requires Maya
     if pm is None:
         raise RuntimeError(
             "Maya is not available; supply a frame range or custom timeline query."
@@ -151,7 +151,7 @@ class PlayblastAutomationTool:
         self._shotgrid = shotgrid_client
         self._review = review_uploader
 
-    def _resolve_frame_range(self, request: PlayblastRequest) -> tuple[int, int]:
+    def _resolve_frame_range(self, request: PlayblastRequest) -> Any:
         if request.frame_range is not None:
             return normalize_frame_range(request.frame_range)
         return normalize_frame_range(self._timeline_query())

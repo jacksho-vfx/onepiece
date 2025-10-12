@@ -139,8 +139,7 @@ def test_batch_export_item_label_uses_shared_sanitizer(tmp_path: Path) -> None:
     )
 
     expected = "_".join(
-        sanitize_token(token)
-        for token in ("Episode 01", "Hero/Main", "  preview!  ")
+        sanitize_token(token) for token in ("Episode 01", "Hero/Main", "  preview!  ")
     )
     assert item.label == expected
 

@@ -68,6 +68,8 @@ class ExportCallback(Protocol):
         frame_range: tuple[int, int] | None,
     ) -> Path:
         """Execute the export and return the path that was written to disk."""
+
+
 @dataclass(slots=True)
 class BatchExportItem:
     """Describe a single asset or shot that should be exported."""

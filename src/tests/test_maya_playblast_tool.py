@@ -89,7 +89,7 @@ def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:
     def timeline() -> tuple[int, int]:
         nonlocal timeline_calls
         timeline_calls += 1
-        return (101.2, 200.6)
+        return (101.2, 200.6)  # type: ignore[return-value]
 
     request = _create_request(tmp_path, frame_range=None)
     tool = PlayblastAutomationTool(
