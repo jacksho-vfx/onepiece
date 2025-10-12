@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 import types
 
@@ -24,20 +25,29 @@ from libraries.dcc.maya import maya
 from libraries.dcc.nuke import nuke as nuke_module
 
 
-def test_maya_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_maya_save_scene_with_explicit_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Saving with a path should delegate to ``pm.saveAs``."""
 
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     def fake_save_as(path: str) -> None:
         captured["path"] = path
+        captured["parent_exists_at_call"] = Path(path).parent.exists()
 
     monkeypatch.setattr(maya.pm, "saveAs", fake_save_as, raising=False)
 
-    scene_path = UPath("/project/test_scene.ma")
+    scene_path = UPath(tmp_path / "maya" / "test_scene.ma")
+    parent = scene_path.parent
+
+    assert not parent.exists()
+
     maya.save_scene(scene_path)
 
     assert captured["path"] == str(scene_path)
+    assert captured["parent_exists_at_call"] is True
+    assert parent.exists()
 
 
 def test_maya_save_scene_defaults_to_current(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,6 +63,33 @@ def test_maya_save_scene_defaults_to_current(monkeypatch: pytest.MonkeyPatch) ->
     maya.save_scene()
 
     assert calls == [{"force": True}]
+
+
+def test_maya_export_scene_creates_parent_directories(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exporting a scene should create parent directories before delegating."""
+
+    captured: dict[str, object] = {}
+
+    def fake_export_all(path: UPath, **kwargs: object) -> None:
+        captured["path"] = path
+        captured["kwargs"] = kwargs
+        captured["parent_exists_at_call"] = path.parent.exists()
+
+    monkeypatch.setattr(maya, "_export_all", fake_export_all)
+
+    export_path = UPath(tmp_path / "exports" / "scene.ma")
+    parent = export_path.parent
+
+    assert not parent.exists()
+
+    maya.export_scene(export_path)
+
+    assert captured["path"] == export_path
+    assert captured["kwargs"] == {"force": True, "type": "mayaAscii"}
+    assert captured["parent_exists_at_call"] is True
+    assert parent.exists()
 
 
 def test_nuke_save_scene_with_explicit_path(monkeypatch: pytest.MonkeyPatch) -> None:
