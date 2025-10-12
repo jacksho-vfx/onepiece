@@ -604,13 +604,29 @@ class _JobRecord:
             history.append((status_value, timestamp))
         if not history:
             history.append((str(payload.get("status", "unknown")), created_at))
+        request_payload = payload.get("request")
+        if not isinstance(request_payload, Mapping):
+            raise ValueError("Stored job request payload must be a mapping.")
+        persisted_farm = request_payload.get("farm") or payload.get("farm")
+        context: dict[str, Collection[str]] | None = None
+        if persisted_farm is not None:
+            farm_key = str(persisted_farm).strip().lower()
+            if farm_key:
+                context = {"farm_registry": {farm_key}}
+        if context is None:
+            request = RenderJobRequest.model_validate(request_payload)
+        else:
+            request = RenderJobRequest.model_validate(
+                request_payload, context=context
+            )
+
         return cls(
             job_id=str(payload["job_id"]),
             farm=str(payload["farm"]),
             farm_type=str(payload.get("farm_type", payload["farm"])),
             status=str(payload.get("status", "unknown")),
             message=payload.get("message"),
-            request=RenderJobRequest(**payload["request"]),
+            request=request,
             created_at=created_at,
             updated_at=updated_at,
             completed_at=completed_at,

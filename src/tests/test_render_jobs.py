@@ -583,6 +583,45 @@ async def test_job_store_persists_records_between_services(
     assert [job["job_id"] for job in jobs] == [job_id]
 
 
+def test_reload_jobs_with_unregistered_adapter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Persisted jobs should be reloaded even if their farm is no longer registered."""
+
+    adapter = StubJobAdapter()
+    legacy_farm = "retired"
+    store_path = tmp_path / "jobs.json"
+
+    monkeypatch.setattr(
+        render.RenderJobRequest,
+        "_farm_registry_provider",
+        lambda: (legacy_farm,),
+    )
+
+    service = render.RenderSubmissionService(
+        {legacy_farm: adapter}, job_store=JobStore(store_path)
+    )
+
+    request = render.RenderJobRequest.model_validate(
+        _job_payload("Retired"), context={"farm_registry": (legacy_farm,)}
+    )
+    result = service.submit_job(request)
+    job_id = result["job_id"]
+    assert job_id
+
+    monkeypatch.setattr(
+        render.RenderJobRequest,
+        "_farm_registry_provider",
+        lambda: (),
+    )
+
+    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
+    jobs = new_service.list_jobs()
+
+    assert [job.job_id for job in jobs] == [job_id]
+    assert jobs[0].request.farm == legacy_farm
+
+
 @pytest.mark.anyio("asyncio")
 async def test_history_limit_removes_old_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
