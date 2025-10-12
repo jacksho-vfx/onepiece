@@ -156,3 +156,44 @@ def test_get_approved_versions_filters_episodes_case_insensitively(
 
     shots = [entry["shot"] for entry in filtered]
     assert shots == ["SHOW_EP01_SC001_SH010_COMP", "SHOW_EP02_SC010_SH020_COMP"]
+
+
+def test_list_versions_for_shot_filters_project_shot_and_status(
+    tmp_path: Path,
+) -> None:
+    client = ShotgridClient(sleep=lambda _: None)
+
+    media = tmp_path / "clip.mov"
+    media.write_bytes(b"data")
+
+    approved = client.register_version("Project X", "SH010", media)
+    published = client.register_version("Project X", "SH010", media)
+    different_shot = client.register_version("Project X", "SH020", media)
+    other_project = client.register_version("Project Y", "SH010", media)
+
+    client.bulk_update_entities(
+        "Version",
+        [
+            {"id": approved["id"], "status": "apr"},
+            {"id": published["id"], "status": "pub"},
+            {"id": different_shot["id"], "status": "apr"},
+            {"id": other_project["id"], "status": "apr"},
+        ],
+    )
+
+    all_versions = client.list_versions_for_shot("Project X", "SH010")
+    assert [version["id"] for version in all_versions] == [
+        approved["id"],
+        published["id"],
+    ]
+
+    filtered = client.list_versions_for_shot(
+        "Project X", "SH010", statuses=["APR", None]
+    )
+    assert [version["id"] for version in filtered] == [approved["id"]]
+
+    empty = client.list_versions_for_shot("Project X", "SH010", statuses=["rev"])
+    assert empty == []
+
+    missing_shot = client.list_versions_for_shot("Project X", "SH999")
+    assert missing_shot == []

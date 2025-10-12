@@ -290,7 +290,15 @@ class HierarchyTemplate:
 
 
 class ShotgridClient:
-    """A lightweight yet feature rich in-memory ShotGrid client."""
+    """A lightweight yet feature rich in-memory ShotGrid client.
+
+    The client mirrors key aspects of the ShotGrid API while keeping
+    operations synchronous and deterministic for tests. Helper methods are
+    provided for registering and querying versions, such as
+    :meth:`register_version`, :meth:`list_versions`, and
+    :meth:`list_versions_for_shot`, alongside playlist and hierarchy
+    utilities.
+    """
 
     def __init__(
         self,
@@ -537,6 +545,46 @@ class ShotgridClient:
 
     def list_versions(self) -> list[Version]:
         return [cast(Version, v) for v in self._store.list("Version")]
+
+    def list_versions_for_shot(
+        self,
+        project_name: str,
+        shot_code: str,
+        *,
+        statuses: Sequence[str | None] | None = None,
+    ) -> list[Version]:
+        """Return versions filtered by project, shot, and optional statuses."""
+
+        if not project_name:
+            raise ValueError("project_name must be supplied")
+        if not shot_code:
+            raise ValueError("shot_code must be supplied")
+
+        normalized_statuses: set[str] | None = None
+        if statuses is not None:
+            normalized_statuses = {
+                "" if status is None else str(status).strip().lower()
+                for status in statuses
+            }
+
+        filtered: list[Version] = []
+        for version in self.list_versions():
+            if version.get("project") != project_name:
+                continue
+            if version.get("shot") != shot_code:
+                continue
+
+            if normalized_statuses is not None:
+                raw_status = version.get("status")
+                normalized = (
+                    "" if raw_status is None else str(raw_status).strip().lower()
+                )
+                if normalized not in normalized_statuses:
+                    continue
+
+            filtered.append(version)
+
+        return filtered
 
     def get_version_by_id(self, version_id: int) -> Version | None:
         """Return a version registered with the in-memory store."""
