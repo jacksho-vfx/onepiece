@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from libraries.shotgrid.api import ShotGridClient
-from libraries.shotgrid.models import EpisodeData, SceneData, ShotData, VersionData
+from libraries.shotgrid.models import EpisodeData, SceneData, ShotData
 
 
 @pytest.fixture()

@@ -106,18 +106,30 @@ class ShotGridClient:
         attributes = record.get("attributes", {})
         relationships = record.get("relationships", {})
 
-        entity_relationship = relationships.get("entity", {}) if isinstance(relationships, dict) else {}
-        entity_data = entity_relationship.get("data", {}) if isinstance(entity_relationship, dict) else {}
-        project_relationship = relationships.get("project", {}) if isinstance(relationships, dict) else {}
-        project_data = project_relationship.get("data", {}) if isinstance(project_relationship, dict) else {}
-
-        shot_name = (
-            entity_data.get("name")
-            or entity_data.get("code")
-            or attributes.get("code")
+        entity_relationship = (
+            relationships.get("entity", {}) if isinstance(relationships, dict) else {}
+        )
+        entity_data = (
+            entity_relationship.get("data", {})
+            if isinstance(entity_relationship, dict)
+            else {}
+        )
+        project_relationship = (
+            relationships.get("project", {}) if isinstance(relationships, dict) else {}
+        )
+        project_data = (
+            project_relationship.get("data", {})
+            if isinstance(project_relationship, dict)
+            else {}
         )
 
-        file_path = attributes.get("sg_path_to_movie") or attributes.get("sg_uploaded_movie")
+        shot_name = (
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
+        )
+
+        file_path = attributes.get("sg_path_to_movie") or attributes.get(
+            "sg_uploaded_movie"
+        )
 
         return {
             "id": record.get("id"),
@@ -127,7 +139,9 @@ class ShotGridClient:
             "file_path": file_path,
             "status": attributes.get("sg_status_list"),
             "description": attributes.get("description"),
-            "project_id": project_data.get("id") if isinstance(project_data, dict) else None,
+            "project_id": (
+                project_data.get("id") if isinstance(project_data, dict) else None
+            ),
         }
 
     def _get_single(
@@ -353,11 +367,15 @@ class ShotGridClient:
         if project_id:
             filters.append({"project.id[$eq]": project_id})
 
-        project_name = version_data.extra.get("project_name") or version_data.extra.get("project")
+        project_name = version_data.extra.get("project_name") or version_data.extra.get(
+            "project"
+        )
         if project_name:
             filters.append({"project": project_name})
 
-        shot_code = version_data.extra.get("shot") or version_data.extra.get("shot_code")
+        shot_code = version_data.extra.get("shot") or version_data.extra.get(
+            "shot_code"
+        )
         if shot_code:
             filters.append({"entity.Shot.code[$eq]": shot_code})
 
