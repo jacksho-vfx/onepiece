@@ -116,6 +116,54 @@ All filters are optional and can be combined. For example, `GET
 /render/jobs?status=running&farm=mock&limit=5` returns at most five jobs that
 are currently running on the `mock` adapter.
 
+## Submitting jobs via HTTP
+
+While the CLI wraps render submissions, the API exposes the same behaviour via
+`POST /render/jobs`.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "farm": "mock",
+        "scene": "shots/ep101_seq010_sh010.ma",
+        "frames": "1001-1012",
+        "output": "/projects/demo/renders/ep101_seq010_sh010",
+        "priority": 70,
+        "chunk_size": 4,
+        "user": "janed"
+      }' \
+  http://localhost:8000/render/jobs
+```
+
+The service validates the payload against the adapter capabilities returned by
+`/farms`. Missing optional keys fall back to adapter defaults, and invalid
+values trigger a `422 Unprocessable Entity` response with field-level error
+messages.
+
+The JSON response mirrors the job metadata returned by `GET /render/jobs` and
+includes a stable `job_id` that can be used for follow-up queries or
+cancellations.
+
+## Cancelling jobs
+
+Adapters that expose the cancellation hook (see the capability descriptor) can
+accept cancellation requests via `DELETE /render/jobs/{job_id}`:
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+  http://localhost:8000/render/jobs/mock-abc123
+```
+
+Successful cancellations return `202 Accepted` along with the updated job
+payload. If the adapter does not support cancellation the API responds with
+`409 Conflict` and the `error.code` `adapter.cancellation_unsupported`.
+
+Dashboards should poll or subscribe to job streams to confirm when the job's
+status transitions to `cancelled`.
+
 ## Streaming walkthroughs
 
 Need end-to-end examples for monitoring render jobs? The

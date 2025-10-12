@@ -335,6 +335,70 @@ stub methods with application-specific logic and keep the CLI commands intact.
    highlighting status distribution, submission throughput windows, and adapter
    utilisation trends.
 
+## 9. Monitor render lifecycle events over SSE
+
+Trafalgar's render service emits server-sent events for job lifecycle updates so
+you can stream progress into dashboards or chat bots without hitting the REST
+API on a timer.
+
+1. Start the render web service with SSE enabled (it is on by default):
+
+   ```bash
+   onepiece trafalgar web render --host 0.0.0.0 --port 8001
+   ```
+
+2. Subscribe to the SSE feed using the bundled helper script:
+
+   ```bash
+   python -m src.apps.trafalgar.tools.job_stream --url http://localhost:8001/jobs/stream
+   ```
+
+   The helper prints each JSON payload as it arrives and maintains the HTTP
+   connection for you. Use `--output job-events.log` to tee the stream to disk.
+
+3. Trigger a render submission in another terminal. Each job emits `job.created`,
+   `job.updated`, and `job.completed` events with timestamps, status changes, and
+   adapter metadata. The initial `jobs.snapshot` message is handy for seeding UI
+   state, especially when users refresh a browser dashboard midway through a
+   batch.
+
+4. When you no longer need the stream press `Ctrl+C`; the helper closes the
+   connection cleanly and prints a summary of event counts by type.
+
+## 10. Automate post-ingest communications
+
+The notification commands can run on the back of ingest reports to keep your
+team updated.
+
+1. Configure a reusable profile with email and Slack defaults:
+
+   ```toml
+   [profiles.pipeline.notify]
+   email_recipients = ["prod@example.com", "supervision@example.com"]
+   slack_channel = "#pipeline"
+   ```
+
+2. Run ingest in dry-run mode and capture the report:
+
+   ```bash
+   onepiece aws ingest deliveries/EP102 --project "Show XYZ" --show-code XYZ \
+     --dry-run --report-format markdown --report-path reports/EP102.md
+   ```
+
+3. Share the status update with the recipients defined in your profile:
+
+   ```bash
+   onepiece notify email --profile pipeline --subject "EP102 ingest review" \
+     --body-file reports/EP102.md
+
+   onepiece notify slack --profile pipeline --message "EP102 ingest report ready" \
+     --attachments reports/EP102.md
+   ```
+
+4. When the delivery is ready for a real ingest, rerun the ingest command without
+   `--dry-run`. The Markdown report from the successful run can be attached to
+   the same notifications so supervisors have an audit trail.
+
 ---
 
 Experimenting with these scenarios builds intuition for how the CLI behaves and gives you realistic command lines to adapt for production.

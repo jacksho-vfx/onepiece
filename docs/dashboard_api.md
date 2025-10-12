@@ -269,14 +269,27 @@ memory usage.
 - `GET /admin/cache` – returns a JSON snapshot of the in-memory caches,
   including entry counts, TTL configuration, and the timestamp of the last
   refresh for each bucket.
-- `POST /admin/cache` – flushes all caches and triggers background refreshes on
-  the next request cycle. The body can be empty; the act of hitting the endpoint
-  clears the stores.
+- `POST /admin/cache` – accepts an optional JSON body containing
+  `ttl_seconds`, `max_records`, `max_projects`, and `flush` keys. Any provided
+  values override the running configuration, and `flush: true` clears the cache
+  immediately.
 
 Both routes require the standard dashboard bearer token and respond with
 `401 Unauthorized` when the token is missing or incorrect. Operators should use
 these endpoints sparingly in production—force-flushing large caches can spike
 load on ShotGrid or other backing APIs until the cache repopulates.
+
+Example requests:
+
+```bash
+curl -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+  http://localhost:8000/admin/cache
+
+curl -X POST -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ttl_seconds": 30, "max_records": 2500, "max_projects": 6, "flush": true}' \
+  http://localhost:8000/admin/cache
+```
 
 ### Endpoint: `GET /deliveries/{project}/{delivery_id}`
 
@@ -340,3 +353,21 @@ from the JSON snapshot, and the sync timestamp is updated. Operators should
 monitor filesystem permissions and available disk space—if the file cannot be
 written the dashboard logs a warning and continues using the in-memory view
 until persistence succeeds.
+
+## Embedding Trafalgar metrics in Grafana
+
+Grafana can visualise Trafalgar metrics with a standard JSON/HTTP data source:
+
+1. Create a new data source with the base URL `http://localhost:8000` (or your
+   deployed host) and configure a custom header `Authorization: Bearer <token>`.
+2. Build panels that query `/metrics` or `/jobs/metrics` and use the `JSON` data
+   format. Grafana's transformation tools can flatten nested objects into table
+   rows or time-series values.
+3. Use the `generated_at` field from `/jobs/metrics` as the panel timestamp so
+   operators can see when the numbers were last refreshed.
+4. Combine the metrics with log panels sourced from your Trafalgar deployment to
+   highlight error spikes alongside ingest or render throughput dips.
+
+Once configured, the Grafana dashboard mirrors the analytics embedded in the
+Uta Control Center while letting supervisors overlay the data with broader
+infrastructure telemetry.

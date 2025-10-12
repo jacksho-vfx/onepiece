@@ -59,3 +59,72 @@ cache TTLs, capacity limits, and admin endpoints—are documented in
 [`docs/dashboard_api.md`](./dashboard_api.md#dashboard-caching-controls). Review
 those settings alongside your profile files so deployment guides surface the
 operational levers available to operators.
+
+## Inspecting merge output
+
+Run `onepiece profile --show-sources` to see exactly where each value comes
+from. The CLI prints a table similar to the following so you can debug
+unexpected overrides:
+
+```
+Profile: mystudio (resolved)
+
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Key            ┃ Value                                      ┃ Source       ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ project        │ Studio Project                             │ user.toml    │
+│ show_code      │ STUDIO                                     │ project.toml │
+│ vendor_bucket  │ vendor_in                                  │ workspace    │
+│ ingest.resume  │ True                                       │ workspace    │
+│ ingest.max_workers │ 8                                      │ CLI          │
+└────────────────┴────────────────────────────────────────────┴──────────────┘
+```
+
+Values supplied on the command line are rendered in bold and flagged with the
+`CLI` source, making it clear when ad-hoc overrides are active.
+
+## Recommended keys
+
+Profiles may contain arbitrary keys; the following tables capture the common
+sections consumed by first-party commands.
+
+### Top-level keys
+
+| Key | Description |
+| --- | --- |
+| `project` | Human-readable project name surfaced in reports and manifests. |
+| `show_code` | Short code used when naming S3 prefixes, delivery folders, and playlists. |
+| `vendor_bucket` / `client_bucket` | Default S3 buckets for ingest workflows. |
+| `profile_notes` | Free-form notes that appear when running `onepiece profile`. |
+
+### `[profiles.<name>.ingest]`
+
+| Key | Description |
+| --- | --- |
+| `max_workers` | Thread pool size for uploads. |
+| `resume` | Enable resumable uploads and checkpoint persistence. |
+| `checkpoint_dir` | Location on disk where multipart checkpoints are stored. |
+| `checkpoint_threshold` | Minimum file size (bytes) before checkpoints are written. |
+| `upload_chunk_size` | Multipart chunk size (bytes) used when resuming transfers. |
+| `use_asyncio` | Toggle asyncio orchestration for I/O-bound workloads. |
+
+### `[profiles.<name>.render]`
+
+| Key | Description |
+| --- | --- |
+| `farm` | Default render farm adapter name (for example `mock` or `tractor`). |
+| `priority` | Preferred priority passed to the adapter unless overridden. |
+| `chunk_size` | Frame chunking default that respects adapter limits. |
+| `user` | Submitter identifier used when the CLI does not infer it automatically. |
+| `output_root` | Root directory where frame outputs should be written. |
+
+### `[profiles.<name>.notify]`
+
+| Key | Description |
+| --- | --- |
+| `email_recipients` | List of email addresses for the `notify email` command. |
+| `slack_channel` | Default Slack channel or webhook for `notify slack`. |
+| `include_reports` | Boolean flag controlling whether reports are attached automatically. |
+
+Use these tables as a checklist when onboarding new shows or departments so the
+CLI behaves consistently across teams.

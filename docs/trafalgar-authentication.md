@@ -91,3 +91,57 @@ the resulting access token (or client credentials) in the same configuration.
 Because credentials are cached, any configuration change requires a service
 restart (or an explicit cache reset during tests). Document the rotation time
 and the associated change request for traceability.
+
+## Testing credentials locally
+
+Launch the Trafalgar services with temporary credentials to validate new
+integrations before sharing them:
+
+```bash
+export TRAFALGAR_SERVICE_CREDENTIALS='[
+  {"id": "local-render", "key": "demo-key", "secret": "demo-secret", "roles": ["render:read", "render:submit"]}
+]'
+
+onepiece trafalgar web render --host 127.0.0.1 --port 8001
+```
+
+Then call the API with matching headers:
+
+```bash
+curl -H "X-API-Key: demo-key" -H "X-API-Secret: demo-secret" \
+  http://127.0.0.1:8001/render/farms
+```
+
+Switch to bearer tokens by setting `TRAFALGAR_SERVICE_CREDENTIALS` with a
+`token` entry and passing `Authorization: Bearer <token>`.
+
+## Troubleshooting
+
+- **`401 Unauthorized`** – The token or key/secret pair did not match a known
+  credential, or the request omitted the required headers. Confirm the header
+  names align with `TRAFALGAR_API_KEY_HEADER`/`TRAFALGAR_API_SECRET_HEADER` and
+  that the credential entry is loaded.
+- **`403 Forbidden`** – Authentication succeeded but the credential lacks the
+  necessary role. Review the role list in the configuration and add the missing
+  permission (for example `render:manage` for cancellation requests).
+- **`503 Service Unavailable`** – The service could not load credentials during
+  startup. Check the log output for JSON parsing errors or missing files and
+  ensure at least one credential is configured.
+
+## CLI integration
+
+The OnePiece CLI forwards Trafalgar credentials automatically when environment
+variables are set. For example, running
+
+```bash
+export TRAFALGAR_API_KEY_HEADER=X-API-Key
+export TRAFALGAR_API_SECRET_HEADER=X-API-Secret
+export TRAFALGAR_SERVICE_CREDENTIALS='[{"id": "cli", "key": "cli-key", "secret": "cli-secret", "roles": ["render:submit"]}]'
+
+onepiece render submit --farm mock --scene shots/shot.ma --frames 1001-1012 \
+  --output renders/shot
+```
+
+ensures the CLI's HTTP requests include the correct headers. When operating with
+bearer tokens, set `TRAFALGAR_DASHBOARD_TOKEN` and the CLI will attach the
+`Authorization` header automatically for dashboard and render requests.
