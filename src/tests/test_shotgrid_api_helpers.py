@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from libraries.shotgrid.api import ShotGridClient
+from libraries.shotgrid.api import ShotGridClient, _version_view
 from libraries.shotgrid.models import EpisodeData, SceneData, ShotData
 
 
@@ -251,4 +251,83 @@ def test_expand_playlist_versions_fetches_and_normalises(
     entity, filters, fields = client._get.call_args.args
     assert entity == "Version"
     assert filters == [{"id[$in]": "101,102"}]
-    assert "description" in fields
+    assert fields.split(",") == _version_view(summary=False)[0]
+
+
+def test_version_view_summary_fields_and_parser() -> None:
+    fields, parser = _version_view(summary=True)
+
+    assert fields == [
+        "code",
+        "version_number",
+        "sg_status_list",
+        "sg_path_to_movie",
+        "sg_uploaded_movie",
+        "entity",
+    ]
+
+    record = {
+        "id": 55,
+        "attributes": {
+            "code": "shot030_v003",
+            "version_number": 3,
+            "sg_status_list": "apr",
+            "sg_path_to_movie": None,
+            "sg_uploaded_movie": "/path/to/upload.mov",
+            "description": "Irrelevant",
+        },
+        "relationships": {
+            "entity": {"data": {"name": "SHOT_030", "code": "SHOT_030_CODE"}},
+            "project": {"data": {"id": 9}},
+        },
+    }
+
+    assert parser(record) == {
+        "shot": "SHOT_030",
+        "version_number": 3,
+        "file_path": "/path/to/upload.mov",
+        "status": "apr",
+        "code": "shot030_v003",
+    }
+
+
+def test_version_view_full_fields_and_parser() -> None:
+    fields, parser = _version_view(summary=False)
+
+    assert fields == [
+        "code",
+        "version_number",
+        "sg_status_list",
+        "sg_path_to_movie",
+        "sg_uploaded_movie",
+        "entity",
+        "description",
+        "project",
+    ]
+
+    record = {
+        "id": 88,
+        "attributes": {
+            "code": "shot040_v004",
+            "version_number": 4,
+            "sg_status_list": "wtg",
+            "sg_path_to_movie": "/movie.mov",
+            "sg_uploaded_movie": None,
+            "description": "Waiting for notes",
+        },
+        "relationships": {
+            "entity": {"data": {"code": "SHOT_040"}},
+            "project": {"data": {"id": 42}},
+        },
+    }
+
+    assert parser(record) == {
+        "id": 88,
+        "code": "shot040_v004",
+        "shot": "SHOT_040",
+        "version_number": 4,
+        "file_path": "/movie.mov",
+        "status": "wtg",
+        "description": "Waiting for notes",
+        "project_id": 42,
+    }
