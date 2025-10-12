@@ -14,8 +14,12 @@ from apps.trafalgar.providers.providers import (
     DeliveryProvider,
     ProviderMetadata,
     ReconcileDataProvider,
+    initialize_providers,
 )
 from apps.trafalgar.web import dashboard
+
+
+initialize_providers()
 
 
 class DummyShotgridClient:
