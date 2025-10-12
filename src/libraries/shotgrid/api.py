@@ -24,7 +24,9 @@ from libraries.shotgrid.models import PipelineStep, TaskCode, TaskData
 log = structlog.get_logger(__name__)
 
 
-def _version_view(*, summary: bool) -> tuple[List[str], Callable[[Dict[str, Any]], Dict[str, Any]]]:
+def _version_view(
+    *, summary: bool
+) -> tuple[List[str], Callable[[Dict[str, Any]], Dict[str, Any]]]:
     """Return canonical Version fields and a parser for *summary* or *full* views."""
 
     fields: List[str] = [
@@ -43,15 +45,21 @@ def _version_view(*, summary: bool) -> tuple[List[str], Callable[[Dict[str, Any]
         relationships = record.get("relationships", {}) or {}
 
         entity_relationship = relationships.get("entity", {}) or {}
-        entity_data = entity_relationship.get("data", {}) if isinstance(entity_relationship, dict) else {}
+        entity_data = (
+            entity_relationship.get("data", {})
+            if isinstance(entity_relationship, dict)
+            else {}
+        )
 
         project_relationship = relationships.get("project", {}) or {}
-        project_data = project_relationship.get("data", {}) if isinstance(project_relationship, dict) else {}
+        project_data = (
+            project_relationship.get("data", {})
+            if isinstance(project_relationship, dict)
+            else {}
+        )
 
         shot_name = (
-            entity_data.get("name")
-            or entity_data.get("code")
-            or attributes.get("code")
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
         )
 
         file_path = attributes.get("sg_path_to_movie") or attributes.get(
