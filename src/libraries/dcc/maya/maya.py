@@ -7,9 +7,9 @@ Requires Maya's Python environment (pymel.core).
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Dict, cast
 
-from upath import UPath
 import structlog
 import pymel.core as pm
 
@@ -43,15 +43,15 @@ def _save(**kwargs: Any) -> None:
     _saveFile(**kwargs)
 
 
-def _open(path: UPath, **kwargs: Any) -> None:
+def _open(path: Path, **kwargs: Any) -> None:
     _openFile(str(path), **kwargs)
 
 
-def _import(path: UPath, **kwargs: Any) -> None:
+def _import(path: Path, **kwargs: Any) -> None:
     _importFile(str(path), **kwargs)
 
 
-def _export_all(path: UPath, **kwargs: Any) -> None:
+def _export_all(path: Path, **kwargs: Any) -> None:
     _exportAll(str(path), **kwargs)
 
 
@@ -217,7 +217,7 @@ def _remove_empty_layers() -> Dict[str, int]:
 # --------------------------------------------------------------------------- #
 # Scene Operations
 # --------------------------------------------------------------------------- #
-def open_scene(path: UPath) -> None:
+def open_scene(path: Path) -> None:
     """
     Open a Maya scene file (.ma or .mb).
 
@@ -232,7 +232,7 @@ def open_scene(path: UPath) -> None:
     log.info("maya_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath | None = None) -> None:
+def save_scene(path: Path | None = None) -> None:
     """
     Save the current Maya scene.
 
@@ -252,7 +252,7 @@ def save_scene(path: UPath | None = None) -> None:
 # --------------------------------------------------------------------------- #
 # Asset Operations
 # --------------------------------------------------------------------------- #
-def import_asset(path: UPath) -> None:
+def import_asset(path: Path) -> None:
     """
     Import an asset or scene into the current Maya scene.
 
@@ -277,7 +277,7 @@ def import_asset(path: UPath) -> None:
     log.info("maya_asset_imported", path=str(path))
 
 
-def export_scene(path: UPath) -> None:
+def export_scene(path: Path) -> None:
     """
     Export the current Maya scene to a file.
 
