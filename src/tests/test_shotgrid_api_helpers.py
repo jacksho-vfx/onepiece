@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from libraries.shotgrid.api import ShotGridClient, _version_view
+from libraries.shotgrid.api import ShotGridClient, ShotGridError, _version_view
 from libraries.shotgrid.models import EpisodeData, SceneData, ShotData
 
 
@@ -15,6 +15,34 @@ def client() -> ShotGridClient:
     """Return an uninitialised ``ShotGridClient`` for isolated testing."""
 
     return ShotGridClient.__new__(ShotGridClient)
+
+
+class StubResponse:
+    def __init__(
+        self,
+        *,
+        ok: bool,
+        status_code: int = 200,
+        text: str = "",
+        payload: dict | None = None,
+    ) -> None:
+        self.ok = ok
+        self.status_code = status_code
+        self.text = text
+        self._payload = payload or {}
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class StubSession:
+    def __init__(self, response: StubResponse) -> None:
+        self._response = response
+        self.patch_calls: list[tuple[str, dict]] = []
+
+    def patch(self, url: str, *, json: dict) -> StubResponse:
+        self.patch_calls.append((url, json))
+        return self._response
 
 
 def test_get_or_create_episode_returns_existing(client: ShotGridClient) -> None:
@@ -125,6 +153,84 @@ def test_simplify_version_record_falls_back_to_uploaded_media(
         "status": None,
         "code": "shot020_v002",
     }
+
+
+def test_update_version_sends_patch_request(client: ShotGridClient) -> None:
+    client.base_url = "https://example.com"
+    response_payload = {"data": {"id": 123, "type": "Version"}}
+    session = StubSession(StubResponse(ok=True, payload=response_payload))
+    client._session = session
+
+    result = client.update_version(123, {"description": "Updated"})
+
+    assert result == response_payload["data"]
+    assert len(session.patch_calls) == 1
+
+    url, payload = session.patch_calls[0]
+    assert url == "https://example.com/api/v1/entity/versions/123"
+    assert payload == {
+        "data": {
+            "type": "Version",
+            "id": 123,
+            "attributes": {"description": "Updated"},
+        }
+    }
+
+
+def test_update_version_includes_relationships(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    response_payload = {"data": {"id": 55}}
+    session = StubSession(StubResponse(ok=True, payload=response_payload))
+    client._session = session
+
+    relationships = {"project": {"data": {"type": "Project", "id": 42}}}
+    client.update_version(55, {"code": "shot030_v001"}, relationships)
+
+    _, payload = session.patch_calls[0]
+    assert payload["data"]["relationships"] == relationships
+
+
+def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = ShotGridClient.__new__(ShotGridClient)
+    captured: dict[str, tuple[int, dict, dict | None]] = {}
+
+    def fake_update(
+        version_id: int,
+        attributes: dict,
+        relationships: dict | None = None,
+    ) -> None:
+        captured["call"] = (version_id, attributes, relationships)
+
+    monkeypatch.setattr(client, "update_version", fake_update)
+
+    client.update_version_status(999, "apr")
+
+    assert captured["call"] == (999, {"sg_status_list": "apr"}, None)
+
+
+def test_update_version_raises_on_error(
+    client: ShotGridClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.base_url = "https://example.com"
+    response = StubResponse(ok=False, status_code=404, text="Not Found")
+    session = StubSession(response)
+    client._session = session
+
+    log_error = MagicMock()
+    monkeypatch.setattr("libraries.shotgrid.api.log.error", log_error)
+
+    with pytest.raises(ShotGridError) as excinfo:
+        client.update_version(321, {"description": "Missing"})
+
+    assert "PATCH Version 321 failed" in str(excinfo.value)
+
+    log_error.assert_called_once_with(
+        "http_patch_failed",
+        entity="Version",
+        entity_id=321,
+        status=404,
+        text="Not Found",
+    )
 
 
 def test_list_playlists_filters_by_project_and_paginates(

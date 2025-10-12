@@ -201,6 +201,39 @@ class ShotGridClient:
             raise ShotGridError(f"POST {entity} failed: {r.text}")
         return r.json()["data"]
 
+    def _patch(
+        self,
+        entity: str,
+        entity_id: int,
+        attributes: Dict[str, Any],
+        relationships: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        url = self._build_url(
+            "api", "v1", f"entity/{entity.lower()}s/{entity_id}"
+        )
+        payload: Dict[str, Any] = {
+            "data": {
+                "type": entity,
+                "id": entity_id,
+                "attributes": attributes,
+            }
+        }
+        if relationships:
+            payload["data"]["relationships"] = relationships
+        response = self._session.patch(url, json=payload)
+        if not response.ok:
+            log.error(
+                "http_patch_failed",
+                entity=entity,
+                entity_id=entity_id,
+                status=response.status_code,
+                text=response.text,
+            )
+            raise ShotGridError(
+                f"PATCH {entity} {entity_id} failed: {response.text}"
+            )
+        return response.json()["data"]
+
     def _build_url(self, *segments: str) -> str:
         base = self.base_url.rstrip("/")
         path = "/".join(segment.strip("/") for segment in segments)
@@ -519,6 +552,21 @@ class ShotGridClient:
             relationships["entity"] = entity_relationship
 
         return self._post(data.entity_type, attributes, relationships or None)
+
+    def update_version(
+        self,
+        version_id: int,
+        attributes: Dict[str, Any],
+        relationships: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Update an existing ShotGrid Version entity."""
+
+        return self._patch("Version", version_id, attributes, relationships)
+
+    def update_version_status(self, version_id: int, status: str) -> Any:
+        """Convenience helper to update a version status."""
+
+        return self.update_version(version_id, {"sg_status_list": status})
 
     def create_version_with_media(
         self,
