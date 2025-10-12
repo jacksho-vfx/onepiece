@@ -10,7 +10,7 @@ from urllib.parse import quote
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.trafalgar.providers import (
+from apps.trafalgar.providers.providers import (
     DeliveryProvider,
     ProviderMetadata,
     ReconcileDataProvider,

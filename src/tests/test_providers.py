@@ -5,7 +5,7 @@ from typing import Any, Mapping, Sequence
 
 import pytest
 
-from apps.trafalgar.providers import (
+from apps.trafalgar.providers.providers import (
     DeliveryProvider,
     ProviderMetadata,
     ReconcileDataProvider,

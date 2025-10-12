@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from apps.trafalgar.providers import (
+from apps.trafalgar.providers.providers import (
     DeliveryProvider,
     ReconcileDataProvider,
     registry as provider_registry,
