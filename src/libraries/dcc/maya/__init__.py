@@ -24,6 +24,14 @@ except ModuleNotFoundError:
 # --------------------------------------------------------------------------- #
 # Import public submodules (these can now import safely)
 # --------------------------------------------------------------------------- #
+from .batch_exporter import (  # noqa: F401
+    DEFAULT_EXPORT_SETTINGS,
+    BatchExportItem,
+    BatchExportResult,
+    BatchExporter,
+    ExportFormat,
+    ExportRecord,
+)
 from .batch_retargeting import (  # noqa: F401
     BatchRetargetingTool,
     RetargetError,
@@ -66,6 +74,12 @@ from .unreal_export_checker import (  # noqa: F401
 )
 
 __all__ = [
+    "DEFAULT_EXPORT_SETTINGS",
+    "BatchExportItem",
+    "BatchExportResult",
+    "BatchExporter",
+    "ExportFormat",
+    "ExportRecord",
     "BatchRetargetingTool",
     "RetargetError",
     "RetargetMapping",
