@@ -87,9 +87,7 @@ def test_simplify_version_record_prefers_entity_name(client: ShotGridClient) -> 
             "sg_status_list": "rev",
         },
         "relationships": {
-            "entity": {
-                "data": {"name": "SHOT_010", "code": "SHOT_010_CODE"}
-            }
+            "entity": {"data": {"name": "SHOT_010", "code": "SHOT_010_CODE"}}
         },
     }
 

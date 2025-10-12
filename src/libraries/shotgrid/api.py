@@ -277,9 +277,7 @@ class ShotGridClient:
         entity_data = relationships.get("entity", {}).get("data", {}) or {}
 
         shot_name = (
-            entity_data.get("name")
-            or entity_data.get("code")
-            or attributes.get("code")
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
         )
 
         return {
