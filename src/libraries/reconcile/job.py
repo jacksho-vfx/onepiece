@@ -107,7 +107,7 @@ class ReconciliationJob:
         self.minimum_score = minimum_score
 
     @staticmethod
-    def _provider_name(provider: Any) -> str:
+    def _provider_name(provider: Any) -> Any:
         return getattr(provider, "name", provider.__class__.__name__)
 
     def _load_delivery(self) -> list[ReconciliationRecord]:
@@ -216,7 +216,8 @@ class ReconciliationJob:
                 rule_trace=best_trace,
             )
 
-        index, candidate = best_candidate
+        index, candidate = best_candidate  # type: ignore[misc]
+
         state.records.pop(index)
         state.matched += 1
 
@@ -255,9 +256,7 @@ class ReconciliationJob:
         total_deliveries = len(matches)
         unmatched_deliveries = total_deliveries - matched_deliveries
         matched_percentage = (
-            (matched_deliveries / total_deliveries) * 100
-            if total_deliveries
-            else 100.0
+            (matched_deliveries / total_deliveries) * 100 if total_deliveries else 100.0
         )
 
         provider_metrics: list[ProviderMetrics] = []
@@ -303,4 +302,3 @@ __all__ = [
     "ProviderMetrics",
     "FieldDifference",
 ]
-

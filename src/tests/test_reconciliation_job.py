@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
@@ -25,7 +26,7 @@ class StaticProvider:
         return [dict(record) for record in self.payload]
 
 
-def test_reconciliation_job_generates_summary(tmp_path) -> None:
+def test_reconciliation_job_generates_summary(tmp_path: Path) -> None:
     delivery = StaticProvider(
         name="delivery",
         payload=[
@@ -71,7 +72,9 @@ def test_reconciliation_job_generates_summary(tmp_path) -> None:
 
     first_match = result.matches[0]
     assert first_match.fully_matched is True
-    vendor_result = next(item for item in first_match.sources if item.provider == "vendor")
+    vendor_result = next(
+        item for item in first_match.sources if item.provider == "vendor"
+    )
     assert vendor_result.matched is True
     assert vendor_result.score and vendor_result.score > 0.8
     assert any(diff.field == "name" for diff in vendor_result.differences)
@@ -79,19 +82,25 @@ def test_reconciliation_job_generates_summary(tmp_path) -> None:
 
     second_match = result.matches[1]
     assert second_match.fully_matched is False
-    vendor_second = next(item for item in second_match.sources if item.provider == "vendor")
+    vendor_second = next(
+        item for item in second_match.sources if item.provider == "vendor"
+    )
     assert vendor_second.matched is False
     assert vendor_second.score is not None and vendor_second.score < 0.75
 
     fs_metrics = next(
-        metric for metric in result.summary.provider_metrics if metric.provider == "filesystem"
+        metric
+        for metric in result.summary.provider_metrics
+        if metric.provider == "filesystem"
     )
     assert fs_metrics.total_records == 1
     assert fs_metrics.matched_records == 1
     assert fs_metrics.unmatched_records == 0
 
     vendor_metrics = next(
-        metric for metric in result.summary.provider_metrics if metric.provider == "vendor"
+        metric
+        for metric in result.summary.provider_metrics
+        if metric.provider == "vendor"
     )
     assert vendor_metrics.total_records == 2
     assert vendor_metrics.matched_records == 1

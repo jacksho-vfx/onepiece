@@ -151,7 +151,11 @@ class FuzzyMatchRule(MatchRule):
         return MatchRule.Result(
             passed=ratio >= self.threshold,
             score=ratio,
-            details=None if ratio >= self.threshold else f"ratio {ratio:.2f} < {self.threshold}",
+            details=(
+                None
+                if ratio >= self.threshold
+                else f"ratio {ratio:.2f} < {self.threshold}"
+            ),
         )
 
 
@@ -181,8 +185,8 @@ class ToleranceRule(MatchRule):
         *,
         provider: str,
     ) -> MatchRule.Result:
-        lhs = delivery.get(self.field)
-        rhs = candidate.get(self.field)
+        lhs: Any = delivery.get(self.field)
+        rhs: Any = candidate.get(self.field)
         try:
             lhs_value = float(lhs)
             rhs_value = float(rhs)
@@ -202,7 +206,9 @@ class ToleranceRule(MatchRule):
         return MatchRule.Result(
             passed=passed,
             score=score,
-            details=None if passed else f"delta {delta:.2f} > tolerance {self.tolerance}",
+            details=(
+                None if passed else f"delta {delta:.2f} > tolerance {self.tolerance}"
+            ),
         )
 
 
@@ -292,4 +298,3 @@ __all__ = [
     "load_rules",
     "load_rule_configs",
 ]
-
