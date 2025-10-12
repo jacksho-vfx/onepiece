@@ -147,7 +147,7 @@ def _normalise_project_root(project_root: Path | None) -> Path | None:
     if project_root is None:
         env_root = os.environ.get("ONEPIECE_PROJECT_ROOT")
         if env_root:
-            project_root = Path(env_root)
+            project_root = Path(env_root).expanduser()
         else:
             project_root = Path.cwd()
     return project_root
