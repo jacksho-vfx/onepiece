@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from upath import UPath
-
 # --------------------------------------------------------------------------- #
 # Provide lightweight stubs for DCC modules when unavailable
 # --------------------------------------------------------------------------- #
@@ -38,7 +36,7 @@ def test_maya_save_scene_with_explicit_path(
 
     monkeypatch.setattr(maya.pm, "saveAs", fake_save_as, raising=False)
 
-    scene_path = UPath(tmp_path / "maya" / "test_scene.ma")
+    scene_path = tmp_path / "maya" / "test_scene.ma"
     parent = scene_path.parent
 
     assert not parent.exists()
@@ -72,14 +70,14 @@ def test_maya_export_scene_creates_parent_directories(
 
     captured: dict[str, object] = {}
 
-    def fake_export_all(path: UPath, **kwargs: object) -> None:
+    def fake_export_all(path: Path, **kwargs: object) -> None:
         captured["path"] = path
         captured["kwargs"] = kwargs
         captured["parent_exists_at_call"] = path.parent.exists()
 
     monkeypatch.setattr(maya, "_export_all", fake_export_all)
 
-    export_path = UPath(tmp_path / "exports" / "scene.ma")
+    export_path = tmp_path / "exports" / "scene.ma"
     parent = export_path.parent
 
     assert not parent.exists()
@@ -100,7 +98,7 @@ def test_nuke_save_scene_with_explicit_path(
     captured: dict[str, str] = {}
 
     def fake_save_as(path: str) -> None:
-        save_path = UPath(path)
+        save_path = Path(path)
         assert save_path.parent.exists(), "Parent directory should exist before saving"
         captured["path"] = path
 
@@ -138,13 +136,13 @@ def test_nuke_export_scene_creates_directory(
     captured: dict[str, str] = {}
 
     def fake_save_as(path: str) -> None:
-        save_path = UPath(path)
+        save_path = Path(path)
         assert save_path.parent.exists(), "Parent directory should exist before export"
         captured["path"] = path
 
     monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
 
-    export_path = UPath(tmp_path / "output" / "exported.nk")
+    export_path = tmp_path / "output" / "exported.nk"
     assert not export_path.parent.exists()
 
     nuke_module.export_scene(export_path)

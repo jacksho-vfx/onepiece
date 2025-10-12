@@ -1,4 +1,5 @@
-from upath import UPath
+from pathlib import Path
+
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
@@ -12,7 +13,7 @@ def sync_from(
     bucket: str,
     show_code: str,
     folder: str,
-    local_path: UPath,
+    local_path: Path,
     dry_run: bool = False,
     include: list[str] | None = typer.Option(None, "--include"),
     exclude: list[str] | None = typer.Option(None, "--exclude"),

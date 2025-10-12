@@ -7,11 +7,11 @@ Requires Maya's Python environment (pymel.core).
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Dict, cast
 
-from upath import UPath
-import structlog
 import pymel.core as pm
+import structlog
 
 log = structlog.get_logger(__name__)
 
@@ -43,15 +43,15 @@ def _save(**kwargs: Any) -> None:
     _saveFile(**kwargs)
 
 
-def _open(path: UPath, **kwargs: Any) -> None:
+def _open(path: Path, **kwargs: Any) -> None:
     _openFile(str(path), **kwargs)
 
 
-def _import(path: UPath, **kwargs: Any) -> None:
+def _import(path: Path, **kwargs: Any) -> None:
     _importFile(str(path), **kwargs)
 
 
-def _export_all(path: UPath, **kwargs: Any) -> None:
+def _export_all(path: Path, **kwargs: Any) -> None:
     _exportAll(str(path), **kwargs)
 
 
@@ -217,12 +217,12 @@ def _remove_empty_layers() -> Dict[str, int]:
 # --------------------------------------------------------------------------- #
 # Scene Operations
 # --------------------------------------------------------------------------- #
-def open_scene(path: UPath) -> None:
+def open_scene(path: Path) -> None:
     """
     Open a Maya scene file (.ma or .mb).
 
     Args:
-        path (UPath): Path to the Maya scene
+        path (Path): Path to the Maya scene
     """
     if not path.exists():
         log.error("maya_open_scene_failed", path=str(path))
@@ -232,7 +232,7 @@ def open_scene(path: UPath) -> None:
     log.info("maya_scene_opened", path=str(path))
 
 
-def save_scene(path: UPath | None = None) -> None:
+def save_scene(path: Path | None = None) -> None:
     """
     Save the current Maya scene.
 
@@ -252,12 +252,12 @@ def save_scene(path: UPath | None = None) -> None:
 # --------------------------------------------------------------------------- #
 # Asset Operations
 # --------------------------------------------------------------------------- #
-def import_asset(path: UPath) -> None:
+def import_asset(path: Path) -> None:
     """
     Import an asset or scene into the current Maya scene.
 
     Args:
-        path (UPath): Path to the Maya file (.ma, .mb, or FBX)
+        path (Path): Path to the Maya file (.ma, .mb, or FBX)
     """
     if not path.exists():
         log.error("maya_import_asset_failed", path=str(path))
@@ -277,12 +277,12 @@ def import_asset(path: UPath) -> None:
     log.info("maya_asset_imported", path=str(path))
 
 
-def export_scene(path: UPath) -> None:
+def export_scene(path: Path) -> None:
     """
     Export the current Maya scene to a file.
 
     Args:
-        path (UPath): Path to save the scene
+        path (Path): Path to save the scene
     """
     if not path:
         raise ValueError("Path must be provided to export Maya scene")

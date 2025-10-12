@@ -4,10 +4,10 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import structlog
-from upath import UPath
 
 from .client import Playlist, ShotgridClient, Version
 
@@ -20,7 +20,7 @@ Recipient = Literal["client", "vendor"]
 class PlaylistPackageSummary:
     """Details about a packaged ShotGrid playlist."""
 
-    package_path: UPath
+    package_path: Path
     manifest: dict[str, Any]
 
 
@@ -31,7 +31,7 @@ def _slugify(value: str) -> str:
     return cleaned or "package"
 
 
-def _ensure_package_dir(base_dir: UPath) -> None:
+def _ensure_package_dir(base_dir: Path) -> None:
     if base_dir.exists():
         # Avoid mixing existing deliveries with new runs.
         if any(base_dir.iterdir()):
@@ -40,8 +40,8 @@ def _ensure_package_dir(base_dir: UPath) -> None:
 
 
 def _build_package_directory(
-    destination: UPath, playlist: Playlist, recipient: Recipient
-) -> UPath:
+    destination: Path, playlist: Playlist, recipient: Recipient
+) -> Path:
     project_slug = _slugify(playlist["project"])
     playlist_slug = _slugify(playlist["playlist_name"])
     package_name = (
@@ -53,8 +53,8 @@ def _build_package_directory(
 
 
 def _copy_media(
-    media_dir: UPath, version: Version, source: UPath
-) -> tuple[UPath, dict[str, Any]]:
+    media_dir: Path, version: Version, source: Path
+) -> tuple[Path, dict[str, Any]]:
     if not source.exists():
         raise FileNotFoundError(f"Media source not found: {source}")
 
@@ -89,7 +89,7 @@ def package_playlist_for_mediashuttle(
     sg_client: ShotgridClient,
     project_name: str,
     playlist_name: str,
-    destination: UPath,
+    destination: Path,
     recipient: Recipient,
 ) -> PlaylistPackageSummary:
     """Package playlist media ready for MediaShuttle delivery."""
@@ -128,7 +128,7 @@ def package_playlist_for_mediashuttle(
 
     items: list[dict[str, Any]] = []
     for version in versions:
-        source = UPath(version["path"])
+        source = Path(version["path"])
         _, manifest_entry = _copy_media(media_dir, version, source)
         items.append(manifest_entry)
 

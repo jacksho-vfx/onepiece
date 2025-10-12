@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping, Protocol
 
 import structlog
-from upath import UPath
 
 try:  # pragma: no cover - maya is optional in most environments
     import pymel.core as pm
@@ -34,7 +33,7 @@ class PlayblastRequest:
     artist: str
     camera: str
     version: int
-    output_directory: UPath
+    output_directory: Path
     sequence: str | None = None
     format: str = "mov"
     codec: str = "h264"
@@ -117,8 +116,8 @@ def _default_timeline_query() -> tuple[int, int]:  # pragma: no cover - requires
 
 
 def _default_playblast(
-    request: PlayblastRequest, target: UPath, frame_range: tuple[int, int]
-) -> UPath:  # pragma: no cover - requires Maya
+    request: PlayblastRequest, target: Path, frame_range: tuple[int, int]
+) -> Path:  # pragma: no cover - requires Maya
     if pm is None:
         raise RuntimeError(
             "Maya is not available; provide a custom playblast callback."
@@ -159,7 +158,7 @@ class PlayblastAutomationTool:
         *,
         timeline_query: Callable[[], tuple[int, int]] | None = None,
         playblast_callback: (
-            Callable[[PlayblastRequest, UPath, tuple[int, int]], Any] | None
+            Callable[[PlayblastRequest, Path, tuple[int, int]], Any] | None
         ) = None,
         clock: Callable[[], _dt.datetime] | None = None,
         shotgrid_client: Any | None = None,
@@ -176,7 +175,7 @@ class PlayblastAutomationTool:
             return _normalize_frame_range(request.frame_range)
         return _normalize_frame_range(self._timeline_query())
 
-    def _ensure_upath(self, path_like: Any) -> Path:
+    def _ensure_path(self, path_like: Any) -> Path:
         if isinstance(path_like, Path):
             return path_like
         return Path(path_like)
@@ -213,7 +212,7 @@ class PlayblastAutomationTool:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         generated = self._playblast(request, target, frame_range)
-        generated_path = self._ensure_upath(generated)
+        generated_path = self._ensure_path(generated)
 
         metadata = self._collect_metadata(request, frame_range, timestamp)
 
@@ -223,7 +222,7 @@ class PlayblastAutomationTool:
             shotgrid_version = self._shotgrid.register_version(
                 request.project,
                 request.shot,
-                Path(generated_path),
+                generated_path,
                 description=description,
             )
             log.info(

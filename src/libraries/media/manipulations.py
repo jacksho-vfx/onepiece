@@ -4,7 +4,6 @@ Manipulations: audio conversion and sequence renumbering using PyAV.
 
 from pathlib import Path
 
-from upath import UPath
 import structlog
 import av
 import shutil
@@ -12,7 +11,7 @@ import shutil
 log = structlog.get_logger(__name__)
 
 
-def convert_audio_to_mono(input_audio: UPath, output_audio: UPath) -> UPath:
+def convert_audio_to_mono(input_audio: Path, output_audio: Path) -> Path:
     """
     Downmix a stereo audio file to mono using PyAV.
     """

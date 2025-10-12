@@ -6,12 +6,11 @@ from pathlib import Path
 from typing import Callable, List, Optional, Union
 
 import structlog
-from upath import UPath
 
 log = structlog.get_logger(__name__)
 
 
-PathLike = Union[UPath, Path, str]
+PathLike = Union[Path, str]
 
 
 def _normalise_path(path: PathLike) -> str:

@@ -1,9 +1,9 @@
 """Top-level Typer application exposing AWS utilities."""
 
+from pathlib import Path
 from typing import List, Optional
 
 import typer
-from upath import UPath
 
 from apps.onepiece.aws.ingest import app as ingest
 from apps.onepiece.aws.sync_from import sync_from as sync_from_command
@@ -37,7 +37,7 @@ def sync_from(
         bucket=bucket,
         show_code=show_code,
         folder=folder,
-        local_path=UPath(local_path),
+        local_path=Path(local_path),
         dry_run=dry_run,
         include=include,
         exclude=exclude,
@@ -69,7 +69,7 @@ def sync_to(
         bucket=bucket,
         show_code=show_code,
         folder=folder,
-        local_path=UPath(local_path),
+        local_path=Path(local_path),
         dry_run=dry_run,
         include=include,
         exclude=exclude,

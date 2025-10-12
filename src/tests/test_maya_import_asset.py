@@ -9,7 +9,7 @@ from libraries.dcc.maya import maya
 
 
 class DummyPath:
-    """Test double that mimics the subset of :class:`UPath` we rely on."""
+    """Test double that mimics the subset of :class:`pathlib.Path` we rely on."""
 
     def __init__(self, value: str) -> None:
         self._value = value

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from upath import UPath
 
 from libraries.dcc.maya.playblast_tool import (
     PlayblastAutomationTool,
@@ -25,7 +24,7 @@ def _create_request(tmp_path: Path, **overrides: Any) -> PlayblastRequest:
         artist="Nami.Swan",
         camera="anim:cam_main",
         version=3,
-        output_directory=UPath(tmp_path / "playblasts"),
+        output_directory=tmp_path / "playblasts",
         format="mov",
         extra_metadata={"status": "pending"},
     )
@@ -40,9 +39,9 @@ def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> P
 
 class _ReviewRecorder:
     def __init__(self) -> None:
-        self.calls: list[tuple[UPath, dict[str, Any]]] = []
+        self.calls: list[tuple[Path, dict[str, Any]]] = []
 
-    def upload(self, media_path: UPath, metadata: dict[str, Any]) -> str:
+    def upload(self, media_path: Path, metadata: dict[str, Any]) -> str:
         self.calls.append((media_path, metadata))
         return "review-001"
 
