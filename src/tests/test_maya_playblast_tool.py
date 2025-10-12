@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from upath import UPath
 
 from libraries.dcc.maya.playblast_tool import (
     PlayblastAutomationTool,
@@ -40,9 +39,9 @@ def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> P
 
 class _ReviewRecorder:
     def __init__(self) -> None:
-        self.calls: list[tuple[UPath, dict[str, Any]]] = []
+        self.calls: list[tuple[Path, dict[str, Any]]] = []
 
-    def upload(self, media_path: UPath, metadata: dict[str, Any]) -> str:
+    def upload(self, media_path: Path, metadata: dict[str, Any]) -> str:
         self.calls.append((media_path, metadata))
         return "review-001"
 

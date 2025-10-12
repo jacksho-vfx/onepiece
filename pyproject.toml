@@ -94,10 +94,6 @@ module = "apps.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "UPath"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "nuke"
 ignore_missing_imports = true
 

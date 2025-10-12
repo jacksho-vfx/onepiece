@@ -7,7 +7,6 @@ from typing import Any, cast
 
 import structlog
 import typer
-from upath import UPath
 
 from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
@@ -110,7 +109,7 @@ def package_playlist_command(
         raise OnePieceValidationError("Recipient must be either 'client' or 'vendor'.")
 
     sg_client = ShotgridClient()
-    package_destination = UPath(destination).expanduser()
+    package_destination = destination.expanduser()
 
     try:
         summary = package_playlist_for_mediashuttle(

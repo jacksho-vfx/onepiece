@@ -2,7 +2,8 @@
 Transformations: convert and create proxy media using PyAV.
 """
 
-from upath import UPath
+from pathlib import Path
+
 import av
 import structlog
 
@@ -10,10 +11,10 @@ log = structlog.get_logger(__name__)
 
 
 def create_1080p_proxy_from_exrs(
-    exr_sequence_dir: UPath,
-    output_mov: UPath,
+    exr_sequence_dir: Path,
+    output_mov: Path,
     fps: int = 24,
-) -> UPath:
+) -> Path:
     """
     Create a 1080p H.264 MOV proxy from an EXR image sequence.
 
@@ -50,11 +51,11 @@ def create_1080p_proxy_from_exrs(
 
 
 def convert_mov_to_exrs(
-    mov_path: UPath,
-    output_dir: UPath,
+    mov_path: Path,
+    output_dir: Path,
     fps: int = 24,
     start_number: int = 1001,
-) -> UPath:
+) -> Path:
     """
     Convert a MOV to an EXR sequence using PyAV and imageio.
     """

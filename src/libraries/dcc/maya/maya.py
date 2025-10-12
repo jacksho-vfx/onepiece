@@ -10,8 +10,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, cast
 
-import structlog
 import pymel.core as pm
+import structlog
 
 log = structlog.get_logger(__name__)
 
@@ -222,7 +222,7 @@ def open_scene(path: Path) -> None:
     Open a Maya scene file (.ma or .mb).
 
     Args:
-        path (UPath): Path to the Maya scene
+        path (Path): Path to the Maya scene
     """
     if not path.exists():
         log.error("maya_open_scene_failed", path=str(path))
@@ -257,7 +257,7 @@ def import_asset(path: Path) -> None:
     Import an asset or scene into the current Maya scene.
 
     Args:
-        path (UPath): Path to the Maya file (.ma, .mb, or FBX)
+        path (Path): Path to the Maya file (.ma, .mb, or FBX)
     """
     if not path.exists():
         log.error("maya_import_asset_failed", path=str(path))
@@ -282,7 +282,7 @@ def export_scene(path: Path) -> None:
     Export the current Maya scene to a file.
 
     Args:
-        path (UPath): Path to save the scene
+        path (Path): Path to save the scene
     """
     if not path:
         raise ValueError("Path must be provided to export Maya scene")

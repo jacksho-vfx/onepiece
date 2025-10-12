@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urljoin
 
-from upath import UPath
 import requests
 import structlog
 
@@ -37,7 +37,7 @@ class ShotGridClient:
         api_key: Optional[str] = None,
     ) -> None:
         cfg = load_config()
-        self.base_url = UPath(base_url or cfg.base_url)
+        self.base_url = base_url or cfg.base_url
         script_name = script_name or cfg.script_name
         api_key = api_key or cfg.api_key
 
@@ -49,13 +49,13 @@ class ShotGridClient:
     # Internal helpers
     # ------------------------------------------------------------------ #
     def _authenticate(self, script_name: str, api_key: str) -> None:
-        url = self.base_url / "api" / "v1" / "auth" / "access_token"
+        url = self._build_url("api", "v1", "auth", "access_token")
         payload = {
             "grant_type": "client_credentials",
             "client_id": script_name,
             "client_secret": api_key,
         }
-        r = self._session.post(str(url), json=payload)
+        r = self._session.post(url, json=payload)
         if not r.ok:
             log.error("auth_failed", status=r.status_code, text=r.text)
             raise ShotGridError(f"Authentication failed: {r.status_code}")
@@ -64,12 +64,12 @@ class ShotGridClient:
         log.info("auth_success", base_url=str(self.base_url))
 
     def _get(self, entity: str, filters: List[Dict[str, Any]], fields: str) -> Any:
-        url = self.base_url / "api" / "v1" / f"entities/{entity.lower()}s"
+        url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
         params: Dict[str, Any] = {"fields": fields}
         for idx, f in enumerate(filters):
             for key, value in f.items():
                 params[f"filter[{idx}][{key}]"] = value
-        r = self._session.get(str(url), params=params)
+        r = self._session.get(url, params=params)
         if not r.ok:
             log.error(
                 "http_get_failed", entity=entity, status=r.status_code, text=r.text
@@ -83,17 +83,22 @@ class ShotGridClient:
         attributes: Dict[str, Any],
         relationships: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        url = self.base_url / "api" / "v1" / f"entities/{entity.lower()}s"
+        url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
         payload: Dict[str, Any] = {"data": {"type": entity, "attributes": attributes}}
         if relationships:
             payload["data"]["relationships"] = relationships
-        r = self._session.post(str(url), json=payload)
+        r = self._session.post(url, json=payload)
         if not r.ok:
             log.error(
                 "http_post_failed", entity=entity, status=r.status_code, text=r.text
             )
             raise ShotGridError(f"POST {entity} failed: {r.text}")
         return r.json()["data"]
+
+    def _build_url(self, *segments: str) -> str:
+        base = self.base_url.rstrip("/")
+        path = "/".join(segment.strip("/") for segment in segments)
+        return urljoin(f"{base}/", path)
 
     def _get_single(
         self, entity: str, filters: List[Dict[str, Any]], fields: str = "id,name,code"
@@ -319,17 +324,14 @@ class ShotGridClient:
         if not media_path.exists():
             raise FileNotFoundError(f"Media file not found: {media_path}")
 
-        url = (
-            self.base_url
-            / "api"
-            / "v1"
-            / f"entity/{entity_type.lower()}s/{entity_id}/_upload"
+        url = self._build_url(
+            "api", "v1", f"entity/{entity_type.lower()}s/{entity_id}/_upload"
         )
 
         with media_path.open("rb") as fp:
             files = {"file": (media_path.name, fp, "application/octet-stream")}
             params = {"upload_type": upload_type}
-            response = self._session.post(str(url), files=files, params=params)
+            response = self._session.post(url, files=files, params=params)
 
         if not response.ok:
             log.error(

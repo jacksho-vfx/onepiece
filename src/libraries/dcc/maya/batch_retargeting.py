@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence, Tuple
 from uuid import uuid4
 
 import pymel.core as pm
 import structlog
-from upath import UPath
 
 log = structlog.get_logger(__name__)
 
@@ -33,8 +33,8 @@ class RetargetMapping:
 class RetargetResult:
     """Summary of a single clip retarget job."""
 
-    source_clip: UPath
-    output_scene: UPath
+    source_clip: Path
+    output_scene: Path
     constraints_applied: int
     baked_nodes: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -49,7 +49,7 @@ def _create_namespace(prefix: str) -> str:
     return namespace
 
 
-def _import_clip(path: UPath, namespace: str) -> None:
+def _import_clip(path: Path, namespace: str) -> None:
     """Import a mocap clip into the current Maya scene."""
 
     if not path.exists():
@@ -188,9 +188,9 @@ class BatchRetargetingTool:
 
     def __init__(
         self,
-        rig_scene: UPath,
+        rig_scene: Path,
         mapping: RetargetMapping,
-        output_directory: UPath,
+        output_directory: Path,
         rig_namespace: str | None = None,
         frame_range: tuple[float, float] | None = None,
     ) -> None:
@@ -205,7 +205,7 @@ class BatchRetargetingTool:
 
         self._output_directory.mkdir(parents=True, exist_ok=True)
 
-    def process(self, mocap_clips: Sequence[UPath]) -> List[RetargetResult]:
+    def process(self, mocap_clips: Sequence[Path]) -> List[RetargetResult]:
         """Retarget a sequence of mocap clips onto the configured rig."""
 
         results: List[RetargetResult] = []
@@ -216,7 +216,7 @@ class BatchRetargetingTool:
 
         return results
 
-    def _process_clip(self, clip: UPath) -> RetargetResult:
+    def _process_clip(self, clip: Path) -> RetargetResult:
         if not clip.exists():
             raise FileNotFoundError(clip)
 

@@ -175,7 +175,7 @@ class PlayblastAutomationTool:
             return _normalize_frame_range(request.frame_range)
         return _normalize_frame_range(self._timeline_query())
 
-    def _ensure_upath(self, path_like: Any) -> Path:
+    def _ensure_path(self, path_like: Any) -> Path:
         if isinstance(path_like, Path):
             return path_like
         return Path(path_like)
@@ -213,7 +213,7 @@ class PlayblastAutomationTool:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         generated = self._playblast(request, target, frame_range)
-        generated_path = self._ensure_upath(generated)
+        generated_path = self._ensure_path(generated)
 
         metadata = self._collect_metadata(request, frame_range, timestamp)
 
@@ -223,7 +223,7 @@ class PlayblastAutomationTool:
             shotgrid_version = self._shotgrid.register_version(
                 request.project,
                 request.shot,
-                Path(generated_path),
+                generated_path,
                 description=description,
             )
             log.info(

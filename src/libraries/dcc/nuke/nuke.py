@@ -20,7 +20,7 @@ def open_scene(path: Path) -> None:
     Open a Nuke script (.nk).
 
     Args:
-        path (UPath): Path to the .nk file
+        path (Path): Path to the .nk file
     """
     if not path.exists():
         log.error("nuke_open_scene_failed", path=str(path))
@@ -52,7 +52,7 @@ def export_scene(path: Path) -> None:
     Export the current Nuke script to a specific file.
 
     Args:
-        path (UPath): Path to save the script
+        path (Path): Path to save the script
     """
     if not path:
         raise ValueError("Path must be provided to export Nuke script")
@@ -70,7 +70,7 @@ def import_asset(path: Path) -> None:
     Import a Nuke node tree from another .nk script.
 
     Args:
-        path (UPath): Path to the .nk file to import
+        path (Path): Path to the .nk file to import
     """
     if not path.exists():
         log.error("nuke_import_asset_failed", path=str(path))
