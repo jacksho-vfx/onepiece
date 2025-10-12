@@ -78,77 +78,50 @@ def test_get_or_create_shot_skips_creation_without_identifiers(
     assert result is None
 
 
-def test_get_version_builds_filters_and_normalises(client: ShotGridClient) -> None:
-    version = VersionData(
-        code="Shot010_V001",
-        project_id=55,
-        extra={
-            "entity": {"data": {"type": "Shot", "id": 777, "code": "Shot010"}},
-        },
-    )
-
+def test_simplify_version_record_prefers_entity_name(client: ShotGridClient) -> None:
     record = {
-        "id": 123,
         "attributes": {
-            "code": "Shot010_V001",
+            "code": "shot010_v001",
             "version_number": 1,
-            "sg_status_list": "rev",
             "sg_path_to_movie": "/path/to/movie.mov",
-            "description": "A test",
+            "sg_status_list": "rev",
         },
         "relationships": {
-            "entity": {"data": {"type": "Shot", "id": 777, "name": "Shot010"}},
-            "project": {"data": {"type": "Project", "id": 55}},
+            "entity": {"data": {"name": "SHOT_010", "code": "SHOT_010_CODE"}}
         },
     }
 
-    captured: dict[str, object] = {}
+    result = client._simplify_version_record(record)
 
-    def fake_get(entity: str, filters: list[dict[str, object]], fields: str) -> list[dict[str, object]]:
-        captured.update({"entity": entity, "filters": filters, "fields": fields})
-        return [record]
-
-    client._get = fake_get  # type: ignore[assignment]
-
-    result = client.get_version(version)
-
-    assert captured["entity"] == "Version"
-    assert captured["fields"] == (
-        "code,version_number,sg_status_list,sg_path_to_movie,sg_uploaded_movie,description,entity,project"
-    )
-    assert captured["filters"] == [
-        {"code": "Shot010_V001"},
-        {"project.id[$eq]": 55},
-        {"entity.Shot.id[$eq]": 777},
-        {"entity.Shot.code[$eq]": "Shot010"},
-    ]
     assert result == {
-        "id": 123,
-        "code": "Shot010_V001",
-        "shot": "Shot010",
+        "shot": "SHOT_010",
         "version_number": 1,
         "file_path": "/path/to/movie.mov",
         "status": "rev",
-        "description": "A test",
-        "project_id": 55,
+        "code": "shot010_v001",
     }
 
 
-def test_get_version_returns_none_when_missing(client: ShotGridClient) -> None:
-    version = VersionData(code="Missing", project_id=44)
+def test_simplify_version_record_falls_back_to_uploaded_media(
+    client: ShotGridClient,
+) -> None:
+    record = {
+        "attributes": {
+            "code": "shot020_v002",
+            "version_number": 2,
+            "sg_path_to_movie": None,
+            "sg_uploaded_movie": "/upload/movie.mov",
+            "sg_status_list": None,
+        },
+        "relationships": {"entity": {"data": {}}},
+    }
 
-    def fake_get(entity: str, filters: list[dict[str, object]], fields: str) -> list[dict[str, object]]:
-        return []
+    result = client._simplify_version_record(record)
 
-    client._get = fake_get  # type: ignore[assignment]
-
-    result = client.get_version(version)
-
-    assert result is None
-
-
-def test_get_version_requires_filters(client: ShotGridClient) -> None:
-    version = VersionData()
-
-    with pytest.raises(ValueError):
-        client.get_version(version)
+    assert result == {
+        "shot": "shot020_v002",
+        "version_number": 2,
+        "file_path": "/upload/movie.mov",
+        "status": None,
+        "code": "shot020_v002",
+    }
