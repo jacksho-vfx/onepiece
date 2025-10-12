@@ -241,6 +241,7 @@ def save_scene(path: Path | None = None) -> None:
             currently open scene is saved in-place.
     """
     if path:
+        path.parent.mkdir(parents=True, exist_ok=True)
         pm.saveAs(str(path))
         log.info("maya_scene_saved_as", path=str(path))
     else:
@@ -285,6 +286,8 @@ def export_scene(path: Path) -> None:
     """
     if not path:
         raise ValueError("Path must be provided to export Maya scene")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     _export_all(path, force=True, type="mayaAscii")
     log.info("maya_scene_exported", path=str(path))

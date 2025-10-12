@@ -240,7 +240,10 @@ def _copy_output(src: Path, dst: Path, *, treat_dst_as_dir: bool = False) -> lis
 
     if src.is_dir():
         if dst.exists():
-            shutil.rmtree(dst)
+            if dst.is_symlink() or not dst.is_dir():
+                dst.unlink()
+            else:
+                shutil.rmtree(dst)
         shutil.copytree(src, dst)
         return [p for p in dst.rglob("*") if p.is_file()]
 
