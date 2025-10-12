@@ -195,9 +195,7 @@ class FtrackRestClient:
 
         if not project_id:
             raise ValueError("project_id must be provided")
-        payload = self._get(
-            "api", "projects", params={"filter": f"id={project_id}"}
-        )
+        payload = self._get("api", "projects", params={"filter": f"id={project_id}"})
         item = self._extract_item(payload)
         if item is None:
             return None

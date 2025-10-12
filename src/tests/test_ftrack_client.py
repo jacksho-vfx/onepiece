@@ -162,11 +162,7 @@ def test_list_helpers_validate_required_identifiers() -> None:
             "get_shot",
             "S1",
             "api/shots",
-            {
-                "data": [
-                    {"id": "S1", "name": "sh010", "project_id": "P1"}
-                ]
-            },
+            {"data": [{"id": "S1", "name": "sh010", "project_id": "P1"}]},
             FtrackShot,
         ),
         (
