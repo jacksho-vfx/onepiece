@@ -24,6 +24,75 @@ from libraries.shotgrid.models import PipelineStep, TaskCode, TaskData
 log = structlog.get_logger(__name__)
 
 
+def _version_view(
+    *, summary: bool
+) -> tuple[List[str], Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Return canonical Version fields and a parser for *summary* or *full* views."""
+
+    fields: List[str] = [
+        "code",
+        "version_number",
+        "sg_status_list",
+        "sg_path_to_movie",
+        "sg_uploaded_movie",
+        "entity",
+    ]
+    if not summary:
+        fields.extend(["description", "project"])
+
+    def parse(record: Dict[str, Any]) -> Dict[str, Any]:
+        attributes = record.get("attributes", {}) or {}
+        relationships = record.get("relationships", {}) or {}
+
+        entity_relationship = relationships.get("entity", {}) or {}
+        entity_data = (
+            entity_relationship.get("data", {})
+            if isinstance(entity_relationship, dict)
+            else {}
+        )
+
+        project_relationship = relationships.get("project", {}) or {}
+        project_data = (
+            project_relationship.get("data", {})
+            if isinstance(project_relationship, dict)
+            else {}
+        )
+
+        shot_name = (
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
+        )
+
+        file_path = attributes.get("sg_path_to_movie") or attributes.get(
+            "sg_uploaded_movie"
+        )
+
+        summary_view = {
+            "shot": shot_name,
+            "version_number": attributes.get("version_number"),
+            "file_path": file_path,
+            "status": attributes.get("sg_status_list"),
+            "code": attributes.get("code"),
+        }
+
+        if summary:
+            return summary_view
+
+        project_id = project_data.get("id") if isinstance(project_data, dict) else None
+
+        return {
+            "id": record.get("id"),
+            "code": summary_view["code"],
+            "shot": summary_view["shot"],
+            "version_number": summary_view["version_number"],
+            "file_path": summary_view["file_path"],
+            "status": summary_view["status"],
+            "description": attributes.get("description"),
+            "project_id": project_id,
+        }
+
+    return fields, parse
+
+
 class ShotGridError(Exception):
     """Raised when ShotGrid operations fail."""
 
@@ -153,46 +222,8 @@ class ShotGridClient:
 
     @staticmethod
     def _normalize_version(record: Dict[str, Any]) -> Dict[str, Any]:
-        attributes = record.get("attributes", {})
-        relationships = record.get("relationships", {})
-
-        entity_relationship = (
-            relationships.get("entity", {}) if isinstance(relationships, dict) else {}
-        )
-        entity_data = (
-            entity_relationship.get("data", {})
-            if isinstance(entity_relationship, dict)
-            else {}
-        )
-        project_relationship = (
-            relationships.get("project", {}) if isinstance(relationships, dict) else {}
-        )
-        project_data = (
-            project_relationship.get("data", {})
-            if isinstance(project_relationship, dict)
-            else {}
-        )
-
-        shot_name = (
-            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
-        )
-
-        file_path = attributes.get("sg_path_to_movie") or attributes.get(
-            "sg_uploaded_movie"
-        )
-
-        return {
-            "id": record.get("id"),
-            "code": attributes.get("code"),
-            "shot": shot_name,
-            "version_number": attributes.get("version_number"),
-            "file_path": file_path,
-            "status": attributes.get("sg_status_list"),
-            "description": attributes.get("description"),
-            "project_id": (
-                project_data.get("id") if isinstance(project_data, dict) else None
-            ),
-        }
+        _, parser = _version_view(summary=False)
+        return parser(record)
 
     def _get_single(
         self, entity: str, filters: List[Dict[str, Any]], fields: str = "id,name,code"
@@ -310,21 +341,9 @@ class ShotGridClient:
             return []
 
         filters = [{"id[$in]": ",".join(str(version_id) for version_id in version_ids)}]
-        fields = ",".join(
-            [
-                "code",
-                "version_number",
-                "sg_status_list",
-                "sg_path_to_movie",
-                "sg_uploaded_movie",
-                "description",
-                "entity",
-                "project",
-            ]
-        )
-
-        records = self._get("Version", filters, fields)
-        return [self._normalize_version(record) for record in records]
+        fields, parser = _version_view(summary=False)
+        records = self._get("Version", filters, ",".join(fields))
+        return [parser(record) for record in records]
 
     # ------------------------------------------------------------------ #
     # Episodes
@@ -411,19 +430,10 @@ class ShotGridClient:
             if project_id is not None
             else [{"project": project_name}]
         )
-        fields = ",".join(
-            [
-                "code",
-                "version_number",
-                "sg_status_list",
-                "sg_path_to_movie",
-                "sg_uploaded_movie",
-                "entity",
-            ]
-        )
-        records = self._get("Version", filters, fields)
+        fields, parser = _version_view(summary=True)
+        records = self._get("Version", filters, ",".join(fields))
 
-        versions = [self._simplify_version_record(record) for record in records]
+        versions = [parser(record) for record in records]
 
         log.info(
             "sg.get_versions_for_project",
@@ -434,48 +444,21 @@ class ShotGridClient:
 
     def _simplify_version_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """Convert a ShotGrid Version entity payload into a summary dictionary."""
-
-        attributes = record.get("attributes", {}) or {}
-        relationships = record.get("relationships", {}) or {}
-        entity_data = relationships.get("entity", {}).get("data", {}) or {}
-
-        shot_name = (
-            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
-        )
-
-        return {
-            "shot": shot_name,
-            "version_number": attributes.get("version_number"),
-            "file_path": attributes.get("sg_path_to_movie")
-            or attributes.get("sg_uploaded_movie"),
-            "status": attributes.get("sg_status_list"),
-            "code": attributes.get("code"),
-        }
+        _, parser = _version_view(summary=True)
+        return parser(record)
 
     def get_version(self, version_data: VersionData) -> Any:
         filters = self._build_version_filters(version_data)
         if not filters:
             raise ValueError("Version lookup requires at least one identifying field.")
 
-        fields = ",".join(
-            [
-                "code",
-                "version_number",
-                "sg_status_list",
-                "sg_path_to_movie",
-                "sg_uploaded_movie",
-                "description",
-                "entity",
-                "project",
-            ]
-        )
-
-        records = self._get("Version", filters, fields)
+        fields, parser = _version_view(summary=False)
+        records = self._get("Version", filters, ",".join(fields))
         if not records:
             log.info("sg.version_not_found", filters=filters)
             return None
 
-        return self._normalize_version(records[0])
+        return parser(records[0])
 
     def _build_version_filters(self, version_data: VersionData) -> List[Dict[str, Any]]:
         filters: List[Dict[str, Any]] = []
