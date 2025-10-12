@@ -200,3 +200,35 @@ def test_prepare_ingest_options_requires_project_and_show_code() -> None:
             checkpoint_threshold=None,
             upload_chunk_size=None,
         )
+
+
+def test_load_profile_expands_project_root_env_var(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    project_root = home / "project"
+    workspace = tmp_path / "workspace"
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("ONEPIECE_PROJECT_ROOT", "~/project")
+
+    project_config = project_root / "onepiece.toml"
+    _write(
+        project_config,
+        """
+default_profile = "project"
+
+[profiles.project]
+project = "Project"
+""".strip()
+        + "\n",
+    )
+
+    workspace.mkdir()
+
+    context = load_profile(workspace=workspace)
+
+    assert context.name == "project"
+    assert project_config in context.sources
+    assert context.data["project"] == "Project"
