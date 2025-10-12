@@ -14,10 +14,10 @@ from upath import UPath
 # --------------------------------------------------------------------------- #
 if "nuke" not in sys.modules:
     nuke_stub = types.ModuleType("nuke")
-    nuke_stub.scriptOpen = lambda *_args, **_kwargs: None
-    nuke_stub.scriptSave = lambda *_args, **_kwargs: None
-    nuke_stub.scriptSaveAs = lambda *_args, **_kwargs: None
-    nuke_stub.nodePaste = lambda *_args, **_kwargs: None
+    nuke_stub.scriptOpen = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
+    nuke_stub.scriptSave = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
+    nuke_stub.scriptSaveAs = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
+    nuke_stub.nodePaste = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
     sys.modules["nuke"] = nuke_stub
 
 from libraries.dcc.maya import maya
