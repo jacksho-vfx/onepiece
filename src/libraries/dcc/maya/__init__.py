@@ -39,6 +39,13 @@ from .auto_rig_validator import (  # noqa: F401
     RigValidationReport,
     validate_rig_import,
 )
+from .playblast_tool import (  # noqa: F401
+    PlayblastAutomationTool,
+    PlayblastRequest,
+    PlayblastResult,
+    ReviewUploader,
+    build_playblast_filename,
+)
 from .unreal_export_checker import (  # noqa: F401
     DEFAULT_ALLOWED_PREFIXES,
     DEFAULT_EXPECTED_ROOT,
@@ -62,6 +69,11 @@ __all__ = [
     "RigValidationIssue",
     "RigValidationReport",
     "validate_rig_import",
+    "PlayblastAutomationTool",
+    "PlayblastRequest",
+    "PlayblastResult",
+    "ReviewUploader",
+    "build_playblast_filename",
     "DEFAULT_ALLOWED_PREFIXES",
     "DEFAULT_EXPECTED_ROOT",
     "DEFAULT_EXPECTED_SCALE",
