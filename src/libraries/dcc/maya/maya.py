@@ -261,7 +261,17 @@ def import_asset(path: UPath) -> None:
         log.error("maya_import_asset_failed", path=str(path))
         raise FileNotFoundError(f"Maya asset not found: {str(path)}")
 
-    _import(path, type="mayaAscii" if path.name.endswith(".ma") else "mayaBinary")
+    import_kwargs: Dict[str, Any] = {}
+
+    extension = path.suffix.lower()
+    if extension == ".ma":
+        import_kwargs["type"] = "mayaAscii"
+    elif extension == ".mb":
+        import_kwargs["type"] = "mayaBinary"
+    elif extension == ".fbx":
+        import_kwargs["type"] = "FBX"
+
+    _import(path, **import_kwargs)
     log.info("maya_asset_imported", path=str(path))
 
 
