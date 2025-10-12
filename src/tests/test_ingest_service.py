@@ -143,6 +143,7 @@ def test_ingest_service_accepts_case_insensitive_show_code(tmp_path: Path) -> No
     assert report.processed_count == 1
     assert report.invalid_count == 0
 
+
 def test_ingest_service_returns_dry_run_report(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
