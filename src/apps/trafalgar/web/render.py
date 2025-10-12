@@ -616,9 +616,7 @@ class _JobRecord:
         if context is None:
             request = RenderJobRequest.model_validate(request_payload)
         else:
-            request = RenderJobRequest.model_validate(
-                request_payload, context=context
-            )
+            request = RenderJobRequest.model_validate(request_payload, context=context)
 
         return cls(
             job_id=str(payload["job_id"]),
