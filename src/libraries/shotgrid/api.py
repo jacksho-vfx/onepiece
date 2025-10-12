@@ -101,6 +101,49 @@ class ShotGridClient:
         path = "/".join(segment.strip("/") for segment in segments)
         return urljoin(f"{base}/", path)
 
+    @staticmethod
+    def _normalize_version(record: Dict[str, Any]) -> Dict[str, Any]:
+        attributes = record.get("attributes", {})
+        relationships = record.get("relationships", {})
+
+        entity_relationship = (
+            relationships.get("entity", {}) if isinstance(relationships, dict) else {}
+        )
+        entity_data = (
+            entity_relationship.get("data", {})
+            if isinstance(entity_relationship, dict)
+            else {}
+        )
+        project_relationship = (
+            relationships.get("project", {}) if isinstance(relationships, dict) else {}
+        )
+        project_data = (
+            project_relationship.get("data", {})
+            if isinstance(project_relationship, dict)
+            else {}
+        )
+
+        shot_name = (
+            entity_data.get("name") or entity_data.get("code") or attributes.get("code")
+        )
+
+        file_path = attributes.get("sg_path_to_movie") or attributes.get(
+            "sg_uploaded_movie"
+        )
+
+        return {
+            "id": record.get("id"),
+            "code": attributes.get("code"),
+            "shot": shot_name,
+            "version_number": attributes.get("version_number"),
+            "file_path": file_path,
+            "status": attributes.get("sg_status_list"),
+            "description": attributes.get("description"),
+            "project_id": (
+                project_data.get("id") if isinstance(project_data, dict) else None
+            ),
+        }
+
     def _get_single(
         self, entity: str, filters: List[Dict[str, Any]], fields: str = "id,name,code"
     ) -> Optional[Dict[str, Any]]:
@@ -290,7 +333,71 @@ class ShotGridClient:
         }
 
     def get_version(self, version_data: VersionData) -> Any:
-        return self.get_version(version_data)
+        filters = self._build_version_filters(version_data)
+        if not filters:
+            raise ValueError("Version lookup requires at least one identifying field.")
+
+        fields = ",".join(
+            [
+                "code",
+                "version_number",
+                "sg_status_list",
+                "sg_path_to_movie",
+                "sg_uploaded_movie",
+                "description",
+                "entity",
+                "project",
+            ]
+        )
+
+        records = self._get("Version", filters, fields)
+        if not records:
+            log.info("sg.version_not_found", filters=filters)
+            return None
+
+        return self._normalize_version(records[0])
+
+    def _build_version_filters(self, version_data: VersionData) -> List[Dict[str, Any]]:
+        filters: List[Dict[str, Any]] = []
+
+        if version_data.code:
+            filters.append({"code": version_data.code})
+
+        project_id = version_data.project_id or version_data.extra.get("project_id")
+        if project_id:
+            filters.append({"project.id[$eq]": project_id})
+
+        project_name = version_data.extra.get("project_name") or version_data.extra.get(
+            "project"
+        )
+        if project_name:
+            filters.append({"project": project_name})
+
+        shot_code = version_data.extra.get("shot") or version_data.extra.get(
+            "shot_code"
+        )
+        if shot_code:
+            filters.append({"entity.Shot.code[$eq]": shot_code})
+
+        entity_relationship = version_data.extra.get("entity")
+        if isinstance(entity_relationship, dict):
+            entity_data = entity_relationship.get("data", entity_relationship)
+            if isinstance(entity_data, dict):
+                entity_type = entity_data.get("type")
+                entity_id = entity_data.get("id")
+                entity_code = entity_data.get("code") or entity_data.get("name")
+
+                if entity_type and entity_id is not None:
+                    filters.append({f"entity.{entity_type}.id[$eq]": entity_id})
+                elif entity_id is not None:
+                    filters.append({"entity.id[$eq]": entity_id})
+
+                if entity_type and entity_code:
+                    filters.append({f"entity.{entity_type}.code[$eq]": entity_code})
+                elif entity_code:
+                    filters.append({"entity.code[$eq]": entity_code})
+
+        return filters
 
     def create_version(self, data: VersionData) -> Any:
         extra = dict(data.extra)
