@@ -33,7 +33,7 @@ def _create_request(tmp_path: Path, **overrides: Any) -> PlayblastRequest:
     return PlayblastRequest(**base)
 
 
-def _fake_playblast(_: PlayblastRequest, target: UPath, __: tuple[int, int]) -> UPath:
+def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> Path:
     Path(target).write_bytes(b"playblast")
     return target
 
@@ -53,10 +53,7 @@ def test_build_playblast_filename_normalizes_tokens(tmp_path: Path) -> None:
 
     filename = build_playblast_filename(request, timestamp)
 
-    assert (
-        filename
-        == "ONE_PIECE_EP_01_SH010_ANIM_CAM_MAIN_V007_NAMI_SWAN_20240211.mov"
-    )
+    assert filename == "ONE_PIECE_EP_01_SH010_ANIM_CAM_MAIN_V007_NAMI_SWAN_20240211.mov"
 
 
 def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:

@@ -11,7 +11,7 @@ import structlog
 from upath import UPath
 
 try:  # pragma: no cover - maya is optional in most environments
-    import pymel.core as pm  # type: ignore
+    import pymel.core as pm
 except Exception:  # pragma: no cover - fallback for non-Maya environments
     pm = None  # type: ignore[assignment]
 
@@ -21,7 +21,7 @@ log = structlog.get_logger(__name__)
 class ReviewUploader(Protocol):
     """Minimal interface for pushing playblasts to external review tools."""
 
-    def upload(self, media_path: UPath, metadata: Mapping[str, Any]) -> str | None:
+    def upload(self, media_path: Path, metadata: Mapping[str, Any]) -> str | None:
         """Upload ``media_path`` with ``metadata`` and return a review identifier."""
 
 
@@ -55,7 +55,7 @@ class PlayblastRequest:
 class PlayblastResult:
     """Summary produced once a playblast has been generated and registered."""
 
-    output_path: UPath
+    output_path: Path
     frame_range: tuple[int, int]
     metadata: Mapping[str, Any]
     shotgrid_version: Mapping[str, Any] | None = None
@@ -72,7 +72,9 @@ def _sanitize_token(token: str | None) -> str:
     return cleaned.upper()
 
 
-def _normalize_frame_range(frame_range: tuple[int | float, int | float]) -> tuple[int, int]:
+def _normalize_frame_range(
+    frame_range: tuple[int | float, int | float]
+) -> tuple[int, int]:
     start_raw, end_raw = frame_range
     start = int(round(float(start_raw)))
     end = int(round(float(end_raw)))
@@ -109,8 +111,8 @@ def _default_timeline_query() -> tuple[int, int]:  # pragma: no cover - requires
         raise RuntimeError(
             "Maya is not available; supply a frame range or custom timeline query."
         )
-    start = pm.playbackOptions(query=True, min=True)  # type: ignore[no-untyped-call]
-    end = pm.playbackOptions(query=True, max=True)  # type: ignore[no-untyped-call]
+    start = pm.playbackOptions(query=True, min=True)
+    end = pm.playbackOptions(query=True, max=True)
     return _normalize_frame_range((start, end))
 
 
@@ -145,7 +147,7 @@ def _default_playblast(
         end=frame_range[1],
         resolution=request.resolution,
     )
-    pm.playblast(**kwargs)  # type: ignore[no-untyped-call]
+    pm.playblast(**kwargs)
     return target
 
 
@@ -156,8 +158,9 @@ class PlayblastAutomationTool:
         self,
         *,
         timeline_query: Callable[[], tuple[int, int]] | None = None,
-        playblast_callback: Callable[[PlayblastRequest, UPath, tuple[int, int]], Any]
-        | None = None,
+        playblast_callback: (
+            Callable[[PlayblastRequest, UPath, tuple[int, int]], Any] | None
+        ) = None,
         clock: Callable[[], _dt.datetime] | None = None,
         shotgrid_client: Any | None = None,
         review_uploader: ReviewUploader | None = None,
@@ -173,10 +176,10 @@ class PlayblastAutomationTool:
             return _normalize_frame_range(request.frame_range)
         return _normalize_frame_range(self._timeline_query())
 
-    def _ensure_upath(self, path_like: Any) -> UPath:
-        if isinstance(path_like, UPath):
+    def _ensure_upath(self, path_like: Any) -> Path:
+        if isinstance(path_like, Path):
             return path_like
-        return UPath(path_like)
+        return Path(path_like)
 
     def _collect_metadata(
         self,
