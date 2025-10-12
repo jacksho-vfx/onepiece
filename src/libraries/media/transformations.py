@@ -65,13 +65,23 @@ def convert_mov_to_exrs(
     container = av.open(str(mov_path))
     video_stream = container.streams.video[0]
 
+    source_rate = getattr(video_stream, "average_rate", None) or video_stream.rate
+    try:
+        source_rate_value = float(source_rate)
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        source_rate_value = float(fps)
+
+    frame_interval = max(int(round(source_rate_value / float(fps))), 1)
+
     frame_number = start_number
+    frame_index = 0
     for frame in container.decode(video_stream):
-        if frame_number % int(video_stream.rate * (1 / fps)) == 0:
+        if frame_index % frame_interval == 0:
             img = frame.to_ndarray(format="rgb24")
             out_path = output_dir / f"frame.{frame_number:04d}.exr"
             iio.imwrite(str(out_path), img)
-        frame_number += 1
+            frame_number += 1
+        frame_index += 1
 
     container.close()
     return output_dir
