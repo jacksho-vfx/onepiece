@@ -26,7 +26,7 @@ def test_package_playlist_for_mediashuttle(
     tmp_path: Path, sg_client: ShotgridClient
 ) -> None:
     project = "OnePiece"
-    media_root = tmp_path / "media"
+    media_root = Path(tmp_path) / "media"
     media_root.mkdir()
 
     version_ids: list[int] = []
@@ -44,7 +44,7 @@ def test_package_playlist_for_mediashuttle(
 
     sg_client.register_playlist(project, "Client Review", version_ids)
 
-    destination = tmp_path / "packages"
+    destination = Path(tmp_path) / "packages"
     destination.mkdir()
 
     summary = package_playlist_for_mediashuttle(
@@ -77,7 +77,7 @@ def test_package_playlist_for_mediashuttle(
 
 
 def test_package_playlist_missing(tmp_path: Path, sg_client: ShotgridClient) -> None:
-    destination = tmp_path / "packages"
+    destination = Path(tmp_path) / "packages"
     destination.mkdir()
 
     with pytest.raises(ValueError):

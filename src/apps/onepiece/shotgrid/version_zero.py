@@ -55,7 +55,6 @@ def version_zero(
         task_description="Processing shots",
     ) as progress:
         for shot_name in shot_names:
-            status_message = "Skipped"
             log.info("processing_shot", shot=shot_name)
 
             try:

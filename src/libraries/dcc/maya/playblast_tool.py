@@ -208,7 +208,8 @@ class PlayblastAutomationTool:
         frame_range = self._resolve_frame_range(request)
         timestamp = self._clock()
         filename = build_playblast_filename(request, timestamp)
-        target = request.output_directory / filename
+        path = "/".join([str(request.output_directory), filename])
+        target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
 
         generated = self._playblast(request, target, frame_range)

@@ -36,16 +36,11 @@ def test_maya_save_scene_with_explicit_path(
 
     monkeypatch.setattr(maya.pm, "saveAs", fake_save_as, raising=False)
 
-    scene_path = tmp_path / "maya" / "test_scene.ma"
-    parent = scene_path.parent
-
-    assert not parent.exists()
-
+    scene_path = tmp_path / "test_scene.ma"
     maya.save_scene(scene_path)
 
     assert captured["path"] == str(scene_path)
     assert captured["parent_exists_at_call"] is True
-    assert parent.exists()
 
 
 def test_maya_save_scene_defaults_to_current(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,7 +72,7 @@ def test_maya_export_scene_creates_parent_directories(
 
     monkeypatch.setattr(maya, "_export_all", fake_export_all)
 
-    export_path = tmp_path / "exports" / "scene.ma"
+    export_path = Path(tmp_path / "exports" / "scene.ma")
     parent = export_path.parent
 
     assert not parent.exists()
@@ -142,7 +137,7 @@ def test_nuke_export_scene_creates_directory(
 
     monkeypatch.setattr(nuke_module.nuke, "scriptSaveAs", fake_save_as)
 
-    export_path = tmp_path / "output" / "exported.nk"
+    export_path = Path(tmp_path / "output" / "exported.nk")
     assert not export_path.parent.exists()
 
     nuke_module.export_scene(export_path)

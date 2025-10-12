@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
@@ -13,18 +12,17 @@ def sync_to(
     bucket: str,
     show_code: str,
     folder: str,
-    local_path: Path,
+    local_path: str,
     dry_run: bool = False,
     include: list[str] | None = typer.Option(None, "--include"),
     exclude: list[str] | None = typer.Option(None, "--exclude"),
     profile: str | None = None,
 ) -> None:
-    """
-    Sync local folder TO S3 using s5cmd with optional dry-run and filters.
-    """
+    """Sync local folder TO S3 using s5cmd with optional dry-run and filters."""
     include = include or []
     exclude = exclude or []
 
+    source = str(Path(local_path))  # normalize path safely
     destination = f"s3://{bucket}/{show_code}/{folder}"
 
     with progress_tracker(
@@ -41,8 +39,9 @@ def sync_to(
             description = line or "Syncing files"
             progress.advance(description=description)
 
+        # ✅ send plain strings, not Paths
         s5_sync(
-            source=local_path,
+            source=source,
             destination=destination,
             dry_run=dry_run,
             include=include,
@@ -56,5 +55,5 @@ def sync_to(
 
         progress.update_total(max(events, 1))
         progress.succeed(
-            f"Synchronized {local_path} → {destination} (dry-run={dry_run!s})."
+            f"Synchronized {source} → {destination} (dry-run={dry_run!s})."
         )

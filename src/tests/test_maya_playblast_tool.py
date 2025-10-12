@@ -24,7 +24,7 @@ def _create_request(tmp_path: Path, **overrides: Any) -> PlayblastRequest:
         artist="Nami.Swan",
         camera="anim:cam_main",
         version=3,
-        output_directory=tmp_path / "playblasts",
+        output_directory=Path(tmp_path / "playblasts"),
         format="mov",
         extra_metadata={"status": "pending"},
     )
