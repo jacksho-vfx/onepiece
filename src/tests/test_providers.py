@@ -7,15 +7,15 @@ import pytest
 
 from apps.trafalgar.providers import (
     DeliveryProvider,
-    ProviderConfigurationError,
     ProviderMetadata,
-    ProviderNotFoundError,
-    ProviderRegistry,
     ReconcileDataProvider,
+    ProviderRegistry,
+    ProviderNotFoundError,
+    ProviderConfigurationError,
 )
 
 
-class ExampleDeliveryProvider(DeliveryProvider):
+class ExampleDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="example-delivery",
         version="1.0",
@@ -27,14 +27,16 @@ class ExampleDeliveryProvider(DeliveryProvider):
         return []
 
 
-class BrokenDeliveryProvider(DeliveryProvider):
-    metadata = object()  # type: ignore[assignment]
+class BrokenDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
+    metadata = object()
 
-    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]:  # pragma: no cover - not executed
+    def list_deliveries(
+        self, project_name: str
+    ) -> Sequence[Mapping[str, Any]]:  # pragma: no cover - not executed
         return []
 
 
-class EntryPointDeliveryProvider(DeliveryProvider):
+class EntryPointDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="entry-delivery",
         version="1.0",
@@ -46,7 +48,7 @@ class EntryPointDeliveryProvider(DeliveryProvider):
         return []
 
 
-class EntryPointReconcileProvider(ReconcileDataProvider):
+class EntryPointReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="entry-reconcile",
         version="1.0",
@@ -104,5 +106,5 @@ def test_provider_registry_loads_entry_points(monkeypatch: pytest.MonkeyPatch) -
     delivery = registry.create("delivery", "entry-delivery")
     reconcile = registry.create("reconcile", "entry-reconcile")
 
-    assert isinstance(delivery, EntryPointDeliveryProvider)
-    assert isinstance(reconcile, EntryPointReconcileProvider)
+    assert delivery.provider_type == EntryPointDeliveryProvider.provider_type
+    assert reconcile.provider_type == EntryPointReconcileProvider.provider_type

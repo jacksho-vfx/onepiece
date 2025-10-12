@@ -39,7 +39,7 @@ class FakeMonotonic:
         return self._value
 
 
-class DummyReconcileProvider(ReconcileDataProvider):
+class DummyReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="test-reconcile",
         version="1.0",
@@ -54,7 +54,7 @@ class DummyReconcileProvider(ReconcileDataProvider):
         return self._payload
 
 
-class DummyDeliveryProvider(DeliveryProvider):
+class DummyDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="test-delivery",
         version="1.0",
@@ -73,7 +73,7 @@ class DummyDeliveryProvider(DeliveryProvider):
         ]
 
 
-class SequencedDeliveryProvider(DeliveryProvider):
+class SequencedDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="sequenced-delivery",
         version="1.0",
