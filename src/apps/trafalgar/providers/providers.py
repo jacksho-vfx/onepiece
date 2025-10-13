@@ -105,7 +105,10 @@ class ProviderRegistry:
 
         metadata = provider_cls.validate_metadata()
         providers_for_type = self._providers[provider_type]
-        if metadata.name in providers_for_type:
+        existing_cls = providers_for_type.get(metadata.name)
+        if existing_cls is not None:
+            if existing_cls is provider_cls:
+                return
             msg = (
                 f"provider '{metadata.name}' already registered for type "
                 f"'{provider_type}'"

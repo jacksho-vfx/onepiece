@@ -63,6 +63,7 @@ class EntryPointReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
 def test_provider_registry_registers_and_creates() -> None:
     registry = ProviderRegistry()
     registry.register(ExampleDeliveryProvider, default=True)
+    registry.register(ExampleDeliveryProvider)
 
     instance = registry.create_default("delivery")
     assert isinstance(instance, ExampleDeliveryProvider)
