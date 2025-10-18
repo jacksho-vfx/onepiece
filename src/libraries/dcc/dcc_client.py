@@ -357,11 +357,15 @@ def _load_package_metadata(package_dir: Path) -> Mapping[str, JSONValue] | None:
     try:
         data = json.loads(metadata_path.read_text())
     except FileNotFoundError:
-        log.debug("Maya validation skipped; metadata.json missing", extra={"package": str(package_dir)})
+        log.debug(
+            "Maya validation skipped; metadata.json missing",
+            extra={"package": str(package_dir)},
+        )
         return None
     except json.JSONDecodeError as exc:  # pragma: no cover - defensive
         log.warning(
-            "Maya validation skipped; metadata.json unreadable", extra={"package": str(package_dir), "error": str(exc)}
+            "Maya validation skipped; metadata.json unreadable",
+            extra={"package": str(package_dir), "error": str(exc)},
         )
         return None
 
@@ -406,7 +410,11 @@ def _load_skeleton_summary(
         except json.JSONDecodeError as exc:  # pragma: no cover - defensive
             log.warning(
                 "Maya validation skipped; skeleton summary unreadable",
-                extra={"package": str(package_dir), "path": skeleton_path.name, "error": str(exc)},
+                extra={
+                    "package": str(package_dir),
+                    "path": skeleton_path.name,
+                    "error": str(exc),
+                },
             )
             return None
         if not isinstance(payload, Mapping):
@@ -464,7 +472,7 @@ def _gather_maya_validation_kwargs(package_dir: Path) -> dict[str, Any] | None:
 
     scale_value = unreal_data.get("scale")
     try:
-        scale = float(scale_value)
+        scale = float(scale_value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         log.warning(
             "Maya validation skipped; scale invalid",

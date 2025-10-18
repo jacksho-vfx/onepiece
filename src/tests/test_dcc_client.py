@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +24,10 @@ from libraries.dcc.dcc_client import (
     publish_scene,
     verify_dcc_dependencies,
 )
-from libraries.dcc.maya.unreal_export_checker import UnrealExportIssue, UnrealExportReport
+from libraries.dcc.maya.unreal_export_checker import (
+    UnrealExportIssue,
+    UnrealExportReport,
+)
 
 
 @patch("subprocess.run")
@@ -106,7 +110,7 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
 
 def _create_publish_inputs(
     tmp_path: Path,
-) -> tuple[Path, Path, Path, dict[str, str], Path]:
+) -> tuple[Path, Path, Path, dict[str, Any], Path]:
     renders = tmp_path / "renders"
     renders.mkdir()
     render_file = renders / "beauty.exr"
@@ -120,7 +124,7 @@ def _create_publish_inputs(
     otio = tmp_path / "edit.otio"
     otio.write_text("otio data")
 
-    metadata: dict[str, str] = {"shot": "010"}
+    metadata: dict[str, Any] = {"shot": "010"}
 
     destination = tmp_path / "published"
 

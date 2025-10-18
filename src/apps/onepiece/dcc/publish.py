@@ -92,9 +92,7 @@ def _format_maya_unreal_summary(report: UnrealExportReport) -> str:
     if report.issues:
         lines.append("  Issues:")
         for issue in report.issues:
-            lines.append(
-                f"    - [{issue.severity}] {issue.code}: {issue.message}"
-            )
+            lines.append(f"    - [{issue.severity}] {issue.code}: {issue.message}")
     else:
         lines.append("  Issues: None")
 
