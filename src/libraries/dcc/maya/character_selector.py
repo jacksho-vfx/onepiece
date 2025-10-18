@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - replaced by maya.__init__ stub
 try:  # pragma: no cover - Maya is not available in CI
     import maya.cmds as maya_cmds
 except ModuleNotFoundError:  # pragma: no cover - replaced by maya.__init__ stub
-    maya_cmds = None  # type: ignore[assignment]
+    maya_cmds = None
 
 
 RigPredicate = Callable[[Any], bool]
@@ -170,7 +170,7 @@ class CharacterSelectorPanel:
         target = rig.selection_target()
         self.cmds.select(target, replace=True)
 
-    def show(self, dock: bool = True) -> str:
+    def show(self, dock: bool = True) -> Any:
         """Create the Maya UI for the panel and return the control name."""
 
         self.refresh()
@@ -182,9 +182,7 @@ class CharacterSelectorPanel:
         if hasattr(cmds, "workspaceControl") and dock:
             if cmds.workspaceControl(panel_name, exists=True):
                 cmds.deleteUI(panel_name)
-            control = cmds.workspaceControl(  # type: ignore[call-arg]
-                panel_name, label=title, retain=False
-            )
+            control = cmds.workspaceControl(panel_name, label=title, retain=False)
             self._build_control_contents()
             return control
 
@@ -219,7 +217,9 @@ class CharacterSelectorPanel:
             )
 
     @classmethod
-    def show_panel(cls, dock: bool = True, pm: Any | None = None, cmds: Any | None = None) -> "CharacterSelectorPanel":
+    def show_panel(
+        cls, dock: bool = True, pm: Any | None = None, cmds: Any | None = None
+    ) -> "CharacterSelectorPanel":
         """Convenience factory that creates and shows the panel."""
 
         panel = cls(pm=pm, cmds=cmds)
