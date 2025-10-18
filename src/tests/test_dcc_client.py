@@ -23,6 +23,7 @@ from libraries.dcc.dcc_client import (
     publish_scene,
     verify_dcc_dependencies,
 )
+from libraries.dcc.maya.unreal_export_checker import UnrealExportIssue, UnrealExportReport
 
 
 @patch("subprocess.run")
@@ -310,6 +311,123 @@ def test_publish_scene_supports_direct_upload(
 
     metadata_path = expected_package / "metadata.json"
     assert json.loads(metadata_path.read_text()) == metadata
+
+
+@patch("libraries.dcc.dcc_client.validate_unreal_export")
+@patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_runs_maya_validation(
+    sync_mock: MagicMock,
+    validate_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    metadata["maya"] = {
+        "unreal_export": {
+            "asset_name": "SK_Hero",
+            "scale": 1.0,
+            "skeleton_summary": {
+                "root": "root",
+                "joints": ["root", "pelvis", "spine_01"],
+            },
+        }
+    }
+
+    report = UnrealExportReport(
+        asset_name="SK_Hero",
+        scale_valid=True,
+        skeleton_valid=True,
+        naming_valid=True,
+        issues=(),
+    )
+    validate_mock.return_value = report
+
+    callbacks: list[UnrealExportReport] = []
+
+    package_path = publish_scene(
+        SupportedDCC.MAYA,
+        scene_name="ep01_sh030",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["mtoa", "bifrost"],
+        required_assets=(),
+        maya_validation_callback=callbacks.append,
+    )
+
+    expected_package = destination / "ep01_sh030"
+    assert package_path == expected_package
+
+    validate_mock.assert_called_once()
+    kwargs = validate_mock.call_args.kwargs
+    assert kwargs["asset_name"] == "SK_Hero"
+    assert kwargs["scale"] == pytest.approx(1.0)
+    assert kwargs["skeleton_root"] == "root"
+    assert kwargs["joints"] == ("root", "pelvis", "spine_01")
+
+    assert callbacks == [report]
+    sync_mock.assert_called_once()
+
+
+@patch("libraries.dcc.dcc_client.validate_unreal_export")
+@patch("libraries.dcc.dcc_client.s5_sync")
+def test_publish_scene_maya_validation_failure(
+    sync_mock: MagicMock,
+    validate_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    metadata["maya"] = {
+        "unreal_export": {
+            "asset_name": "SK_Villain",
+            "scale": 1.0,
+            "skeleton_summary": {
+                "root": "world",
+                "joints": ["world"],
+            },
+        }
+    }
+
+    issue = UnrealExportIssue(
+        code="SKELETON_ROOT_MISMATCH",
+        message="Skeleton root must be root",
+        severity="error",
+    )
+    report = UnrealExportReport(
+        asset_name="SK_Villain",
+        scale_valid=True,
+        skeleton_valid=False,
+        naming_valid=True,
+        issues=(issue,),
+    )
+    validate_mock.return_value = report
+
+    callbacks: list[UnrealExportReport] = []
+
+    with pytest.raises(RuntimeError) as excinfo:
+        publish_scene(
+            SupportedDCC.MAYA,
+            scene_name="ep01_sh031",
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata,
+            destination=destination,
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            plugin_inventory=["mtoa", "bifrost"],
+            required_assets=(),
+            maya_validation_callback=callbacks.append,
+        )
+
+    assert "SKELETON_ROOT_MISMATCH" in str(excinfo.value)
+    assert callbacks == [report]
+    sync_mock.assert_not_called()
 
 
 @patch("libraries.dcc.dcc_client.s5_sync")
