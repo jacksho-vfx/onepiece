@@ -14,6 +14,7 @@ from libraries.dcc.dcc_client import (
     JSONValue,
     publish_scene,
 )
+from libraries.dcc.maya.unreal_export_checker import UnrealExportReport
 from libraries.validations.dcc import validate_dcc
 
 
@@ -77,6 +78,27 @@ def _format_dependency_summary(report: DCCDependencyReport) -> str:
     return "\n".join(lines)
 
 
+def _format_maya_unreal_summary(report: UnrealExportReport) -> str:
+    def _yes_no(flag: bool) -> str:
+        return "Yes" if flag else "No"
+
+    lines = [
+        f"Maya Unreal export validation for {report.asset_name}",
+        f"  Scale valid: {_yes_no(report.scale_valid)}",
+        f"  Skeleton valid: {_yes_no(report.skeleton_valid)}",
+        f"  Naming valid: {_yes_no(report.naming_valid)}",
+    ]
+
+    if report.issues:
+        lines.append("  Issues:")
+        for issue in report.issues:
+            lines.append(f"    - [{issue.severity}] {issue.code}: {issue.message}")
+    else:
+        lines.append("  Issues: None")
+
+    return "\n".join(lines)
+
+
 @app.command("publish")
 def publish(
     dcc: str = typer.Option(..., "--dcc", help="DCC that produced the scene."),
@@ -130,10 +152,15 @@ def publish(
     metadata_dict = _load_metadata(metadata)
 
     report: DCCDependencyReport | None = None
+    maya_report: UnrealExportReport | None = None
 
     def capture_report(dependency_report: DCCDependencyReport) -> None:
         nonlocal report
         report = dependency_report
+
+    def capture_maya_report(unreal_report: UnrealExportReport) -> None:
+        nonlocal maya_report
+        maya_report = unreal_report
 
     package_path = publish_scene(
         resolved_dcc,
@@ -149,11 +176,16 @@ def publish(
         profile=profile,
         direct_s3_path=direct_upload_path,
         dependency_callback=capture_report if dependency_summary else None,
+        maya_validation_callback=capture_maya_report if dependency_summary else None,
         dry_run=dry_run,
     )
 
     log.info("cli_publish_completed", package=str(package_path))
     typer.echo(f"Published package created at {package_path}")
 
-    if dependency_summary and report is not None:
-        typer.echo(_format_dependency_summary(report))
+    if dependency_summary:
+        if report is not None:
+            typer.echo(_format_dependency_summary(report))
+        if maya_report is not None:
+            typer.echo("")
+            typer.echo(_format_maya_unreal_summary(maya_report))
