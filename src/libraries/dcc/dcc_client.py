@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Literal, TypeAlias
 
 import logging
@@ -314,6 +314,7 @@ def _prepare_package_contents(
 ) -> tuple[Path, list[Path], list[Path]]:
     """Create the package directory and populate it with scene outputs."""
 
+    _validate_scene_name(scene_name)
     package_dir = destination / scene_name
     package_dir.mkdir(parents=True, exist_ok=True)
 
@@ -326,6 +327,32 @@ def _prepare_package_contents(
     _copy_output(Path(otio), package_dir / "otio", treat_dst_as_dir=True)
 
     return package_dir, renders_files, previews_files
+
+
+_INVALID_SCENE_NAME_MESSAGE = (
+    "scene_name must be a simple name without path separators or traversal components"
+)
+
+
+def _validate_scene_name(scene_name: str) -> None:
+    """Ensure ``scene_name`` cannot escape the destination directory."""
+
+    if not scene_name or not scene_name.strip():
+        raise ValueError(_INVALID_SCENE_NAME_MESSAGE)
+
+    if scene_name in {".", ".."}:
+        raise ValueError(_INVALID_SCENE_NAME_MESSAGE)
+
+    candidate = PurePath(scene_name)
+    if candidate.is_absolute():
+        raise ValueError(_INVALID_SCENE_NAME_MESSAGE)
+
+    separators = {os.sep, os.altsep, "/", "\\"}
+    if any(sep and sep in scene_name for sep in separators):
+        raise ValueError(_INVALID_SCENE_NAME_MESSAGE)
+
+    if any(part in {".", ".."} for part in candidate.parts):
+        raise ValueError(_INVALID_SCENE_NAME_MESSAGE)
 
 
 def _write_metadata_and_thumbnails(

@@ -240,3 +240,50 @@ def test_publish_cli_validates_direct_upload_path(
     )
 
     assert result.exit_code != 0
+
+
+def test_publish_cli_rejects_dangerous_scene_name(tmp_path: Path) -> None:
+    renders = tmp_path / "renders"
+    renders.mkdir()
+    (renders / "beauty.exr").write_text("beauty")
+
+    previews = tmp_path / "previews"
+    previews.mkdir()
+    (previews / "preview.jpg").write_text("preview")
+
+    otio = tmp_path / "edit.otio"
+    otio.write_text("otio")
+
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps({"shot": "010"}))
+
+    destination = tmp_path / "package"
+    destination.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "--dcc",
+            "Nuke",
+            "--scene-name",
+            "../evil",
+            "--renders",
+            str(renders),
+            "--previews",
+            str(previews),
+            "--otio",
+            str(otio),
+            "--metadata",
+            str(metadata),
+            "--destination",
+            str(destination),
+            "--bucket",
+            "bucket",
+            "--show-code",
+            "OP",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid value for --scene-name" in result.output
+    assert "scene_name must be a simple name" in result.output
