@@ -69,9 +69,7 @@ def _load_metadata(package_dir: Path) -> Mapping[str, Any]:
     try:
         data = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise UnrealImportError(
-            f"Metadata JSON is invalid: {exc}"
-        ) from exc
+        raise UnrealImportError(f"Metadata JSON is invalid: {exc}") from exc
 
     if not isinstance(data, Mapping):
         raise UnrealImportError("Metadata JSON must contain an object")
@@ -133,7 +131,7 @@ def _collect_import_summaries(
     if not isinstance(unreal_section, Mapping):
         raise UnrealImportError("Metadata missing 'unreal' section")
 
-    assets: Sequence[object] | None = unreal_section.get("assets")  # type: ignore[assignment]
+    assets: Sequence[object] | None = unreal_section.get("assets")
     if not isinstance(assets, Sequence) or not assets:
         raise UnrealImportError("Metadata must describe at least one Unreal asset")
 
@@ -159,7 +157,9 @@ def _collect_import_summaries(
         if destination_path is None:
             destination_path = default_destination or f"/Game/{project}"
         if not isinstance(destination_path, str) or not destination_path:
-            raise UnrealImportError("destination_path must resolve to a non-empty string")
+            raise UnrealImportError(
+                "destination_path must resolve to a non-empty string"
+            )
 
         destination_name = raw_entry.get("destination_name")
         if destination_name is None:
@@ -171,12 +171,8 @@ def _collect_import_summaries(
         if factory_class is not None and not isinstance(factory_class, str):
             raise UnrealImportError("factory_class must be a string when provided")
 
-        task_settings = _normalise_task_settings(
-            raw_entry.get("task_options")  # type: ignore[arg-type]
-        )
-        factory_settings = _normalise_factory_settings(
-            raw_entry.get("factory_options")  # type: ignore[arg-type]
-        )
+        task_settings = _normalise_task_settings(raw_entry.get("task_options"))
+        factory_settings = _normalise_factory_settings(raw_entry.get("factory_options"))
 
         summaries.append(
             UnrealImportSummary(

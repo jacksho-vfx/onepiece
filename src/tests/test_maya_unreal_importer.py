@@ -147,7 +147,9 @@ def test_unreal_importer_rejects_failed_validation(tmp_path: Path) -> None:
         importer.import_package(package, project="OP", asset_name="Hero")
 
 
-def test_unreal_import_cli_outputs_dry_run_summary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_unreal_import_cli_outputs_dry_run_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     package = _package_with_metadata(tmp_path)
     runner = CliRunner()
     called: dict[str, object] = {}
@@ -200,7 +202,7 @@ def test_unreal_import_cli_outputs_dry_run_summary(monkeypatch: pytest.MonkeyPat
     assert called["project"] == "OP"
     assert called["asset"] == "Hero"
     assert called["dry_run"] is True
-    assert "\"destination_path\": \"/Game/Shows/OP/Heroes\"" in result.output
+    assert '"destination_path": "/Game/Shows/OP/Heroes"' in result.output
 
 
 def test_unreal_import_cli_surfaces_import_errors(
