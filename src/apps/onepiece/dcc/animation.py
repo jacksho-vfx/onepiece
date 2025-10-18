@@ -155,12 +155,12 @@ def trigger_playblast(
     version: int = typer.Option(
         ..., "--version", min=0, help="Playblast version number."
     ),
-    output_directory: Path = typer.Option(
+    output_directory: str = typer.Option(
         ...,
         "--output-directory",
         dir_okay=True,
         file_okay=False,
-        path_type=Path,
+        path_type=str,
         help="Directory where the playblast should be written.",
     ),
     sequence: str | None = typer.Option(
@@ -213,7 +213,7 @@ def trigger_playblast(
             artist=artist,
             camera=camera,
             version=version,
-            output_directory=output_directory,
+            output_directory=Path(output_directory),
             format=format,
             codec=codec,
             resolution=(width, height),
