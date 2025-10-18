@@ -177,7 +177,9 @@ def publish(
             profile=profile,
             direct_s3_path=direct_upload_path,
             dependency_callback=capture_report if dependency_summary else None,
-            maya_validation_callback=capture_maya_report if dependency_summary else None,
+            maya_validation_callback=(
+                capture_maya_report if dependency_summary else None
+            ),
             dry_run=dry_run,
         )
     except ValueError as exc:
