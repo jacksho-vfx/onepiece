@@ -32,6 +32,11 @@ from .batch_exporter import (  # noqa: F401
     ExportFormat,
     ExportRecord,
 )
+from .character_selector import (  # noqa: F401
+    CharacterSelectorPanel,
+    RigDescriptor,
+    discover_rigs,
+)
 from .batch_retargeting import (  # noqa: F401
     BatchRetargetingTool,
     RetargetError,
@@ -80,6 +85,9 @@ __all__ = [
     "BatchExporter",
     "ExportFormat",
     "ExportRecord",
+    "CharacterSelectorPanel",
+    "RigDescriptor",
+    "discover_rigs",
     "BatchRetargetingTool",
     "RetargetError",
     "RetargetMapping",
