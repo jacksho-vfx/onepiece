@@ -114,12 +114,14 @@ def run_cleanup_scene(
 ) -> None:
     """Run Maya scene cleanup helpers with configurable operations."""
 
-    if not any((
-        remove_unused_references,
-        clean_namespaces,
-        optimize_layers,
-        prune_unknown_nodes,
-    )):
+    if not any(
+        (
+            remove_unused_references,
+            clean_namespaces,
+            optimize_layers,
+            prune_unknown_nodes,
+        )
+    ):
         raise typer.BadParameter("At least one cleanup operation must be enabled")
 
     stats = cleanup_scene(
@@ -142,11 +144,17 @@ def run_cleanup_scene(
 
 @app.command("playblast")
 def trigger_playblast(
-    project: str = typer.Option(..., "--project", help="Project code for the playblast."),
+    project: str = typer.Option(
+        ..., "--project", help="Project code for the playblast."
+    ),
     shot: str = typer.Option(..., "--shot", help="Shot identifier."),
-    artist: str = typer.Option(..., "--artist", help="Artist generating the playblast."),
+    artist: str = typer.Option(
+        ..., "--artist", help="Artist generating the playblast."
+    ),
     camera: str = typer.Option(..., "--camera", help="Camera used for rendering."),
-    version: int = typer.Option(..., "--version", min=0, help="Playblast version number."),
+    version: int = typer.Option(
+        ..., "--version", min=0, help="Playblast version number."
+    ),
     output_directory: Path = typer.Option(
         ...,
         "--output-directory",
@@ -158,10 +166,14 @@ def trigger_playblast(
     sequence: str | None = typer.Option(
         None, "--sequence", help="Optional sequence identifier."
     ),
-    format: str = typer.Option("mov", "--format", help="File format for the playblast."),
+    format: str = typer.Option(
+        "mov", "--format", help="File format for the playblast."
+    ),
     codec: str = typer.Option("h264", "--codec", help="Codec used when rendering."),
     width: int = typer.Option(1920, "--width", min=1, help="Output width in pixels."),
-    height: int = typer.Option(1080, "--height", min=1, help="Output height in pixels."),
+    height: int = typer.Option(
+        1080, "--height", min=1, help="Output height in pixels."
+    ),
     frame_start: int | None = typer.Option(
         None, "--frame-start", help="First frame to capture."
     ),

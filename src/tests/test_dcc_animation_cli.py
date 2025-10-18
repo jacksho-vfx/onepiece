@@ -32,8 +32,12 @@ def test_debug_animation_reports_and_logs(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(dcc_animation, "log", log)
 
     issues = (
-        SimpleNamespace(code="FRAME_RANGE_INVALID", message="Frame range broken", severity="error"),
-        SimpleNamespace(code="CACHE_NOT_LOADED", message="Cache not loaded", severity="warning"),
+        SimpleNamespace(
+            code="FRAME_RANGE_INVALID", message="Frame range broken", severity="error"
+        ),
+        SimpleNamespace(
+            code="CACHE_NOT_LOADED", message="Cache not loaded", severity="warning"
+        ),
     )
     report = SimpleNamespace(issues=issues)
 
@@ -45,7 +49,9 @@ def test_debug_animation_reports_and_logs(monkeypatch: MonkeyPatch) -> None:
 
     monkeypatch.setattr(dcc_animation, "debug_animation", fake_debug_animation)
 
-    result = runner.invoke(dcc_animation.app, ["debug-animation", "--scene-name", "shot010"])
+    result = runner.invoke(
+        dcc_animation.app, ["debug-animation", "--scene-name", "shot010"]
+    )
 
     assert result.exit_code == dcc_animation.OnePieceValidationError.exit_code
     assert "Animation issues for shot010" in result.output
@@ -100,7 +106,9 @@ def test_cleanup_scene_logs_summary(monkeypatch: MonkeyPatch) -> None:
     assert any(event == "dcc_animation_cleanup_summary" for event, _ in log.records)
 
 
-def test_playblast_validates_frame_range(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_playblast_validates_frame_range(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     log = DummyLogger()
     monkeypatch.setattr(dcc_animation, "log", log)
 
@@ -130,12 +138,14 @@ def test_playblast_validates_frame_range(monkeypatch: MonkeyPatch, tmp_path: Pat
     assert log.records == []
 
 
-def test_playblast_triggers_tool_and_logs(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_playblast_triggers_tool_and_logs(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     log = DummyLogger()
     monkeypatch.setattr(dcc_animation, "log", log)
 
     extra_metadata_file = tmp_path / "metadata.json"
-    extra_metadata_file.write_text("{\"department\": \"anim\"}")
+    extra_metadata_file.write_text('{"department": "anim"}')
 
     class FakeTool:
         def __init__(self) -> None:
