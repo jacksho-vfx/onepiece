@@ -47,7 +47,9 @@ def test_open_shot_invokes_dcc_open_scene(
 
     monkeypatch.setattr(open_shot_module, "validate_dcc", fake_validate_dcc)
     monkeypatch.setattr(open_shot_module, "open_scene", fake_open_scene)
-    monkeypatch.setattr(open_shot_module, "check_dcc_environment", fake_check_environment)
+    monkeypatch.setattr(
+        open_shot_module, "check_dcc_environment", fake_check_environment
+    )
 
     result = runner.invoke(
         open_shot_module.app,
@@ -98,7 +100,9 @@ def test_open_shot_reports_validation_failures(
 
     monkeypatch.setattr(open_shot_module, "validate_dcc", fake_validate_dcc)
     monkeypatch.setattr(open_shot_module, "open_scene", fake_open_scene)
-    monkeypatch.setattr(open_shot_module, "check_dcc_environment", fake_check_environment)
+    monkeypatch.setattr(
+        open_shot_module, "check_dcc_environment", fake_check_environment
+    )
 
     result = runner.invoke(
         open_shot_module.app,
@@ -110,12 +114,17 @@ def test_open_shot_reports_validation_failures(
         ],
     )
 
-    assert result.exit_code == open_shot_module.OnePieceExternalServiceError.exit_code
+    assert result.exit_code == open_shot_module.OnePieceValidationError.exit_code
     assert "Missing required plugins: arnold" in result.output
-    assert "GPU requirement not satisfied (required: RTX 3090; detected: GTX 1080)." in result.output
+    assert (
+        "GPU requirement not satisfied (required: RTX 3090; detected: GTX 1080)."
+        in result.output
+    )
 
 
-def test_open_shot_skip_validation_flag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_open_shot_skip_validation_flag(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     """`--skip-validation` bypasses environment checks."""
 
     shot_path = tmp_path / "example.ma"
@@ -137,7 +146,9 @@ def test_open_shot_skip_validation_flag(monkeypatch: MonkeyPatch, tmp_path: Path
 
     monkeypatch.setattr(open_shot_module, "validate_dcc", fake_validate_dcc)
     monkeypatch.setattr(open_shot_module, "open_scene", fake_open_scene)
-    monkeypatch.setattr(open_shot_module, "check_dcc_environment", fake_check_environment)
+    monkeypatch.setattr(
+        open_shot_module, "check_dcc_environment", fake_check_environment
+    )
 
     result = runner.invoke(
         open_shot_module.app,

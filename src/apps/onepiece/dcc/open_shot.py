@@ -6,7 +6,10 @@ from typing import Any
 import structlog
 import typer
 
-from apps.onepiece.utils.errors import OnePieceExternalServiceError
+from apps.onepiece.utils.errors import (
+    OnePieceValidationError,
+    OnePieceExternalServiceError,
+)
 from libraries.dcc.dcc_client import open_scene
 from libraries.validations.dcc import (
     detect_dcc_from_file,
@@ -41,7 +44,9 @@ def _format_validation_issues(report: Any) -> list[str]:
     if not report.installed:
         issues.append("DCC executable is not installed or not found on PATH.")
 
-    missing_plugins = getattr(report.plugins, "missing", frozenset())
+    missing_plugins: frozenset[Any] | Any = getattr(
+        report.plugins, "missing", frozenset()
+    )
     if missing_plugins:
         plugin_list = ", ".join(sorted(missing_plugins))
         issues.append(f"Missing required plugins: {plugin_list}.")
@@ -110,6 +115,6 @@ def open_shot(
             shot=str(shot_path),
             error=str(exc),
         )
-        raise OnePieceExternalServiceError(
+        raise OnePieceValidationError(
             f"Failed to open {shot_path} in {dcc_enum.value}: {exc}"
         ) from exc
