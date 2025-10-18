@@ -46,7 +46,7 @@ class _FakeCmds:
             self.selections.append(target)
 
 
-def test_discover_rigs_uses_attribute_flag():
+def test_discover_rigs_uses_attribute_flag() -> None:
     nodes = [
         _FakeNode("heroA_Rig", {"isCharacterRig": True}),
         _FakeNode("prop01_geo", {"isCharacterRig": False}),
@@ -59,7 +59,7 @@ def test_discover_rigs_uses_attribute_flag():
     assert fake_pm.calls == [(tuple(), {"assemblies": True})]
 
 
-def test_discover_rigs_falls_back_to_name_suffix():
+def test_discover_rigs_falls_back_to_name_suffix() -> None:
     nodes = [
         _FakeNode("villain:Body_RIG", {}),
         _FakeNode("environment_grp", {}),
@@ -71,7 +71,7 @@ def test_discover_rigs_falls_back_to_name_suffix():
     assert [rig.name for rig in rigs] == ["villain:Body_RIG"]
 
 
-def test_character_selector_panel_selects_filtered_rig():
+def test_character_selector_panel_selects_filtered_rig() -> None:
     nodes = [
         _FakeNode("heroA_Rig", {"isCharacterRig": True}),
         _FakeNode("villain_Rig", {"isCharacterRig": True}),
@@ -92,7 +92,6 @@ def test_character_selector_panel_selects_filtered_rig():
     assert fake_cmds.selections == ["villain_Rig"]
 
 
-def test_rig_descriptor_selection_target_accepts_plain_strings():
+def test_rig_descriptor_selection_target_accepts_plain_strings() -> None:
     rig = RigDescriptor(name="testRig", node="plainString")
     assert rig.selection_target() == "plainString"
-
