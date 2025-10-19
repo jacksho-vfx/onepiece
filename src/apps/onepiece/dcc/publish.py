@@ -55,6 +55,17 @@ def _validate_direct_upload_path(path: str | None) -> str | None:
     return path
 
 
+def _validate_scene_name(value: str) -> str:
+    path = Path(value)
+    if path.is_absolute():
+        raise typer.BadParameter("scene-name must not be an absolute path")
+    if path.name != value:
+        raise typer.BadParameter("scene-name must not contain path separators")
+    if any(part in {"..", ""} for part in path.parts):
+        raise typer.BadParameter("scene-name must not reference parent directories")
+    return value
+
+
 def _format_dependency_summary(report: DCCDependencyReport) -> str:
     def _join_plugins(status: DCCPluginStatus, attribute: str) -> str:
         value = getattr(status, attribute)
@@ -103,7 +114,10 @@ def _format_maya_unreal_summary(report: UnrealExportReport) -> str:
 def publish(
     dcc: str = typer.Option(..., "--dcc", help="DCC that produced the scene."),
     scene_name: str = typer.Option(
-        ..., "--scene-name", help="Name used for the published package."
+        ...,
+        "--scene-name",
+        help="Name used for the published package.",
+        callback=_validate_scene_name,
     ),
     renders: Path = typer.Option(
         ..., "--renders", exists=True, file_okay=True, dir_okay=True
