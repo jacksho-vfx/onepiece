@@ -114,7 +114,7 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
 
     key = f"ONEPIECE_{dcc.name}_PLUGINS"
     raw_plugins = env.get(key, "")
-    plugins = {part.strip() for part in raw_plugins.split(",") if part.strip()}
+    plugins = {part.strip().lower() for part in raw_plugins.split(",") if part.strip()}
     return frozenset(sorted(plugins))
 
 
@@ -151,10 +151,14 @@ def check_dcc_environment(
     installed, executable = _detect_executable(dcc, env_mapping)
 
     if plugin_inventory is not None:
-        available_plugins = frozenset(sorted(plugin_inventory.get(dcc, frozenset())))
+        available_plugins = frozenset(
+            sorted(plugin.lower() for plugin in plugin_inventory.get(dcc, frozenset()))
+        )
     else:
         available_plugins = _plugins_from_env(dcc, env_mapping)
-    required_plugins = frozenset(sorted(DCC_PLUGIN_REQUIREMENTS.get(dcc, ())))
+    required_plugins = frozenset(
+        sorted(plugin.lower() for plugin in DCC_PLUGIN_REQUIREMENTS.get(dcc, ()))
+    )
     missing_plugins = frozenset(sorted(required_plugins - available_plugins))
     plugin_result = PluginValidation(
         required=required_plugins,
