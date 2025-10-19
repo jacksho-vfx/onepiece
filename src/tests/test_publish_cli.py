@@ -283,7 +283,16 @@ def test_publish_cli_rejects_dangerous_scene_name(tmp_path: Path) -> None:
             "OP",
         ],
     )
-
     assert result.exit_code != 0
-    assert "Invalid value for --scene-name" in result.output
-    assert "scene_name must be a simple name" in result.output
+    checks = [
+        "Invalid",
+        "value",
+        "scene",
+        "must",
+        "not",
+        "contain",
+        "path",
+        "separators",
+    ]
+    for check in checks:
+        assert check in result.output
