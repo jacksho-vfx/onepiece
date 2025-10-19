@@ -158,7 +158,11 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
 
     key = f"ONEPIECE_{dcc.name}_PLUGINS"
     raw_plugins = env.get(key, "")
-    plugins = {item.strip() for item in raw_plugins.split(",") if item.strip()}
+    plugins = {
+        item.strip().lower()
+        for item in raw_plugins.split(",")
+        if item.strip()
+    }
     return frozenset(plugins)
 
 
@@ -167,9 +171,11 @@ def _normalise_required_plugins(
 ) -> frozenset[str]:
     """Return the set of plugins that must be available for ``dcc``."""
 
-    baseline = set(DCC_PLUGIN_REQUIREMENTS.get(dcc, ()))
+    baseline = {plugin.lower() for plugin in DCC_PLUGIN_REQUIREMENTS.get(dcc, ())}
     if extra_plugins:
-        baseline.update(plugin.strip() for plugin in extra_plugins if plugin.strip())
+        baseline.update(
+            plugin.strip().lower() for plugin in extra_plugins if plugin.strip()
+        )
     return frozenset(sorted(baseline))
 
 
@@ -219,7 +225,7 @@ def verify_dcc_dependencies(
         available_plugins = _plugins_from_env(dcc, env_mapping)
     else:
         available_plugins = frozenset(
-            plugin.strip() for plugin in plugin_inventory if plugin.strip()
+            plugin.strip().lower() for plugin in plugin_inventory if plugin.strip()
         )
 
     plugins_required = _normalise_required_plugins(dcc, required_plugins)

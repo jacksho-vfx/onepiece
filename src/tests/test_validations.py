@@ -67,8 +67,21 @@ def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) ->
 
     assert report.installed is True
     assert report.executable == "/opt/Nuke14/Nuke14.0"
-    assert report.plugins.missing == frozenset({"OCIO"})
+    assert report.plugins.missing == frozenset({"ocio"})
     assert report.gpu.meets_requirement is True
+
+
+@patch("libraries.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
+def test_check_dcc_environment_normalises_plugin_inventory(mock_which: MagicMock) -> None:
+    env = {
+        "PATH": "/opt/Nuke14",
+        "ONEPIECE_NUKE_PLUGINS": "CaraVR, ocio",
+    }
+
+    report = dcc_validations.check_dcc_environment(SupportedDCC.NUKE, env=env)
+
+    assert report.plugins.available == frozenset({"caravr", "ocio"})
+    assert report.plugins.missing == frozenset()
 
 
 @patch("libraries.validations.dcc.shutil.which", return_value=None)
@@ -127,8 +140,8 @@ def test_dcc_environment_cli_renders_summary(mock_check: MagicMock) -> None:
         installed=True,
         executable="/opt/Nuke14/Nuke14.0",
         plugins=PluginValidation(
-            required=frozenset({"CaraVR", "OCIO"}),
-            available=frozenset({"CaraVR", "OCIO"}),
+            required=frozenset({"caravr", "ocio"}),
+            available=frozenset({"caravr", "ocio"}),
             missing=frozenset(),
         ),
         gpu=GPUValidation(
@@ -144,7 +157,7 @@ def test_dcc_environment_cli_renders_summary(mock_check: MagicMock) -> None:
     assert result.exit_code == 0
     assert "Nuke" in result.stdout
     assert "Plugins" in result.stdout
-    assert "required: CaraVR, OCIO" in result.stdout
+    assert "required: caravr, ocio" in result.stdout
     assert "GPU" in result.stdout
     assert "required: OpenGL 4.1" in result.stdout
 

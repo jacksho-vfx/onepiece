@@ -79,7 +79,7 @@ def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
         plugin_inventory=["CaraVR"],
     )
 
-    assert report.plugins.missing == frozenset({"OCIO"})
+    assert report.plugins.missing == frozenset({"ocio"})
     missing_assets = {path.relative_to(package) for path in report.assets.missing}
     expected_assets = {
         Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]
@@ -106,6 +106,23 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
     assert report.plugins.missing == frozenset()
     assert report.assets.missing == tuple()
     assert report.is_valid is True
+
+
+def test_verify_dcc_dependencies_handles_mixed_case_plugin_inventory(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.NUKE,
+        package,
+        plugin_inventory=["CaraVR", "OCIO", "CustomPlugin"],
+        required_plugins=["CustomPlugin"],
+    )
+
+    expected = frozenset({"caravr", "ocio", "customplugin"})
+    assert report.plugins.available == expected
+    assert report.plugins.required == expected
+    assert report.plugins.missing == frozenset()
 
 
 def _create_publish_inputs(
