@@ -108,7 +108,9 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
     assert report.is_valid is True
 
 
-def test_verify_dcc_dependencies_handles_mixed_case_plugin_inventory(tmp_path: Path) -> None:
+def test_verify_dcc_dependencies_handles_mixed_case_plugin_inventory(
+    tmp_path: Path,
+) -> None:
     package = tmp_path / "package"
     package.mkdir()
 
@@ -546,6 +548,6 @@ def test_publish_scene_dependency_failure_blocks_upload(
         )
 
     message = str(excinfo.value)
-    assert "missing plugins: OCIO" in message
+    assert "missing plugins: ocio" in message
     assert "missing assets: missing/asset.txt" in message
     sync_mock.assert_not_called()

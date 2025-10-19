@@ -114,11 +114,7 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
 
     key = f"ONEPIECE_{dcc.name}_PLUGINS"
     raw_plugins = env.get(key, "")
-    plugins = {
-        part.strip().lower()
-        for part in raw_plugins.split(",")
-        if part.strip()
-    }
+    plugins = {part.strip().lower() for part in raw_plugins.split(",") if part.strip()}
     return frozenset(sorted(plugins))
 
 

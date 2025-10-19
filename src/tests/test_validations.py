@@ -72,7 +72,9 @@ def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) ->
 
 
 @patch("libraries.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
-def test_check_dcc_environment_normalises_plugin_inventory(mock_which: MagicMock) -> None:
+def test_check_dcc_environment_normalises_plugin_inventory(
+    mock_which: MagicMock,
+) -> None:
     env = {
         "PATH": "/opt/Nuke14",
         "ONEPIECE_NUKE_PLUGINS": "CaraVR, ocio",
