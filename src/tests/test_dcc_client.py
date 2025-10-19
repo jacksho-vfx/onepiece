@@ -164,6 +164,21 @@ def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
     assert (expected_package / "otio" / "edit.otio").exists()
 
 
+@pytest.mark.parametrize(
+    "scene_name",
+    ["../evil", "/tmp/hack", "shot/../evil", "shot\\evil", "..", "."],
+)
+def test_prepare_package_contents_rejects_dangerous_scene_names(
+    tmp_path: Path, scene_name: str
+) -> None:
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    with pytest.raises(ValueError) as excinfo:
+        _prepare_package_contents(scene_name, renders, previews, otio, destination)
+
+    assert "scene_name must be a simple name" in str(excinfo.value)
+
+
 def test_write_metadata_and_thumbnails_prefers_previews(tmp_path: Path) -> None:
     package_dir = tmp_path / "package"
     package_dir.mkdir()

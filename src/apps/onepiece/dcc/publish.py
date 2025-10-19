@@ -162,23 +162,28 @@ def publish(
         nonlocal maya_report
         maya_report = unreal_report
 
-    package_path = publish_scene(
-        resolved_dcc,
-        scene_name=scene_name,
-        renders=renders,
-        previews=previews,
-        otio=otio,
-        metadata=metadata_dict,
-        destination=destination,
-        bucket=bucket,
-        show_code=show_code,
-        show_type=resolved_show_type,
-        profile=profile,
-        direct_s3_path=direct_upload_path,
-        dependency_callback=capture_report if dependency_summary else None,
-        maya_validation_callback=capture_maya_report if dependency_summary else None,
-        dry_run=dry_run,
-    )
+    try:
+        package_path = publish_scene(
+            resolved_dcc,
+            scene_name=scene_name,
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata_dict,
+            destination=destination,
+            bucket=bucket,
+            show_code=show_code,
+            show_type=resolved_show_type,
+            profile=profile,
+            direct_s3_path=direct_upload_path,
+            dependency_callback=capture_report if dependency_summary else None,
+            maya_validation_callback=(
+                capture_maya_report if dependency_summary else None
+            ),
+            dry_run=dry_run,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--scene-name") from exc
 
     log.info("cli_publish_completed", package=str(package_path))
     typer.echo(f"Published package created at {package_path}")
