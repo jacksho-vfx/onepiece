@@ -7,7 +7,9 @@ from types import ModuleType
 import pytest
 
 
-def test_maya_module_errors_without_required_pymel(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_maya_module_errors_without_required_pymel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module_name = "libraries.dcc.maya.maya"
 
     # Ensure a clean import state for the maya module.
