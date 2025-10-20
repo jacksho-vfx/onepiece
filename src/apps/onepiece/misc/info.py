@@ -1,6 +1,7 @@
 """CLI to display OnePiece environment and configuration info."""
 
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Mapping, Optional
@@ -35,9 +36,9 @@ def mask_sensitive_value(value: str, visible_chars: int = 4) -> str:
 
 def detect_installed_dccs() -> list[str]:
     """Return list of DCCs that are likely installed based on PATH."""
-    detected = []
+    detected: list[str] = []
     for dcc in SupportedDCC:
-        if dcc.value.lower() in os.environ.get("PATH", "").lower():
+        if shutil.which(dcc.command):
             detected.append(dcc.value)
     return detected or ["None detected"]
 

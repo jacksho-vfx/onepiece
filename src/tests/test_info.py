@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -35,3 +36,21 @@ def test_mask_sensitive_value_handles_edge_cases() -> None:
     assert info_module.mask_sensitive_value("Not set") == "Not set"
     assert info_module.mask_sensitive_value("") == ""
     assert info_module.mask_sensitive_value("abc", visible_chars=4) == "***"
+
+
+def test_detect_installed_dccs_avoids_false_positive(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", os.pathsep.join(["/Users/Mayank/bin"]))
+    monkeypatch.setattr(info_module.shutil, "which", lambda command: None)
+
+    assert info_module.detect_installed_dccs() == ["None detected"]
+
+
+def test_detect_installed_dccs_detects_available(monkeypatch: MonkeyPatch) -> None:
+    def fake_which(command: str) -> str | None:
+        if command in {"maya", "maya.exe"}:
+            return "/opt/autodesk/maya"
+        return None
+
+    monkeypatch.setattr(info_module.shutil, "which", fake_which)
+
+    assert info_module.detect_installed_dccs() == ["Maya"]
