@@ -13,6 +13,26 @@ from typing import Any, Dict, cast
 import pymel.core as pm
 import structlog
 
+
+_REQUIRED_PM_ATTRIBUTES = (
+    "listReferences",
+    "namespaceInfo",
+    "listNamespaces",
+    "namespace",
+    "ls",
+    "delete",
+)
+
+_missing_pm_attributes = [
+    name for name in _REQUIRED_PM_ATTRIBUTES if not hasattr(pm, name)
+]
+if _missing_pm_attributes:
+    missing_list = ", ".join(sorted(_missing_pm_attributes))
+    raise RuntimeError(
+        "PyMEL (pymel.core) is missing required Maya functions: "
+        f"{missing_list}. Ensure Maya's Python environment is available."
+    )
+
 log = structlog.get_logger(__name__)
 
 
