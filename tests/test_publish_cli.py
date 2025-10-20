@@ -6,8 +6,19 @@ import sys
 import types
 
 import importlib
+from pathlib import Path
+from typing import Any
+
 import typer
+from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
+
+from libraries.dcc.dcc_client import (
+    DCCAssetStatus,
+    DCCDependencyReport,
+    DCCPluginStatus,
+    SupportedDCC,
+)
 
 if "requests" not in sys.modules:
     requests_stub = types.ModuleType("requests")
@@ -24,8 +35,8 @@ if "libraries.ftrack" not in sys.modules:
     class _FtrackRestClient:  # pragma: no cover - simple import stub
         pass
 
-    ftrack_stub.FtrackError = RuntimeError
-    ftrack_stub.FtrackRestClient = _FtrackRestClient
+    ftrack_stub.FtrackError = RuntimeError  # type: ignore[attr-defined]
+    ftrack_stub.FtrackRestClient = _FtrackRestClient  # type: ignore[attr-defined]
     sys.modules["libraries.ftrack"] = ftrack_stub
 
 for module_name in (
@@ -40,18 +51,13 @@ for module_name in (
 
 publish_module = importlib.import_module("apps.onepiece.dcc.publish")
 app = publish_module.app
-from libraries.dcc.dcc_client import (
-    DCCAssetStatus,
-    DCCDependencyReport,
-    DCCPluginStatus,
-    SupportedDCC,
-)
-
 
 runner = CliRunner()
 
 
-def test_publish_dependency_summary_handles_path_assets(monkeypatch, tmp_path):
+def test_publish_dependency_summary_handles_path_assets(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     """Dependency summaries should render when asset entries are ``Path`` objects."""
 
     scene_name = "example"
@@ -86,7 +92,9 @@ def test_publish_dependency_summary_handles_path_assets(monkeypatch, tmp_path):
         ),
     )
 
-    def fake_publish_scene(*_args, dependency_callback=None, **_kwargs):
+    def fake_publish_scene(
+        *_args: Any, dependency_callback: Any | None = None, **_kwargs: Any
+    ) -> Any:
         if dependency_callback is not None:
             dependency_callback(report)
         return package_dir

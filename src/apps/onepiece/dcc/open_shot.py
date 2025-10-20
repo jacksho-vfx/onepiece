@@ -6,10 +6,7 @@ from typing import Any
 import structlog
 import typer
 
-from apps.onepiece.utils.errors import (
-    OnePieceValidationError,
-    OnePieceExternalServiceError,
-)
+from apps.onepiece.utils.errors import OnePieceValidationError
 from libraries.dcc.dcc_client import open_scene
 from libraries.validations.dcc import (
     detect_dcc_from_file,
@@ -100,10 +97,12 @@ def open_shot(
                 issues=issues,
             )
             bullet_list = "\n".join(f"- {entry}" for entry in issues)
-            raise OnePieceExternalServiceError(
+            error = OnePieceValidationError(
                 "Failed to open "
                 f"{shot_path} in {dcc_enum.value}: environment validation failed:\n{bullet_list}"
             )
+            typer.secho(f"{error.heading}: {error}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=error.exit_code)
 
     try:
         open_scene(dcc_enum, shot_path)

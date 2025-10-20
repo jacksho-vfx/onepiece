@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from PIL import Image as PILImage
-
 from typing import TYPE_CHECKING, Any
+
+try:  # pragma: no cover - dependency optional for basic functionality
+    from PIL import Image as PILImage
+except ImportError:  # pragma: no cover - handled lazily when export attempted
+    PILImage = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     import imageio.v3 as iio
@@ -21,6 +24,12 @@ Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
 
 def _require_pillow() -> Any:
+    """Return :mod:`PIL.Image` or raise a helpful error if unavailable."""
+
+    if PILImage is None:
+        raise RuntimeError(
+            "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
+        )
     return PILImage
 
 

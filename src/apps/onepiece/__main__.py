@@ -22,8 +22,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Invoke the root Typer application."""
 
     try:
-        app(args=list(argv) if argv is not None else None, standalone_mode=False)
-        return int(ExitCode.SUCCESS)
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+        if result is None:
+            return int(ExitCode.SUCCESS)
+        if isinstance(result, ExitCode):
+            return int(result)
+        return int(result)
     except OnePieceError as exc:
         exit_code = _handle_cli_error(exc)
         return int(exit_code)
