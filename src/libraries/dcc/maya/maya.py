@@ -10,8 +10,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, cast
 
-import pymel.core as pm
 import structlog
+
+try:  # pragma: no cover - import depends on Maya environment
+    import pymel.core as pm  # type: ignore[import]
+except Exception as exc:  # pragma: no cover - handled gracefully below
+    pm = None  # type: ignore[assignment]
+    _PM_IMPORT_EXCEPTION = exc
+else:
+    _PM_IMPORT_EXCEPTION = None
 
 
 _REQUIRED_PM_ATTRIBUTES = (
@@ -23,15 +30,54 @@ _REQUIRED_PM_ATTRIBUTES = (
     "delete",
 )
 
-_missing_pm_attributes = [
-    name for name in _REQUIRED_PM_ATTRIBUTES if not hasattr(pm, name)
-]
-if _missing_pm_attributes:
-    missing_list = ", ".join(sorted(_missing_pm_attributes))
-    raise RuntimeError(
-        "PyMEL (pymel.core) is missing required Maya functions: "
-        f"{missing_list}. Ensure Maya's Python environment is available."
-    )
+_missing_pm_attributes = {
+    name
+    for name in _REQUIRED_PM_ATTRIBUTES
+    if pm is None or not hasattr(pm, name)
+}
+
+
+def _register_missing(name: str) -> None:
+    """Track which pymel callables are unavailable."""
+
+    _missing_pm_attributes.add(name)
+
+
+def _format_missing_message(name: str | None = None) -> str:
+    """Return a helpful error message for missing pymel functionality."""
+
+    if name is not None:
+        _register_missing(name)
+
+    if _missing_pm_attributes:
+        missing_list = ", ".join(sorted(_missing_pm_attributes))
+        message = (
+            "PyMEL (pymel.core) is missing required Maya functions: "
+            f"{missing_list}. Ensure Maya's Python environment is available."
+        )
+    else:
+        message = (
+            "PyMEL (pymel.core) is unavailable. Ensure Maya's Python "
+            "environment is available."
+        )
+
+    if _PM_IMPORT_EXCEPTION is not None:
+        message = f"{message} (Original import error: {_PM_IMPORT_EXCEPTION})"
+
+    return message
+
+
+def _get_pm_attr(name: str) -> Any:
+    """Return an attribute from ``pymel.core`` or raise a helpful error."""
+
+    if pm is None:
+        raise RuntimeError(_format_missing_message(name))
+
+    target = getattr(pm, name, None)
+    if target is None:
+        raise RuntimeError(_format_missing_message(name))
+
+    return target
 
 log = structlog.get_logger(__name__)
 
@@ -39,14 +85,12 @@ log = structlog.get_logger(__name__)
 def _resolve_pm_callable(name: str) -> Callable[..., None]:
     """Return a ``pymel.core`` callable, falling back to a stub when absent."""
 
-    target = getattr(pm, name, None)
-    if target is None:  # pragma: no cover - depends on Maya environment
+    try:
+        target = _get_pm_attr(name)
+    except RuntimeError:
 
         def _missing(*_args: Any, **_kwargs: Any) -> None:
-            raise RuntimeError(
-                "pymel.core is missing the expected Maya command "
-                f"'{name}'. Ensure Maya's Python package is available."
-            )
+            raise RuntimeError(_format_missing_message(name))
 
         return _missing
 
@@ -81,7 +125,9 @@ def _remove_unused_references() -> Dict[str, int]:
     removed = 0
     failed = 0
 
-    for reference in pm.listReferences() or []:
+    list_references = _get_pm_attr("listReferences")
+
+    for reference in list_references() or []:
         try:
             if reference.nodes():
                 continue
@@ -113,10 +159,11 @@ def _namespace_is_removable(namespace: str) -> bool:
     """Return True if the namespace has no dependency nodes."""
 
     try:
+        namespace_info = _get_pm_attr("namespaceInfo")
         dependency_nodes = (
-            pm.namespaceInfo(namespace, listOnlyDependencyNodes=True) or []
+            namespace_info(namespace, listOnlyDependencyNodes=True) or []
         )
-        child_namespaces = pm.namespaceInfo(namespace, listNamespace=True) or []
+        child_namespaces = namespace_info(namespace, listNamespace=True) or []
     except RuntimeError:  # pragma: no cover - requires Maya environment
         return False
 
@@ -134,7 +181,8 @@ def _cleanup_namespaces() -> Dict[str, int]:
     removed = 0
     failed = 0
 
-    namespaces = pm.listNamespaces(recursive=True)
+    list_namespaces = _get_pm_attr("listNamespaces")
+    namespaces = list_namespaces(recursive=True)
     # Remove deeper namespaces first so parents become empty.
     namespaces = sorted(namespaces, key=lambda ns: ns.count(":"), reverse=True)
 
@@ -146,7 +194,8 @@ def _cleanup_namespaces() -> Dict[str, int]:
             continue
 
         try:
-            pm.namespace(removeNamespace=namespace)
+            remove_namespace = _get_pm_attr("namespace")
+            remove_namespace(removeNamespace=namespace)
             removed += 1
             log.info("maya_namespace_removed", namespace=namespace)
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
@@ -164,16 +213,20 @@ def _delete_unknown_nodes() -> Dict[str, int]:
     """Delete unknown/invalid nodes that bloat the file size."""
 
     unknown_types = ["unknown", "unknownDag", "unknownTransform"]
+    ls = _get_pm_attr("ls")
+
     try:
-        unknown_nodes = pm.ls(type=unknown_types)
+        unknown_nodes = ls(type=unknown_types)
     except RuntimeError:  # pragma: no cover - depends on Maya state
         unknown_nodes = []
 
     deleted = 0
 
     if unknown_nodes:
+        delete = _get_pm_attr("delete")
+
         try:
-            pm.delete(unknown_nodes)
+            delete(unknown_nodes)
             deleted = len(unknown_nodes)
             log.info("maya_unknown_nodes_deleted", count=deleted)
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
@@ -188,7 +241,9 @@ def _remove_empty_layers() -> Dict[str, int]:
     display_removed = 0
     render_removed = 0
 
-    for layer in pm.ls(type="displayLayer") or []:
+    ls = _get_pm_attr("ls")
+
+    for layer in ls(type="displayLayer") or []:
         name = layer.name()
         if name == "defaultLayer":
             continue
@@ -201,14 +256,16 @@ def _remove_empty_layers() -> Dict[str, int]:
         if members:
             continue
 
+        delete = _get_pm_attr("delete")
+
         try:
-            pm.delete(layer)
+            delete(layer)
             display_removed += 1
             log.info("maya_display_layer_removed", layer=name)
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
             log.warning("maya_display_layer_remove_failed", layer=name, error=str(exc))
 
-    for layer in pm.ls(type="renderLayer") or []:
+    for layer in ls(type="renderLayer") or []:
         name = layer.name()
         if name == "defaultRenderLayer":
             continue
@@ -221,8 +278,10 @@ def _remove_empty_layers() -> Dict[str, int]:
         if members:
             continue
 
+        delete = _get_pm_attr("delete")
+
         try:
-            pm.delete(layer)
+            delete(layer)
             render_removed += 1
             log.info("maya_render_layer_removed", layer=name)
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
@@ -262,7 +321,8 @@ def save_scene(path: Path | None = None) -> None:
     """
     if path:
         path.parent.mkdir(parents=True, exist_ok=True)
-        pm.saveAs(str(path))
+        save_as = _get_pm_attr("saveAs")
+        save_as(str(path))
         log.info("maya_scene_saved_as", path=str(path))
     else:
         _save(force=True)
