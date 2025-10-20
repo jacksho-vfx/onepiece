@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import datetime as _dt
-from pathlib import Path
+import shutil
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import pytest
@@ -156,3 +157,25 @@ def test_execute_validates_frame_range(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         tool.execute(request)
+
+
+def test_execute_normalizes_windows_style_directory(tmp_path: Path) -> None:
+    windows_dir = Path(r"C:\\projects")
+    request = _create_request(tmp_path, output_directory=windows_dir)
+    timestamp = _dt.datetime(2024, 6, 1, 0, 0, 0)
+    tool = PlayblastAutomationTool(
+        timeline_query=lambda: (200, 210),
+        playblast_callback=lambda _req, target, _frame: target,
+        clock=lambda: timestamp,
+    )
+
+    try:
+        result = tool.execute(request)
+        expected_filename = build_playblast_filename(request, timestamp)
+
+        assert result.output_path == windows_dir / expected_filename
+        assert PureWindowsPath(str(result.output_path)) == (
+            PureWindowsPath(windows_dir) / expected_filename
+        )
+    finally:
+        shutil.rmtree(windows_dir, ignore_errors=True)
