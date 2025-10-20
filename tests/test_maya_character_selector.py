@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List
 
+import sys
+import types
+
+sys.modules.setdefault("requests", types.ModuleType("requests"))
+sys.modules.setdefault("libraries.ftrack", types.ModuleType("libraries.ftrack"))
+
 from libraries.dcc.maya.character_selector import (
     CharacterSelectorPanel,
     RigDescriptor,
