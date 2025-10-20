@@ -76,7 +76,6 @@ if (
     raise RuntimeError(_format_missing_message())
 
 
-
 def _get_pm_attr(name: str) -> Any:
     """Return an attribute from ``pymel.core`` or raise a helpful error."""
 
