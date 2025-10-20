@@ -13,12 +13,12 @@ from typing import Any, Dict, cast
 import structlog
 
 try:  # pragma: no cover - import depends on Maya environment
-    import pymel.core as pm  # type: ignore[import]
+    import pymel.core as pm
 except Exception as exc:  # pragma: no cover - handled gracefully below
     pm = None  # type: ignore[assignment]
     _PM_IMPORT_EXCEPTION = exc
 else:
-    _PM_IMPORT_EXCEPTION = None
+    _PM_IMPORT_EXCEPTION = None  # type: ignore[assignment]
 
 
 _REQUIRED_PM_ATTRIBUTES = (
@@ -31,9 +31,7 @@ _REQUIRED_PM_ATTRIBUTES = (
 )
 
 _missing_pm_attributes = {
-    name
-    for name in _REQUIRED_PM_ATTRIBUTES
-    if pm is None or not hasattr(pm, name)
+    name for name in _REQUIRED_PM_ATTRIBUTES if pm is None or not hasattr(pm, name)
 }
 
 
@@ -78,6 +76,7 @@ def _get_pm_attr(name: str) -> Any:
         raise RuntimeError(_format_missing_message(name))
 
     return target
+
 
 log = structlog.get_logger(__name__)
 
@@ -141,7 +140,7 @@ def _remove_unused_references() -> Dict[str, int]:
             continue
 
         try:
-            reference.remove()  # type: ignore[no-untyped-call]
+            reference.remove()
             removed += 1
             log.info("maya_reference_removed", reference=str(reference))
         except RuntimeError as exc:  # pragma: no cover - depends on Maya state
@@ -160,9 +159,7 @@ def _namespace_is_removable(namespace: str) -> bool:
 
     try:
         namespace_info = _get_pm_attr("namespaceInfo")
-        dependency_nodes = (
-            namespace_info(namespace, listOnlyDependencyNodes=True) or []
-        )
+        dependency_nodes = namespace_info(namespace, listOnlyDependencyNodes=True) or []
         child_namespaces = namespace_info(namespace, listNamespace=True) or []
     except RuntimeError:  # pragma: no cover - requires Maya environment
         return False
