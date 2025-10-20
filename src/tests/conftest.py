@@ -10,8 +10,10 @@ from collections.abc import Iterator
 import pytest
 
 try:  # pragma: no cover - exercised implicitly during test discovery
-    import structlog  # type: ignore  # noqa: F401
-except ModuleNotFoundError:  # pragma: no cover - exercised implicitly during test discovery
+    import structlog
+except (
+    ModuleNotFoundError
+):  # pragma: no cover - exercised implicitly during test discovery
     structlog = types.ModuleType("structlog")
 
     class _StubLogger:
@@ -29,14 +31,16 @@ except ModuleNotFoundError:  # pragma: no cover - exercised implicitly during te
     def _get_logger(*_args: object, **_kwargs: object) -> _StubLogger:
         return _StubLogger()
 
-    structlog.get_logger = _get_logger  # type: ignore[attr-defined]
-    structlog.getLogger = _get_logger  # type: ignore[attr-defined]
+    structlog.get_logger = _get_logger
+    structlog.getLogger = _get_logger
     sys.modules["structlog"] = structlog
 
 try:  # pragma: no cover - exercised implicitly during test discovery
     from apps.trafalgar.web import security
-except ModuleNotFoundError:  # pragma: no cover - exercised implicitly during test discovery
-    security = None  # type: ignore[assignment]
+except (
+    ModuleNotFoundError
+):  # pragma: no cover - exercised implicitly during test discovery
+    security = None
 
 
 @pytest.fixture(autouse=True)
