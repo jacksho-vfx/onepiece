@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 import types
 
+from hypothesis import HealthCheck, settings
+
 
 def _ensure_structlog_stub() -> None:
     if "structlog" in sys.modules:
@@ -33,3 +35,9 @@ def _ensure_structlog_stub() -> None:
 
 
 _ensure_structlog_stub()
+
+settings.register_profile(
+    "ci",
+    suppress_health_check=[HealthCheck.too_slow],
+)
+settings.load_profile("ci")

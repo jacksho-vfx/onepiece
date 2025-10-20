@@ -10,6 +10,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import types
+
 import structlog
 
 try:  # pragma: no cover - import depends on Maya environment
@@ -63,6 +65,16 @@ def _format_missing_message(name: str | None = None) -> str:
         message = f"{message} (Original import error: {_PM_IMPORT_EXCEPTION})"
 
     return message
+
+
+if (
+    pm is not None
+    and isinstance(pm, types.ModuleType)
+    and getattr(pm, "__spec__", None) is None
+    and _missing_pm_attributes
+):
+    raise RuntimeError(_format_missing_message())
+
 
 
 def _get_pm_attr(name: str) -> Any:

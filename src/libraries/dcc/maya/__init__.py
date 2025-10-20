@@ -17,9 +17,24 @@ except ModuleNotFoundError:
     sys.modules.setdefault("maya.cmds", types.ModuleType("maya.cmds"))
     sys.modules.setdefault("maya.utils", types.ModuleType("maya.utils"))
     sys.modules.setdefault("pymel", types.ModuleType("pymel"))
-    sys.modules.setdefault("pymel.core", types.ModuleType("pymel.core"))
+    core_module = sys.modules.setdefault("pymel.core", types.ModuleType("pymel.core"))
     sys.modules.setdefault("pymel.core.system", types.ModuleType("pymel.core.system"))
     sys.modules.setdefault("pymel.core.general", types.ModuleType("pymel.core.general"))
+
+    def _missing_pymel_callable(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError(
+            "PyMEL (pymel.core) is unavailable outside of Autodesk Maya."
+        )
+
+    for name in (
+        "listReferences",
+        "namespaceInfo",
+        "listNamespaces",
+        "namespace",
+        "ls",
+        "delete",
+    ):
+        setattr(core_module, name, _missing_pymel_callable)
 
 # --------------------------------------------------------------------------- #
 # Import public submodules (these can now import safely)

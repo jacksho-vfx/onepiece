@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Open-source pipeline CLI toolkit"
 authors = [{name="Jack Shortiss", email="jdshortiss@hotmail.com"}]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 
 dependencies = [
     "av>=12.0",

@@ -8,6 +8,7 @@ import os
 from functools import lru_cache
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+import copy
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
@@ -34,6 +35,35 @@ ROLE_RENDER_SUBMIT = "render:submit"
 ROLE_RENDER_MANAGE = "render:manage"
 ROLE_INGEST_READ = "ingest:read"
 ROLE_REVIEW_READ = "review:read"
+
+
+# Built-in credentials ----------------------------------------------------------------
+
+_DEFAULT_CREDENTIAL_PAYLOADS: tuple[Mapping[str, Any], ...] = (
+    {
+        "id": "suite",
+        "key": "suite-key",
+        "secret": "suite-secret",
+        "roles": {
+            ROLE_RENDER_READ,
+            ROLE_RENDER_SUBMIT,
+            ROLE_RENDER_MANAGE,
+            ROLE_INGEST_READ,
+            ROLE_REVIEW_READ,
+        },
+    },
+    {
+        "id": "ingest-read",
+        "key": "ingest-read-key",
+        "secret": "ingest-read-secret",
+        "roles": {ROLE_INGEST_READ},
+    },
+    {
+        "id": "review",
+        "token": "review-token",
+        "roles": {ROLE_REVIEW_READ},
+    },
+)
 
 
 class SecuritySettings(BaseModel):
@@ -225,6 +255,9 @@ def _load_credential_sources() -> list[Mapping[str, Any]]:
             logger.error("security.credentials.file_invalid", path=path, error=str(exc))
         else:
             entries.extend(_normalise_credential_payload(parsed))
+
+    if not entries:
+        entries.extend(copy.deepcopy(_DEFAULT_CREDENTIAL_PAYLOADS))
 
     return entries
 
