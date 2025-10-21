@@ -150,7 +150,7 @@ def test_render_feed_stream() -> None:
 
 def test_render_feed_stream_filters() -> None:
     params = {"sequence": "SQ05", "shot_id": "SQ05_SH045", "limit": 2}
-    with client.stream("GET", "/render-feed/live", params=params) as response:
+    with client.stream("GET", "/render-feed/live", params=params) as response:  # type: ignore[arg-type]
         assert response.status_code == 200
         payloads: list[dict[str, object]] = []
         for raw_line in response.iter_lines():
