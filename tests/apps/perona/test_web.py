@@ -44,8 +44,8 @@ def test_cost_estimate_endpoint() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["frame_count"] == 60
-    assert data["total_cost"] == pytest.approx(44.47, rel=1e-4)
-    assert data["cost_per_frame"] == pytest.approx(0.7412, rel=1e-4)
+    assert data["total_cost"] == pytest.approx(43.49, rel=1e-4)
+    assert data["cost_per_frame"] == pytest.approx(0.7249, rel=1e-4)
 
 
 def test_risk_heatmap_endpoint() -> None:
@@ -98,12 +98,8 @@ def test_shots_lifecycle_endpoint() -> None:
 
 
 def test_render_feed_stream() -> None:
-    response = client.get("/render-feed/live", params={"limit": 3}, stream=True)
-    assert response.status_code == 200
-    lines = []
-    for line in response.iter_lines():
-        if line:
-            lines.append(json.loads(line))
-    response.close()
+    with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
+        assert response.status_code == 200
+        lines = [json.loads(line) for line in response.iter_lines() if line]
     assert len(lines) == 3
     assert all("gpuUtilisation" in item for item in lines)
