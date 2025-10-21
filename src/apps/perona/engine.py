@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+import logging
 import os
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence, Any
 import tomllib
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -241,6 +245,20 @@ def _coerce_cost_model_input(
     )
 
 
+def _safe_float(value: object, default: float, *, setting: str) -> float:
+    """Parse *value* as a float, returning *default* when invalid."""
+
+    if value is None:
+        return default
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        LOGGER.warning(
+            "Ignoring invalid %s override %r; using default %s", setting, value, default
+        )
+        return default
+
+
 class PeronaEngine:
     """High level orchestration of the dashboard analytics."""
 
@@ -291,11 +309,15 @@ class PeronaEngine:
         baseline_input = _coerce_cost_model_input(
             baseline_settings, DEFAULT_BASELINE_COST_INPUT
         )
-        target_error_rate = float(
-            raw_settings.get("target_error_rate", DEFAULT_TARGET_ERROR_RATE)  # type: ignore[arg-type]
+        target_error_rate = _safe_float(
+            raw_settings.get("target_error_rate"),
+            DEFAULT_TARGET_ERROR_RATE,
+            setting="target_error_rate",
         )
-        pnl_baseline_cost = float(
-            raw_settings.get("pnl_baseline_cost", DEFAULT_PNL_BASELINE_COST)  # type: ignore[arg-type]
+        pnl_baseline_cost = _safe_float(
+            raw_settings.get("pnl_baseline_cost"),
+            DEFAULT_PNL_BASELINE_COST,
+            setting="pnl_baseline_cost",
         )
         return cls(
             baseline_input=baseline_input,

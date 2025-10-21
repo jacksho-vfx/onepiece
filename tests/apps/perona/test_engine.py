@@ -7,9 +7,12 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 
 from apps.perona.engine import (
     CostModelInput,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_TARGET_ERROR_RATE,
     OptimizationScenario,
     PeronaEngine,
 )
@@ -131,6 +134,27 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
     assert baseline.gpu_hourly_rate == pytest.approx(12.5)
     assert engine.target_error_rate == pytest.approx(0.02)
     assert engine.pnl_explainer().baseline_cost == pytest.approx(9876.5)
+
+
+def test_from_settings_ignores_invalid_numeric_overrides(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    config_path = tmp_path / "settings.toml"
+    config_path.write_text(
+        dedent(
+            """
+            target_error_rate = "oops"
+            pnl_baseline_cost = "bad-data"
+            """
+        ).strip()
+    )
+    with caplog.at_level("WARNING"):
+        engine = PeronaEngine.from_settings(path=config_path)
+    assert engine.target_error_rate == pytest.approx(DEFAULT_TARGET_ERROR_RATE)
+    assert engine.pnl_explainer().baseline_cost == pytest.approx(
+        DEFAULT_PNL_BASELINE_COST
+    )
+    assert any("target_error_rate" in record.message for record in caplog.records)
 
 
 def test_constructor_accepts_injected_baseline() -> None:
