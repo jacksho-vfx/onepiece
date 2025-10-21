@@ -9,6 +9,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from apps.perona.engine import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_SETTINGS_PATH,
+    DEFAULT_TARGET_ERROR_RATE,
+)
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web.dashboard import app, invalidate_engine_cache
 
@@ -20,6 +26,22 @@ def test_health_endpoint() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_settings_endpoint_defaults() -> None:
+    response = client.get("/settings")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["target_error_rate"] == pytest.approx(DEFAULT_TARGET_ERROR_RATE)
+    assert data["pnl_baseline_cost"] == pytest.approx(DEFAULT_PNL_BASELINE_COST)
+    assert data["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+
+    baseline = data["baseline_cost_input"]
+    assert baseline["frame_count"] == DEFAULT_BASELINE_COST_INPUT.frame_count
+    assert baseline["gpu_hourly_rate"] == pytest.approx(
+        DEFAULT_BASELINE_COST_INPUT.gpu_hourly_rate
+    )
 
 
 def test_app_version_matches_perona_version() -> None:
@@ -121,6 +143,59 @@ def test_settings_reload_between_requests(
 ) -> None:
     """Settings updates apply without restarting the FastAPI app."""
 
+    invalidate_engine_cache()
+
+
+def test_settings_endpoint_honours_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invalidate_engine_cache()
+
+    override = tmp_path / "custom.toml"
+    override.write_text(
+        """
+target_error_rate = 0.042
+pnl_baseline_cost = 9876.5
+
+[baseline_cost_input]
+frame_count = 128
+average_frame_time_ms = 132.5
+gpu_hourly_rate = 5.5
+    """
+    )
+
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(override))
+
+    first_response = client.get("/settings")
+    assert first_response.status_code == 200
+    first_data = first_response.json()
+    assert first_data["settings_path"] == str(override)
+    assert first_data["target_error_rate"] == pytest.approx(0.042)
+    assert first_data["pnl_baseline_cost"] == pytest.approx(9876.5)
+    assert first_data["baseline_cost_input"]["frame_count"] == 128
+
+    override.write_text(
+        """
+target_error_rate = 0.12
+pnl_baseline_cost = 5432.1
+
+[baseline_cost_input]
+frame_count = 96
+gpu_hourly_rate = 4.25
+    """
+    )
+    os.utime(override, None)
+
+    second_response = client.get("/settings")
+    assert second_response.status_code == 200
+    second_data = second_response.json()
+    assert second_data["settings_path"] == str(override)
+    assert second_data["target_error_rate"] == pytest.approx(0.12)
+    assert second_data["pnl_baseline_cost"] == pytest.approx(5432.1)
+    assert second_data["baseline_cost_input"]["frame_count"] == 96
+    assert second_data["baseline_cost_input"]["gpu_hourly_rate"] == pytest.approx(4.25)
+
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
     invalidate_engine_cache()
 
     default_response = client.get("/pnl")
