@@ -146,6 +146,12 @@ before continuing, and exports the path via `PERONA_SETTINGS_PATH` so the
 FastAPI app picks it up on startup. Use `perona version` to print the
 current dashboard build number directly from the CLI. 【F:src/apps/perona/app.py†L1-L174】
 
+The runtime configuration loader emits warnings via the `apps.perona.engine`
+logger whenever a candidate settings file cannot be read or parsed, including
+the offending path and exception. Operators rolling out new releases should
+watch for these messages in the Perona service logs to confirm that overrides
+were accepted, otherwise the engine will fall back to the bundled defaults.
+
 ### Rendering standalone scenes with Chopper
 
 The lightweight `chopper` CLI renders self-contained JSON scene descriptions. A

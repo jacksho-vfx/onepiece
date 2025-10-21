@@ -195,13 +195,28 @@ def _load_settings(path: str | os.PathLike[str] | None) -> dict[str, object]:
     candidates.append(DEFAULT_SETTINGS_PATH)
 
     for candidate in candidates:
+        expanded = candidate.expanduser()
         try:
-            with candidate.expanduser().open("rb") as handle:
+            with expanded.open("rb") as handle:
                 return tomllib.load(handle)
-        except FileNotFoundError:
-            continue
-        except (OSError, tomllib.TOMLDecodeError):
-            continue
+        except FileNotFoundError as exc:
+            LOGGER.warning(
+                "Settings file %s not found (%s); falling back to defaults",
+                expanded,
+                exc,
+            )
+        except tomllib.TOMLDecodeError as exc:
+            LOGGER.warning(
+                "Unable to parse settings file %s (%s); falling back to defaults",
+                expanded,
+                exc,
+            )
+        except OSError as exc:
+            LOGGER.warning(
+                "Unable to read settings file %s (%s); falling back to defaults",
+                expanded,
+                exc,
+            )
     return {}
 
 

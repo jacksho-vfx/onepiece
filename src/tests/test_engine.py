@@ -15,6 +15,7 @@ from apps.perona.engine import (
     DEFAULT_TARGET_ERROR_RATE,
     OptimizationScenario,
     PeronaEngine,
+    _load_settings,
 )
 
 
@@ -155,6 +156,22 @@ def test_from_settings_ignores_invalid_numeric_overrides(
         DEFAULT_PNL_BASELINE_COST
     )
     assert any("target_error_rate" in record.message for record in caplog.records)
+
+
+def test_load_settings_logs_and_falls_back_on_toml_errors(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    bad_config = tmp_path / "broken.toml"
+    bad_config.write_text("target_error_rate = [1,")
+
+    with caplog.at_level("WARNING"):
+        data = _load_settings(bad_config)
+
+    assert data["baseline_cost_input"]["frame_count"] == 2688
+    assert any(str(bad_config) in record.message for record in caplog.records)
+    assert any(
+        "falling back to defaults" in record.message for record in caplog.records
+    )
 
 
 def test_constructor_accepts_injected_baseline() -> None:
