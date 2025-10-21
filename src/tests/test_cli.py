@@ -106,6 +106,28 @@ gpu_hourly_rate = 4.2
     assert payload["baseline_cost_input"]["gpu_hourly_rate"] == 4.2
 
 
+def test_settings_command_rejects_missing_path(tmp_path: Path) -> None:
+    missing_path = tmp_path / "absent.toml"
+
+    result = runner.invoke(app, ["settings", "--settings-path", str(missing_path)])
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_settings_command_rejects_unreadable_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings_path = tmp_path / "blocked.toml"
+    settings_path.write_text("target_error_rate = 0.2")
+    monkeypatch.setattr("apps.perona.app.os.access", lambda path, mode: False)
+
+    result = runner.invoke(app, ["settings", "--settings-path", str(settings_path)])
+
+    assert result.exit_code != 0
+    assert "readable" in result.output
+
+
 def test_dashboard_command_sets_settings_path_env(
     mocker: MockerFixture, tmp_path: Path
 ) -> None:
@@ -117,6 +139,7 @@ def test_dashboard_command_sets_settings_path_env(
     mocker.patch("apps.perona.app.import_module", return_value=uvicorn_module)
 
     settings_path = tmp_path / "custom.toml"
+    settings_path.write_text("target_error_rate = 0.1")
 
     try:
         result = runner.invoke(
@@ -135,3 +158,18 @@ def test_dashboard_command_sets_settings_path_env(
         )
     finally:
         os.environ.pop(env_key, None)
+
+
+def test_dashboard_command_rejects_invalid_settings_path(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    mocker.patch("apps.perona.app.import_module")
+    missing_path = tmp_path / "missing.toml"
+
+    result = runner.invoke(
+        app,
+        ["web", "dashboard", "--settings-path", str(missing_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output

@@ -141,9 +141,10 @@ inspect render and ingest metrics from a browser. Run
 toggle `--reload/--no-reload` for development auto-reloads and adjust
 `--log-level` as needed, with defaults bound to `127.0.0.1:8065`. Supply
 `--settings-path path/to/settings.toml` to load an alternate configuration
-before the server boots; the CLI exports the path via `PERONA_SETTINGS_PATH` so
-the FastAPI app picks it up on startup. Use `perona version` to print the
-current dashboard build number directly from the CLI. 【F:src/apps/perona/app.py†L1-L107】
+before the server boots; the CLI validates that the file exists and is readable
+before continuing, and exports the path via `PERONA_SETTINGS_PATH` so the
+FastAPI app picks it up on startup. Use `perona version` to print the
+current dashboard build number directly from the CLI. 【F:src/apps/perona/app.py†L1-L174】
 
 ### Rendering standalone scenes with Chopper
 
