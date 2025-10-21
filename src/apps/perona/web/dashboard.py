@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, NamedTuple
@@ -15,15 +14,12 @@ from fastapi.responses import StreamingResponse
 
 from apps.perona.version import PERONA_VERSION
 
-from apps.perona.engine import PeronaEngine
+from apps.perona.engine import PeronaEngine, DEFAULT_SETTINGS_PATH
 from apps.perona.models import (
     CostEstimate,
     CostEstimateRequest,
     OptimizationBacktestRequest,
     OptimizationBacktestResponse,
-    CostBreakdown,
-    CostModelInput,
-    DEFAULT_SETTINGS_PATH,
     OptimizationResult,
     PnLBreakdown,
     RenderMetric,
@@ -114,15 +110,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/render-feed", response_model=list[RenderMetricModel])
+@app.get("/render-feed", response_model=list[RenderMetric])
 def render_feed(
     limit: int = Query(30, ge=1, le=250),
     engine: PeronaEngine = Depends(get_engine),
-) -> list[RenderMetricModel]:
+) -> list[RenderMetric]:
     """Return recent render telemetry samples for dashboard widgets."""
 
     metrics = [
-        RenderMetricModel.from_entity(metric)
+        RenderMetric.from_entity(metric)
         for metric in engine.stream_render_metrics(limit)
     ]
     return metrics
@@ -137,7 +133,7 @@ async def render_feed_stream(
 
     async def _generator() -> Any:
         for metric in engine.stream_render_metrics(limit):
-            model = RenderMetricModel.from_entity(metric)
+            model = RenderMetric.from_entity(metric)
             payload = model.model_dump(mode="json", by_alias=True)
             yield json.dumps(payload) + "\n"
             await asyncio.sleep(0.05)
@@ -145,32 +141,32 @@ async def render_feed_stream(
     return StreamingResponse(_generator(), media_type="application/x-ndjson")
 
 
-@app.post("/cost/estimate", response_model=CostEstimateModel)
+@app.post("/cost/estimate", response_model=CostEstimate)
 def cost_estimate(
     payload: CostEstimateRequest,
     engine: PeronaEngine = Depends(get_engine),
-) -> CostEstimateModel:
+) -> CostEstimate:
     """Estimate the cost per frame for the supplied inputs."""
 
     breakdown = engine.estimate_cost(payload.to_entity())
-    return CostEstimateModel.from_breakdown(breakdown)
+    return CostEstimate.from_breakdown(breakdown)
 
 
-@app.get("/risk-heatmap", response_model=list[RiskIndicatorModel])
+@app.get("/risk-heatmap", response_model=list[RiskIndicator])
 def risk_heatmap(
     engine: PeronaEngine = Depends(get_engine),
-) -> list[RiskIndicatorModel]:
+) -> list[RiskIndicator]:
     """Return the current render risk heatmap."""
 
-    return [RiskIndicatorModel.from_entity(item) for item in engine.risk_heatmap()]
+    return [RiskIndicator.from_entity(item) for item in engine.risk_heatmap()]
 
 
-@app.get("/pnl", response_model=PnLBreakdownModel)
-def pnl(engine: PeronaEngine = Depends(get_engine)) -> PnLBreakdownModel:
+@app.get("/pnl", response_model=PnLBreakdown)
+def pnl(engine: PeronaEngine = Depends(get_engine)) -> PnLBreakdown:
     """Return the P&L attribution summary for the latest render window."""
 
     breakdown = engine.pnl_explainer()
-    return PnLBreakdownModel.from_entity(breakdown)
+    return PnLBreakdown.from_entity(breakdown)
 
 
 @app.post("/optimization/backtest", response_model=OptimizationBacktestResponse)
@@ -188,13 +184,13 @@ def optimization_backtest(
     )
 
 
-@app.get("/shots/lifecycle", response_model=list[ShotLifecycleModel])
+@app.get("/shots/lifecycle", response_model=list[Shot])
 def shots_lifecycle(
     engine: PeronaEngine = Depends(get_engine),
-) -> list[ShotLifecycleModel]:
+) -> list[Shot]:
     """Return lifecycle timelines for key monitored shots."""
 
-    return [ShotLifecycleModel.from_entity(item) for item in engine.shot_lifecycle()]
+    return [Shot.from_entity(item) for item in engine.shot_lifecycle()]
 
 
 __all__ = ["app", "get_engine", "invalidate_engine_cache"]
