@@ -25,6 +25,7 @@ from apps.perona.models import (
     RenderMetric,
     RiskIndicator,
     Shot,
+    SettingsSummary,
 )
 
 app = FastAPI(
@@ -47,31 +48,36 @@ _engine_lock = Lock()
 _engine_cache: _EngineCacheEntry | None = None
 
 
-def _settings_signature() -> tuple[str | None, str, float | None]:
-    """Return the cache signature for the current settings configuration."""
+def _resolved_settings_path() -> Path | None:
+    """Return the first existing settings candidate for display purposes."""
 
     env_path = os.getenv("PERONA_SETTINGS_PATH")
     candidates: list[Path] = []
     if env_path:
-        candidates.append(Path(env_path).expanduser())
+        candidates.append(Path(env_path))
     candidates.append(DEFAULT_SETTINGS_PATH)
 
-    resolved: Path | None = None
-    mtime: float | None = None
     for candidate in candidates:
-        try:
-            stat_result = candidate.stat()
-        except FileNotFoundError:
-            continue
-        else:
-            resolved = candidate
-            mtime = stat_result.st_mtime
-            break
+        resolved = candidate.expanduser()
+        if resolved.exists():
+            return resolved
+    return None
 
-    if resolved is None:
-        resolved = candidates[-1]
 
-    return (env_path, str(resolved), mtime)
+def _settings_signature() -> tuple[str | None, str, float | None]:
+    """Return the cache signature for the current settings configuration."""
+
+    env_path = os.getenv("PERONA_SETTINGS_PATH")
+    resolved_path = _resolved_settings_path()
+    signature_path = resolved_path or DEFAULT_SETTINGS_PATH.expanduser()
+
+    mtime: float | None = None
+    try:
+        mtime = signature_path.stat().st_mtime
+    except OSError:
+        mtime = None
+
+    return (env_path, str(signature_path), mtime)
 
 
 def _load_engine(force_refresh: bool) -> PeronaEngine:
@@ -108,6 +114,15 @@ def health() -> dict[str, str]:
     """Simple health endpoint for uptime checks."""
 
     return {"status": "ok"}
+
+
+@app.get("/settings", response_model=SettingsSummary)
+def settings_summary() -> SettingsSummary:
+    """Return the resolved configuration powering the dashboard."""
+
+    engine = PeronaEngine.from_settings()
+    resolved_path = _resolved_settings_path()
+    return SettingsSummary.from_engine(engine, settings_path=resolved_path)
 
 
 @app.get("/render-feed", response_model=list[RenderMetric])
