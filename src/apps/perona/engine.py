@@ -6,12 +6,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 import os
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes
-    import tomli as tomllib  # type: ignore[import]
+from typing import Iterable, Mapping, Sequence, Any
+import tomllib
 
 
 @dataclass(frozen=True)
@@ -210,17 +206,17 @@ def _coerce_cost_model_input(
 ) -> CostModelInput:
     data = data or {}
 
-    def _as_int(name: str, default: int) -> int:
+    def _as_int(name: str, default: int) -> Any:
         value = data.get(name, default)
         try:
-            return int(value)
+            return int(value)  # type: ignore[call-overload]
         except (TypeError, ValueError):
             return default
 
-    def _as_float(name: str, default: float) -> float:
+    def _as_float(name: str, default: float) -> Any:
         value = data.get(name, default)
         try:
-            return float(value)
+            return float(value)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             return default
 
@@ -240,9 +236,7 @@ def _coerce_cost_model_input(
             "storage_rate_per_gb", fallback.storage_rate_per_gb
         ),
         data_egress_gb=_as_float("data_egress_gb", fallback.data_egress_gb),
-        egress_rate_per_gb=_as_float(
-            "egress_rate_per_gb", fallback.egress_rate_per_gb
-        ),
+        egress_rate_per_gb=_as_float("egress_rate_per_gb", fallback.egress_rate_per_gb),
         misc_costs=_as_float("misc_costs", fallback.misc_costs),
     )
 
@@ -258,7 +252,9 @@ class PeronaEngine:
     ) -> None:
         self._baseline_cost_input = baseline_input or DEFAULT_BASELINE_COST_INPUT
         self._target_error_rate = (
-            target_error_rate if target_error_rate is not None else DEFAULT_TARGET_ERROR_RATE
+            target_error_rate
+            if target_error_rate is not None
+            else DEFAULT_TARGET_ERROR_RATE
         )
         self._pnl_baseline_cost = (
             pnl_baseline_cost
@@ -296,10 +292,10 @@ class PeronaEngine:
             baseline_settings, DEFAULT_BASELINE_COST_INPUT
         )
         target_error_rate = float(
-            raw_settings.get("target_error_rate", DEFAULT_TARGET_ERROR_RATE)
+            raw_settings.get("target_error_rate", DEFAULT_TARGET_ERROR_RATE)  # type: ignore[arg-type]
         )
         pnl_baseline_cost = float(
-            raw_settings.get("pnl_baseline_cost", DEFAULT_PNL_BASELINE_COST)
+            raw_settings.get("pnl_baseline_cost", DEFAULT_PNL_BASELINE_COST)  # type: ignore[arg-type]
         )
         return cls(
             baseline_input=baseline_input,
