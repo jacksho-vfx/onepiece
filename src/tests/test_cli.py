@@ -199,6 +199,75 @@ def test_settings_export_refuses_to_overwrite(tmp_path: Path) -> None:
     assert destination.read_text() == "original"
 
 
+def test_cost_estimate_command_outputs_table() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "cost",
+            "estimate",
+            "--frame-count",
+            "300",
+            "--average-frame-time-ms",
+            "90",
+            "--gpu-hourly-rate",
+            "4.5",
+            "--storage-gb",
+            "12",
+            "--storage-rate-per-gb",
+            "0.4",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Cost estimate" in result.output
+    assert "Storage cost" in result.output
+    assert "Total cost" in result.output
+
+
+def test_cost_estimate_command_supports_json_output() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "cost",
+            "estimate",
+            "--frame-count",
+            "120",
+            "--average-frame-time-ms",
+            "80",
+            "--gpu-hourly-rate",
+            "3.5",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["frame_count"] == 120
+    assert payload["concurrency"] == 1
+    assert payload["gpu_cost"] == 0.01
+
+
+def test_cost_estimate_command_reports_validation_errors() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "cost",
+            "estimate",
+            "--frame-count",
+            "0",
+            "--average-frame-time-ms",
+            "100",
+            "--gpu-hourly-rate",
+            "5",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "frame_count" in result.output
+    assert "greater than 0" in result.output
+
+
 def test_settings_export_can_force_overwrite(tmp_path: Path) -> None:
     destination = tmp_path / "perona.toml"
     destination.write_text("original")

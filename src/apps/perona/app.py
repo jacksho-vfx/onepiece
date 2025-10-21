@@ -10,7 +10,10 @@ from typing import Any, Literal, Mapping
 
 import typer
 
+from pydantic import ValidationError
+
 from apps.perona.engine import DEFAULT_SETTINGS_PATH, PeronaEngine
+from apps.perona.models import CostEstimate, CostEstimateRequest
 from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
@@ -26,7 +29,9 @@ app = typer.Typer(
     ),
 )
 web_app = typer.Typer(name="web", help="Web interface helpers for Perona.")
+cost_app = typer.Typer(name="cost", help="Cost modelling utilities for Perona.")
 app.add_typer(web_app)
+app.add_typer(cost_app)
 
 
 @app.command("version")
@@ -128,6 +133,30 @@ def _format_settings_table(
     return "\n".join(lines)
 
 
+def _format_cost_breakdown_table(estimate: CostEstimate) -> str:
+    """Render a tabular summary of the cost estimate."""
+
+    labels = {
+        "frame_count": "Frame count",
+        "gpu_hours": "GPU hours",
+        "render_hours": "Render hours",
+        "concurrency": "Concurrency",
+        "gpu_cost": "GPU cost",
+        "render_farm_cost": "Render farm cost",
+        "storage_cost": "Storage cost",
+        "egress_cost": "Egress cost",
+        "misc_cost": "Misc cost",
+        "total_cost": "Total cost",
+        "cost_per_frame": "Cost per frame",
+    }
+    values = estimate.model_dump()
+    width = max(len(label) for label in labels.values())
+    lines = ["Cost estimate", "-" * len("Cost estimate")]
+    for key, label in labels.items():
+        lines.append(f"{label:<{width}} : {_format_value(values[key])}")
+    return "\n".join(lines)
+
+
 @app.command("settings")
 def settings(
     settings_path: Path | None = typer.Option(
@@ -173,6 +202,100 @@ def settings(
             settings_path=resolved_path,
         )
     )
+
+
+@cost_app.command("estimate")
+def cost_estimate(
+    frame_count: int = typer.Option(
+        ..., "--frame-count", "-n", help="Total number of frames to render."
+    ),
+    average_frame_time_ms: float = typer.Option(
+        ...,
+        "--average-frame-time-ms",
+        "-t",
+        help="Average render time per frame in milliseconds.",
+    ),
+    gpu_hourly_rate: float = typer.Option(
+        ..., "--gpu-hourly-rate", "-r", help="Hourly GPU cost in the chosen currency."
+    ),
+    gpu_count: int = typer.Option(
+        1, "--gpu-count", "-g", help="Concurrent GPUs utilised for the render."
+    ),
+    render_hours: float = typer.Option(
+        0.0,
+        "--render-hours",
+        help="Actual render farm hours (defaults to theoretical if omitted).",
+    ),
+    render_farm_hourly_rate: float = typer.Option(
+        0.0,
+        "--render-farm-hourly-rate",
+        help="Hourly cost for managed render farm usage.",
+    ),
+    storage_gb: float = typer.Option(
+        0.0, "--storage-gb", help="Storage consumed in gigabytes."
+    ),
+    storage_rate_per_gb: float = typer.Option(
+        0.0, "--storage-rate-per-gb", help="Storage cost per gigabyte."
+    ),
+    data_egress_gb: float = typer.Option(
+        0.0, "--data-egress-gb", help="Data egress volume in gigabytes."
+    ),
+    egress_rate_per_gb: float = typer.Option(
+        0.0, "--egress-rate-per-gb", help="Data egress cost per gigabyte."
+    ),
+    misc_costs: float = typer.Option(
+        0.0, "--misc-costs", help="Additional miscellaneous costs."
+    ),
+    output_format: OutputFormat = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format for the estimate (table or json).",
+        case_sensitive=False,
+    ),
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file to seed defaults.",
+    ),
+) -> None:
+    """Estimate render costs for a given workload."""
+
+    try:
+        payload = CostEstimateRequest(
+            frame_count=frame_count,
+            average_frame_time_ms=average_frame_time_ms,
+            gpu_hourly_rate=gpu_hourly_rate,
+            gpu_count=gpu_count,
+            render_hours=render_hours,
+            render_farm_hourly_rate=render_farm_hourly_rate,
+            storage_gb=storage_gb,
+            storage_rate_per_gb=storage_rate_per_gb,
+            data_egress_gb=data_egress_gb,
+            egress_rate_per_gb=egress_rate_per_gb,
+            misc_costs=misc_costs,
+        )
+    except ValidationError as exc:
+        messages = []
+        for error in exc.errors():
+            location = ".".join(str(part) for part in error.get("loc", []))
+            messages.append(f"{location}: {error.get('msg')}")
+        raise typer.BadParameter("; ".join(messages)) from exc
+
+    validated_settings_path = _validate_settings_path(settings_path)
+    engine = PeronaEngine.from_settings(path=validated_settings_path)
+    breakdown = engine.estimate_cost(payload.to_entity())
+    estimate = CostEstimate.from_breakdown(breakdown)
+
+    fmt = str(output_format).lower()
+    if fmt not in {"table", "json"}:
+        raise typer.BadParameter("format must be either 'table' or 'json'.")
+
+    if fmt == "json":
+        typer.echo(json.dumps(estimate.model_dump(), indent=2, sort_keys=True))
+        return
+
+    typer.echo(_format_cost_breakdown_table(estimate))
 
 
 @web_app.command("dashboard")
@@ -261,4 +384,11 @@ def settings_export(
     typer.echo(f"Exported settings to {target_path}")
 
 
-__all__ = ["app", "dashboard", "settings", "settings_export", "version"]
+__all__ = [
+    "app",
+    "cost_estimate",
+    "dashboard",
+    "settings",
+    "settings_export",
+    "version",
+]
