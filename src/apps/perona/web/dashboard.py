@@ -37,7 +37,7 @@ app = FastAPI(
     version=PERONA_VERSION,
 )
 
-_engine = PeronaEngine()
+_engine = PeronaEngine.from_settings()
 
 
 class RenderMetricModel(BaseModel):

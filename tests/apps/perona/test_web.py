@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -112,3 +114,46 @@ def test_render_feed_stream() -> None:
             payloads.append(json.loads(raw_line))
     assert len(payloads) == 3
     assert all("gpuUtilisation" in item for item in payloads)
+
+
+def test_settings_override_via_environment(tmp_path) -> None:
+    """Engine reads settings from PERONA_SETTINGS_PATH when available."""
+
+    from apps.perona.web import dashboard as dashboard_module
+
+    settings_path = tmp_path / "override.toml"
+    settings_path.write_text(
+        """
+pnl_baseline_cost = 4321.0
+
+[baseline_cost_input]
+frame_count = 12
+average_frame_time_ms = 120.0
+gpu_hourly_rate = 4.5
+gpu_count = 8
+render_farm_hourly_rate = 1.25
+storage_gb = 1.5
+storage_rate_per_gb = 0.2
+data_egress_gb = 0.5
+egress_rate_per_gb = 0.1
+misc_costs = 12.5
+"""
+    )
+
+    original_env = os.environ.get("PERONA_SETTINGS_PATH")
+    os.environ["PERONA_SETTINGS_PATH"] = str(settings_path)
+    try:
+        reloaded = importlib.reload(dashboard_module)
+        override_client = TestClient(reloaded.app)
+        response = override_client.get("/pnl")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["baseline_cost"] == pytest.approx(4321.0)
+    finally:
+        if original_env is None:
+            os.environ.pop("PERONA_SETTINGS_PATH", None)
+        else:
+            os.environ["PERONA_SETTINGS_PATH"] = original_env
+        restored = importlib.reload(dashboard_module)
+        global client
+        client = TestClient(restored.app)
