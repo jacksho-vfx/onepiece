@@ -1123,29 +1123,34 @@ class RenderSubmissionService:
                 status_entry = status_totals.setdefault(
                     status_name,
                     {
-                        "count": 0,
+                        "jobs": set(),
                         "total_duration": 0.0,
                         "active": 0,
                         "last_updated": None,
                     },
                 )
-                status_entry["count"] += 1
+                # Track job identifiers per status so we can report the number of
+                # distinct jobs that have visited the status rather than the number
+                # of status transitions recorded in history.
+                status_entry["jobs"].add(record.job_id)
                 status_entry["total_duration"] += max(duration_seconds, 0.0)
                 if record_updated is not None:
                     last_updated: datetime | None = status_entry["last_updated"]
                     if last_updated is None or record_updated > last_updated:
                         status_entry["last_updated"] = record_updated
 
+            record_status = record.status or "unknown"
             status_entry = status_totals.setdefault(
-                record.status,
+                record_status,
                 {
-                    "count": 0,
+                    "jobs": set(),
                     "total_duration": 0.0,
                     "active": 0,
                     "last_updated": None,
                 },
             )
             status_entry["active"] += 1
+            status_entry["jobs"].add(record.job_id)
             if record_updated is not None:
                 last_updated = status_entry["last_updated"]
                 if last_updated is None or record_updated > last_updated:
@@ -1182,7 +1187,7 @@ class RenderSubmissionService:
 
         status_payload: dict[str, RenderStatusAnalytics] = {}
         for status_name, entry in status_totals.items():
-            count = entry["count"]
+            count = len(entry["jobs"])
             active = entry["active"]
             total_duration = entry["total_duration"]
             effective_count = count or active
