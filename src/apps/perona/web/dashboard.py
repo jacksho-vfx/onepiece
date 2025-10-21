@@ -128,13 +128,17 @@ def settings_summary() -> SettingsSummary:
 @app.get("/render-feed", response_model=list[RenderMetric])
 def render_feed(
     limit: int = Query(30, ge=1, le=250),
+    sequence: str | None = Query(None),
+    shot_id: str | None = Query(None),
     engine: PeronaEngine = Depends(get_engine),
 ) -> list[RenderMetric]:
     """Return recent render telemetry samples for dashboard widgets."""
 
     metrics = [
         RenderMetric.from_entity(metric)
-        for metric in engine.stream_render_metrics(limit)
+        for metric in engine.stream_render_metrics(
+            limit, sequence=sequence, shot_id=shot_id
+        )
     ]
     return metrics
 
@@ -142,12 +146,16 @@ def render_feed(
 @app.get("/render-feed/live")
 async def render_feed_stream(
     limit: int = Query(30, ge=1, le=250),
+    sequence: str | None = Query(None),
+    shot_id: str | None = Query(None),
     engine: PeronaEngine = Depends(get_engine),
 ) -> StreamingResponse:
     """Stream telemetry samples using newline delimited JSON."""
 
     async def _generator() -> Any:
-        for metric in engine.stream_render_metrics(limit):
+        for metric in engine.stream_render_metrics(
+            limit, sequence=sequence, shot_id=shot_id
+        ):
             model = RenderMetric.from_entity(metric)
             payload = model.model_dump(mode="json", by_alias=True)
             yield json.dumps(payload) + "\n"

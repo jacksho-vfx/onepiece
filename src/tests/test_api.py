@@ -58,6 +58,16 @@ def test_render_feed_limit() -> None:
     assert {"sequence", "shot_id", "fps"}.issubset(first.keys())
 
 
+def test_render_feed_filters() -> None:
+    params = {"sequence": "SQ18", "shot_id": "SQ18_SH220"}
+    response = client.get("/render-feed", params=params)
+    assert response.status_code == 200
+    data = response.json()
+    assert data, "Expected filtered render feed to return samples"
+    assert {item["sequence"] for item in data} == {"SQ18"}
+    assert {item["shot_id"] for item in data} == {"SQ18_SH220"}
+
+
 def test_cost_estimate_endpoint() -> None:
     payload = {
         "frame_count": 60,
@@ -136,6 +146,20 @@ def test_render_feed_stream() -> None:
             payloads.append(json.loads(raw_line))
     assert len(payloads) == 3
     assert all("gpuUtilisation" in item for item in payloads)
+
+
+def test_render_feed_stream_filters() -> None:
+    params = {"sequence": "SQ05", "shot_id": "SQ05_SH045", "limit": 2}
+    with client.stream("GET", "/render-feed/live", params=params) as response:  # type: ignore[arg-type]
+        assert response.status_code == 200
+        payloads: list[dict[str, object]] = []
+        for raw_line in response.iter_lines():
+            if not raw_line:
+                continue
+            payloads.append(json.loads(raw_line))
+    assert len(payloads) == 2
+    assert {item["sequence"] for item in payloads} == {"SQ05"}
+    assert {item["shot_id"] for item in payloads} == {"SQ05_SH045"}
 
 
 def test_settings_reload_between_requests(

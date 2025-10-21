@@ -340,13 +340,24 @@ class PeronaEngine:
             pnl_baseline_cost=pnl_baseline_cost,
         )
 
-    def stream_render_metrics(self, limit: int | None = None) -> Iterable[RenderMetric]:
-        """Return the most recent render metrics, capped by *limit* if provided."""
+    def stream_render_metrics(
+        self,
+        limit: int | None = None,
+        *,
+        sequence: str | None = None,
+        shot_id: str | None = None,
+    ) -> Iterable[RenderMetric]:
+        """Return recent render metrics filtered by the supplied identifiers."""
 
-        samples: Sequence[RenderMetric] = self._render_log
+        filtered: list[RenderMetric] = [
+            sample
+            for sample in self._render_log
+            if (sequence is None or sample.sequence == sequence)
+            and (shot_id is None or sample.shot_id == shot_id)
+        ]
         if limit is not None:
-            samples = samples[-limit:]
-        for sample in samples:
+            filtered = filtered[-limit:]
+        for sample in filtered:
             yield sample
 
     def estimate_cost(self, inputs: CostModelInput) -> CostBreakdown:

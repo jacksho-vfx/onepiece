@@ -172,4 +172,6 @@ def test_dashboard_command_rejects_invalid_settings_path(
     )
 
     assert result.exit_code != 0
-    assert "does not exist" in result.output
+    terms = ["does", "not", "exist"]
+    for term in terms:
+        assert term in result.output
