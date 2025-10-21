@@ -100,7 +100,9 @@ def test_shots_lifecycle_endpoint_returns_timelines() -> None:
 def test_ndjson_render_feed_stream() -> None:
     async def _collect_stream() -> list[dict[str, object]]:
         def _read_stream() -> list[dict[str, object]]:
-            with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
+            with client.stream(
+                "GET", "/render-feed/live", params={"limit": 3}
+            ) as response:
                 assert response.status_code == 200
                 payloads: list[dict[str, object]] = []
                 for raw_line in response.iter_lines():
