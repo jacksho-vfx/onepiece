@@ -31,7 +31,13 @@ def version() -> None:
 def _load_uvicorn() -> Any:
     """Dynamically import uvicorn to keep it optional for non-web commands."""
 
-    return import_module("uvicorn")
+    try:
+        return import_module("uvicorn")
+    except ImportError as exc:
+        raise typer.BadParameter(
+            "uvicorn is required for this command. Install it with "
+            "`pip install onepiece[uvicorn]`."
+        ) from exc
 
 
 @web_app.command("dashboard")
