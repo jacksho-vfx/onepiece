@@ -183,7 +183,9 @@ class PeronaEngine:
     def stream_render_metrics(self, limit: int | None = None) -> Iterable[RenderMetric]:
         """Return the most recent render metrics, capped by *limit* if provided."""
 
-        samples = sorted(self._render_log, key=lambda item: item.timestamp, reverse=True)
+        samples = sorted(
+            self._render_log, key=lambda item: item.timestamp, reverse=True
+        )
         if limit is not None:
             samples = samples[:limit]
         for sample in reversed(samples):
@@ -211,7 +213,9 @@ class PeronaEngine:
         storage_cost = inputs.storage_gb * inputs.storage_rate_per_gb
         egress_cost = inputs.data_egress_gb * inputs.egress_rate_per_gb
         misc_cost = inputs.misc_costs
-        total_cost = gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
+        total_cost = (
+            gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
+        )
         cost_per_frame = total_cost / inputs.frame_count
         return CostBreakdown(
             frame_count=inputs.frame_count,
@@ -236,7 +240,10 @@ class PeronaEngine:
             render_factor = telemetry.average_frame_time_ms / baseline_time
             error_factor = telemetry.error_rate / self._target_error_rate
             cache_penalty = 1.0 - telemetry.cache_stability
-            score = min(100.0, round(render_factor * 40 + error_factor * 40 + cache_penalty * 20, 2))
+            score = min(
+                100.0,
+                round(render_factor * 40 + error_factor * 40 + cache_penalty * 20, 2),
+            )
             drivers: list[str] = []
             if render_factor > 1.05:
                 drivers.append(
@@ -293,16 +300,21 @@ class PeronaEngine:
                 scenario_input = replace(
                     scenario_input, gpu_hourly_rate=scenario.gpu_hourly_rate
                 )
-            frame_time_multiplier = max(scenario.frame_time_scale * scenario.sampling_scale, 0.05)
+            frame_time_multiplier = max(
+                scenario.frame_time_scale * scenario.sampling_scale, 0.05
+            )
             scenario_input = replace(
                 scenario_input,
                 average_frame_time_ms=baseline_input.average_frame_time_ms
                 * frame_time_multiplier,
-                storage_gb=baseline_input.storage_gb * max(scenario.resolution_scale**2, 0.1),
+                storage_gb=baseline_input.storage_gb
+                * max(scenario.resolution_scale**2, 0.1),
             )
             breakdown = self.estimate_cost(scenario_input)
             savings = round(baseline_breakdown.total_cost - breakdown.total_cost, 2)
-            notes = scenario.notes or self._build_optimization_note(scenario, breakdown, baseline_breakdown)
+            notes = scenario.notes or self._build_optimization_note(
+                scenario, breakdown, baseline_breakdown
+            )
             results.append(
                 OptimizationResult(
                     name=scenario.name,
@@ -570,7 +582,10 @@ class PeronaEngine:
         ]
         if scenario.gpu_count and scenario.gpu_count != baseline.concurrency:
             details.append(f"gpu count -> {scenario.gpu_count}")
-        if scenario.gpu_hourly_rate and scenario.gpu_hourly_rate != self._baseline_cost_input.gpu_hourly_rate:
+        if (
+            scenario.gpu_hourly_rate
+            and scenario.gpu_hourly_rate != self._baseline_cost_input.gpu_hourly_rate
+        ):
             details.append(f"gpu rate ${scenario.gpu_hourly_rate:.2f}/h")
         if scenario.frame_time_scale != 1.0 or scenario.sampling_scale != 1.0:
             details.append(

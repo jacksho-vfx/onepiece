@@ -148,7 +148,9 @@ class OptimizationScenarioRequest(BaseModel):
     notes: str | None = None
 
     def to_entity(self) -> OptimizationScenario:
-        return OptimizationScenario(**{k: v for k, v in self.model_dump().items() if v is not None})
+        return OptimizationScenario(
+            **{k: v for k, v in self.model_dump().items() if v is not None}
+        )
 
 
 class OptimizationResultModel(BaseModel):
