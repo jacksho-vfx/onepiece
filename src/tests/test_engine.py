@@ -169,7 +169,9 @@ def test_load_settings_logs_and_falls_back_on_toml_errors(
 
     assert data["baseline_cost_input"]["frame_count"] == 2688
     assert any(str(bad_config) in record.message for record in caplog.records)
-    assert any("falling back to defaults" in record.message for record in caplog.records)
+    assert any(
+        "falling back to defaults" in record.message for record in caplog.records
+    )
 
 
 def test_constructor_accepts_injected_baseline() -> None:
