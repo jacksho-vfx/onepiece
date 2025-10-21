@@ -18,6 +18,7 @@ pip install -e .
 
 # Explore the available commands
 onepiece --help
+perona --help
 ```
 
 Once installed, the CLI exposes a number of subcommands:
@@ -131,6 +132,14 @@ onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK
 ```
 
 Packages that include `metadata.json` with Unreal import details now drive automatically constructed `AssetImportTask` objects. Failed Maya-to-Unreal validations abort the process with actionable error messages, while dry-run mode prints the planned tasks as JSON for review. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
+
+### Operating the Perona dashboard
+
+The `perona` CLI serves the VFX performance dashboard via uvicorn so teams can
+inspect render and ingest metrics from a browser. Run
+`perona web dashboard --host 0.0.0.0 --port 8065` to expose the FastAPI app;
+toggle `--reload/--no-reload` for development auto-reloads and adjust
+`--log-level` as needed, with defaults bound to `127.0.0.1:8065`. 【F:src/apps/perona/app.py†L1-L69】
 
 ### Rendering standalone scenes with Chopper
 
