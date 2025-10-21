@@ -11,7 +11,12 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from apps.perona.app import DEFAULT_HOST, DEFAULT_PORT, app
-from apps.perona.engine import DEFAULT_SETTINGS_PATH
+from apps.perona.engine import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_SETTINGS_PATH,
+    DEFAULT_TARGET_ERROR_RATE,
+)
 from apps.perona.version import PERONA_VERSION
 
 
@@ -104,6 +109,94 @@ gpu_hourly_rate = 4.2
     assert payload["baseline_cost_input"]["frame_count"] == 48
     assert payload["baseline_cost_input"]["average_frame_time_ms"] == 21.5
     assert payload["baseline_cost_input"]["gpu_hourly_rate"] == 4.2
+
+
+def test_settings_command_supports_diff_table(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
+
+    settings_path = tmp_path / "diff.toml"
+    settings_path.write_text(
+        """
+target_error_rate = 0.02
+pnl_baseline_cost = 19000.0
+
+[baseline_cost_input]
+gpu_hourly_rate = 9.75
+frame_count = 3000
+""".strip()
+    )
+
+    result = runner.invoke(
+        app, ["settings", "--settings-path", str(settings_path), "--diff"]
+    )
+
+    assert result.exit_code == 0
+    assert "Differences from defaults" in result.output
+    assert "Baseline cost inputs" in result.output
+    assert "(Δ +1.0, default 8.75)" in result.output
+    assert "(Δ +312, default 2,688)" in result.output
+    assert "(Δ +0.008, default 0.012)" in result.output
+    assert "(Δ +760.0, default 18,240.0)" in result.output
+
+
+def test_settings_command_supports_diff_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
+
+    settings_path = tmp_path / "diff-json.toml"
+    settings_path.write_text(
+        """
+target_error_rate = 0.02
+pnl_baseline_cost = 19000.0
+
+[baseline_cost_input]
+gpu_hourly_rate = 9.75
+frame_count = 3000
+""".strip()
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "settings",
+            "--settings-path",
+            str(settings_path),
+            "--format",
+            "json",
+            "--diff",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["target_error_rate"] == 0.02
+    differences = payload.get("differences")
+    assert differences is not None
+
+    baseline_diffs = differences["baseline_cost_input"]
+    assert baseline_diffs["gpu_hourly_rate"]["current"] == 9.75
+    assert baseline_diffs["gpu_hourly_rate"]["default"] == pytest.approx(
+        DEFAULT_BASELINE_COST_INPUT.gpu_hourly_rate
+    )
+    assert baseline_diffs["gpu_hourly_rate"]["delta"] == pytest.approx(1.0)
+
+    frame_diff = baseline_diffs["frame_count"]
+    assert frame_diff["current"] == 3000
+    assert frame_diff["default"] == DEFAULT_BASELINE_COST_INPUT.frame_count
+    assert frame_diff["delta"] == 312
+
+    target_diff = differences["target_error_rate"]
+    assert target_diff["current"] == 0.02
+    assert target_diff["default"] == pytest.approx(DEFAULT_TARGET_ERROR_RATE)
+    assert target_diff["delta"] == pytest.approx(0.008)
+
+    pnl_diff = differences["pnl_baseline_cost"]
+    assert pnl_diff["current"] == 19000.0
+    assert pnl_diff["default"] == DEFAULT_PNL_BASELINE_COST
+    assert pnl_diff["delta"] == pytest.approx(760)
 
 
 def test_settings_command_rejects_missing_path(tmp_path: Path) -> None:

@@ -18,11 +18,15 @@ perona settings
 
 # Load an explicit settings file and display the resolved table
 perona settings --settings-path /opt/perona/perona.toml
+
+# Highlight how overrides differ from the bundled defaults
+perona settings --settings-path /opt/perona/perona.toml --diff
 ```
 
 Key options:
 
 - `--settings-path PATH` &mdash; optional, validates that the file exists and is readable before using it.
+- `--diff/--no-diff` &mdash; opt-in, appends a comparison against the packaged defaults (works with both table and JSON output).
 - `--format table|json` &mdash; switches between the aligned table (default) and JSON output for automation.
 
 The JSON output doubles as an export helper so downstream tooling can persist the configuration snapshot:
