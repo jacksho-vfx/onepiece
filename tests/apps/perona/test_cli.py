@@ -1,6 +1,7 @@
 """CLI regression tests for the Perona Typer application."""
 
 import os
+from pathlib import Path
 
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
@@ -28,7 +29,7 @@ def test_dashboard_command_reports_missing_uvicorn(mocker: MockerFixture) -> Non
 
 
 def test_dashboard_command_sets_settings_path_env(
-    mocker: MockerFixture, tmp_path
+    mocker: MockerFixture, tmp_path: Path
 ) -> None:
     env_key = "PERONA_SETTINGS_PATH"
     os.environ.pop(env_key, None)
