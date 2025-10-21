@@ -147,7 +147,11 @@ toggle `--reload/--no-reload` for development auto-reloads and adjust
 before the server boots; the CLI validates that the file exists and is readable
 before continuing, and exports the path via `PERONA_SETTINGS_PATH` so the
 FastAPI app picks it up on startup. Use `perona version` to print the
-current dashboard build number directly from the CLI. 【F:src/apps/perona/app.py†L1-L174】
+current dashboard build number directly from the CLI. The FastAPI surface
+mirrors [`perona settings`](docs/perona_dashboard.md#inspect-resolved-settings)
+via [`GET /settings`](docs/perona_dashboard.md#settings-snapshot) so automation
+can read the merged configuration without shelling out to the CLI.
+【F:src/apps/perona/app.py†L1-L174】【F:src/apps/perona/web/dashboard.py†L101-L133】
 
 The runtime configuration loader emits warnings via the `apps.perona.engine`
 logger whenever a candidate settings file cannot be read or parsed, including

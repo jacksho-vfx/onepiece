@@ -103,8 +103,44 @@ overrides under version control to ensure reproducible deployments.
 ## HTTP API reference
 
 Perona's FastAPI surface ships alongside the CLI. Endpoints are rooted at the uvicorn base URL (for example,
-`http://127.0.0.1:8065`). The service does not expose a standalone `/settings` endpoint; instead use `perona settings --format json`
-to retrieve the effective configuration until the REST surface grows to cover it.
+`http://127.0.0.1:8065`). The `/settings` endpoint mirrors the [`perona settings`](#inspect-resolved-settings) CLI output so
+automation can consume the resolved configuration directly from the API.
+
+### Settings snapshot
+
+- `GET /settings` &mdash; returns the resolved configuration powering the dashboard, including any overrides detected on disk or
+  via `PERONA_SETTINGS_PATH`.
+
+```bash
+curl http://127.0.0.1:8065/settings | jq
+```
+
+Example response:
+
+```json
+{
+  "baseline_cost_input": {
+    "frame_count": 2688,
+    "average_frame_time_ms": 142.0,
+    "gpu_hourly_rate": 8.75,
+    "gpu_count": 64,
+    "render_hours": 0.0,
+    "render_farm_hourly_rate": 5.25,
+    "storage_gb": 12.4,
+    "storage_rate_per_gb": 0.38,
+    "data_egress_gb": 3.8,
+    "egress_rate_per_gb": 0.19,
+    "misc_costs": 220.0
+  },
+  "target_error_rate": 0.012,
+  "pnl_baseline_cost": 18240.0,
+  "settings_path": "/opt/perona/perona.toml"
+}
+```
+
+When no overrides are detected the `settings_path` field is `null`. Supplying `perona web dashboard --settings-path` (or
+exporting `PERONA_SETTINGS_PATH`) ensures the API echoes the same path so release diffing can confirm the expected file was
+loaded.
 
 ### Health checks
 
@@ -169,8 +205,12 @@ curl http://127.0.0.1:8065/shots/lifecycle | jq '.[0]'
 
 Before cutting a release confirm:
 
-- CLI commands above match `perona --help` output.
-- The configuration resolution order reflects the latest engine defaults.
-- API responses align with the FastAPI models (update curl examples if schemas change).
+- CLI commands above match `perona --help` output, including the [`perona settings`](#inspect-resolved-settings) JSON diff
+  helpers, the [`perona cost estimate`](#estimate-render-costs) command, and the [`perona web dashboard`](#launch-the-web-dashboard)
+  reload toggles.
+- The configuration resolution order reflects the latest engine defaults and aligns with the [`GET /settings`](#settings-snapshot)
+  response payload.
+- API responses align with the FastAPI models (update curl examples if schemas change), especially the [`/settings`](#settings-snapshot)
+  and [`/cost/estimate`](#cost-estimation) endpoints.
 
 Once verified, update this document and cross-check the README link to keep operator documentation consistent.
