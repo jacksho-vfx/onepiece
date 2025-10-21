@@ -306,12 +306,10 @@ class PeronaEngine:
     def stream_render_metrics(self, limit: int | None = None) -> Iterable[RenderMetric]:
         """Return the most recent render metrics, capped by *limit* if provided."""
 
-        samples = sorted(
-            self._render_log, key=lambda item: item.timestamp, reverse=True
-        )
+        samples: Sequence[RenderMetric] = self._render_log
         if limit is not None:
-            samples = samples[:limit]
-        for sample in reversed(samples):
+            samples = samples[-limit:]
+        for sample in samples:
             yield sample
 
     def estimate_cost(self, inputs: CostModelInput) -> CostBreakdown:
@@ -522,6 +520,7 @@ class PeronaEngine:
                         cache_health=telemetry.cache_stability,
                     )
                 )
+        samples.sort(key=lambda metric: metric.timestamp)
         return tuple(samples)
 
     def _build_lifecycle(self) -> tuple[ShotLifecycle, ...]:
