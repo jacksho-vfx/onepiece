@@ -32,6 +32,29 @@ The JSON output doubles as an export helper so downstream tooling can persist th
 perona settings --format json > build/perona-settings.json
 ```
 
+### Estimate render costs
+
+Use `perona cost estimate` to model the spend for a prospective render workload without hitting the API:
+
+```bash
+# Produce a tabular breakdown of costs
+perona cost estimate --frame-count 480 --average-frame-time-ms 110 --gpu-hourly-rate 9.25 \
+  --storage-gb 15 --storage-rate-per-gb 0.45
+
+# Emit JSON for automation pipelines
+perona cost estimate --frame-count 120 --average-frame-time-ms 80 --gpu-hourly-rate 7.5 \
+  --format json
+```
+
+Key options:
+
+- `--frame-count` &mdash; required, total number of frames being rendered.
+- `--average-frame-time-ms` &mdash; required, mean render time per frame in milliseconds.
+- `--gpu-hourly-rate` &mdash; required, cost of GPU usage per hour.
+- `--storage-gb`, `--storage-rate-per-gb`, `--data-egress-gb`, `--egress-rate-per-gb`, `--misc-costs` &mdash; optional inputs for ancillary spend.
+- `--format table|json` &mdash; toggles between the tabular and JSON renderings of the breakdown.
+- `--settings-path PATH` &mdash; optional, seeds the engine with a custom settings file before calculating costs.
+
 ### Launch the web dashboard
 
 Use `perona web dashboard` to boot the uvicorn-powered FastAPI service:
