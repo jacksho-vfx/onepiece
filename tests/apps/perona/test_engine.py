@@ -75,7 +75,9 @@ def test_shot_lifecycle_exposes_current_stage(engine: PeronaEngine) -> None:
     lifecycles = engine.shot_lifecycle()
     assert lifecycles
     for lifecycle in lifecycles:
-        open_stage_count = len([stage for stage in lifecycle.stages if stage.completed_at is None])
+        open_stage_count = len(
+            [stage for stage in lifecycle.stages if stage.completed_at is None]
+        )
         assert lifecycle.current_stage in {stage.name for stage in lifecycle.stages}
         if open_stage_count:
             assert lifecycle.current_stage in {
