@@ -6,11 +6,14 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Iterable
 
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .engine import (
     CostBreakdown,
     CostModelInput,
+    PeronaEngine,
     OptimizationResult as EngineOptimizationResult,
     OptimizationScenario,
     PnLBreakdown as EnginePnLBreakdown,
@@ -207,6 +210,50 @@ class CostEstimateRequest(BaseModel):
 
     def to_entity(self) -> CostModelInput:
         return CostModelInput(**self.model_dump())
+
+
+class BaselineCostInput(BaseModel):
+    """Baseline cost input parameters sourced from configuration."""
+
+    frame_count: int
+    average_frame_time_ms: float
+    gpu_hourly_rate: float
+    gpu_count: int
+    render_hours: float
+    render_farm_hourly_rate: float
+    storage_gb: float
+    storage_rate_per_gb: float
+    data_egress_gb: float
+    egress_rate_per_gb: float
+    misc_costs: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_entity(cls, inputs: CostModelInput) -> "BaselineCostInput":
+        return cls.model_validate(inputs)
+
+
+class SettingsSummary(BaseModel):
+    """Snapshot of the resolved settings powering the dashboard."""
+
+    baseline_cost_input: BaselineCostInput
+    target_error_rate: float
+    pnl_baseline_cost: float
+    settings_path: Path | None = None
+
+    @classmethod
+    def from_engine(
+        cls, engine: "PeronaEngine", *, settings_path: Path | None
+    ) -> "SettingsSummary":
+        return cls(
+            baseline_cost_input=BaselineCostInput.from_entity(
+                engine.baseline_cost_input
+            ),
+            target_error_rate=engine.target_error_rate,
+            pnl_baseline_cost=engine.pnl_baseline_cost,
+            settings_path=settings_path,
+        )
 
 
 class OptimizationScenarioRequest(BaseModel):
