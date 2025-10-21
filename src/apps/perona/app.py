@@ -1,17 +1,21 @@
 """Typer CLI entry points for the Perona dashboard services."""
 
+import json
 import os
+from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Mapping
 
 import typer
 
+from apps.perona.engine import DEFAULT_SETTINGS_PATH, PeronaEngine
 from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8065
-DEFAULT_SETTINGS_FILE = Path(__file__).with_name("defaults.toml")
+
+OutputFormat = Literal["table", "json"]
 
 app = typer.Typer(
     name="perona",
@@ -43,38 +47,118 @@ def _load_uvicorn() -> Any:
         ) from exc
 
 
-def _resolve_settings_file() -> Path:
-    """Return the active Perona settings file path."""
 
+def _format_value(value: object) -> str:
+    """Render numeric values with thousands separators where possible."""
+
+    if isinstance(value, float):
+        return f"{value:,}"
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def _humanise_key(key: str) -> str:
+    """Convert snake_case keys into a more readable variant."""
+
+    overrides = {"gpu": "GPU", "gb": "GB", "ms": "ms", "pnl": "P&L"}
+    words = key.split("_")
+    return " ".join(overrides.get(word, word.capitalize()) for word in words)
+
+
+def _resolve_settings_path(cli_path: Path | None) -> Path | None:
+    """Return the first existing settings candidate for display purposes."""
+
+    candidates: list[Path] = []
+    if cli_path is not None:
+        candidates.append(cli_path)
     env_path = os.getenv("PERONA_SETTINGS_PATH")
     if env_path:
-        return Path(env_path)
-    return DEFAULT_SETTINGS_FILE
+        candidates.append(Path(env_path))
+    candidates.append(DEFAULT_SETTINGS_PATH)
+
+    for candidate in candidates:
+        resolved = candidate.expanduser()
+        if resolved.exists():
+            return resolved
+    return None
+
+
+def _format_settings_table(
+    baseline: Mapping[str, object],
+    target_error_rate: float,
+    pnl_baseline_cost: float,
+    *,
+    settings_path: Path | None,
+) -> str:
+    """Produce a readable summary of the resolved Perona settings."""
+
+    humanised_keys = {key: _humanise_key(key) for key in baseline}
+    width = max(
+        [len(name) for name in humanised_keys.values()]
+        + [len("Target error rate"), len("P&L baseline cost")]
+    )
+    lines: list[str] = []
+    if settings_path is not None:
+        lines.append(f"Settings file: {settings_path}")
+        lines.append("")
+    lines.append("Baseline cost inputs")
+    lines.append("-" * len("Baseline cost inputs"))
+    for key, value in baseline.items():
+        display_key = humanised_keys[key]
+        lines.append(f"{display_key:<{width}} : {_format_value(value)}")
+    lines.append("")
+    lines.append(f"{'Target error rate':<{width}} : {_format_value(target_error_rate)}")
+    lines.append(
+        f"{'P&L baseline cost':<{width}} : {_format_value(pnl_baseline_cost)}"
+    )
+    return "\n".join(lines)
 
 
 @app.command("settings")
 def settings(
-    show_path: bool = typer.Option(
-        False,
-        "--show-path",
-        help="Show the resolved settings path instead of the file contents.",
-    )
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file to load.",
+    ),
+    output_format: OutputFormat = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format for the resolved settings (table or json).",
+        case_sensitive=False,
+    ),
 ) -> None:
-    """Display the contents (or path) of the active Perona settings file."""
+    """Display the resolved Perona configuration values."""
 
-    settings_file = _resolve_settings_file()
+    resolved_path = _resolve_settings_path(settings_path)
+    engine = PeronaEngine.from_settings(path=settings_path)
+    baseline = asdict(engine.baseline_cost_input)
+    payload: dict[str, object] = {
+        "baseline_cost_input": baseline,
+        "target_error_rate": engine.target_error_rate,
+        "pnl_baseline_cost": engine.pnl_baseline_cost,
+    }
+    if resolved_path is not None:
+        payload["settings_path"] = str(resolved_path)
 
-    if show_path:
-        typer.echo(str(settings_file))
+    fmt = str(output_format).lower()
+    if fmt not in {"table", "json"}:
+        raise typer.BadParameter("format must be either 'table' or 'json'.")
+
+    if fmt == "json":
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 
-    if not settings_file.exists():
-        typer.echo(
-            f"Settings file not found at {settings_file}. Set PERONA_SETTINGS_PATH to a valid file."
+    typer.echo(
+        _format_settings_table(
+            baseline,
+            engine.target_error_rate,
+            engine.pnl_baseline_cost,
+            settings_path=resolved_path,
         )
-        raise typer.Exit(code=1)
-
-    typer.echo(settings_file.read_text())
+    )
 
 
 @web_app.command("dashboard")
