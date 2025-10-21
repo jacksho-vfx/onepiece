@@ -5,6 +5,8 @@
 The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`, `shotgrid`, and `validate` command groups (including the reconciliation helper) under `python -m apps.onepiece`.
 
 > **Release spotlight (v1.0.0):** Configuration profiles can now be layered across user, project, and workspace scopes, ingest commands expose resumable upload controls, render submissions validate adapter capabilities up-front, and the brand-new Uta Control Center mirrors every CLI command in a browser alongside the Trafalgar dashboard.
+>
+> **Latest merges:** A new `dcc animation` command group debugs Maya scenes, cleans namespaces, and automates playblasts with structured logging. Published packages can be re-imported into Unreal through `dcc import-unreal`, and the publish workflow now enforces safe scene names while surfacing Unreal export validation summaries. Environment health checks treat plugin names case-insensitively and fall back gracefully when PyMEL is unavailable, and Trafalgar's reconcile helpers sit atop a pluggable provider registry with sensible defaults. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/validations/dcc.py†L1-L118】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Core
 - `python -m apps.onepiece info` — print environment and configuration details for the pipeline client.
@@ -33,6 +35,10 @@ If the ingest command exits early, review the CLI heading and take the suggested
 ### DCC integration
 - `python -m apps.onepiece dcc open-shot --shot <scene_file> [--dcc <maya|nuke|…>]` — open the scene in the inferred or specified DCC, surfacing external errors cleanly.
 - `python -m apps.onepiece dcc publish --dcc <dcc> --scene-name <name> --renders <path> --previews <path> --otio <file> --metadata <file> --destination <dir> --bucket <bucket> --show-code <code> [--show-type vfx|prod --profile <aws_profile> --direct-upload-path s3://… --dependency-summary]` — package and publish a scene, optionally summarising dependency validation.
+- `python -m apps.onepiece dcc animation debug-animation [--scene-name current] [--fail-on-warnings]` — analyse animation metadata and report muted constraints, channel mismatches, and frame range issues before shots leave Maya.
+- `python -m apps.onepiece dcc animation cleanup-scene [--remove-unused-references/--keep-unused-references …]` — prune unused references, empty namespaces, and unknown nodes with per-operation toggles.
+- `python -m apps.onepiece dcc animation playblast --project <code> --shot <shot> --artist <user> --camera <name> --version <n> --output-directory <dir> [--sequence <seq> --format mov|avi|… --metadata <file> --include-audio]` — generate logged playblasts that downstream review tools can ingest.
+- `python -m apps.onepiece dcc import-unreal --package <dir> --project <project> --asset <asset> [--dry-run]` — rebuild an Unreal asset from a published package, previewing the generated `AssetImportTask` payloads with `--dry-run`.
 
 ### Review & render
 - `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--burnin/--no-burnin --codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest.
@@ -117,8 +123,8 @@ team updated without scraping terminal output.
 - `python -m apps.onepiece validate names-batch [--csv <names.csv> | --dir <directory>]` — batch-validate names from CSV or filesystem sources with rich output.
 - `python -m apps.onepiece validate paths <path> [<path> …]` — preflight filesystem paths for existence, writability, and free space.
 - `python -m apps.onepiece validate asset-consistency <manifest.json> [--local-base <root>] [--project <project> --context <vendor_in|…>] [--scope shots|assets]` — compare manifest expectations against local storage and S3 parity checks.
-- `python -m apps.onepiece validate dcc-environment [--dcc <maya> --dcc <nuke> …]` — render DCC environment health reports, erroring if any requirement is unmet.
-- `python -m apps.onepiece validate reconcile --project <project> [--scope shots|assets|versions --context <vendor_in|…> --csv <report.csv> --json <report.json>]` — reconcile ShotGrid, filesystem, and optional S3 inventories with progress reporting.
+- `python -m apps.onepiece validate dcc-environment [--dcc <maya> --dcc <nuke> …]` — render DCC environment health reports, normalising plugin names and falling back to environment hints when PyMEL is unavailable.
+- `python -m apps.onepiece validate reconcile --project <project> [--scope shots|assets|versions --context <vendor_in|…> --csv <report.csv> --json <report.json>]` — reconcile ShotGrid, filesystem, and optional S3 inventories with progress reporting. The underlying job now consumes data from the default provider registry entry, making it easy to swap in custom data sources via entry points when required. 【F:src/libraries/validations/dcc.py†L1-L118】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ## Trafalgar CLI (`python -m apps.trafalgar …`)
 

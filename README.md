@@ -3,6 +3,8 @@
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
 > **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
+>
+> **Recent merges** extend the DCC tooling with a dedicated animation command group, an Unreal Engine importer, and tighter publish validation. Maya-specific helpers now guard against missing PyMEL installations, plugin discovery treats module names case-insensitively, and scene-name validation rejects unsafe paths. Trafalgar introduces a pluggable provider registry with sensible defaults so delivery and reconciliation data sources can be extended without forking the service.
 
 ## Quick start
 
@@ -24,6 +26,8 @@ Once installed, the CLI exposes a number of subcommands:
 - `onepiece profile` &mdash; Displays the resolved configuration profile, including the settings loaded from `onepiece.toml` files.
 - `onepiece dcc publish ...` &mdash; Packages scene renders, previews, and metadata and pushes them to S3 (see the detailed options below).
 - `onepiece dcc open-shot` &mdash; Launches a scene file in the matching DCC, automatically inferring the application from the file extension when not supplied explicitly.
+- `onepiece dcc animation debug-animation|cleanup-scene|playblast` &mdash; Diagnose Maya animation scenes, clean stale references, and trigger logged playblasts without leaving the CLI.
+- `onepiece dcc import-unreal --package <dir> --project <Project> --asset <Name>` &mdash; Rehydrate Maya-authored packages inside Unreal, with `--dry-run` support for previewing the generated import tasks.
 - `onepiece aws sync-from` / `onepiece aws sync-to` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
 - `onepiece aws ingest` &mdash; Validates vendor/client deliveries, registers Versions in ShotGrid, and uploads media with detailed progress feedback.
 - `onepiece validate reconcile ...` &mdash; Runs validation suites for ingest/publish workflows.
@@ -56,6 +60,7 @@ Key environment variables recognised across the CLI surface:
 | `AWS_PROFILE` | AWS profile applied when spawning `s5cmd` or other AWS-powered helpers. |
 | `TRAFALGAR_DASHBOARD_TOKEN` | Bearer token required to query the dashboard and render APIs. |
 | `ONEPIECE_PROJECT_ROOT` | Overrides the project root used when resolving `onepiece.toml` profiles. |
+| `ONEPIECE_MAYA_PLUGINS` / `ONEPIECE_GPU` | Optional hints consumed by the DCC environment report when PyMEL or vendor detection is unavailable. |
 
 Project and workspace defaults can be captured in `onepiece.toml` files. The
 [configuration profile guide](docs/configuration_profiles.md) includes merging
@@ -87,6 +92,8 @@ onepiece dcc publish --dcc maya --scene-name ep101_seq010_sh010 --renders ./rend
   --bucket s3://studio-prod-shots --show-code XYZ --dependency-summary
 ```
 
+Scene names must now be simple package identifiers without directory separators, parent traversal, or absolute paths. The CLI normalises the supplied value before publishing and raises a validation error when the name would escape the package root. Maya exports that include Unreal metadata automatically trigger the new validation summary so scale, skeleton coverage, and naming issues are surfaced before uploads. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
+
 #### Submit a render job with profile defaults
 
 ```bash
@@ -97,6 +104,33 @@ onepiece render submit --profile studio_farm --scene ./shots/shot.ma --frames 10
 
 More step-by-step walkthroughs, including example manifests, are available in
 [`docs/cli_walkthroughs.md`](docs/cli_walkthroughs.md).
+
+#### Debug and playblast Maya animation scenes
+
+```bash
+# Report animation issues such as muted constraints or orphaned channels
+onepiece dcc animation debug-animation --scene-name seq010_sh010_anim_v003
+
+# Tidy up a heavy scene by pruning unused references and namespaces
+onepiece dcc animation cleanup-scene --keep-unused-references --keep-namespaces
+
+# Generate a playblast with logged metadata for downstream reviews
+onepiece dcc animation playblast \
+  --project SHOW01 --sequence sq010 --shot sh010 --artist robin.d \
+  --camera renderCam --version 12 --output-directory ./playblasts/sh010_v012 \
+  --metadata metadata/playblast.json --include-audio
+```
+
+The animation command group relies on pure-Python helpers and lazy Maya imports, so the CLI exits cleanly when PyMEL is unavailable instead of crashing mid-command. Detailed structured logging accompanies every run to feed dashboards and alerting. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+
+#### Import a published package into Unreal Engine
+
+```bash
+# Preview the Unreal tasks generated from a publish before running them in-editor
+onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK_Hero --dry-run
+```
+
+Packages that include `metadata.json` with Unreal import details now drive automatically constructed `AssetImportTask` objects. Failed Maya-to-Unreal validations abort the process with actionable error messages, while dry-run mode prints the planned tasks as JSON for review. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
 
 ### Rendering standalone scenes with Chopper
 
@@ -143,6 +177,11 @@ These resources provide a safe sandbox to explore the command surface before poi
 - **Resumable ingest controls** – `onepiece aws ingest` exposes flags and profile keys for asyncio orchestration, worker pools, resumable uploads, and checkpoint tuning so large deliveries can be retried safely.
 - **Capability-aware render submissions** – Render jobs automatically pick sensible priorities and chunk sizes from adapter metadata, with validation to reject values outside the advertised range before a request ever reaches the farm.
 
+- **Maya animation workflows** – A dedicated Typer sub-app debugs animation scenes, performs configurable cleanup, and launches playblasts with structured logging so teams can automate checklist-driven reviews. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】
+- **Unreal package import pipeline** – Published Maya exports can be validated and rehydrated inside Unreal using the bundled importer and CLI command, complete with dry-run previews of generated tasks. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
+- **Safer publishing defaults** – Scene names are strictly validated, dependency summaries now render correct paths, and Unreal export checks report skeleton, naming, and scale issues before uploads reach S3. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
+- **Resilient DCC detection** – Environment health checks treat plugin names case-insensitively, guard against missing PyMEL modules, and expose GPU/plugin overrides through environment variables to keep headless diagnostics reliable. 【F:src/libraries/validations/dcc.py†L1-L118】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+
 ### Trafalgar v1.0.0
 
 - **Dashboard data resilience** – Project discovery now combines environment configuration with on-the-fly ShotGrid lookups and caches the results locally so teams can keep browsing known shows even if ShotGrid is offline.
@@ -151,6 +190,7 @@ These resources provide a safe sandbox to explore the command surface before poi
 - **Normalised status metrics** – Dashboard summaries collapse mixed-case and abbreviated ShotGrid statuses into canonical buckets, ensuring the overall status, per-project totals, and episode breakdowns tell the same story.
 - **Delivery manifest optimisation** – Delivery payloads prefer upstream manifest data when provided, regenerate manifests only once per delivery, and gracefully handle packages that arrive without entry lists so operators still get a full audit trail.
 - **Render job management** – The render FastAPI app now tracks submitted jobs in memory, exposes endpoints to list and inspect them, and supports adapter-powered cancellation, mirroring the CLI workflow for real-time follow-up.
+- **Pluggable providers** – Delivery feeds and reconciliation sources register through a provider registry with built-in defaults, enabling studios to extend Trafalgar via Python entry points instead of hard-coding integrations. 【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Uta Control Center v1.0.0
 
