@@ -135,6 +135,9 @@ Packages that include `metadata.json` with Unreal import details now drive autom
 
 ### Operating the Perona dashboard
 
+For day-to-day commands, configuration layering, and HTTP endpoint details see
+[Perona dashboard operations](docs/perona_dashboard.md).
+
 The `perona` CLI serves the VFX performance dashboard via uvicorn so teams can
 inspect render and ingest metrics from a browser. Run
 `perona web dashboard --host 0.0.0.0 --port 8065` to expose the FastAPI app;
