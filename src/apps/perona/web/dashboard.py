@@ -11,6 +11,8 @@ from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from apps.perona.version import PERONA_VERSION
+
 from apps.perona.engine import (
     CostBreakdown,
     CostModelInput,
@@ -32,7 +34,7 @@ app = FastAPI(
         "The API surfaces telemetry, risk scoring, cost attribution and optimisation "
         "backtests that power the interactive UI."
     ),
-    version="1.0.0",
+    version=PERONA_VERSION,
 )
 
 _engine = PeronaEngine()
