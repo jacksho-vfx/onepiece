@@ -65,6 +65,21 @@ def _humanise_key(key: str) -> str:
     return " ".join(overrides.get(word, word.capitalize()) for word in words)
 
 
+def _validate_settings_path(settings_path: Path | None) -> Path | None:
+    """Ensure an optional settings path exists and is readable."""
+
+    if settings_path is None:
+        return None
+
+    resolved = settings_path.expanduser()
+    if not resolved.exists():
+        raise typer.BadParameter(f"Settings file '{resolved}' does not exist.")
+    if not os.access(resolved, os.R_OK):
+        raise typer.BadParameter(f"Settings file '{resolved}' is not readable.")
+
+    return resolved
+
+
 def _resolve_settings_path(cli_path: Path | None) -> Path | None:
     """Return the first existing settings candidate for display purposes."""
 
@@ -129,8 +144,9 @@ def settings(
 ) -> None:
     """Display the resolved Perona configuration values."""
 
-    resolved_path = _resolve_settings_path(settings_path)
-    engine = PeronaEngine.from_settings(path=settings_path)
+    validated_settings_path = _validate_settings_path(settings_path)
+    resolved_path = _resolve_settings_path(validated_settings_path)
+    engine = PeronaEngine.from_settings(path=validated_settings_path)
     baseline = asdict(engine.baseline_cost_input)
     payload: dict[str, object] = {
         "baseline_cost_input": baseline,
@@ -199,8 +215,10 @@ def dashboard(
     typer.echo(f"Starting Perona dashboard on http://{host}:{port}")
     uvicorn = _load_uvicorn()
 
-    if settings_path is not None:
-        os.environ["PERONA_SETTINGS_PATH"] = str(settings_path)
+    validated_settings_path = _validate_settings_path(settings_path)
+
+    if validated_settings_path is not None:
+        os.environ["PERONA_SETTINGS_PATH"] = str(validated_settings_path)
     else:
         os.environ.pop("PERONA_SETTINGS_PATH", None)
 
