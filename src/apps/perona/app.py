@@ -5,6 +5,8 @@ from typing import Any
 
 import typer
 
+from apps.perona.version import PERONA_VERSION
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8065
 
@@ -17,6 +19,13 @@ app = typer.Typer(
 )
 web_app = typer.Typer(name="web", help="Web interface helpers for Perona.")
 app.add_typer(web_app)
+
+
+@app.command("version")
+def version() -> None:
+    """Display the current Perona release version."""
+
+    typer.echo(PERONA_VERSION)
 
 
 def _load_uvicorn() -> Any:
@@ -69,4 +78,4 @@ def dashboard(
     )
 
 
-__all__ = ["app", "dashboard"]
+__all__ = ["app", "dashboard", "version"]
