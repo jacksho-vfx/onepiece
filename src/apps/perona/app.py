@@ -1,6 +1,8 @@
 """Typer CLI entry points for the Perona dashboard services."""
 
+import os
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -70,11 +72,22 @@ def dashboard(
         help="Log level passed to uvicorn.",
         show_default=True,
     ),
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file loaded by the dashboard.",
+    ),
 ) -> None:
     """Launch the Perona dashboard using uvicorn."""
 
     typer.echo(f"Starting Perona dashboard on http://{host}:{port}")
     uvicorn = _load_uvicorn()
+
+    if settings_path is not None:
+        os.environ["PERONA_SETTINGS_PATH"] = str(settings_path)
+    else:
+        os.environ.pop("PERONA_SETTINGS_PATH", None)
+
     uvicorn.run(
         "apps.perona.web.dashboard:app",
         host=host,

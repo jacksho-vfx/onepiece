@@ -139,9 +139,11 @@ The `perona` CLI serves the VFX performance dashboard via uvicorn so teams can
 inspect render and ingest metrics from a browser. Run
 `perona web dashboard --host 0.0.0.0 --port 8065` to expose the FastAPI app;
 toggle `--reload/--no-reload` for development auto-reloads and adjust
-`--log-level` as needed, with defaults bound to `127.0.0.1:8065`. Use
-`perona version` to print the current dashboard build number directly from the
-CLI. 【F:src/apps/perona/app.py†L1-L80】
+`--log-level` as needed, with defaults bound to `127.0.0.1:8065`. Supply
+`--settings-path path/to/settings.toml` to load an alternate configuration
+before the server boots; the CLI exports the path via `PERONA_SETTINGS_PATH` so
+the FastAPI app picks it up on startup. Use `perona version` to print the
+current dashboard build number directly from the CLI. 【F:src/apps/perona/app.py†L1-L107】
 
 ### Rendering standalone scenes with Chopper
 
