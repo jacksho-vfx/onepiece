@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 from pathlib import Path
@@ -11,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.perona.version import PERONA_VERSION
-from apps.perona.web.dashboard import app
+from apps.perona.web.dashboard import app, invalidate_engine_cache
 
 
 client = TestClient(app)
@@ -117,15 +116,24 @@ def test_render_feed_stream() -> None:
     assert all("gpuUtilisation" in item for item in payloads)
 
 
-def test_settings_override_via_environment(tmp_path: Path) -> None:
-    """Engine reads settings from PERONA_SETTINGS_PATH when available."""
+def test_settings_reload_between_requests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Settings updates apply without restarting the FastAPI app."""
 
-    from apps.perona.web import dashboard as dashboard_module
+    invalidate_engine_cache()
 
-    settings_path = tmp_path / "override.toml"
-    settings_path.write_text(
+    default_response = client.get("/pnl")
+    assert default_response.status_code == 200
+    default_cost = default_response.json()["baseline_cost"]
+
+    override_a = tmp_path / "override_a.toml"
+    override_a.write_text("pnl_baseline_cost = 4321.0\n")
+
+    override_b = tmp_path / "override_b.toml"
+    override_b.write_text(
         """
-pnl_baseline_cost = 4321.0
+pnl_baseline_cost = 2468.0
 
 [baseline_cost_input]
 frame_count = 12
@@ -141,20 +149,35 @@ misc_costs = 12.5
 """
     )
 
-    original_env = os.environ.get("PERONA_SETTINGS_PATH")
-    os.environ["PERONA_SETTINGS_PATH"] = str(settings_path)
-    try:
-        reloaded = importlib.reload(dashboard_module)
-        override_client = TestClient(reloaded.app)
-        response = override_client.get("/pnl")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["baseline_cost"] == pytest.approx(4321.0)
-    finally:
-        if original_env is None:
-            os.environ.pop("PERONA_SETTINGS_PATH", None)
-        else:
-            os.environ["PERONA_SETTINGS_PATH"] = original_env
-        restored = importlib.reload(dashboard_module)
-        global client
-        client = TestClient(restored.app)
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(override_a))
+    response_a = client.get("/pnl")
+    assert response_a.status_code == 200
+    assert response_a.json()["baseline_cost"] == pytest.approx(4321.0)
+
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(override_b))
+    response_b = client.get("/pnl")
+    assert response_b.status_code == 200
+    assert response_b.json()["baseline_cost"] == pytest.approx(2468.0)
+
+    override_b.write_text(
+        """
+pnl_baseline_cost = 6543.0
+
+[baseline_cost_input]
+frame_count = 18
+average_frame_time_ms = 160.0
+gpu_hourly_rate = 7.0
+"""
+    )
+    os.utime(override_b, None)
+
+    refreshed = client.get("/pnl")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["baseline_cost"] == pytest.approx(6543.0)
+
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
+    restored = client.get("/pnl")
+    assert restored.status_code == 200
+    assert restored.json()["baseline_cost"] == pytest.approx(default_cost)
+
+    invalidate_engine_cache()
