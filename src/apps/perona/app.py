@@ -47,7 +47,6 @@ def _load_uvicorn() -> Any:
         ) from exc
 
 
-
 def _format_value(value: object) -> str:
     """Render numeric values with thousands separators where possible."""
 
@@ -109,9 +108,7 @@ def _format_settings_table(
         lines.append(f"{display_key:<{width}} : {_format_value(value)}")
     lines.append("")
     lines.append(f"{'Target error rate':<{width}} : {_format_value(target_error_rate)}")
-    lines.append(
-        f"{'P&L baseline cost':<{width}} : {_format_value(pnl_baseline_cost)}"
-    )
+    lines.append(f"{'P&L baseline cost':<{width}} : {_format_value(pnl_baseline_cost)}")
     return "\n".join(lines)
 
 
