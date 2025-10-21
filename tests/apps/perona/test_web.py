@@ -7,6 +7,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from apps.perona.version import PERONA_VERSION
 from apps.perona.web.dashboard import app
 
 
@@ -17,6 +18,10 @@ def test_health_endpoint() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_app_version_matches_perona_version() -> None:
+    assert app.version == PERONA_VERSION
 
 
 def test_render_feed_limit() -> None:
