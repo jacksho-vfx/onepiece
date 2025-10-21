@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -116,7 +117,7 @@ def test_render_feed_stream() -> None:
     assert all("gpuUtilisation" in item for item in payloads)
 
 
-def test_settings_override_via_environment(tmp_path) -> None:
+def test_settings_override_via_environment(tmp_path: Path) -> None:
     """Engine reads settings from PERONA_SETTINGS_PATH when available."""
 
     from apps.perona.web import dashboard as dashboard_module
