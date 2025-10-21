@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from typing import Iterable, Sequence
+import os
+from pathlib import Path
+from typing import Iterable, Mapping, Sequence, Any
+import tomllib
 
 
 @dataclass(frozen=True)
@@ -158,27 +161,147 @@ class ShotLifecycle:
         return self.stages[-1].name
 
 
+DEFAULT_BASELINE_COST_INPUT = CostModelInput(
+    frame_count=2688,
+    average_frame_time_ms=142.0,
+    gpu_hourly_rate=8.75,
+    gpu_count=64,
+    render_hours=0.0,
+    render_farm_hourly_rate=5.25,
+    storage_gb=12.4,
+    storage_rate_per_gb=0.38,
+    data_egress_gb=3.8,
+    egress_rate_per_gb=0.19,
+    misc_costs=220.0,
+)
+DEFAULT_TARGET_ERROR_RATE = 0.012
+DEFAULT_PNL_BASELINE_COST = 18240.0
+DEFAULT_SETTINGS_PATH = Path(__file__).with_name("defaults.toml")
+
+
+def _load_settings(path: str | os.PathLike[str] | None) -> dict[str, object]:
+    """Load configuration data from a TOML file, falling back to defaults."""
+
+    candidates: list[Path] = []
+    if path is not None:
+        candidates.append(Path(path))
+    env_path = os.getenv("PERONA_SETTINGS_PATH")
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.append(DEFAULT_SETTINGS_PATH)
+
+    for candidate in candidates:
+        try:
+            with candidate.expanduser().open("rb") as handle:
+                return tomllib.load(handle)
+        except FileNotFoundError:
+            continue
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+    return {}
+
+
+def _coerce_cost_model_input(
+    data: Mapping[str, object] | None, fallback: CostModelInput
+) -> CostModelInput:
+    data = data or {}
+
+    def _as_int(name: str, default: int) -> Any:
+        value = data.get(name, default)
+        try:
+            return int(value)  # type: ignore[call-overload]
+        except (TypeError, ValueError):
+            return default
+
+    def _as_float(name: str, default: float) -> Any:
+        value = data.get(name, default)
+        try:
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return default
+
+    return CostModelInput(
+        frame_count=_as_int("frame_count", fallback.frame_count),
+        average_frame_time_ms=_as_float(
+            "average_frame_time_ms", fallback.average_frame_time_ms
+        ),
+        gpu_hourly_rate=_as_float("gpu_hourly_rate", fallback.gpu_hourly_rate),
+        gpu_count=_as_int("gpu_count", fallback.gpu_count),
+        render_hours=_as_float("render_hours", fallback.render_hours),
+        render_farm_hourly_rate=_as_float(
+            "render_farm_hourly_rate", fallback.render_farm_hourly_rate
+        ),
+        storage_gb=_as_float("storage_gb", fallback.storage_gb),
+        storage_rate_per_gb=_as_float(
+            "storage_rate_per_gb", fallback.storage_rate_per_gb
+        ),
+        data_egress_gb=_as_float("data_egress_gb", fallback.data_egress_gb),
+        egress_rate_per_gb=_as_float("egress_rate_per_gb", fallback.egress_rate_per_gb),
+        misc_costs=_as_float("misc_costs", fallback.misc_costs),
+    )
+
+
 class PeronaEngine:
     """High level orchestration of the dashboard analytics."""
 
-    def __init__(self) -> None:
-        self._baseline_cost_input = CostModelInput(
-            frame_count=2688,
-            average_frame_time_ms=142.0,
-            gpu_hourly_rate=8.75,
-            gpu_count=64,
-            render_farm_hourly_rate=5.25,
-            storage_gb=12.4,
-            storage_rate_per_gb=0.38,
-            data_egress_gb=3.8,
-            egress_rate_per_gb=0.19,
-            misc_costs=220.0,
+    def __init__(
+        self,
+        baseline_input: CostModelInput | None = None,
+        target_error_rate: float | None = None,
+        pnl_baseline_cost: float | None = None,
+    ) -> None:
+        self._baseline_cost_input = baseline_input or DEFAULT_BASELINE_COST_INPUT
+        self._target_error_rate = (
+            target_error_rate
+            if target_error_rate is not None
+            else DEFAULT_TARGET_ERROR_RATE
         )
-        self._target_error_rate = 0.012
+        self._pnl_baseline_cost = (
+            pnl_baseline_cost
+            if pnl_baseline_cost is not None
+            else DEFAULT_PNL_BASELINE_COST
+        )
         self._telemetry = self._build_telemetry()
         self._render_log = self._build_render_log()
         self._lifecycle = self._build_lifecycle()
         self._pnl_contributions = self._build_pnl_contributions()
+
+    @property
+    def baseline_cost_input(self) -> CostModelInput:
+        return self._baseline_cost_input
+
+    @property
+    def target_error_rate(self) -> float:
+        return self._target_error_rate
+
+    @property
+    def pnl_baseline_cost(self) -> float:
+        return self._pnl_baseline_cost
+
+    @classmethod
+    def from_settings(
+        cls, *, path: str | os.PathLike[str] | None = None
+    ) -> "PeronaEngine":
+        """Instantiate the engine using configuration sourced from disk/env."""
+
+        raw_settings = _load_settings(path)
+        baseline_settings: Mapping[str, object] = raw_settings.get(
+            "baseline_cost_input", {}
+        )  # type: ignore[assignment]
+        baseline_input = _coerce_cost_model_input(
+            baseline_settings, DEFAULT_BASELINE_COST_INPUT
+        )
+        target_error_rate = float(
+            raw_settings.get("target_error_rate", DEFAULT_TARGET_ERROR_RATE)  # type: ignore[arg-type]
+        )
+        pnl_baseline_cost = float(
+            raw_settings.get("pnl_baseline_cost", DEFAULT_PNL_BASELINE_COST)  # type: ignore[arg-type]
+        )
+        return cls(
+            baseline_input=baseline_input,
+            target_error_rate=target_error_rate,
+            pnl_baseline_cost=pnl_baseline_cost,
+        )
 
     def stream_render_metrics(self, limit: int | None = None) -> Iterable[RenderMetric]:
         """Return the most recent render metrics, capped by *limit* if provided."""
@@ -273,7 +396,7 @@ class PeronaEngine:
     def pnl_explainer(self) -> PnLBreakdown:
         """Explain the delta in render spend compared with the baseline."""
 
-        baseline_cost = 18240.0
+        baseline_cost = self._pnl_baseline_cost
         contributions = tuple(self._pnl_contributions)
         delta_cost = round(sum(item.delta_cost for item in contributions), 2)
         current_cost = round(baseline_cost + delta_cost, 2)

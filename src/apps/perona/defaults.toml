@@ -1,0 +1,14 @@
+target_error_rate = 0.012
+pnl_baseline_cost = 18240.0
+
+[baseline_cost_input]
+frame_count = 2688
+average_frame_time_ms = 142.0
+gpu_hourly_rate = 8.75
+gpu_count = 64
+render_farm_hourly_rate = 5.25
+storage_gb = 12.4
+storage_rate_per_gb = 0.38
+data_egress_gb = 3.8
+egress_rate_per_gb = 0.19
+misc_costs = 220.0

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import datetime
 from typing import Any
 
@@ -237,7 +236,7 @@ async def render_feed_stream(limit: int = Query(30, ge=1, le=250)) -> StreamingR
     async def _generator() -> Any:
         for metric in _engine.stream_render_metrics(limit):
             model = RenderMetricModel.from_entity(metric)
-            yield json.dumps(model.model_dump(by_alias=True)) + "\n"
+            yield model.model_dump_json(by_alias=True) + "\n"
             await asyncio.sleep(0.05)
 
     return StreamingResponse(_generator(), media_type="application/x-ndjson")
