@@ -3,6 +3,8 @@
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
 > **Release spotlight (v1.0.0):** The CLI honours layered configuration profiles and resumable ingest toggles, Trafalgar introduces cache-tunable dashboards with job inspection endpoints, and the new Uta Control Center renders the command surface in your browser alongside the embedded dashboard.
+>
+> **Latest merges:** Animation-focused commands now debug Maya scenes, orchestrate cleanup operations, and generate logged playblasts from the CLI. Maya publishes validate scene names before packaging and report Unreal export readiness, while the new Unreal importer reconstructs assets directly inside the editor with a dry-run preview. Trafalgar reconciliations ride on a provider registry that ships with a default data source, keeping dashboards configurable without bespoke forks. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Adjusting dashboard cache behaviour
 
@@ -119,6 +121,8 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
 
    The same `--report-format csv` flag streams a tabular version to stdout (or to `--report-path`) when you prefer spreadsheet tooling.
 
+4. Keep `--scene-name` restricted to a simple package identifier. Absolute paths, parent directory references, and separator characters now trigger an immediate validation error so publishes cannot escape the package directory on disk. When the package metadata includes a `maya_to_unreal` validation block, the CLI prints a summary covering scale checks, skeleton coverage, and naming compliance before uploading assets. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
+
 ## 4. Package a DCC publish for QA
 
 This scenario simulates a Maya lighting publish that bundles render outputs, previews, and metadata before pushing them to S3.
@@ -165,7 +169,58 @@ notes,"QA dry run for onboarding"
 
 4. Inspect the generated report for any validation warnings. When the report looks good, rerun the command without `--report-only` to build and upload the package.
 
-## 5. Bootstrap a ShotGrid project
+## 5. Debug a Maya animation scene
+
+1. Open the scene inside Maya and ensure the animation metadata exists on disk (for example under `metadata/animation.json`).
+
+2. Run the animation debugger with a descriptive scene label:
+
+   ```bash
+   onepiece dcc animation debug-animation --scene-name seq010_sh010_anim_v003
+   ```
+
+   The command surfaces muted constraints, missing driven keys, and invalid frame ranges. Use `--fail-on-warnings` to force non-zero exit codes when warnings should block reviews.
+
+3. Prune stale data before sharing the scene:
+
+   ```bash
+   onepiece dcc animation cleanup-scene --keep-unused-references --keep-namespaces
+   ```
+
+   Selectively disable operations when you need to preserve specific references or namespaces. Every run emits a structured summary to the log so pipeline dashboards can track cleanup activity. 【F:src/apps/onepiece/dcc/animation.py†L1-L149】
+
+4. Generate a playblast with captured metadata:
+
+   ```bash
+   onepiece dcc animation playblast \
+     --project SHOW01 --sequence sq010 --shot sh010 --artist robin.d \
+     --camera renderCam --version 12 --output-directory ./playblasts/sh010_v012 \
+     --metadata metadata/playblast.json --include-audio
+   ```
+
+   Playblast automation reads optional JSON metadata and records the generated clip for downstream review systems. The command lazily imports PyMEL, exiting cleanly in headless environments where Maya is unavailable. 【F:src/apps/onepiece/dcc/animation.py†L150-L194】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+
+## 6. Import a package into Unreal Engine
+
+1. Ensure the published directory contains a `metadata.json` with a `maya_to_unreal` validation result and an `unreal` section describing the generated assets (see `src/tests/test_maya_unreal_importer.py` for a reference payload).
+
+2. Preview the Unreal import tasks without launching the editor:
+
+   ```bash
+   onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK_Hero --dry-run
+   ```
+
+   Dry runs emit a JSON summary describing the destination path, asset name, task flags, and factory settings.
+
+3. Remove `--dry-run` to execute the import inside Unreal:
+
+   ```bash
+   onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK_Hero
+   ```
+
+   Failed validations (for example an invalid scale or missing skeleton joints) abort the process with actionable errors so Unreal never receives an inconsistent package. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
+
+## 7. Bootstrap a ShotGrid project
 
 The `docs/examples/shotgrid_hierarchy.csv` file models a minimal episodic show structure.
 
@@ -195,7 +250,7 @@ onepiece shotgrid apply-hierarchy \
 
 Dropping the `--dry-run` flag will create the entities using the resilient bulk helpers described in the README.
 
-## 6. Package a ShotGrid playlist for delivery
+## 8. Package a ShotGrid playlist for delivery
 
 The playlist packaging helpers can be exercised locally with the in-memory
 ShotGrid client. Create a sandbox directory with placeholder media and then run
@@ -258,7 +313,7 @@ MediaShuttle-ready package.
 3. Inspect the generated directory and `manifest.json` file to confirm the
    playlist structure.
 
-## 7. Exercise the DCC scaffolding stubs
+## 9. Exercise the DCC scaffolding stubs
 
 The Trafalgar v1.0.0 release focuses on keeping the web suite responsive: the
 dashboard auto-caches version lookups, gracefully handles sparse delivery
@@ -296,7 +351,7 @@ another client from `libraries.dcc.client` to rehearse the workflow for other
 applications. When you are ready to wire up a real integration, override the
 stub methods with application-specific logic and keep the CLI commands intact.
 
-## 8. Orchestrate CLI runs from the Uta Control Center
+## 10. Orchestrate CLI runs from the Uta Control Center
 
 1. Launch the browser UI alongside the Trafalgar dashboard:
 
@@ -335,7 +390,7 @@ stub methods with application-specific logic and keep the CLI commands intact.
    highlighting status distribution, submission throughput windows, and adapter
    utilisation trends.
 
-## 9. Monitor render lifecycle events over SSE
+## 11. Monitor render lifecycle events over SSE
 
 Trafalgar's render service emits server-sent events for job lifecycle updates so
 you can stream progress into dashboards or chat bots without hitting the REST
@@ -365,7 +420,7 @@ API on a timer.
 4. When you no longer need the stream press `Ctrl+C`; the helper closes the
    connection cleanly and prints a summary of event counts by type.
 
-## 10. Automate post-ingest communications
+## 12. Automate post-ingest communications
 
 The notification commands can run on the back of ingest reports to keep your
 team updated.

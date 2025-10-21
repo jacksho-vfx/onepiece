@@ -3,6 +3,8 @@
 This guide describes how to set up a local development environment for OnePiece, explains how the repository is organised, and captures the day-to-day workflow for contributing changes.
 
 > **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.
+>
+> **Latest merges:** Animation commands joined the CLI to debug Maya scenes, clean namespaces, and fire playblasts; the Unreal importer rebuilds published packages directly inside the editor; and publish safety checks now guard scene names while reporting Unreal validation summaries. Trafalgar's provider registry exposes delivery/reconciliation integrations through entry points, and the Maya modules handle missing PyMEL gracefully so unit tests run without DCC installations. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/apps/trafalgar/providers/providers.py†L1-L210】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
 
 ## Prerequisites
 
@@ -14,6 +16,8 @@ Optional tooling that streamlines development:
 
 - [uv](https://github.com/astral-sh/uv) or [pipx](https://pipx.pypa.io/stable/) for managing virtual environments.
 - Docker for validating integrations that depend on external services.
+
+Maya-focused helpers lazily import PyMEL and surface friendly errors when the module is unavailable, so contributors can run the core test suite on machines without Autodesk software installed. Install the DCC-specific extras only when you need to exercise the integrations inside Maya itself. 【F:src/libraries/dcc/maya/__init__.py†L1-L48】
 
 ## Repository layout
 
@@ -88,10 +92,12 @@ onepiece/
 - **Progress reporting** – The Rich-powered progress tracker defined in `apps/onepiece/utils/progress.py` provides a consistent way to surface progress bars, success/failure banners, and task descriptions. Use it for long-running operations such as ingest, project setup, or delivery packaging.
 - **ShotGrid workflows** – High-level commands such as `onepiece shotgrid show-setup` and `onepiece shotgrid deliver` wrap the lower-level client helpers. When extending these flows, reuse the convenience functions in `libraries/shotgrid` to stay aligned with existing retry logic and manifest generation.
 - **DCC helpers** – Utilities under `apps/onepiece/dcc/` (for example `open_shot.py`) demonstrate the preferred pattern for validating input, mapping to `SupportedDCC` enums, and surfacing actionable CLI errors. Follow the same structure when introducing new DCC-facing commands.
+- **Provider registry** – Trafalgar discovers delivery and reconciliation integrations through the `ProviderRegistry`. Register new providers via entry points rather than editing the built-ins so deployments can opt in without diverging from `main`. 【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ## Debugging tips
 
 - `onepiece info` is a quick way to confirm that environment variables, DCC discovery, and AWS profiles are configured properly.
+- `onepiece dcc animation debug-animation` highlights muted constraints and frame range issues without requiring Maya to render UI, making it ideal for quick validation on render nodes. 【F:src/apps/onepiece/dcc/animation.py†L1-L94】
 - Tests inside `src/tests` include fixtures that mock AWS and ShotGrid interactions. Import them in new tests to avoid hitting live services.
 - Use the `--dry-run` flags offered by the `aws` and `publish` commands to inspect their behaviour without transferring data.
 - Enable structured logging by exporting `ONEPIECE_LOG_LEVEL=DEBUG` and `ONEPIECE_LOG_FORMAT=json` when you need machine-parseable telemetry for complex ingest or render investigations.
