@@ -234,12 +234,12 @@ def _format_settings_table(
             if baseline_diffs:
                 lines.append("Baseline cost inputs")
                 for key in baseline:
-                    if key in baseline_diffs:
+                    if key in baseline_diffs:  # type: ignore[operator]
                         display_key = humanised_keys.get(key, _humanise_key(key))
                         lines.append(
                             _format_difference_line(
                                 display_key,
-                                baseline_diffs[key],
+                                baseline_diffs[key],  # type: ignore[index]
                                 width=width,
                                 indent="  ",
                             )
@@ -248,7 +248,7 @@ def _format_settings_table(
                 lines.append(
                     _format_difference_line(
                         "Target error rate",
-                        differences["target_error_rate"],
+                        differences["target_error_rate"],  # type: ignore[arg-type]
                         width=width,
                     )
                 )
@@ -256,7 +256,7 @@ def _format_settings_table(
                 lines.append(
                     _format_difference_line(
                         "P&L baseline cost",
-                        differences["pnl_baseline_cost"],
+                        differences["pnl_baseline_cost"],  # type: ignore[arg-type]
                         width=width,
                     )
                 )
