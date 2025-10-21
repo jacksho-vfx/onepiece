@@ -175,3 +175,38 @@ def test_dashboard_command_rejects_invalid_settings_path(
     terms = ["does", "not", "exist"]
     for term in terms:
         assert term in result.output
+
+
+def test_settings_export_writes_default_settings(tmp_path: Path) -> None:
+    destination = tmp_path / "perona" / "settings.toml"
+    destination.parent.mkdir()
+
+    result = runner.invoke(app, ["settings-export", str(destination)])
+
+    assert result.exit_code == 0
+    assert destination.read_text() == DEFAULT_SETTINGS_PATH.read_text()
+    assert str(destination) in result.output
+
+
+def test_settings_export_refuses_to_overwrite(tmp_path: Path) -> None:
+    destination = tmp_path / "perona.toml"
+    destination.write_text("original")
+
+    result = runner.invoke(app, ["settings-export", str(destination)])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert destination.read_text() == "original"
+
+
+def test_settings_export_can_force_overwrite(tmp_path: Path) -> None:
+    destination = tmp_path / "perona.toml"
+    destination.write_text("original")
+
+    result = runner.invoke(
+        app,
+        ["settings-export", str(destination), "--force"],
+    )
+
+    assert result.exit_code == 0
+    assert destination.read_text() == DEFAULT_SETTINGS_PATH.read_text()

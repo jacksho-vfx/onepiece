@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
@@ -231,4 +232,33 @@ def dashboard(
     )
 
 
-__all__ = ["app", "dashboard", "settings", "version"]
+@app.command("settings-export")
+def settings_export(
+    destination: Path = typer.Argument(
+        ..., help="Path to write the exported Perona settings file to."
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite the destination file if it already exists.",
+    ),
+) -> None:
+    """Export the bundled default settings to the provided path."""
+
+    target_path = destination.expanduser()
+    parent = target_path.parent
+    if not parent.exists() or not parent.is_dir():
+        raise typer.BadParameter(
+            f"Destination directory '{parent}' does not exist or is not a directory."
+        )
+
+    if target_path.exists() and not force:
+        raise typer.BadParameter(
+            f"Destination file '{target_path}' already exists. Use --force to overwrite."
+        )
+
+    shutil.copyfile(DEFAULT_SETTINGS_PATH, target_path)
+    typer.echo(f"Exported settings to {target_path}")
+
+
+__all__ = ["app", "dashboard", "settings", "settings_export", "version"]
