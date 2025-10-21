@@ -7,6 +7,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 
 from apps.perona.engine import (
     CostModelInput,
@@ -135,7 +136,9 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
     assert engine.pnl_explainer().baseline_cost == pytest.approx(9876.5)
 
 
-def test_from_settings_ignores_invalid_numeric_overrides(tmp_path: Path, caplog) -> None:
+def test_from_settings_ignores_invalid_numeric_overrides(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
     config_path = tmp_path / "settings.toml"
     config_path.write_text(
         dedent(
