@@ -100,6 +100,10 @@ def test_shots_lifecycle_endpoint() -> None:
 def test_render_feed_stream() -> None:
     with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
         assert response.status_code == 200
-        lines = [json.loads(line) for line in response.iter_lines() if line]
-    assert len(lines) == 3
-    assert all("gpuUtilisation" in item for item in lines)
+        payloads: list[dict[str, object]] = []
+        for raw_line in response.iter_lines():
+            if not raw_line:
+                continue
+            payloads.append(json.loads(raw_line))
+    assert len(payloads) == 3
+    assert all("gpuUtilisation" in item for item in payloads)
