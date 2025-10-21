@@ -24,8 +24,10 @@ from apps.perona.models import (
     PnLBreakdown,
     RenderMetric,
     RiskIndicator,
+    Sequence,
     Shot,
     SettingsSummary,
+    sequences_from_lifecycles,
 )
 
 app = FastAPI(
@@ -214,6 +216,16 @@ def shots_lifecycle(
     """Return lifecycle timelines for key monitored shots."""
 
     return [Shot.from_entity(item) for item in engine.shot_lifecycle()]
+
+
+@app.get("/shots/sequences", response_model=list[Sequence])
+def shot_sequences(
+    engine: PeronaEngine = Depends(get_engine),
+) -> list[Sequence]:
+    """Return monitored shots grouped by sequence."""
+
+    sequences = sequences_from_lifecycles(engine.shot_lifecycle())
+    return list(sequences)
 
 
 __all__ = ["app", "get_engine", "invalidate_engine_cache"]

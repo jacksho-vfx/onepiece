@@ -136,6 +136,20 @@ def test_shots_lifecycle_endpoint() -> None:
     assert {"sequence", "shot_id", "current_stage"}.issubset(data[0].keys())
 
 
+def test_shots_sequences_endpoint() -> None:
+    response = client.get("/shots/sequences")
+    assert response.status_code == 200
+    data = response.json()
+    assert data
+
+    names = [item["name"] for item in data]
+    assert len(names) == len(set(names))
+
+    for sequence in data:
+        shot_ids = [shot["shot_id"] for shot in sequence["shots"]]
+        assert shot_ids == sorted(shot_ids)
+
+
 def test_render_feed_stream() -> None:
     with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
         assert response.status_code == 200
