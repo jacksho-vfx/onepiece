@@ -110,4 +110,4 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["src/tests"]
+testpaths = ["src/tests", "tests"]
