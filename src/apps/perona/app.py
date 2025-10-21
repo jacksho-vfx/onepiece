@@ -11,6 +11,7 @@ from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8065
+DEFAULT_SETTINGS_FILE = Path(__file__).with_name("defaults.toml")
 
 app = typer.Typer(
     name="perona",
@@ -40,6 +41,40 @@ def _load_uvicorn() -> Any:
             "uvicorn is required for this command. Install it with "
             "`pip install onepiece[uvicorn]`."
         ) from exc
+
+
+def _resolve_settings_file() -> Path:
+    """Return the active Perona settings file path."""
+
+    env_path = os.getenv("PERONA_SETTINGS_PATH")
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_SETTINGS_FILE
+
+
+@app.command("settings")
+def settings(
+    show_path: bool = typer.Option(
+        False,
+        "--show-path",
+        help="Show the resolved settings path instead of the file contents.",
+    )
+) -> None:
+    """Display the contents (or path) of the active Perona settings file."""
+
+    settings_file = _resolve_settings_file()
+
+    if show_path:
+        typer.echo(str(settings_file))
+        return
+
+    if not settings_file.exists():
+        typer.echo(
+            f"Settings file not found at {settings_file}. Set PERONA_SETTINGS_PATH to a valid file."
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(settings_file.read_text())
 
 
 @web_app.command("dashboard")
@@ -97,4 +132,4 @@ def dashboard(
     )
 
 
-__all__ = ["app", "dashboard", "version"]
+__all__ = ["app", "dashboard", "settings", "version"]
