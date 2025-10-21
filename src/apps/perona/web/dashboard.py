@@ -86,11 +86,7 @@ def _load_engine(force_refresh: bool) -> PeronaEngine:
     signature = _settings_signature()
     with _engine_lock:
         cache_entry = _engine_cache
-        if (
-            force_refresh
-            or cache_entry is None
-            or cache_entry.signature != signature
-        ):
+        if force_refresh or cache_entry is None or cache_entry.signature != signature:
             engine = PeronaEngine.from_settings()
             cache_entry = _EngineCacheEntry(engine=engine, signature=signature)
             _engine_cache = cache_entry
@@ -105,9 +101,7 @@ def invalidate_engine_cache() -> None:
         _engine_cache = None
 
 
-def get_engine(
-    refresh: bool = Query(False, alias="refresh_engine")
-) -> PeronaEngine:
+def get_engine(refresh: bool = Query(False, alias="refresh_engine")) -> PeronaEngine:
     """FastAPI dependency yielding the shared Perona engine instance."""
 
     return _load_engine(refresh)
@@ -337,7 +331,9 @@ def cost_estimate(
 
 
 @app.get("/risk-heatmap", response_model=list[RiskIndicatorModel])
-def risk_heatmap(engine: PeronaEngine = Depends(get_engine)) -> list[RiskIndicatorModel]:
+def risk_heatmap(
+    engine: PeronaEngine = Depends(get_engine),
+) -> list[RiskIndicatorModel]:
     """Return the current render risk heatmap."""
 
     return [RiskIndicatorModel.from_entity(item) for item in engine.risk_heatmap()]
@@ -367,7 +363,9 @@ def optimization_backtest(
 
 
 @app.get("/shots/lifecycle", response_model=list[ShotLifecycleModel])
-def shots_lifecycle(engine: PeronaEngine = Depends(get_engine)) -> list[ShotLifecycleModel]:
+def shots_lifecycle(
+    engine: PeronaEngine = Depends(get_engine),
+) -> list[ShotLifecycleModel]:
     """Return lifecycle timelines for key monitored shots."""
 
     return [ShotLifecycleModel.from_entity(item) for item in engine.shot_lifecycle()]
