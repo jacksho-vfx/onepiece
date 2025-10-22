@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from libraries.render.analytics import cost_per_frame
 from apps.trafalgar.web import render as render_module
 from apps.trafalgar.web.render import (
     RenderJobRequest,
@@ -24,6 +25,77 @@ def _request() -> RenderJobRequest:
         chunk_size=1,
         user="tester",
     )
+
+
+def test_cost_per_frame_calculates_expected_value() -> None:
+    result = cost_per_frame(
+        gpu_time=1.5,
+        rate_gpu=4.0,
+        cpu_time=2.0,
+        rate_cpu=1.25,
+        storage=0.75,
+        rate_storage=0.4,
+    )
+
+    assert result == pytest.approx(1.5 * 4.0 + 2.0 * 1.25 + 0.75 * 0.4)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {
+            "gpu_time": -0.1,
+            "rate_gpu": 3.5,
+            "cpu_time": 0.5,
+            "rate_cpu": 1.0,
+            "storage": 0.2,
+            "rate_storage": 0.1,
+        },
+        {
+            "gpu_time": 0.1,
+            "rate_gpu": -3.5,
+            "cpu_time": 0.5,
+            "rate_cpu": 1.0,
+            "storage": 0.2,
+            "rate_storage": 0.1,
+        },
+        {
+            "gpu_time": 0.1,
+            "rate_gpu": 3.5,
+            "cpu_time": -0.5,
+            "rate_cpu": 1.0,
+            "storage": 0.2,
+            "rate_storage": 0.1,
+        },
+        {
+            "gpu_time": 0.1,
+            "rate_gpu": 3.5,
+            "cpu_time": 0.5,
+            "rate_cpu": -1.0,
+            "storage": 0.2,
+            "rate_storage": 0.1,
+        },
+        {
+            "gpu_time": 0.1,
+            "rate_gpu": 3.5,
+            "cpu_time": 0.5,
+            "rate_cpu": 1.0,
+            "storage": -0.2,
+            "rate_storage": 0.1,
+        },
+        {
+            "gpu_time": 0.1,
+            "rate_gpu": 3.5,
+            "cpu_time": 0.5,
+            "rate_cpu": 1.0,
+            "storage": 0.2,
+            "rate_storage": -0.1,
+        },
+    ],
+)
+def test_cost_per_frame_rejects_negative_inputs(kwargs: dict[str, float]) -> None:
+    with pytest.raises(ValueError):
+        cost_per_frame(**kwargs)
 
 
 def test_update_record_tracks_status_history_and_completion(
