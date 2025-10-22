@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, cast, Dict
 
 import pytest
@@ -39,6 +40,16 @@ def render_service() -> render_module.RenderSubmissionService:
     yield service
     render_module.get_render_service.cache_clear()
 
+
+def test_parse_timestamp_accepts_z_suffix() -> None:
+    timestamp = render_module._parse_timestamp("2024-05-12T14:30:45Z")
+    assert timestamp == datetime(2024, 5, 12, 14, 30, 45, tzinfo=timezone.utc)
+
+
+def test_parse_timestamp_accepts_datetime_objects() -> None:
+    naive = datetime(2024, 5, 12, 14, 30, 45)
+    parsed = render_module._parse_timestamp(naive)
+    assert parsed == datetime(2024, 5, 12, 14, 30, 45, tzinfo=timezone.utc)
 
 def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
     response = client.get("/farms")

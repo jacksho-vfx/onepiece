@@ -75,21 +75,41 @@ def _serialise_datetime(value: datetime | None) -> str | None:
 
 
 def _parse_timestamp(value: Any) -> datetime:
-    if isinstance(value, (int, float)):
+    """Parse ``value`` into a timezone-aware UTC timestamp."""
+
+    timestamp: datetime | None = None
+
+    if isinstance(value, datetime):
+        timestamp = value
+    elif isinstance(value, (int, float)):
         try:
-            return datetime.fromtimestamp(value, tz=timezone.utc)
+            timestamp = datetime.fromtimestamp(value, tz=timezone.utc)
         except (OverflowError, OSError, ValueError):
-            pass
-    if isinstance(value, str):
+            timestamp = None
+    elif isinstance(value, str):
+        text = value.strip()
+        if text.endswith(("Z", "z")):
+            text = f"{text[:-1]}+00:00"
         try:
-            parsed = datetime.fromisoformat(value)
+            timestamp = datetime.fromisoformat(text)
         except ValueError:
-            pass
-        else:
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-    return _utcnow()
+            try:
+                numeric = float(text)
+            except ValueError:
+                timestamp = None
+            else:
+                try:
+                    timestamp = datetime.fromtimestamp(numeric, tz=timezone.utc)
+                except (OverflowError, OSError, ValueError):
+                    timestamp = None
+
+    if timestamp is None:
+        return _utcnow()
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+    return timestamp.astimezone(timezone.utc)
 
 
 FARM_DESCRIPTIONS: Mapping[str, str] = {
