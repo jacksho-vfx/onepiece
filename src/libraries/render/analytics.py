@@ -110,6 +110,7 @@ def rolling_mean(
 
     return tuple(result)
 
+
 def cost_per_frame(
     *,
     gpu_time: SupportsFloat,
