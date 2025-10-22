@@ -291,7 +291,6 @@ gpu_hourly_rate = 4.25
     monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
     invalidate_engine_cache()
 
-
     default_response = client.get("/pnl")
     assert default_response.status_code == 200
     default_cost = default_response.json()["baseline_cost"]

@@ -25,11 +25,11 @@ from apps.perona.models import (
     PnLBreakdown,
     RenderMetric,
     RiskIndicator,
-    Sequence,
     Shot,
     SettingsSummary,
     sequences_from_lifecycles,
 )
+from apps.perona.models import Sequence as PeronaSequence
 
 
 class RenderMetricBatch(BaseModel):
@@ -42,7 +42,9 @@ class RenderMetricBatch(BaseModel):
     def to_serialisable(self) -> list[dict[str, Any]]:
         """Return JSON-friendly dictionaries for persistence."""
 
-        return [metric.model_dump(mode="json", by_alias=True) for metric in self.metrics]
+        return [
+            metric.model_dump(mode="json", by_alias=True) for metric in self.metrics
+        ]
 
 
 class RenderMetricStore:
@@ -108,7 +110,9 @@ async def ingest_render_metrics(
 
     records = payload.to_serialisable()
     if not records:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No metrics supplied.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No metrics supplied."
+        )
 
     background_tasks.add_task(_metrics_store.persist, records)
     return {"status": "accepted", "enqueued": len(records)}
@@ -327,10 +331,10 @@ def shots_lifecycle(
     return [Shot.from_entity(item) for item in engine.shot_lifecycle()]
 
 
-@app.get("/shots/sequences", response_model=list[Sequence])
+@app.get("/shots/sequences", response_model=list[PeronaSequence])
 def shot_sequences(
     engine: PeronaEngine = Depends(get_engine),
-) -> list[Sequence]:
+) -> list[PeronaSequence]:
     """Return monitored shots grouped by sequence."""
 
     sequences = sequences_from_lifecycles(engine.shot_lifecycle())
