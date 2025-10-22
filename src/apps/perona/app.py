@@ -294,13 +294,15 @@ def _post_settings_reload(base_url: str) -> SettingsSummary:
     request = Request(endpoint, data=b"", method="POST")
     request.add_header("Content-Length", "0")
     try:
-        with urlopen(request) as response:  # type: ignore[call-arg]
+        with urlopen(request) as response:
             payload = response.read()
             status = getattr(response, "status", response.getcode())
     except HTTPError as exc:  # pragma: no cover - network errors are surfaced in tests
         raise RuntimeError(f"Dashboard returned error: {exc}") from exc
     except URLError as exc:  # pragma: no cover - surfaced in tests when unreachable
-        raise RuntimeError(f"Unable to reach dashboard at {endpoint}: {exc.reason}") from exc
+        raise RuntimeError(
+            f"Unable to reach dashboard at {endpoint}: {exc.reason}"
+        ) from exc
 
     if status != 200:
         raise RuntimeError(f"Dashboard returned unexpected status code {status}.")
@@ -313,7 +315,9 @@ def _post_settings_reload(base_url: str) -> SettingsSummary:
     try:
         return SettingsSummary.model_validate(payload_data)
     except ValidationError as exc:  # pragma: no cover - defensive guard
-        raise RuntimeError("Dashboard response did not match the expected schema.") from exc
+        raise RuntimeError(
+            "Dashboard response did not match the expected schema."
+        ) from exc
 
 
 def _echo_settings_summary(summary: SettingsSummary) -> None:
