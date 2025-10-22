@@ -54,4 +54,3 @@ def test_apply_migrations_is_idempotent(tmp_path: Path) -> None:
 
 def test_latest_migration_id_tracks_tail() -> None:
     assert latest_migration_id(MIGRATIONS) == MIGRATIONS[-1].identifier
-

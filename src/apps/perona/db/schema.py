@@ -161,4 +161,3 @@ def latest_migration_id(migrations: Iterable[Migration] | None = None) -> str | 
     if not sequence:
         return None
     return sequence[-1].identifier
-
