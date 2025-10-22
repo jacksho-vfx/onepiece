@@ -340,12 +340,15 @@ def save_scene(path: Path | None = None) -> None:
 # --------------------------------------------------------------------------- #
 # Asset Operations
 # --------------------------------------------------------------------------- #
+_USD_EXTENSIONS = {".usd", ".usda", ".usdc", ".usdz"}
+
+
 def import_asset(path: Path) -> None:
     """
     Import an asset or scene into the current Maya scene.
 
     Args:
-        path (Path): Path to the Maya file (.ma, .mb, or FBX)
+        path (Path): Path to the Maya file (.ma, .mb, FBX, or USD)
     """
     if not path.exists():
         log.error("maya_import_asset_failed", path=str(path))
@@ -360,6 +363,8 @@ def import_asset(path: Path) -> None:
         import_kwargs["type"] = "mayaBinary"
     elif extension == ".fbx":
         import_kwargs["type"] = "FBX"
+    elif extension in _USD_EXTENSIONS:
+        import_kwargs["type"] = "USD Import"
 
     _import(path, **import_kwargs)
     log.info("maya_asset_imported", path=str(path))

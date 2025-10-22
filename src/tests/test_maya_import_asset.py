@@ -30,6 +30,10 @@ class DummyPath:
         ("asset.ma", {"type": "mayaAscii"}),
         ("asset.mb", {"type": "mayaBinary"}),
         ("asset.fbx", {"type": "FBX"}),
+        ("asset.usd", {"type": "USD Import"}),
+        ("asset.usda", {"type": "USD Import"}),
+        ("asset.usdc", {"type": "USD Import"}),
+        ("asset.usdz", {"type": "USD Import"}),
     ),
 )
 def test_import_asset_dispatches_import_type(
