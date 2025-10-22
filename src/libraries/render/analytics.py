@@ -111,6 +111,58 @@ def rolling_mean(
     return tuple(result)
 
 
+def cost_per_frame(
+    *,
+    gpu_time: SupportsFloat,
+    rate_gpu: SupportsFloat,
+    cpu_time: SupportsFloat,
+    rate_cpu: SupportsFloat,
+    storage: SupportsFloat,
+    rate_storage: SupportsFloat,
+) -> float:
+    """Compute the monetary cost of rendering a single frame.
+
+    Parameters
+    ----------
+    gpu_time:
+        GPU render time for the frame, typically in hours.
+    rate_gpu:
+        Hourly rate charged for GPU usage.
+    cpu_time:
+        CPU render time for the frame, typically in hours.
+    rate_cpu:
+        Hourly rate charged for CPU usage.
+    storage:
+        Storage consumed by the frame, typically in gigabytes.
+    rate_storage:
+        Cost per unit of storage consumed.
+    """
+
+    gpu_time_value = float(gpu_time)
+    rate_gpu_value = float(rate_gpu)
+    cpu_time_value = float(cpu_time)
+    rate_cpu_value = float(rate_cpu)
+    storage_value = float(storage)
+    rate_storage_value = float(rate_storage)
+
+    for name, value in (
+        ("gpu_time", gpu_time_value),
+        ("rate_gpu", rate_gpu_value),
+        ("cpu_time", cpu_time_value),
+        ("rate_cpu", rate_cpu_value),
+        ("storage", storage_value),
+        ("rate_storage", rate_storage_value),
+    ):
+        if value < 0:
+            raise ValueError(f"{name} cannot be negative")
+
+    return (
+        gpu_time_value * rate_gpu_value
+        + cpu_time_value * rate_cpu_value
+        + storage_value * rate_storage_value
+    )
+
+
 def total_cost_per_shot(
     summaries: Iterable[ShotRenderSummary],
     *,
@@ -166,6 +218,7 @@ def total_cost_per_sequence(
 
 
 __all__ = [
+    "cost_per_frame",
     "average_frame_time_by_sequence",
     "average_frame_time_by_shot",
     "rolling_mean",
