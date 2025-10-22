@@ -45,6 +45,8 @@ def test_settings_command_displays_defaults(monkeypatch: pytest.MonkeyPatch) -> 
     assert "0.012" in result.output
     assert "P&L baseline cost" in result.output
     assert "18,240" in result.output
+    assert "Currency" in result.output
+    assert "GBP" in result.output
     assert "Warnings:" not in result.output
 
 
@@ -64,6 +66,7 @@ frame_count = 12
 average_frame_time_ms = 55.5
 gpu_hourly_rate = 15.75
 misc_costs = 12.0
+currency = "USD"
 """.strip()
     )
 
@@ -77,6 +80,8 @@ misc_costs = 12.0
     assert "15.75" in result.output
     assert "0.42" in result.output
     assert "9,999.5" in result.output
+    assert "Currency" in result.output
+    assert "USD" in result.output
 
 
 def test_settings_command_supports_json_output(
@@ -94,6 +99,7 @@ pnl_baseline_cost = 5432.1
 frame_count = 48
 average_frame_time_ms = 21.5
 gpu_hourly_rate = 4.2
+currency = "USD"
 """.strip()
     )
 
@@ -110,6 +116,7 @@ gpu_hourly_rate = 4.2
     assert payload["baseline_cost_input"]["frame_count"] == 48
     assert payload["baseline_cost_input"]["average_frame_time_ms"] == 21.5
     assert payload["baseline_cost_input"]["gpu_hourly_rate"] == 4.2
+    assert payload["baseline_cost_input"]["currency"] == "USD"
     assert payload["warnings"] == []
 
 
@@ -374,6 +381,31 @@ def test_cost_estimate_command_supports_json_output() -> None:
     assert payload["frame_count"] == 120
     assert payload["concurrency"] == 1
     assert payload["gpu_cost"] == 0.01
+    assert payload["currency"] == "GBP"
+
+
+def test_cost_estimate_command_accepts_currency_override() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "cost",
+            "estimate",
+            "--frame-count",
+            "60",
+            "--average-frame-time-ms",
+            "160",
+            "--gpu-hourly-rate",
+            "5.0",
+            "--currency",
+            "usd",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["currency"] == "USD"
 
 
 def test_cost_estimate_command_reports_validation_errors() -> None:
@@ -394,6 +426,27 @@ def test_cost_estimate_command_reports_validation_errors() -> None:
     assert result.exit_code != 0
     assert "frame_count" in result.output
     assert "greater than 0" in result.output
+
+
+def test_cost_estimate_command_rejects_unknown_currency() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "cost",
+            "estimate",
+            "--frame-count",
+            "100",
+            "--average-frame-time-ms",
+            "120",
+            "--gpu-hourly-rate",
+            "4.5",
+            "--currency",
+            "aud",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "currency must be one of" in result.output
 
 
 def test_settings_export_can_force_overwrite(tmp_path: Path) -> None:

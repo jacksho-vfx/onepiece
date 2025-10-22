@@ -17,10 +17,13 @@ from pydantic import ValidationError
 
 from apps.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
+    SUPPORTED_CURRENCIES,
     PeronaEngine,
+    get_currency_symbol,
 )
 from apps.perona.models import CostEstimate, CostEstimateRequest, SettingsSummary
 from apps.perona.version import PERONA_VERSION
@@ -76,6 +79,17 @@ def _format_value(value: object) -> str:
     if isinstance(value, int):
         return f"{value:,}"
     return str(value)
+
+
+def _format_currency_amount(amount: float, currency: str) -> str:
+    """Return ``amount`` prefixed with the symbol for ``currency`` when known."""
+
+    symbol = get_currency_symbol(currency)
+    formatted = _format_value(abs(amount))
+    sign = "-" if amount < 0 else ""
+    if symbol == currency:
+        return f"{sign}{currency} {formatted}"
+    return f"{sign}{symbol}{formatted}"
 
 
 def _humanise_key(key: str) -> str:
@@ -269,12 +283,27 @@ def _format_cost_breakdown_table(estimate: CostEstimate) -> str:
         "misc_cost": "Misc cost",
         "total_cost": "Total cost",
         "cost_per_frame": "Cost per frame",
+        "currency": "Currency",
     }
     values = estimate.model_dump()
     width = max(len(label) for label in labels.values())
+    currency_fields = {
+        "gpu_cost",
+        "render_farm_cost",
+        "storage_cost",
+        "egress_cost",
+        "misc_cost",
+        "total_cost",
+        "cost_per_frame",
+    }
     lines = ["Cost estimate", "-" * len("Cost estimate")]
     for key, label in labels.items():
-        lines.append(f"{label:<{width}} : {_format_value(values[key])}")
+        value = values[key]
+        if key in currency_fields:
+            display = _format_currency_amount(float(value), estimate.currency)
+        else:
+            display = _format_value(value)
+        lines.append(f"{label:<{width}} : {display}")
     return "\n".join(lines)
 
 
@@ -513,6 +542,15 @@ def cost_estimate(
         "--settings-path",
         help="Optional path to a Perona settings file to seed defaults.",
     ),
+    currency: str = typer.Option(
+        DEFAULT_CURRENCY,
+        "--currency",
+        help=(
+            "Currency code for monetary values. Supported codes: "
+            + ", ".join(SUPPORTED_CURRENCIES)
+        ),
+        case_sensitive=False,
+    ),
 ) -> None:
     """Estimate render costs for a given workload."""
 
@@ -529,6 +567,7 @@ def cost_estimate(
             data_egress_gb=data_egress_gb,
             egress_rate_per_gb=egress_rate_per_gb,
             misc_costs=misc_costs,
+            currency=currency,
         )
     except ValidationError as exc:
         messages = []

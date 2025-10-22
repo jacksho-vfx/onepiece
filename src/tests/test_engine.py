@@ -11,6 +11,7 @@ from _pytest.logging import LogCaptureFixture
 
 from apps.perona.engine import (
     CostModelInput,
+    DEFAULT_CURRENCY,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_TARGET_ERROR_RATE,
@@ -43,6 +44,7 @@ def test_estimate_cost_breakdown(engine: PeronaEngine) -> None:
     assert breakdown.concurrency == 32
     assert breakdown.total_cost == pytest.approx(98.92, rel=1e-4)
     assert breakdown.cost_per_frame == pytest.approx(0.8243, rel=1e-4)
+    assert breakdown.currency == DEFAULT_CURRENCY
 
 
 def test_risk_heatmap_is_sorted(engine: PeronaEngine) -> None:
@@ -105,6 +107,7 @@ def test_from_settings_loads_default_configuration() -> None:
     baseline = engine.baseline_cost_input
     assert baseline.gpu_count == 64
     assert baseline.gpu_hourly_rate == pytest.approx(8.75)
+    assert baseline.currency == DEFAULT_CURRENCY
     assert engine.target_error_rate == pytest.approx(0.012)
     assert engine.pnl_explainer().baseline_cost == pytest.approx(18240.0)
     assert result.settings_path == DEFAULT_SETTINGS_PATH.expanduser()
@@ -130,6 +133,7 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
             data_egress_gb = 2.0
             egress_rate_per_gb = 0.55
             misc_costs = 150.0
+            currency = "USD"
             """
         ).strip()
     )
@@ -138,6 +142,7 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
     baseline = engine.baseline_cost_input
     assert baseline.frame_count == 1440
     assert baseline.gpu_hourly_rate == pytest.approx(12.5)
+    assert baseline.currency == "USD"
     assert engine.target_error_rate == pytest.approx(0.02)
     assert engine.pnl_explainer().baseline_cost == pytest.approx(9876.5)
     assert result.settings_path == config_path
@@ -198,6 +203,7 @@ def test_constructor_accepts_injected_baseline() -> None:
         data_egress_gb=1.2,
         egress_rate_per_gb=0.2,
         misc_costs=50.0,
+        currency="usd",
     )
     engine = PeronaEngine(
         baseline_input=custom_input,

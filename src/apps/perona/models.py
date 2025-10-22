@@ -8,11 +8,12 @@ from typing import Any, Iterable
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .engine import (
     CostBreakdown,
     CostModelInput,
+    DEFAULT_CURRENCY,
     PeronaEngine,
     SettingsLoadResult,
     OptimizationResult as EngineOptimizationResult,
@@ -21,6 +22,7 @@ from .engine import (
     PnLContribution as EnginePnLContribution,
     RenderMetric as EngineRenderMetric,
     RiskIndicator as EngineRiskIndicator,
+    SUPPORTED_CURRENCIES,
     ShotLifecycle,
     ShotLifecycleStage,
 )
@@ -70,6 +72,7 @@ class CostEstimate(BaseModel):
     misc_cost: float
     total_cost: float
     cost_per_frame: float
+    currency: str
 
     @classmethod
     def from_breakdown(cls, breakdown: CostBreakdown) -> "CostEstimate":
@@ -208,6 +211,17 @@ class CostEstimateRequest(BaseModel):
     data_egress_gb: float = Field(0, ge=0)
     egress_rate_per_gb: float = Field(0, ge=0)
     misc_costs: float = Field(0, ge=0)
+    currency: str = Field(DEFAULT_CURRENCY)
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str) -> str:
+        upper = value.upper()
+        if upper not in SUPPORTED_CURRENCIES:
+            raise ValueError(
+                f"currency must be one of {', '.join(SUPPORTED_CURRENCIES)}"
+            )
+        return upper
 
     def to_entity(self) -> CostModelInput:
         return CostModelInput(**self.model_dump())
@@ -227,6 +241,7 @@ class BaselineCostInput(BaseModel):
     data_egress_gb: float
     egress_rate_per_gb: float
     misc_costs: float
+    currency: str
 
     model_config = ConfigDict(from_attributes=True)
 

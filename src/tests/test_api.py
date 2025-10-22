@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from apps.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
@@ -43,6 +44,7 @@ def test_settings_endpoint_defaults() -> None:
     assert baseline["gpu_hourly_rate"] == pytest.approx(
         DEFAULT_BASELINE_COST_INPUT.gpu_hourly_rate
     )
+    assert baseline["currency"] == DEFAULT_CURRENCY
 
 
 def test_app_version_matches_perona_version() -> None:
@@ -86,6 +88,25 @@ def test_cost_estimate_endpoint() -> None:
     assert data["frame_count"] == 60
     assert data["total_cost"] == pytest.approx(43.49, rel=1e-4)
     assert data["cost_per_frame"] == pytest.approx(0.7249, rel=1e-4)
+    assert data["currency"] == DEFAULT_CURRENCY
+
+
+def test_cost_estimate_endpoint_supports_currency_override() -> None:
+    payload = {
+        "frame_count": 60,
+        "average_frame_time_ms": 160,
+        "gpu_hourly_rate": 8.5,
+        "gpu_count": 16,
+        "render_farm_hourly_rate": 4.5,
+        "storage_gb": 4.2,
+        "storage_rate_per_gb": 0.35,
+        "misc_costs": 42.0,
+        "currency": "USD",
+    }
+    response = client.post("/cost/estimate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["currency"] == "USD"
 
 
 def test_risk_heatmap_endpoint() -> None:

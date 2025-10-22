@@ -79,6 +79,7 @@ Key options:
 - `--gpu-hourly-rate` &mdash; required, cost of GPU usage per hour.
 - `--storage-gb`, `--storage-rate-per-gb`, `--data-egress-gb`, `--egress-rate-per-gb`, `--misc-costs` &mdash; optional inputs for ancillary spend.
 - `--format table|json` &mdash; toggles between the tabular and JSON renderings of the breakdown.
+- `--currency GBP|USD` &mdash; controls which currency the CLI and API use for monetary outputs.
 - `--settings-path PATH` &mdash; optional, seeds the engine with a custom settings file before calculating costs.
 
 ### Launch the web dashboard
@@ -153,7 +154,8 @@ Example response:
     "storage_rate_per_gb": 0.38,
     "data_egress_gb": 3.8,
     "egress_rate_per_gb": 0.19,
-    "misc_costs": 220.0
+    "misc_costs": 220.0,
+    "currency": "GBP"
   },
   "target_error_rate": 0.012,
   "pnl_baseline_cost": 18240.0,
