@@ -184,6 +184,59 @@ def test_settings_reload_between_requests(
 
     invalidate_engine_cache()
 
+    override = tmp_path / "perona.toml"
+    override.write_text(
+        """
+target_error_rate = 0.015
+pnl_baseline_cost = 3210.0
+
+[baseline_cost_input]
+frame_count = 144
+gpu_hourly_rate = 6.75
+    """
+    )
+
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(override))
+
+    initial_response = client.get("/settings")
+    assert initial_response.status_code == 200
+    initial_data = initial_response.json()
+    assert initial_data["target_error_rate"] == pytest.approx(0.015)
+    assert initial_data["pnl_baseline_cost"] == pytest.approx(3210.0)
+    assert initial_data["baseline_cost_input"]["gpu_hourly_rate"] == pytest.approx(6.75)
+
+    override.write_text(
+        """
+target_error_rate = 0.025
+pnl_baseline_cost = 4567.0
+
+[baseline_cost_input]
+frame_count = 188
+gpu_hourly_rate = 8.5
+    """
+    )
+    os.utime(override, None)
+
+    reload_response = client.post("/settings/reload")
+    assert reload_response.status_code == 200
+    reload_data = reload_response.json()
+    assert reload_data["target_error_rate"] == pytest.approx(0.025)
+    assert reload_data["pnl_baseline_cost"] == pytest.approx(4567.0)
+    assert reload_data["baseline_cost_input"]["frame_count"] == 188
+
+    pnl_response = client.get("/pnl")
+    assert pnl_response.status_code == 200
+    pnl_data = pnl_response.json()
+    assert pnl_data["baseline_cost"] == pytest.approx(4567.0)
+
+    final_settings = client.get("/settings")
+    assert final_settings.status_code == 200
+    final_data = final_settings.json()
+    assert final_data["baseline_cost_input"]["gpu_hourly_rate"] == pytest.approx(8.5)
+
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
+    invalidate_engine_cache()
+
 
 def test_settings_endpoint_honours_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

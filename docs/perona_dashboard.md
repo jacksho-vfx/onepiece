@@ -36,6 +36,28 @@ The JSON output doubles as an export helper so downstream tooling can persist th
 perona settings --format json > build/perona-settings.json
 ```
 
+### Reload settings without restarting
+
+Use `perona settings reload` to force a running dashboard instance to rebuild its engine cache after editing override files:
+
+```bash
+# Reload a dashboard running on the default localhost port
+perona settings reload
+
+# Target a remote deployment explicitly
+perona settings reload --url https://perona.internal.example.com
+
+# Refresh the settings for a locally imported FastAPI app without HTTP
+perona settings reload --local
+```
+
+Key options:
+
+- `--url URL` &mdash; optional, points the CLI at a specific dashboard base URL. Falls back to the `PERONA_DASHBOARD_URL`
+  environment variable or `http://127.0.0.1:8065`.
+- `--local` &mdash; bypasses HTTP entirely and triggers the cache invalidator directly. Handy for local development when the
+  FastAPI app is imported inside the same Python process.
+
 ### Estimate render costs
 
 Use `perona cost estimate` to model the spend for a prospective render workload without hitting the API:
@@ -110,6 +132,7 @@ automation can consume the resolved configuration directly from the API.
 
 - `GET /settings` &mdash; returns the resolved configuration powering the dashboard, including any overrides detected on disk or
   via `PERONA_SETTINGS_PATH`.
+- `POST /settings/reload` &mdash; clears the engine cache, rebuilds the configuration from disk, and returns the refreshed summary.
 
 ```bash
 curl http://127.0.0.1:8065/settings | jq

@@ -7,6 +7,9 @@ from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, Mapping
+from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 import typer
 
@@ -19,7 +22,7 @@ from apps.perona.engine import (
     DEFAULT_TARGET_ERROR_RATE,
     PeronaEngine,
 )
-from apps.perona.models import CostEstimate, CostEstimateRequest
+from apps.perona.models import CostEstimate, CostEstimateRequest, SettingsSummary
 from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
@@ -34,8 +37,14 @@ app = typer.Typer(
         "to launch the FastAPI service that powers the real-time analytics surface."
     ),
 )
+settings_app = typer.Typer(
+    name="settings",
+    help="Inspect and manage Perona dashboard settings.",
+    invoke_without_command=True,
+)
 web_app = typer.Typer(name="web", help="Web interface helpers for Perona.")
 cost_app = typer.Typer(name="cost", help="Cost modelling utilities for Perona.")
+app.add_typer(settings_app)
 app.add_typer(web_app)
 app.add_typer(cost_app)
 
@@ -269,8 +278,67 @@ def _format_cost_breakdown_table(estimate: CostEstimate) -> str:
     return "\n".join(lines)
 
 
-@app.command("settings")
+def _resolve_dashboard_url(explicit_url: str | None) -> str:
+    """Return the dashboard URL based on CLI arguments and environment."""
+
+    base = explicit_url or os.getenv("PERONA_DASHBOARD_URL")
+    if base:
+        return base.rstrip("/")
+    return f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
+
+
+def _post_settings_reload(base_url: str) -> SettingsSummary:
+    """Trigger the dashboard reload endpoint and return the response summary."""
+
+    endpoint = urljoin(base_url.rstrip("/") + "/", "settings/reload")
+    request = Request(endpoint, data=b"", method="POST")
+    request.add_header("Content-Length", "0")
+    try:
+        with urlopen(request) as response:  # type: ignore[call-arg]
+            payload = response.read()
+            status = getattr(response, "status", response.getcode())
+    except HTTPError as exc:  # pragma: no cover - network errors are surfaced in tests
+        raise RuntimeError(f"Dashboard returned error: {exc}") from exc
+    except URLError as exc:  # pragma: no cover - surfaced in tests when unreachable
+        raise RuntimeError(f"Unable to reach dashboard at {endpoint}: {exc.reason}") from exc
+
+    if status != 200:
+        raise RuntimeError(f"Dashboard returned unexpected status code {status}.")
+
+    try:
+        payload_data = json.loads(payload.decode("utf-8")) if payload else {}
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
+        raise RuntimeError("Dashboard responded with invalid JSON.") from exc
+
+    try:
+        return SettingsSummary.model_validate(payload_data)
+    except ValidationError as exc:  # pragma: no cover - defensive guard
+        raise RuntimeError("Dashboard response did not match the expected schema.") from exc
+
+
+def _echo_settings_summary(summary: SettingsSummary) -> None:
+    """Display a textual summary of the resolved settings."""
+
+    baseline = summary.baseline_cost_input.model_dump()
+    typer.echo(
+        _format_settings_table(
+            baseline,
+            summary.target_error_rate,
+            summary.pnl_baseline_cost,
+            settings_path=summary.settings_path,
+        )
+    )
+
+    if summary.warnings:
+        typer.echo("")
+        typer.echo("Warnings:")
+        for message in summary.warnings:
+            typer.echo(f"- {message}")
+
+
+@settings_app.callback(invoke_without_command=True)
 def settings(
+    ctx: typer.Context,
     settings_path: Path | None = typer.Option(
         None,
         "--settings-path",
@@ -290,6 +358,9 @@ def settings(
     ),
 ) -> None:
     """Display the resolved Perona configuration values."""
+
+    if ctx.invoked_subcommand is not None:
+        return
 
     validated_settings_path = _validate_settings_path(settings_path)
     load_result = PeronaEngine.from_settings(path=validated_settings_path)
@@ -341,6 +412,46 @@ def settings(
             typer.echo(f"- {message}")
 
     if warnings:
+        raise typer.Exit(code=1)
+
+
+@settings_app.command("reload")
+def settings_reload(
+    url: str | None = typer.Option(
+        None,
+        "--url",
+        help=(
+            "Base URL of the running Perona dashboard. Defaults to PERONA_DASHBOARD_URL "
+            "or http://127.0.0.1:8065."
+        ),
+    ),
+    local: bool = typer.Option(
+        False,
+        "--local/--no-local",
+        help="Reload settings in-process without issuing an HTTP request.",
+    ),
+) -> None:
+    """Force the dashboard engine to reload configuration overrides."""
+
+    if local:
+        from apps.perona.web.dashboard import reload_settings
+
+        summary = reload_settings()
+        location = "local engine"
+    else:
+        base_url = _resolve_dashboard_url(url)
+        try:
+            summary = _post_settings_reload(base_url)
+        except RuntimeError as exc:
+            typer.echo(f"Error reloading settings via {base_url}: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        location = base_url
+
+    typer.echo(f"Settings reloaded via {location}.")
+    typer.echo("")
+    _echo_settings_summary(summary)
+
+    if summary.warnings:
         raise typer.Exit(code=1)
 
 

@@ -44,6 +44,8 @@ app = FastAPI(
 class _EngineCacheEntry(NamedTuple):
     engine: PeronaEngine
     signature: tuple[str | None, str, float | None]
+    settings_path: Path | None
+    warnings: tuple[str, ...]
 
 
 _engine_lock = Lock()
@@ -82,8 +84,8 @@ def _settings_signature() -> tuple[str | None, str, float | None]:
     return (env_path, str(signature_path), mtime)
 
 
-def _load_engine(force_refresh: bool) -> PeronaEngine:
-    """Return a cached engine instance, reloading when configuration changes."""
+def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:
+    """Return the cached engine entry, refreshing when configuration changes."""
 
     global _engine_cache
 
@@ -92,10 +94,20 @@ def _load_engine(force_refresh: bool) -> PeronaEngine:
         cache_entry = _engine_cache
         if force_refresh or cache_entry is None or cache_entry.signature != signature:
             load_result = PeronaEngine.from_settings()
-            engine = load_result.engine
-            cache_entry = _EngineCacheEntry(engine=engine, signature=signature)
+            cache_entry = _EngineCacheEntry(
+                engine=load_result.engine,
+                signature=signature,
+                settings_path=load_result.settings_path,
+                warnings=load_result.warnings,
+            )
             _engine_cache = cache_entry
-        return cache_entry.engine
+        return cache_entry
+
+
+def _load_engine(force_refresh: bool) -> PeronaEngine:
+    """Return a cached engine instance, reloading when configuration changes."""
+
+    return _get_engine_cache_entry(force_refresh).engine
 
 
 def invalidate_engine_cache() -> None:
@@ -104,6 +116,24 @@ def invalidate_engine_cache() -> None:
     global _engine_cache
     with _engine_lock:
         _engine_cache = None
+
+
+def _settings_summary_from_cache(force_refresh: bool = False) -> SettingsSummary:
+    """Return a settings summary derived from the cached engine entry."""
+
+    cache_entry = _get_engine_cache_entry(force_refresh)
+    return SettingsSummary.from_engine(
+        cache_entry.engine,
+        settings_path=cache_entry.settings_path,
+        warnings=cache_entry.warnings,
+    )
+
+
+def reload_settings() -> SettingsSummary:
+    """Invalidate and rebuild the engine cache, returning the refreshed summary."""
+
+    invalidate_engine_cache()
+    return _settings_summary_from_cache(force_refresh=True)
 
 
 def get_engine(refresh: bool = Query(False, alias="refresh_engine")) -> PeronaEngine:
@@ -123,8 +153,14 @@ def health() -> dict[str, str]:
 def settings_summary() -> SettingsSummary:
     """Return the resolved configuration powering the dashboard."""
 
-    load_result = PeronaEngine.from_settings()
-    return SettingsSummary.from_load_result(load_result)
+    return _settings_summary_from_cache()
+
+
+@app.post("/settings/reload", response_model=SettingsSummary)
+def settings_reload() -> SettingsSummary:
+    """Reload engine configuration and return the updated settings summary."""
+
+    return reload_settings()
 
 
 @app.get("/render-feed", response_model=list[RenderMetric])
@@ -228,4 +264,4 @@ def shot_sequences(
     return list(sequences)
 
 
-__all__ = ["app", "get_engine", "invalidate_engine_cache"]
+__all__ = ["app", "get_engine", "invalidate_engine_cache", "reload_settings"]
