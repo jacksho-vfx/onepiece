@@ -786,7 +786,7 @@ class PeronaEngine:
         scenario: OptimizationScenario,
         breakdown: CostBreakdown,
         baseline: CostBreakdown,
-        ) -> str:
+    ) -> str:
         delta = baseline.total_cost - breakdown.total_cost
         direction = "saves" if delta > 0 else "adds"
         symbol = get_currency_symbol(breakdown.currency)
@@ -800,9 +800,7 @@ class PeronaEngine:
             scenario.gpu_hourly_rate
             and scenario.gpu_hourly_rate != self._baseline_cost_input.gpu_hourly_rate
         ):
-            details.append(
-                f"gpu rate {symbol}{scenario.gpu_hourly_rate:.2f}/h"
-            )
+            details.append(f"gpu rate {symbol}{scenario.gpu_hourly_rate:.2f}/h")
         if scenario.frame_time_scale != 1.0 or scenario.sampling_scale != 1.0:
             details.append(
                 f"frame time x{scenario.frame_time_scale * scenario.sampling_scale:.2f}"
