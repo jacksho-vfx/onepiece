@@ -12,7 +12,13 @@ import typer
 
 from pydantic import ValidationError
 
-from apps.perona.engine import DEFAULT_SETTINGS_PATH, PeronaEngine
+from apps.perona.engine import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_SETTINGS_PATH,
+    DEFAULT_TARGET_ERROR_RATE,
+    PeronaEngine,
+)
 from apps.perona.models import CostEstimate, CostEstimateRequest
 from apps.perona.version import PERONA_VERSION
 
@@ -104,12 +110,97 @@ def _resolve_settings_path(cli_path: Path | None) -> Path | None:
     return None
 
 
+def _format_difference_line(
+    label: str,
+    entry: Mapping[str, object],
+    *,
+    width: int,
+    indent: str = "",
+) -> str:
+    """Render a single line describing a deviation from defaults."""
+
+    current = entry.get("current")
+    default = entry.get("default")
+    delta = entry.get("delta")
+    detail_parts: list[str] = []
+    if delta is not None:
+        delta_display = _format_value(delta)
+        if isinstance(delta, (int, float)) and delta > 0:
+            delta_display = f"+{delta_display}"
+        detail_parts.append(f"Δ {delta_display}")
+    if default is not None:
+        detail_parts.append(f"default {_format_value(default)}")
+    detail = ", ".join(detail_parts)
+    suffix = f" ({detail})" if detail else ""
+    return f"{indent}{label:<{width}} : {_format_value(current)}{suffix}"
+
+
+def _diff_numeric(current: object, default: object) -> float | int | None:
+    """Return the numeric delta between two values when applicable."""
+
+    numeric_types = (int, float)
+    if isinstance(current, numeric_types) and isinstance(default, numeric_types):
+        return current - default
+    return None
+
+
+def _diff_mapping(
+    current: Mapping[str, object], default: Mapping[str, object]
+) -> dict[str, dict[str, object]]:
+    """Identify key/value differences between two mappings."""
+
+    differences: dict[str, dict[str, object]] = {}
+    for key, value in current.items():
+        default_value = default.get(key)
+        if value != default_value:
+            entry: dict[str, object] = {"current": value, "default": default_value}
+            delta = _diff_numeric(value, default_value)
+            if delta is not None:
+                entry["delta"] = delta
+            differences[key] = entry
+    return differences
+
+
+def _calculate_settings_differences(
+    baseline: Mapping[str, object],
+    target_error_rate: float,
+    pnl_baseline_cost: float,
+) -> dict[str, object]:
+    """Return a structured diff against the baked-in Perona defaults."""
+
+    baseline_defaults = asdict(DEFAULT_BASELINE_COST_INPUT)
+    baseline_diffs = _diff_mapping(baseline, baseline_defaults)
+    differences: dict[str, object] = {}
+    if baseline_diffs:
+        differences["baseline_cost_input"] = baseline_diffs
+
+    def _diff_scalar(current: object, default: object) -> dict[str, object] | None:
+        if current == default:
+            return None
+        entry: dict[str, object] = {"current": current, "default": default}
+        delta = _diff_numeric(current, default)
+        if delta is not None:
+            entry["delta"] = delta
+        return entry
+
+    target_diff = _diff_scalar(target_error_rate, DEFAULT_TARGET_ERROR_RATE)
+    if target_diff is not None:
+        differences["target_error_rate"] = target_diff
+
+    pnl_diff = _diff_scalar(pnl_baseline_cost, DEFAULT_PNL_BASELINE_COST)
+    if pnl_diff is not None:
+        differences["pnl_baseline_cost"] = pnl_diff
+
+    return differences
+
+
 def _format_settings_table(
     baseline: Mapping[str, object],
     target_error_rate: float,
     pnl_baseline_cost: float,
     *,
     settings_path: Path | None,
+    differences: Mapping[str, object] | None = None,
 ) -> str:
     """Produce a readable summary of the resolved Perona settings."""
 
@@ -130,6 +221,45 @@ def _format_settings_table(
     lines.append("")
     lines.append(f"{'Target error rate':<{width}} : {_format_value(target_error_rate)}")
     lines.append(f"{'P&L baseline cost':<{width}} : {_format_value(pnl_baseline_cost)}")
+
+    if differences is not None:
+        lines.append("")
+        header = "Differences from defaults"
+        lines.append(header)
+        lines.append("-" * len(header))
+        if not differences:
+            lines.append("No differences detected (using default settings).")
+        else:
+            baseline_diffs = differences.get("baseline_cost_input", {})
+            if baseline_diffs:
+                lines.append("Baseline cost inputs")
+                for key in baseline:
+                    if key in baseline_diffs:  # type: ignore[operator]
+                        display_key = humanised_keys.get(key, _humanise_key(key))
+                        lines.append(
+                            _format_difference_line(
+                                display_key,
+                                baseline_diffs[key],  # type: ignore[index]
+                                width=width,
+                                indent="  ",
+                            )
+                        )
+            if "target_error_rate" in differences:
+                lines.append(
+                    _format_difference_line(
+                        "Target error rate",
+                        differences["target_error_rate"],  # type: ignore[arg-type]
+                        width=width,
+                    )
+                )
+            if "pnl_baseline_cost" in differences:
+                lines.append(
+                    _format_difference_line(
+                        "P&L baseline cost",
+                        differences["pnl_baseline_cost"],  # type: ignore[arg-type]
+                        width=width,
+                    )
+                )
     return "\n".join(lines)
 
 
@@ -164,6 +294,11 @@ def settings(
         "--settings-path",
         help="Optional path to a Perona settings file to load.",
     ),
+    diff: bool = typer.Option(
+        False,
+        "--diff/--no-diff",
+        help="Display differences against the bundled defaults.",
+    ),
     output_format: OutputFormat = typer.Option(
         "table",
         "--format",
@@ -178,6 +313,7 @@ def settings(
     resolved_path = _resolve_settings_path(validated_settings_path)
     engine = PeronaEngine.from_settings(path=validated_settings_path)
     baseline = asdict(engine.baseline_cost_input)
+    differences: dict[str, object] | None = None
     payload: dict[str, object] = {
         "baseline_cost_input": baseline,
         "target_error_rate": engine.target_error_rate,
@@ -185,6 +321,16 @@ def settings(
     }
     if resolved_path is not None:
         payload["settings_path"] = str(resolved_path)
+
+    if diff:
+        differences = _calculate_settings_differences(
+            baseline,
+            engine.target_error_rate,
+            engine.pnl_baseline_cost,
+        )
+        payload["differences"] = differences
+    elif diff is False:
+        differences = None
 
     fmt = str(output_format).lower()
     if fmt not in {"table", "json"}:
@@ -200,6 +346,7 @@ def settings(
             engine.target_error_rate,
             engine.pnl_baseline_cost,
             settings_path=resolved_path,
+            differences=differences if diff else None,
         )
     )
 
