@@ -7,10 +7,11 @@ import json
 import os
 from pathlib import Path
 from threading import Lock
-from typing import Any, NamedTuple
+from typing import Any, Mapping, NamedTuple, Sequence
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.version import PERONA_VERSION
 
@@ -24,11 +25,68 @@ from apps.perona.models import (
     PnLBreakdown,
     RenderMetric,
     RiskIndicator,
-    Sequence,
     Shot,
     SettingsSummary,
     sequences_from_lifecycles,
 )
+from apps.perona.models import Sequence as PeronaSequence
+
+
+class RenderMetricBatch(BaseModel):
+    """Payload wrapper for render metrics ingested via the API."""
+
+    metrics: tuple[RenderMetric, ...] = Field(default_factory=tuple)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    def to_serialisable(self) -> list[dict[str, Any]]:
+        """Return JSON-friendly dictionaries for persistence."""
+
+        return [
+            metric.model_dump(mode="json", by_alias=True) for metric in self.metrics
+        ]
+
+
+class RenderMetricStore:
+    """Simple append-only store that persists render metrics to disk."""
+
+    def __init__(self, path: Path):
+        self._path = path
+        self._lock = Lock()
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def persist(self, records: Sequence[Mapping[str, Any]]) -> None:
+        """Append metrics to the backing store as NDJSON."""
+
+        if not records:
+            return
+
+        lines = [
+            json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+            for record in records
+        ]
+        payload = "\n".join(lines) + "\n"
+
+        with self._lock:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(payload)
+
+
+def _resolve_metrics_store_path() -> Path:
+    """Return the configured metrics store path, falling back to cache dir."""
+
+    env_path = os.getenv("PERONA_METRICS_PATH")
+    if env_path:
+        return Path(env_path).expanduser()
+
+    cache_home = os.getenv("XDG_CACHE_HOME")
+    base_dir = Path(cache_home).expanduser() if cache_home else Path.home() / ".cache"
+    return base_dir / "perona" / "render-metrics.ndjson"
+
 
 app = FastAPI(
     title="Perona",
@@ -39,6 +97,25 @@ app = FastAPI(
     ),
     version=PERONA_VERSION,
 )
+
+
+_metrics_store = RenderMetricStore(_resolve_metrics_store_path())
+
+
+@app.post("/api/metrics", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_render_metrics(
+    payload: RenderMetricBatch, background_tasks: BackgroundTasks
+) -> dict[str, Any]:
+    """Accept render metrics and persist them asynchronously."""
+
+    records = payload.to_serialisable()
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No metrics supplied."
+        )
+
+    background_tasks.add_task(_metrics_store.persist, records)
+    return {"status": "accepted", "enqueued": len(records)}
 
 
 class _EngineCacheEntry(NamedTuple):
@@ -254,10 +331,10 @@ def shots_lifecycle(
     return [Shot.from_entity(item) for item in engine.shot_lifecycle()]
 
 
-@app.get("/shots/sequences", response_model=list[Sequence])
+@app.get("/shots/sequences", response_model=list[PeronaSequence])
 def shot_sequences(
     engine: PeronaEngine = Depends(get_engine),
-) -> list[Sequence]:
+) -> list[PeronaSequence]:
     """Return monitored shots grouped by sequence."""
 
     sequences = sequences_from_lifecycles(engine.shot_lifecycle())
