@@ -218,15 +218,11 @@ def _load_settings(
             LOGGER.warning(message)
             warnings.append(message)
         except tomllib.TOMLDecodeError as exc:
-            message = (
-                f"Unable to parse settings file {expanded} ({exc}); falling back to defaults"
-            )
+            message = f"Unable to parse settings file {expanded} ({exc}); falling back to defaults"
             LOGGER.warning(message)
             warnings.append(message)
         except OSError as exc:
-            message = (
-                f"Unable to read settings file {expanded} ({exc}); falling back to defaults"
-            )
+            message = f"Unable to read settings file {expanded} ({exc}); falling back to defaults"
             LOGGER.warning(message)
             warnings.append(message)
     return {}, None, tuple(warnings)
