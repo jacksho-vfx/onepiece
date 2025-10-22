@@ -36,6 +36,7 @@ def test_settings_endpoint_defaults() -> None:
     assert data["target_error_rate"] == pytest.approx(DEFAULT_TARGET_ERROR_RATE)
     assert data["pnl_baseline_cost"] == pytest.approx(DEFAULT_PNL_BASELINE_COST)
     assert data["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+    assert data["warnings"] == []
 
     baseline = data["baseline_cost_input"]
     assert baseline["frame_count"] == DEFAULT_BASELINE_COST_INPUT.frame_count
@@ -293,4 +294,23 @@ gpu_hourly_rate = 7.0
     assert restored.status_code == 200
     assert restored.json()["baseline_cost"] == pytest.approx(default_cost)
 
+    invalidate_engine_cache()
+
+
+def test_settings_endpoint_reports_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invalidate_engine_cache()
+
+    missing_path = tmp_path / "missing.toml"
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(missing_path))
+
+    response = client.get("/settings")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+    assert data["warnings"]
+    assert any("falling back to defaults" in warning for warning in data["warnings"])
+
+    monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
     invalidate_engine_cache()

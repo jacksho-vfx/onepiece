@@ -183,9 +183,21 @@ DEFAULT_PNL_BASELINE_COST = 18240.0
 DEFAULT_SETTINGS_PATH = Path(__file__).with_name("defaults.toml")
 
 
-def _load_settings(path: str | os.PathLike[str] | None) -> dict[str, object]:
+@dataclass(frozen=True)
+class SettingsLoadResult:
+    """Container describing the outcome of loading Perona settings."""
+
+    engine: "PeronaEngine"
+    settings_path: Path | None
+    warnings: tuple[str, ...] = ()
+
+
+def _load_settings(
+    path: str | os.PathLike[str] | None,
+) -> tuple[dict[str, object], Path | None, tuple[str, ...]]:
     """Load configuration data from a TOML file, falling back to defaults."""
 
+    warnings: list[str] = []
     candidates: list[Path] = []
     if path is not None:
         candidates.append(Path(path))
@@ -198,26 +210,26 @@ def _load_settings(path: str | os.PathLike[str] | None) -> dict[str, object]:
         expanded = candidate.expanduser()
         try:
             with expanded.open("rb") as handle:
-                return tomllib.load(handle)
+                return tomllib.load(handle), expanded, tuple(warnings)
         except FileNotFoundError as exc:
-            LOGGER.warning(
-                "Settings file %s not found (%s); falling back to defaults",
-                expanded,
-                exc,
+            message = (
+                f"Settings file {expanded} not found ({exc}); falling back to defaults"
             )
+            LOGGER.warning(message)
+            warnings.append(message)
         except tomllib.TOMLDecodeError as exc:
-            LOGGER.warning(
-                "Unable to parse settings file %s (%s); falling back to defaults",
-                expanded,
-                exc,
+            message = (
+                f"Unable to parse settings file {expanded} ({exc}); falling back to defaults"
             )
+            LOGGER.warning(message)
+            warnings.append(message)
         except OSError as exc:
-            LOGGER.warning(
-                "Unable to read settings file %s (%s); falling back to defaults",
-                expanded,
-                exc,
+            message = (
+                f"Unable to read settings file {expanded} ({exc}); falling back to defaults"
             )
-    return {}
+            LOGGER.warning(message)
+            warnings.append(message)
+    return {}, None, tuple(warnings)
 
 
 def _coerce_cost_model_input(
@@ -314,10 +326,10 @@ class PeronaEngine:
     @classmethod
     def from_settings(
         cls, *, path: str | os.PathLike[str] | None = None
-    ) -> "PeronaEngine":
+    ) -> SettingsLoadResult:
         """Instantiate the engine using configuration sourced from disk/env."""
 
-        raw_settings = _load_settings(path)
+        raw_settings, resolved_path, warnings = _load_settings(path)
         baseline_settings: Mapping[str, object] = raw_settings.get(
             "baseline_cost_input", {}
         )  # type: ignore[assignment]
@@ -334,10 +346,13 @@ class PeronaEngine:
             DEFAULT_PNL_BASELINE_COST,
             setting="pnl_baseline_cost",
         )
-        return cls(
+        engine = cls(
             baseline_input=baseline_input,
             target_error_rate=target_error_rate,
             pnl_baseline_cost=pnl_baseline_cost,
+        )
+        return SettingsLoadResult(
+            engine=engine, settings_path=resolved_path, warnings=warnings
         )
 
     def stream_render_metrics(

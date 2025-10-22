@@ -92,24 +92,6 @@ def _validate_settings_path(settings_path: Path | None) -> Path | None:
     return resolved
 
 
-def _resolve_settings_path(cli_path: Path | None) -> Path | None:
-    """Return the first existing settings candidate for display purposes."""
-
-    candidates: list[Path] = []
-    if cli_path is not None:
-        candidates.append(cli_path)
-    env_path = os.getenv("PERONA_SETTINGS_PATH")
-    if env_path:
-        candidates.append(Path(env_path))
-    candidates.append(DEFAULT_SETTINGS_PATH)
-
-    for candidate in candidates:
-        resolved = candidate.expanduser()
-        if resolved.exists():
-            return resolved
-    return None
-
-
 def _format_difference_line(
     label: str,
     entry: Mapping[str, object],
@@ -310,8 +292,10 @@ def settings(
     """Display the resolved Perona configuration values."""
 
     validated_settings_path = _validate_settings_path(settings_path)
-    resolved_path = _resolve_settings_path(validated_settings_path)
-    engine = PeronaEngine.from_settings(path=validated_settings_path)
+    load_result = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = load_result.engine
+    warnings = load_result.warnings
+    resolved_path = load_result.settings_path
     baseline = asdict(engine.baseline_cost_input)
     differences: dict[str, object] | None = None
     payload: dict[str, object] = {
@@ -321,6 +305,7 @@ def settings(
     }
     if resolved_path is not None:
         payload["settings_path"] = str(resolved_path)
+    payload["warnings"] = list(warnings)
 
     if diff:
         differences = _calculate_settings_differences(
@@ -338,17 +323,25 @@ def settings(
 
     if fmt == "json":
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    typer.echo(
-        _format_settings_table(
-            baseline,
-            engine.target_error_rate,
-            engine.pnl_baseline_cost,
-            settings_path=resolved_path,
-            differences=differences if diff else None,
+    else:
+        typer.echo(
+            _format_settings_table(
+                baseline,
+                engine.target_error_rate,
+                engine.pnl_baseline_cost,
+                settings_path=resolved_path,
+                differences=differences if diff else None,
+            )
         )
-    )
+
+    if warnings:
+        typer.echo("")
+        typer.echo("Warnings:")
+        for message in warnings:
+            typer.echo(f"- {message}")
+
+    if warnings:
+        raise typer.Exit(code=1)
 
 
 @cost_app.command("estimate")
@@ -430,7 +423,7 @@ def cost_estimate(
         raise typer.BadParameter("; ".join(messages)) from exc
 
     validated_settings_path = _validate_settings_path(settings_path)
-    engine = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = PeronaEngine.from_settings(path=validated_settings_path).engine
     breakdown = engine.estimate_cost(payload.to_entity())
     estimate = CostEstimate.from_breakdown(breakdown)
 
