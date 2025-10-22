@@ -28,6 +28,27 @@ class RenderMetric:
     cache_health: float
 
 
+SUPPORTED_CURRENCIES: tuple[str, ...] = ("GBP", "USD")
+_CURRENCY_SYMBOLS: dict[str, str] = {"GBP": "£", "USD": "$"}
+DEFAULT_CURRENCY = "GBP"
+
+
+def _normalise_currency(value: object, fallback: str = DEFAULT_CURRENCY) -> str:
+    """Return an upper-cased currency code when supported, else ``fallback``."""
+
+    if isinstance(value, str):
+        normalised = value.upper()
+        if normalised in SUPPORTED_CURRENCIES:
+            return normalised
+    return fallback
+
+
+def get_currency_symbol(currency: str) -> str:
+    """Return the symbol representing *currency* or the code when unknown."""
+
+    return _CURRENCY_SYMBOLS.get(currency, currency)
+
+
 @dataclass(frozen=True)
 class CostModelInput:
     """Inputs required to estimate render costs."""
@@ -43,6 +64,10 @@ class CostModelInput:
     data_egress_gb: float = 0.0
     egress_rate_per_gb: float = 0.0
     misc_costs: float = 0.0
+    currency: str = DEFAULT_CURRENCY
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "currency", _normalise_currency(self.currency))
 
 
 @dataclass(frozen=True)
@@ -60,6 +85,10 @@ class CostBreakdown:
     misc_cost: float
     total_cost: float
     cost_per_frame: float
+    currency: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "currency", _normalise_currency(self.currency))
 
 
 @dataclass(frozen=True)
@@ -177,6 +206,7 @@ DEFAULT_BASELINE_COST_INPUT = CostModelInput(
     data_egress_gb=3.8,
     egress_rate_per_gb=0.19,
     misc_costs=220.0,
+    currency=DEFAULT_CURRENCY,
 )
 DEFAULT_TARGET_ERROR_RATE = 0.012
 DEFAULT_PNL_BASELINE_COST = 18240.0
@@ -265,6 +295,7 @@ def _coerce_cost_model_input(
         data_egress_gb=_as_float("data_egress_gb", fallback.data_egress_gb),
         egress_rate_per_gb=_as_float("egress_rate_per_gb", fallback.egress_rate_per_gb),
         misc_costs=_as_float("misc_costs", fallback.misc_costs),
+        currency=_normalise_currency(data.get("currency"), fallback.currency),
     )
 
 
@@ -409,6 +440,7 @@ class PeronaEngine:
             misc_cost=round(misc_cost, 2),
             total_cost=round(total_cost, 2),
             cost_per_frame=round(cost_per_frame, 4),
+            currency=inputs.currency,
         )
 
     def risk_heatmap(self) -> Sequence[RiskIndicator]:
@@ -757,8 +789,9 @@ class PeronaEngine:
     ) -> str:
         delta = baseline.total_cost - breakdown.total_cost
         direction = "saves" if delta > 0 else "adds"
+        symbol = get_currency_symbol(breakdown.currency)
         details: list[str] = [
-            f"{direction} ${abs(delta):,.2f} vs baseline",
+            f"{direction} {symbol}{abs(delta):,.2f} vs baseline",
             f"cost/frame {breakdown.cost_per_frame:.4f}",
         ]
         if scenario.gpu_count and scenario.gpu_count != baseline.concurrency:
@@ -767,7 +800,7 @@ class PeronaEngine:
             scenario.gpu_hourly_rate
             and scenario.gpu_hourly_rate != self._baseline_cost_input.gpu_hourly_rate
         ):
-            details.append(f"gpu rate ${scenario.gpu_hourly_rate:.2f}/h")
+            details.append(f"gpu rate {symbol}{scenario.gpu_hourly_rate:.2f}/h")
         if scenario.frame_time_scale != 1.0 or scenario.sampling_scale != 1.0:
             details.append(
                 f"frame time x{scenario.frame_time_scale * scenario.sampling_scale:.2f}"
@@ -789,4 +822,7 @@ __all__ = [
     "RiskIndicator",
     "ShotLifecycle",
     "ShotLifecycleStage",
+    "SUPPORTED_CURRENCIES",
+    "DEFAULT_CURRENCY",
+    "get_currency_symbol",
 ]
