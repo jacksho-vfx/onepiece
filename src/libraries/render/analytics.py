@@ -76,14 +76,12 @@ def average_frame_time_by_shot(
         totals[key] += float(sample.frame_time_ms)
         counts[key] += 1
 
-    return {
-        key: totals[key] / counts[key]
-        for key in totals
-        if counts[key]
-    }
+    return {key: totals[key] / counts[key] for key in totals if counts[key]}
 
 
-def rolling_mean(values: Sequence[SupportsFloat], window: int) -> tuple[float | None, ...]:
+def rolling_mean(
+    values: Sequence[SupportsFloat], window: int
+) -> tuple[float | None, ...]:
     """Compute a simple rolling mean across ``values``.
 
     The returned tuple matches the length of ``values``. Positions before the
