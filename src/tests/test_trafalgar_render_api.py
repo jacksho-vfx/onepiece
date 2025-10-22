@@ -51,6 +51,7 @@ def test_parse_timestamp_accepts_datetime_objects() -> None:
     parsed = render_module._parse_timestamp(naive)
     assert parsed == datetime(2024, 5, 12, 14, 30, 45, tzinfo=timezone.utc)
 
+
 def test_get_farms_lists_registered_adapters(client: TestClient) -> None:
     response = client.get("/farms")
     assert response.status_code == 200
