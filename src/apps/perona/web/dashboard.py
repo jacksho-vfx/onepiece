@@ -91,7 +91,8 @@ def _load_engine(force_refresh: bool) -> PeronaEngine:
     with _engine_lock:
         cache_entry = _engine_cache
         if force_refresh or cache_entry is None or cache_entry.signature != signature:
-            engine = PeronaEngine.from_settings()
+            load_result = PeronaEngine.from_settings()
+            engine = load_result.engine
             cache_entry = _EngineCacheEntry(engine=engine, signature=signature)
             _engine_cache = cache_entry
         return cache_entry.engine
@@ -122,9 +123,8 @@ def health() -> dict[str, str]:
 def settings_summary() -> SettingsSummary:
     """Return the resolved configuration powering the dashboard."""
 
-    engine = PeronaEngine.from_settings()
-    resolved_path = _resolved_settings_path()
-    return SettingsSummary.from_engine(engine, settings_path=resolved_path)
+    load_result = PeronaEngine.from_settings()
+    return SettingsSummary.from_load_result(load_result)
 
 
 @app.get("/render-feed", response_model=list[RenderMetric])

@@ -14,6 +14,7 @@ from .engine import (
     CostBreakdown,
     CostModelInput,
     PeronaEngine,
+    SettingsLoadResult,
     OptimizationResult as EngineOptimizationResult,
     OptimizationScenario,
     PnLBreakdown as EnginePnLBreakdown,
@@ -241,10 +242,15 @@ class SettingsSummary(BaseModel):
     target_error_rate: float
     pnl_baseline_cost: float
     settings_path: Path | None = None
+    warnings: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def from_engine(
-        cls, engine: "PeronaEngine", *, settings_path: Path | None
+        cls,
+        engine: "PeronaEngine",
+        *,
+        settings_path: Path | None,
+        warnings: tuple[str, ...] = (),
     ) -> "SettingsSummary":
         return cls(
             baseline_cost_input=BaselineCostInput.from_entity(
@@ -253,6 +259,15 @@ class SettingsSummary(BaseModel):
             target_error_rate=engine.target_error_rate,
             pnl_baseline_cost=engine.pnl_baseline_cost,
             settings_path=settings_path,
+            warnings=warnings,
+        )
+
+    @classmethod
+    def from_load_result(cls, result: SettingsLoadResult) -> "SettingsSummary":
+        return cls.from_engine(
+            result.engine,
+            settings_path=result.settings_path,
+            warnings=result.warnings,
         )
 
 
@@ -318,6 +333,7 @@ __all__ = [
     "PnLContribution",
     "RenderMetric",
     "RiskIndicator",
+    "SettingsSummary",
     "Sequence",
     "Shot",
     "ShotStage",

@@ -45,6 +45,7 @@ def test_settings_command_displays_defaults(monkeypatch: pytest.MonkeyPatch) -> 
     assert "0.012" in result.output
     assert "P&L baseline cost" in result.output
     assert "18,240" in result.output
+    assert "Warnings:" not in result.output
 
 
 def test_settings_command_honours_custom_settings_path(
@@ -109,6 +110,7 @@ gpu_hourly_rate = 4.2
     assert payload["baseline_cost_input"]["frame_count"] == 48
     assert payload["baseline_cost_input"]["average_frame_time_ms"] == 21.5
     assert payload["baseline_cost_input"]["gpu_hourly_rate"] == 4.2
+    assert payload["warnings"] == []
 
 
 def test_settings_command_supports_diff_table(
@@ -175,6 +177,7 @@ frame_count = 3000
     assert payload["target_error_rate"] == 0.02
     differences = payload.get("differences")
     assert differences is not None
+    assert payload["warnings"] == []
 
     baseline_diffs = differences["baseline_cost_input"]
     assert baseline_diffs["gpu_hourly_rate"]["current"] == 9.75
@@ -197,6 +200,38 @@ frame_count = 3000
     assert pnl_diff["current"] == 19000.0
     assert pnl_diff["default"] == DEFAULT_PNL_BASELINE_COST
     assert pnl_diff["delta"] == pytest.approx(760)
+
+
+def test_settings_command_reports_env_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing_path = tmp_path / "missing.toml"
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(missing_path))
+
+    result = runner.invoke(app, ["settings"])
+
+    assert result.exit_code == 1
+    assert "Warnings:" in result.output
+    assert str(missing_path) in result.output
+    assert "falling back to defaults" in result.output
+
+
+def test_settings_command_reports_env_fallback_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing_path = tmp_path / "missing.toml"
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", str(missing_path))
+
+    result = runner.invoke(app, ["settings", "--format", "json"])
+
+    assert result.exit_code == 1
+    output = result.output
+    json_text, warnings_text = output.split("\n\nWarnings:\n", maxsplit=1)
+    payload = json.loads(json_text)
+    assert payload["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+    assert payload["warnings"]
+    warning_lines = [line.strip("- ") for line in warnings_text.strip().splitlines()]
+    assert any(str(missing_path) in line for line in warning_lines)
 
 
 def test_settings_command_rejects_missing_path(tmp_path: Path) -> None:
