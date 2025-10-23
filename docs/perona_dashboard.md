@@ -47,14 +47,18 @@ perona settings reload
 # Target a remote deployment explicitly
 perona settings reload --url https://perona.internal.example.com
 
+# Supply just a host/port; http:// will be inferred automatically
+perona settings reload --url perona.internal.example.com:8065
+
 # Refresh the settings for a locally imported FastAPI app without HTTP
 perona settings reload --local
 ```
 
 Key options:
 
-- `--url URL` &mdash; optional, points the CLI at a specific dashboard base URL. Falls back to the `PERONA_DASHBOARD_URL`
-  environment variable or `http://127.0.0.1:8065`.
+- `--url URL` &mdash; optional, points the CLI at a specific dashboard base URL. Accepts bare hosts/ports and automatically
+  prefixes `http://` when no scheme is supplied. Falls back to the `PERONA_DASHBOARD_URL` environment variable or
+  `http://127.0.0.1:8065`.
 - `--local` &mdash; bypasses HTTP entirely and triggers the cache invalidator directly. Handy for local development when the
   FastAPI app is imported inside the same Python process.
 

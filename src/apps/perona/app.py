@@ -8,7 +8,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 import typer
@@ -312,7 +312,11 @@ def _resolve_dashboard_url(explicit_url: str | None) -> str:
 
     base = explicit_url or os.getenv("PERONA_DASHBOARD_URL")
     if base:
-        return base.rstrip("/")
+        trimmed = base.strip().rstrip("/")
+        parsed = urlparse(trimmed)
+        if not parsed.scheme or (parsed.scheme and not parsed.netloc):
+            trimmed = f"http://{trimmed}"
+        return trimmed
     return f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
 
 
