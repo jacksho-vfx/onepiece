@@ -174,6 +174,49 @@ def test_shots_sequences_endpoint() -> None:
         assert shot_ids == sorted(shot_ids)
 
 
+def test_shots_summary_filters_by_sequence() -> None:
+    response = client.get("/shots", params={"sequence": "SQ05"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["completed"] == 1
+    assert data["by_sequence"] == [{"name": "SQ05", "shots": 1}]
+    assert {shot["sequence"] for shot in data["active_shots"]} == {"SQ05"}
+
+
+def test_shots_lifecycle_filters_by_artist() -> None:
+    response = client.get("/shots/lifecycle", params={"artist": "M. Chen"})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    shot = data[0]
+    assert shot["sequence"] == "SQ12"
+    assert shot["shot_id"] == "SQ12_SH010"
+
+
+def test_shots_filters_by_date_range() -> None:
+    params = {
+        "start_date": "2024-05-17T12:00:00",
+        "end_date": "2024-05-18T00:00:00",
+    }
+    response = client.get("/shots", params=params)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["by_sequence"] == [{"name": "SQ05", "shots": 1}]
+    assert {shot["sequence"] for shot in data["active_shots"]} == {"SQ05"}
+
+
+def test_shot_sequences_support_filters() -> None:
+    response = client.get("/shots/sequences", params={"artist": "R. Ali"})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    sequence = data[0]
+    assert sequence["name"] == "SQ18"
+    assert {shot["shot_id"] for shot in sequence["shots"]} == {"SQ18_SH220"}
+
+
 def test_render_feed_stream() -> None:
     with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
         assert response.status_code == 200
