@@ -607,7 +607,14 @@ def _sync_package_to_s3(
 ) -> str:
     """Synchronise the packaged scene to S3 and return the destination path."""
 
-    destination_path = direct_s3_path or f"s3://{bucket}/{scene_name}"
+    if direct_s3_path:
+        destination_path = direct_s3_path
+    else:
+        show_type_segment = show_type.strip("/") or show_type
+        show_code_segment = show_code.strip("/") or show_code
+        destination_path = (
+            f"s3://{bucket}/{show_type_segment}/{show_code_segment}/{scene_name}"
+        )
 
     log.info(
         "publish_scene_packaged dcc=%s package=%s bucket=%s show_code=%s show_type=%s destination=%s",

@@ -294,10 +294,11 @@ def test_sync_package_to_s3_uses_expected_destination(
             direct_s3_path=None,
         )
 
-    assert destination == "s3://libraries-bucket/ep01_sh030"
+    expected_destination = "s3://libraries-bucket/vfx/OP/ep01_sh030"
+    assert destination == expected_destination
     sync_mock.assert_called_once_with(
         source=package_dir,
-        destination=destination,
+        destination=expected_destination,
         dry_run=True,
         include=None,
         exclude=None,
@@ -402,7 +403,7 @@ def test_publish_scene_runs_maya_validation(
 
     expected_package = destination / "ep01_sh030"
     assert result.package_dir == expected_package
-    assert result.destination == "s3://libraries-bucket/ep01_sh030"
+    assert result.destination == "s3://libraries-bucket/vfx/OP/ep01_sh030"
 
     validate_mock.assert_called_once()
     kwargs = validate_mock.call_args.kwargs
@@ -495,12 +496,12 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
 
     expected_package = destination / "ep01_sh011"
     assert result.package_dir == expected_package
-    assert result.destination == "s3://libraries-bucket/ep01_sh011"
+    assert result.destination == "s3://libraries-bucket/vfx/OP/ep01_sh011"
     assert (expected_package / "metadata.json").exists()
 
     sync_mock.assert_called_once_with(
         source=expected_package,
-        destination="s3://libraries-bucket/ep01_sh011",
+        destination="s3://libraries-bucket/vfx/OP/ep01_sh011",
         dry_run=True,
         include=None,
         exclude=None,
@@ -537,7 +538,7 @@ def test_publish_scene_replaces_existing_file_targets(
 
     expected_package = destination / "ep01_sh012"
     assert result.package_dir == expected_package
-    assert result.destination == "s3://libraries-bucket/ep01_sh012"
+    assert result.destination == "s3://libraries-bucket/vfx/OP/ep01_sh012"
     previews_dir = expected_package / "previews"
     assert previews_dir.is_dir()
     assert (previews_dir / "preview.jpg").read_text() == "preview"
