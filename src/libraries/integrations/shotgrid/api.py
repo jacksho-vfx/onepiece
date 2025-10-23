@@ -335,6 +335,25 @@ class ShotGridClient:
         fields = "id,name,code,versions"
         return self._get_paginated("Playlist", filters, fields)
 
+    def get_playlist_record(
+        self,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        fields: Sequence[str] | str = ("id", "name", "code", "versions"),
+    ) -> Optional[Dict[str, Any]]:
+        """Return a single playlist record using the provided *filters*."""
+
+        resolved_filters = filters or []
+
+        if isinstance(fields, str):
+            field_param = fields
+        else:
+            field_param = ",".join(str(field).strip() for field in fields if field)
+
+        if not field_param:
+            field_param = "id,name,code"
+
+        return self._get_single("Playlist", resolved_filters, field_param)
+
     def list_versions_raw(
         self,
         filters: Optional[List[Dict[str, Any]]] = None,

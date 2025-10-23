@@ -282,6 +282,28 @@ def test_list_playlists_filters_by_project_and_paginates(
     assert second_call_kwargs["params"]["page[number]"] == 2
 
 
+def test_get_playlist_record_delegates_to_single(client: ShotGridClient) -> None:
+    filters = [{"project": 77}, {"code": "Editorial"}]
+
+    client._get_single = MagicMock(return_value={"id": 5})
+
+    result = client.get_playlist_record(filters)
+
+    assert result == {"id": 5}
+    client._get_single.assert_called_once_with(
+        "Playlist", filters, "id,name,code,versions"
+    )
+
+
+def test_get_playlist_record_accepts_sequence_fields(client: ShotGridClient) -> None:
+    filters: list[dict[str, Any]] = []
+    client._get_single = MagicMock(return_value=None)
+
+    client.get_playlist_record(filters, ["id", "code"])
+
+    client._get_single.assert_called_once_with("Playlist", filters, "id,code")
+
+
 def test_expand_playlist_versions_fetches_and_normalises(
     client: ShotGridClient,
 ) -> None:
