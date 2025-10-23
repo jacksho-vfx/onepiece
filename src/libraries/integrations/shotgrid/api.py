@@ -452,7 +452,11 @@ class ShotGridClient:
             except (TypeError, ValueError):
                 continue
 
-        return [parsed_by_id[version_id] for version_id in version_ids if version_id in parsed_by_id]
+        return [
+            parsed_by_id[version_id]
+            for version_id in version_ids
+            if version_id in parsed_by_id
+        ]
 
     # ------------------------------------------------------------------ #
     # Episodes

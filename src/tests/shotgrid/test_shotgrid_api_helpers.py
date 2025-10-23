@@ -640,6 +640,7 @@ def test_expand_playlist_versions_respects_playlist_order(
     assert fields == _version_view(summary=False)[0]
     assert kwargs == {"page_size": None}
 
+
 def test_list_versions_raw_uses_pagination_by_default(
     client: ShotGridClient,
 ) -> None:
