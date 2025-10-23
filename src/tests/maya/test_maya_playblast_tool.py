@@ -56,15 +56,11 @@ def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> P
     return target
 
 
-def _fake_empty_playblast(
-    _: PlayblastRequest, __: Path, ___: tuple[int, int]
-) -> Any:
+def _fake_empty_playblast(_: PlayblastRequest, __: Path, ___: tuple[int, int]) -> Any:
     return None
 
 
-def _fake_invalid_playblast(
-    _: PlayblastRequest, __: Path, ___: tuple[int, int]
-) -> Any:
+def _fake_invalid_playblast(_: PlayblastRequest, __: Path, ___: tuple[int, int]) -> Any:
     return 1234
 
 
