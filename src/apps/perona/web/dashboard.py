@@ -349,8 +349,49 @@ async def render_feed_stream(
 def metrics_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
     """Return aggregated statistics for recent render telemetry."""
 
-    samples = list(engine.stream_render_metrics())
-    if not samples:
+    def _rounded_mean(total: float, count: int) -> float:
+        return round(total / count, 3) if count else 0.0
+
+    total_samples = 0
+    total_fps = 0.0
+    total_frame_time = 0.0
+    total_gpu_utilisation = 0.0
+    total_error_count = 0.0
+
+    sequence_stats: dict[str, dict[str, Any]] = {}
+    latest_sample: RenderMetric | None = None
+    latest_timestamp: datetime | None = None
+
+    for sample in engine.stream_render_metrics():
+        total_samples += 1
+        total_fps += sample.fps
+        total_frame_time += sample.frame_time_ms
+        total_gpu_utilisation += sample.gpu_utilisation
+        total_error_count += sample.error_count
+
+        entry = sequence_stats.setdefault(
+            sample.sequence,
+            {
+                "shots": set(),
+                "count": 0,
+                "fps_total": 0.0,
+                "frame_time_total": 0.0,
+                "gpu_utilisation_total": 0.0,
+                "error_total": 0.0,
+            },
+        )
+        entry["shots"].add(sample.shot_id)
+        entry["count"] += 1
+        entry["fps_total"] += sample.fps
+        entry["frame_time_total"] += sample.frame_time_ms
+        entry["gpu_utilisation_total"] += sample.gpu_utilisation
+        entry["error_total"] += sample.error_count
+
+        if latest_timestamp is None or sample.timestamp > latest_timestamp:
+            latest_timestamp = sample.timestamp
+            latest_sample = sample
+
+    if total_samples == 0:
         return {
             "total_samples": 0,
             "averages": {
@@ -363,55 +404,35 @@ def metrics_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any
             "latest_sample": None,
         }
 
-    def _rounded_mean(values: Sequence[float]) -> float:
-        return round(fmean(values), 3)
-
     overall_averages = {
-        "fps": _rounded_mean([sample.fps for sample in samples]),
-        "frame_time_ms": _rounded_mean([sample.frame_time_ms for sample in samples]),
-        "gpu_utilisation": _rounded_mean(
-            [sample.gpu_utilisation for sample in samples]
-        ),
-        "error_count": _rounded_mean([sample.error_count for sample in samples]),
+        "fps": _rounded_mean(total_fps, total_samples),
+        "frame_time_ms": _rounded_mean(total_frame_time, total_samples),
+        "gpu_utilisation": _rounded_mean(total_gpu_utilisation, total_samples),
+        "error_count": _rounded_mean(total_error_count, total_samples),
     }
-
-    sequence_stats: dict[str, dict[str, Any]] = {}
-    for sample in samples:
-        entry = sequence_stats.setdefault(
-            sample.sequence,
-            {
-                "shots": set(),
-                "fps": [],
-                "frame_time_ms": [],
-                "gpu_utilisation": [],
-                "error_count": [],
-            },
-        )
-        entry["shots"].add(sample.shot_id)
-        entry["fps"].append(sample.fps)
-        entry["frame_time_ms"].append(sample.frame_time_ms)
-        entry["gpu_utilisation"].append(sample.gpu_utilisation)
-        entry["error_count"].append(sample.error_count)
 
     sequences_summary = [
         {
             "sequence": name,
             "shots": len(data["shots"]),
-            "avg_fps": _rounded_mean(data["fps"]),
-            "avg_frame_time_ms": _rounded_mean(data["frame_time_ms"]),
-            "avg_gpu_utilisation": _rounded_mean(data["gpu_utilisation"]),
-            "avg_error_count": _rounded_mean(data["error_count"]),
+            "avg_fps": _rounded_mean(data["fps_total"], data["count"]),
+            "avg_frame_time_ms": _rounded_mean(data["frame_time_total"], data["count"]),
+            "avg_gpu_utilisation": _rounded_mean(
+                data["gpu_utilisation_total"], data["count"]
+            ),
+            "avg_error_count": _rounded_mean(data["error_total"], data["count"]),
         }
         for name, data in sorted(sequence_stats.items())
     ]
 
-    latest_sample = max(samples, key=lambda sample: sample.timestamp)
-    latest_payload = RenderMetric.from_entity(latest_sample).model_dump(
-        mode="json", by_alias=True
+    latest_payload = (
+        RenderMetric.from_entity(latest_sample).model_dump(mode="json", by_alias=True)
+        if latest_sample
+        else None
     )
 
     return {
-        "total_samples": len(samples),
+        "total_samples": total_samples,
         "averages": overall_averages,
         "sequences": sequences_summary,
         "latest_sample": latest_payload,
