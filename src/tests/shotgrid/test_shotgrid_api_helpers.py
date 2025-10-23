@@ -210,6 +210,31 @@ def test_get_or_create_project_creates_when_missing(client: ShotGridClient) -> N
     assert result == created
 
 
+def test_create_project_sets_name_and_code(client: ShotGridClient) -> None:
+    client._post = MagicMock(return_value={"id": 42})
+
+    result = client.create_project("Project X", template="episodic")
+
+    assert result == {"id": 42}
+    entity_type, attributes = client._post.call_args.args[:2]
+    assert entity_type == "Project"
+    assert attributes == {
+        "name": "Project X",
+        "code": "Project X",
+        "template": "episodic",
+    }
+
+
+def test_create_project_omits_template_when_none(client: ShotGridClient) -> None:
+    client._post = MagicMock(return_value={"id": 99})
+
+    client.create_project("Project Y", template=None)
+
+    entity_type, attributes = client._post.call_args.args[:2]
+    assert entity_type == "Project"
+    assert attributes == {"name": "Project Y", "code": "Project Y"}
+
+
 def test_get_or_create_episode_skips_creation_without_identifiers(
     client: ShotGridClient,
 ) -> None:

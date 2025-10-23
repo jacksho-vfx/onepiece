@@ -316,7 +316,10 @@ class ShotGridClient:
         return result["id"] if result else None
 
     def create_project(self, project_name: str, template: str | None) -> Any:
-        return self._post("Project", {"code": project_name, "template": template})
+        attributes = {"name": project_name, "code": project_name}
+        if template is not None:
+            attributes["template"] = template
+        return self._post("Project", attributes)
 
     def get_or_create_project(self, name: str, template: str | None) -> Any:
         return self._get_or_create_entity(
