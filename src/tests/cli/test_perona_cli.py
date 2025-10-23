@@ -75,9 +75,7 @@ def test_settings_rejects_directory_settings_path(
 
     from_settings = mocker.patch("apps.perona.app.PeronaEngine.from_settings")
 
-    result = runner.invoke(
-        perona_app, ["settings", "--settings-path", str(directory)]
-    )
+    result = runner.invoke(perona_app, ["settings", "--settings-path", str(directory)])
 
     assert result.exit_code == 2
     assert "Settings path" in result.output
