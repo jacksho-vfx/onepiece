@@ -246,9 +246,7 @@ def test_create_task_includes_entity_relationship(client: ShotGridClient) -> Non
     assert attributes["code"] == TaskCode.FINAL_DELIVERY.value
     assert attributes["content"] == TaskCode.FINAL_DELIVERY.value
     assert relationships["project"] == {"data": {"type": "Project", "id": 101}}
-    assert relationships["entity"] == {
-        "data": {"type": "Asset", "id": 202}
-    }
+    assert relationships["entity"] == {"data": {"type": "Asset", "id": 202}}
 
 
 def test_create_task_defaults_related_entity_type(client: ShotGridClient) -> None:
