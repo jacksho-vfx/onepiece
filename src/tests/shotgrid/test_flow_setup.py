@@ -23,13 +23,6 @@
 #     ) -> Any:  # pragma: no cover - behaviour tested via setup
 #         return self._project
 #
-#     def get_or_create_project(self, payload: Any, template: str | None) -> Any:
-#         return self._project
-#
-#     def get_project_id_by_name(self, payload: Any) -> Any:
-#         self._project = payload
-#         return 123
-#
 #     def get_or_create_episode(self, payload: Any) -> Any:
 #         self.episode_payload = payload
 #         return {"id": 101}
@@ -48,7 +41,18 @@
 #
 #     client = _FakeShotGridClient(project=None)
 #
-#     with pytest.raises(RuntimeError, match="Project 'my-show' could not be retrieved or created"):
+#     with pytest.raises(RuntimeError, match="ShotGrid project 'my-show' was not found"):
+#         setup_single_shot("my-show", "E01_S01_SH010", client=client)
+#
+#
+# def test_setup_single_shot_missing_project_id() -> None:
+#     """A project without an ``id`` should raise before accessing the hierarchy."""
+#
+#     client = _FakeShotGridClient(project={"name": "my-show"})
+#
+#     with pytest.raises(
+#         RuntimeError, match="ShotGrid project 'my-show' is missing an id"
+#     ):
 #         setup_single_shot("my-show", "E01_S01_SH010", client=client)
 #
 #
@@ -59,6 +63,19 @@
 #
 #     setup_single_shot("my-show", "E01_S01_SH010", client=client)
 #
-#     assert client.episode_payload.project_id == 123  # type: ignore[attr-defined]
-#     assert client.scene_payload.project_id == 123  # type: ignore[attr-defined]
-#     assert client.shot_payload.project_id == 123  # type: ignore[attr-defined]
+#     assert client.episode_payload.project_id == 777  # type: ignore[attr-defined]
+#     assert client.scene_payload.project_id == 777  # type: ignore[attr-defined]
+#     assert client.shot_payload.project_id == 777  # type: ignore[attr-defined]
+#     assert client.scene_payload.code == "E01_S01"  # type: ignore[attr-defined]
+#
+#
+# def test_setup_single_shot_supports_hyphenated_codes() -> None:
+#     """Hyphen separated shot codes should be normalised like underscore codes."""
+#
+#     client = _FakeShotGridClient(project={"id": 888, "name": "my-show"})
+#
+#     setup_single_shot("my-show", "E02-S03-SH020", client=client)
+#
+#     assert client.episode_payload.code == "E02"  # type: ignore[attr-defined]
+#     assert client.scene_payload.code == "E02_S03"  # type: ignore[attr-defined]
+#     assert client.shot_payload.code == "E02-S03-SH020"  # type: ignore[attr-defined]
