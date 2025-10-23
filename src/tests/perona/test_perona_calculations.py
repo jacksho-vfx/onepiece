@@ -58,11 +58,12 @@ def test_risk_heatmap_uses_cached_frame_times(engine: PeronaEngine) -> None:
 
     original_log = engine._render_log
     try:
+
         class FailOnIter:
-            def __iter__(self):
+            def __iter__(self) -> AssertionError:
                 raise AssertionError("render log should not be iterated")
 
-        engine._render_log = FailOnIter()  # type: ignore[assignment]
+        engine._render_log = FailOnIter()
         heatmap = engine.risk_heatmap()
     finally:
         engine._render_log = original_log
