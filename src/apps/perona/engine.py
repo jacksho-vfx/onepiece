@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import logging
 import os
 from pathlib import Path
+import math
+import statistics
 from typing import Iterable, Mapping, Sequence, Any
 import tomllib
 
@@ -15,6 +17,13 @@ from libraries.render import optimization as render_optimization
 
 
 LOGGER = logging.getLogger(__name__)
+
+_RISK_REFERENCE_TIME = datetime(2024, 5, 20, 12, 0)
+_VARIANCE_CV_MAX = 0.02
+_DEADLINE_HORIZON_HOURS = 7 * 24
+_VARIANCE_WEIGHT = 0.2
+_ERROR_WEIGHT = 0.4
+_DEADLINE_WEIGHT = 0.4
 
 
 @dataclass(frozen=True)
@@ -143,6 +152,7 @@ class ShotTelemetry:
     error_rate: float
     cache_stability: float
     frames_rendered: int
+    deadline: datetime
 
 
 @dataclass(frozen=True)
@@ -465,28 +475,71 @@ class PeronaEngine:
         """Return risk scores ordered from most to least critical."""
 
         indicators: list[RiskIndicator] = []
-        baseline_time = self._baseline_cost_input.average_frame_time_ms
+        target_error_rate = max(self._target_error_rate, 1e-6)
+        weight_total = _VARIANCE_WEIGHT + _ERROR_WEIGHT + _DEADLINE_WEIGHT
         for telemetry in self._telemetry:
-            render_factor = telemetry.average_frame_time_ms / baseline_time
-            error_factor = telemetry.error_rate / self._target_error_rate
-            cache_penalty = 1.0 - telemetry.cache_stability
-            score = min(
-                100.0,
-                round(render_factor * 40 + error_factor * 40 + cache_penalty * 20, 2),
+            frame_times = [
+                sample.frame_time_ms
+                for sample in self._render_log
+                if sample.sequence == telemetry.sequence
+                and sample.shot_id == telemetry.shot_id
+            ]
+            if len(frame_times) > 1:
+                variance = statistics.pvariance(frame_times)
+                mean_frame_time = statistics.fmean(frame_times)
+            elif frame_times:
+                variance = 0.0
+                mean_frame_time = frame_times[0]
+            else:
+                variance = 0.0
+                mean_frame_time = telemetry.average_frame_time_ms
+
+            if mean_frame_time <= 0:
+                variance_score = 0.0
+            else:
+                std_dev = math.sqrt(variance)
+                coefficient_variation = std_dev / mean_frame_time if std_dev else 0.0
+                if coefficient_variation <= 0:
+                    variance_score = 0.0
+                else:
+                    variance_score = min(1.0, coefficient_variation / _VARIANCE_CV_MAX)
+
+            error_excess = max(0.0, telemetry.error_rate - target_error_rate)
+            error_score = min(1.0, error_excess / target_error_rate)
+
+            hours_remaining = (
+                telemetry.deadline - _RISK_REFERENCE_TIME
+            ).total_seconds() / 3600
+            if hours_remaining <= 0:
+                deadline_score = 1.0
+            else:
+                horizon = _DEADLINE_HORIZON_HOURS
+                clamped_hours = min(hours_remaining, horizon)
+                deadline_score = max(0.0, 1.0 - clamped_hours / horizon)
+
+            weighted_sum = (
+                variance_score * _VARIANCE_WEIGHT
+                + error_score * _ERROR_WEIGHT
+                + deadline_score * _DEADLINE_WEIGHT
             )
+            normalised_score = weighted_sum / weight_total if weight_total else 0.0
+            score = round(normalised_score * 100, 2)
+
             drivers: list[str] = []
-            if render_factor > 1.05:
-                drivers.append(
-                    f"Slow renders (+{(render_factor - 1) * 100:.1f}% vs baseline)"
-                )
-            if error_factor > 1.0:
-                drivers.append(
-                    f"Error rate high (+{(error_factor - 1) * 100:.1f}% vs target)"
-                )
-            if cache_penalty > 0.2:
+            if variance_score >= 0.5:
+                drivers.append("Render time volatility")
+            if error_excess > 0:
+                delta_pct = (telemetry.error_rate / target_error_rate - 1) * 100
+                drivers.append(f"Error rate high (+{delta_pct:.1f}% vs target)")
+            if hours_remaining <= 0:
+                drivers.append("Deadline missed")
+            elif deadline_score >= 0.25:
+                drivers.append(f"Deadline pressure ({hours_remaining:.0f}h remaining)")
+            if telemetry.cache_stability < 0.75:
                 drivers.append("Cache rebuild risk")
             if not drivers:
                 drivers.append("Within tolerance")
+
             indicators.append(
                 RiskIndicator(
                     sequence=telemetry.sequence,
@@ -566,6 +619,7 @@ class PeronaEngine:
                 error_rate=0.028,
                 cache_stability=0.71,
                 frames_rendered=420,
+                deadline=datetime(2024, 5, 21, 18, 0),
             ),
             ShotTelemetry(
                 sequence="SQ18",
@@ -575,6 +629,7 @@ class PeronaEngine:
                 error_rate=0.014,
                 cache_stability=0.82,
                 frames_rendered=512,
+                deadline=datetime(2024, 5, 24, 12, 0),
             ),
             ShotTelemetry(
                 sequence="SQ05",
@@ -584,6 +639,7 @@ class PeronaEngine:
                 error_rate=0.009,
                 cache_stability=0.9,
                 frames_rendered=368,
+                deadline=datetime(2024, 5, 28, 9, 0),
             ),
             ShotTelemetry(
                 sequence="SQ09",
@@ -593,6 +649,7 @@ class PeronaEngine:
                 error_rate=0.032,
                 cache_stability=0.64,
                 frames_rendered=488,
+                deadline=datetime(2024, 5, 21, 9, 0),
             ),
         )
 

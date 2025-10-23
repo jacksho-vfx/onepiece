@@ -48,9 +48,11 @@ def test_estimate_cost_breakdown(engine: PeronaEngine) -> None:
 
 
 def test_risk_heatmap_is_sorted(engine: PeronaEngine) -> None:
-    scores = [item.risk_score for item in engine.risk_heatmap()]
+    heatmap = engine.risk_heatmap()
+    scores = [item.risk_score for item in heatmap]
     assert scores == sorted(scores, reverse=True)
-    assert scores[0] >= 90
+    assert all(0 <= score <= 100 for score in scores)
+    assert heatmap[0].shot_id == "SQ09_SH180"
 
 
 def test_pnl_explainer_consistency(engine: PeronaEngine) -> None:
