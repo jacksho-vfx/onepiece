@@ -39,6 +39,14 @@ def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> P
     return target
 
 
+def _fake_mismatch_playblast(
+    _: PlayblastRequest, target: Path, __: tuple[int, int]
+) -> Path:
+    reported = target.parent / "reported.mov"
+    Path(reported).write_bytes(b"playblast")
+    return reported
+
+
 class _ReviewRecorder:
     def __init__(self) -> None:
         self.calls: list[tuple[Path, dict[str, Any]]] = []
@@ -179,3 +187,23 @@ def test_execute_normalizes_windows_style_directory(tmp_path: Path) -> None:
         )
     finally:
         shutil.rmtree(windows_dir, ignore_errors=True)
+
+
+def test_execute_prefers_reported_playblast_path(tmp_path: Path) -> None:
+    request = _create_request(tmp_path)
+    tool = PlayblastAutomationTool(
+        timeline_query=lambda: (300, 310),
+        playblast_callback=_fake_mismatch_playblast,
+        clock=lambda: _dt.datetime(2024, 7, 1, 10, 0, 0),
+    )
+
+    result = tool.execute(request)
+
+    expected_filename = build_playblast_filename(
+        request, _dt.datetime(2024, 7, 1, 10, 0, 0)
+    )
+    default_target = request.output_directory / expected_filename
+    reported_target = default_target.parent / "reported.mov"
+
+    assert result.output_path == reported_target
+    assert reported_target.exists()
