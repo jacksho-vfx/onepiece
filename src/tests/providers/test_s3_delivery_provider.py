@@ -93,7 +93,9 @@ def test_s3_delivery_provider_requires_bucket() -> None:
     assert deliveries == []
 
 
-def test_s3_delivery_provider_handles_service_errors(caplog: pytest.LogCaptureFixture) -> None:
+def test_s3_delivery_provider_handles_service_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class FailingPaginator:
         def paginate(self, **kwargs: Any) -> list[dict[str, Any]]:
             raise RuntimeError("boom")
@@ -112,6 +114,4 @@ def test_s3_delivery_provider_handles_service_errors(caplog: pytest.LogCaptureFi
         deliveries = provider.list_deliveries("atlas")
 
     assert deliveries == []
-    assert any(
-        "s3_delivery_list_failed" in record.message for record in caplog.records
-    )
+    assert any("s3_delivery_list_failed" in record.message for record in caplog.records)
