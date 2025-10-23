@@ -1253,9 +1253,7 @@ class RenderSubmissionService:
                     completion_seconds = (
                         record.completed_at - record.created_at
                     ).total_seconds()
-                    adapter_entry["total_completion"] += max(
-                        completion_seconds, 0.0
-                    )
+                    adapter_entry["total_completion"] += max(completion_seconds, 0.0)
 
             status_payload: dict[str, RenderStatusAnalytics] = {}
             for status_name, entry in status_totals.items():
@@ -1263,7 +1261,9 @@ class RenderSubmissionService:
                 active = entry["active"]
                 total_duration = entry["total_duration"]
                 effective_count = count or active
-                average = (total_duration / effective_count) if effective_count else None
+                average = (
+                    (total_duration / effective_count) if effective_count else None
+                )
                 status_payload[status_name] = RenderStatusAnalytics(
                     count=count,
                     active=active,
