@@ -6,7 +6,11 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
+from pathlib import PurePosixPath
 from typing import Any, ClassVar, Iterable, Mapping, Sequence, TypeVar
+
+import logging
+from datetime import datetime, timezone
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,13 +223,133 @@ class S3DeliveryProvider(DeliveryProvider):
         capabilities=("s3", "read"),
     )
 
-    def __init__(self, *, client: Any | None = None) -> None:
-        self._client = client
+    _logger = logging.getLogger(__name__)
 
-    def list_deliveries(
-        self, project_name: str
-    ) -> Sequence[Mapping[str, Any]]:  # pragma: no cover - stub
-        return []
+    def __init__(
+        self,
+        *,
+        client: Any | None = None,
+        bucket: str | None = None,
+        prefix_template: str = "{project}/",
+        manifest_filename: str = "manifest.json",
+    ) -> None:
+        self._client = client
+        self._bucket = bucket
+        self._prefix_template = prefix_template
+        self._manifest_filename = manifest_filename
+
+    def _resolve_client(self) -> Any | None:
+        if self._client is not None:
+            return self._client
+        try:
+            import boto3
+        except Exception:  # pragma: no cover - optional dependency
+            self._logger.warning("s3_delivery_provider_missing_client")
+            return None
+        self._client = boto3.client("s3")
+        return self._client
+
+    def _format_prefix(self, project_name: str) -> str:
+        prefix = self._prefix_template.format(project=project_name)
+        prefix = prefix.lstrip("/")
+        if prefix and not prefix.endswith("/"):
+            prefix += "/"
+        return prefix
+
+    @staticmethod
+    def _format_timestamp(value: Any) -> str | None:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.isoformat()
+        if value is None:
+            return None
+        return str(value)
+
+    def _derive_delivery_identity(self, key: str) -> tuple[str, str]:
+        path = PurePosixPath(key)
+        manifest_name = path.name
+        parent = path.parent
+        if manifest_name == self._manifest_filename and parent != path:
+            identifier = parent.name or str(parent)
+        else:
+            identifier = path.stem or str(path)
+        name = identifier
+        return identifier, name
+
+    def list_deliveries(self, project_name: str) -> Sequence[Mapping[str, Any]]:
+        bucket = self._bucket
+        if not bucket:
+            self._logger.warning(
+                "s3_delivery_bucket_missing",
+                extra={"project": project_name},
+            )
+            return []
+
+        client = self._resolve_client()
+        if client is None:
+            self._logger.warning(
+                "s3_delivery_client_unavailable",
+                extra={"project": project_name},
+            )
+            return []
+
+        prefix = self._format_prefix(project_name)
+
+        try:
+            paginator = client.get_paginator("list_objects_v2")
+        except Exception as exc:  # pragma: no cover - defensive
+            self._logger.exception(
+                "s3_delivery_get_paginator_failed",
+                exc_info=exc,
+                extra={"project": project_name, "bucket": bucket},
+            )
+            return []
+
+        try:
+            pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+        except Exception as exc:
+            self._logger.exception(
+                "s3_delivery_list_failed",
+                exc_info=exc,
+                extra={
+                    "project": project_name,
+                    "bucket": bucket,
+                    "prefix": prefix,
+                },
+            )
+            return []
+
+        deliveries: list[dict[str, Any]] = []
+        for page in pages:
+            objects = page.get("Contents") or []
+            for entry in objects:
+                key = entry.get("Key")
+                if not isinstance(key, str):
+                    continue
+                if not key.endswith(self._manifest_filename):
+                    continue
+                identifier, name = self._derive_delivery_identity(key)
+                timestamp = self._format_timestamp(entry.get("LastModified"))
+                etag = entry.get("ETag")
+                if isinstance(etag, str):
+                    etag = etag.strip('"')
+                deliveries.append(
+                    {
+                        "project": project_name,
+                        "bucket": bucket,
+                        "key": key,
+                        "manifest": key,
+                        "delivery_id": identifier,
+                        "name": name,
+                        "created_at": timestamp,
+                        "size": entry.get("Size"),
+                        "etag": etag,
+                    }
+                )
+
+        deliveries.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+        return deliveries
 
 
 def initialize_providers() -> ProviderRegistry:
