@@ -10,6 +10,9 @@ All notable changes to the OnePiece pipeline toolkit.
   yields to streaming clients, avoiding mismatched annotations during type checks.
 - Documented Trafalgar render job history retention controls and the `/render/health`
   metrics so operators can tune pruning windows and alert on persistence issues.
+- Improved the Chopper CLI's scene loading diagnostics so directory paths, permission
+  errors, and other I/O failures surface actionable guidance instead of generic
+  tracebacks.
 
 ---
 

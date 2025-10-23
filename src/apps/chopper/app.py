@@ -20,6 +20,18 @@ def _load_scene(path: Path) -> Scene:
         contents = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:  # pragma: no cover - defensive
         raise typer.BadParameter(f"Scene file '{path}' was not found") from exc
+    except IsADirectoryError as exc:
+        raise typer.BadParameter(
+            f"Scene path '{path}' is a directory; expected a JSON file"
+        ) from exc
+    except PermissionError as exc:
+        raise typer.BadParameter(
+            f"Scene file '{path}' cannot be read due to permissions"
+        ) from exc
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"Scene file '{path}' could not be read: {exc}"
+        ) from exc
 
     try:
         payload: dict[str, Any] = json.loads(contents)
