@@ -172,7 +172,7 @@ def _fetch_versions(
     client: ShotGridClient, filters: list[dict[str, object]]
 ) -> list[DailiesClip]:
     log.debug("dailies.fetch_versions", filters=json.dumps(filters))
-    records = client._get(
+    records = client._get_paginated(
         "Version", filters, VERSION_FIELDS
     )  # noqa: SLF001 - private API
     clips: list[DailiesClip] = []
