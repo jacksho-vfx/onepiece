@@ -331,7 +331,7 @@ def test_expand_playlist_versions_fetches_and_normalises(
         },
     ]
 
-    client._get = MagicMock(return_value=version_payloads)
+    client.list_versions_raw = MagicMock(return_value=version_payloads)
 
     result = client.expand_playlist_versions(playlist)
 
@@ -358,12 +358,62 @@ def test_expand_playlist_versions_fetches_and_normalises(
         },
     ]
 
-    assert client._get.call_count == 1
-    entity, filters, fields = client._get.call_args.args
-    assert entity == "Version"
+    assert client.list_versions_raw.call_count == 1
+    filters, fields = client.list_versions_raw.call_args.args
+    kwargs = client.list_versions_raw.call_args.kwargs
     assert filters == [{"id[$in]": "101,102"}]
-    assert fields.split(",") == _version_view(summary=False)[0]
+    assert list(fields) == _version_view(summary=False)[0]
+    assert kwargs == {"page_size": None}
 
+
+def test_list_versions_raw_uses_pagination_by_default(
+    client: ShotGridClient,
+) -> None:
+    filters = [{"project": 99}]
+    fields = ["code", "version_number"]
+
+    client._get = MagicMock(side_effect=AssertionError("_get should not be used"))
+    client._get_paginated = MagicMock(return_value=[{"id": 1}])
+
+    result = client.list_versions_raw(filters, fields)
+
+    assert result == [{"id": 1}]
+    client._get_paginated.assert_called_once_with(
+        "Version", filters, "code,version_number", page_size=100
+    )
+
+
+def test_list_versions_raw_supports_single_page_requests(
+    client: ShotGridClient,
+) -> None:
+    default_fields = _version_view(summary=False)[0]
+
+    client._get_paginated = MagicMock(
+        side_effect=AssertionError("_get_paginated should not be used")
+    )
+    client._get = MagicMock(return_value=[{"id": 2}])
+
+    result = client.list_versions_raw(None, None, page_size=None)
+
+    assert result == [{"id": 2}]
+    client._get.assert_called_once_with(
+        "Version", [], ",".join(default_fields)
+    )
+
+
+def test_list_versions_raw_normalises_string_fields(
+    client: ShotGridClient,
+) -> None:
+    client._get_paginated = MagicMock(
+        return_value=[{"id": 3}]
+    )
+
+    result = client.list_versions_raw([], " code , version_number ")
+
+    assert result == [{"id": 3}]
+    client._get_paginated.assert_called_once_with(
+        "Version", [], "code,version_number", page_size=100
+    )
 
 def test_version_view_summary_fields_and_parser() -> None:
     fields, parser = _version_view(summary=True)

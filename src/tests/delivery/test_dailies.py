@@ -71,8 +71,8 @@ class _PaginatedShotGridClient:
                 ),
             ],
         ]
-        self.last_paginated_call: (
-            tuple[str, list[dict[str, object]], str, int] | None
+        self.last_versions_call: (
+            tuple[list[dict[str, object]], str, int | None] | None
         ) = None
 
     def get_project(self, project_name: str) -> dict[str, object]:
@@ -95,26 +95,26 @@ class _PaginatedShotGridClient:
             }
         }
 
-    def _get(
-        self, *args: Any, **kwargs: Any
-    ) -> AssertionError:  # noqa: ANN001, D401, SLF001
-        """The dailies module should rely on pagination."""
-
-        raise AssertionError("_get should not be used when fetching versions")
-
-    def _get_paginated(
+    def list_versions_raw(
         self,
-        entity: str,
         filters: list[dict[str, object]],
         fields: str,
-        page_size: int = 100,
-    ) -> list[dict[str, object]]:  # noqa: SLF001 - private API
-        assert entity == "Version"
-        self.last_paginated_call = (entity, filters, fields, page_size)
+        *,
+        page_size: int | None = 100,
+    ) -> list[dict[str, object]]:
+        assert page_size == 100
+        self.last_versions_call = (filters, fields, page_size)
         aggregated: list[dict[str, object]] = []
         for page in self._version_pages:
             aggregated.extend(page)
         return aggregated
+
+    def _get(
+        self, *args: Any, **kwargs: Any
+    ) -> AssertionError:  # noqa: ANN001, D401, SLF001
+        """The dailies module should route through list_versions_raw."""
+
+        raise AssertionError("_get should not be used when fetching versions")
 
 
 def test_extract_duration_handles_zero_frame_count() -> None:
@@ -138,8 +138,7 @@ def test_fetch_playlist_versions_aggregates_paginated_results() -> None:
         "shot_003_v001",
         "shot_004_v001",
     ]
-    assert client.last_paginated_call == (
-        "Version",
+    assert client.last_versions_call == (
         [{"id[$in]": "101,102,103,104"}],
         dailies.VERSION_FIELDS,
         100,
