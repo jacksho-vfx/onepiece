@@ -74,6 +74,14 @@ def _load_uvicorn() -> Any:
         ) from exc
 
 
+class DifferenceEntry(TypedDict):
+    """Structure describing a difference between current and default values."""
+
+    current: object
+    default: object | None
+    delta: NotRequired[float | int]
+
+
 def _format_value(value: object) -> str:
     """Render numeric values with thousands separators where possible."""
 
@@ -143,14 +151,6 @@ def _format_difference_line(
     detail = ", ".join(detail_parts)
     suffix = f" ({detail})" if detail else ""
     return f"{indent}{label:<{width}} : {_format_value(current)}{suffix}"
-
-
-class DifferenceEntry(TypedDict):
-    """Structure describing a difference between current and default values."""
-
-    current: object
-    default: object | None
-    delta: NotRequired[float | int]
 
 
 class SettingsDifferences(TypedDict, total=False):
