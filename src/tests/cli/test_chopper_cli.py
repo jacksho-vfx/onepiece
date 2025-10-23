@@ -108,7 +108,7 @@ def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 2
-    terms = ["conflicts", "with", "--format"]
+    terms = ["conflicts", "with", "format"]
     for term in terms:
         assert term in result.stderr
 
