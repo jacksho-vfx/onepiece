@@ -142,7 +142,8 @@ def _lifecycle_date_bounds(lifecycle: ShotLifecycle) -> tuple[datetime, datetime
     """Return the earliest start and latest activity timestamps for a lifecycle."""
 
     starts = [stage.started_at for stage in lifecycle.stages]
-    ends = [stage.completed_at or stage.started_at for stage in lifecycle.stages]
+    now = datetime.utcnow()
+    ends = [stage.completed_at or now for stage in lifecycle.stages]
     return min(starts), max(ends)
 
 
