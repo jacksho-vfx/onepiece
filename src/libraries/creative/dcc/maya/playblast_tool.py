@@ -58,9 +58,7 @@ class PlayblastRequest:
             raise TypeError("extra_metadata must be a mapping with string keys")
         for key in self.extra_metadata.keys():
             if not isinstance(key, str):
-                raise TypeError(
-                    "extra_metadata must be a mapping with string keys"
-                )
+                raise TypeError("extra_metadata must be a mapping with string keys")
         try:
             width = int(self.resolution[0])
             height = int(self.resolution[1])

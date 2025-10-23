@@ -61,7 +61,9 @@ def test_playblast_request_rejects_invalid_resolution(
 def test_playblast_request_rejects_invalid_extra_metadata(
     tmp_path: Path, extra_metadata: Any
 ) -> None:
-    with pytest.raises(TypeError, match="extra_metadata must be a mapping with string keys"):
+    with pytest.raises(
+        TypeError, match="extra_metadata must be a mapping with string keys"
+    ):
         _create_request(tmp_path, extra_metadata=extra_metadata)
 
 
