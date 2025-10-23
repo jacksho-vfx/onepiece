@@ -720,7 +720,7 @@ class ShotGridClient:
         )
 
     def create_playlist(self, data: PlaylistData) -> Any:
-        relationships = {
+        relationships: dict[str, dict[str, Any]] = {
             "project": {"data": {"type": "Project", "id": data.project_id}}
         }
         if data.version_ids:

@@ -216,9 +216,7 @@ def test_create_playlist_includes_version_relationships(
     entity_type, attributes, relationships = client._post.call_args.args
     assert entity_type == "Playlist"
     assert attributes == {"code": "Dailies"}
-    assert relationships["project"] == {
-        "data": {"type": "Project", "id": 321}
-    }
+    assert relationships["project"] == {"data": {"type": "Project", "id": 321}}
     assert relationships["versions"] == {
         "data": [
             {"type": "Version", "id": 11},
