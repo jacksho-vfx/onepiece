@@ -22,6 +22,8 @@ def scan_project_files(
     naming conventions are skipped.
     """
 
+    normalised_scope = scope.lower()
+
     root = Path(project_root)
     if not root.exists():
         log.warning("filesystem.scan.missing_root", root=str(root))
@@ -31,7 +33,7 @@ def scan_project_files(
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        entity, version = extract_from_path(path, scope=scope)
+        entity, version = extract_from_path(path, scope=normalised_scope)
         if not entity or not version:
             continue
         results.append({"shot": entity, "version": version, "path": str(path)})
@@ -39,7 +41,8 @@ def scan_project_files(
     log.info(
         "filesystem.scan.complete",
         root=str(root),
-        scope=scope,
+        scope=normalised_scope,
         files=len(results),
     )
+    results.sort(key=lambda item: (item["shot"], item["version"], item["path"]))
     return results
