@@ -12,7 +12,12 @@ from libraries.integrations.shotgrid.api import (
     ShotGridError,
     _version_view,
 )
-from libraries.integrations.shotgrid.models import EpisodeData, SceneData, ShotData
+from libraries.integrations.shotgrid.models import (
+    EpisodeData,
+    PlaylistData,
+    SceneData,
+    ShotData,
+)
 
 
 @pytest.fixture()
@@ -193,6 +198,33 @@ def test_update_version_includes_relationships(client: ShotGridClient) -> None:
 
     _, payload = session.patch_calls[0]
     assert payload["data"]["relationships"] == relationships
+
+
+def test_create_playlist_includes_version_relationships(
+    client: ShotGridClient,
+) -> None:
+    data = PlaylistData(
+        code="Dailies",
+        project_id=321,
+        version_ids=[11, 22],
+    )
+    client._post = MagicMock(return_value={"id": 99})
+
+    result = client.create_playlist(data)
+
+    assert result == {"id": 99}
+    entity_type, attributes, relationships = client._post.call_args.args
+    assert entity_type == "Playlist"
+    assert attributes == {"code": "Dailies"}
+    assert relationships["project"] == {
+        "data": {"type": "Project", "id": 321}
+    }
+    assert relationships["versions"] == {
+        "data": [
+            {"type": "Version", "id": 11},
+            {"type": "Version", "id": 22},
+        ]
+    }
 
 
 def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
