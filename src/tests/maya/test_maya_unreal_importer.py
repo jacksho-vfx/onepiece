@@ -146,6 +146,25 @@ def test_unreal_importer_supports_dry_run(tmp_path: Path) -> None:
     assert summary.destination_path == "/Game/Shows/OP/Heroes"
 
 
+def test_unreal_importer_normalises_windows_destination_path(tmp_path: Path) -> None:
+    package = _package_with_metadata(tmp_path)
+    metadata_path = package / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["unreal"]["assets"][0]["destination_path"] = r"\Game\Shows\OP\Heroes"
+    metadata_path.write_text(json.dumps(metadata))
+
+    importer = UnrealPackageImporter()
+
+    summaries = importer.import_package(
+        package,
+        project="OP",
+        asset_name="Hero",
+        dry_run=True,
+    )
+
+    assert summaries[0].destination_path == "/Game/Shows/OP/Heroes"
+
+
 def test_unreal_importer_rejects_failed_validation(tmp_path: Path) -> None:
     package = _package_with_metadata(tmp_path, status="failed")
     importer = UnrealPackageImporter()
@@ -164,6 +183,40 @@ def test_unreal_importer_rejects_assets_outside_package(tmp_path: Path) -> None:
     importer = UnrealPackageImporter()
 
     with pytest.raises(UnrealImportError, match="inside the package directory"):
+        importer.import_package(package, project="OP", asset_name="Hero")
+
+
+def test_unreal_importer_rejects_destination_path_outside_game(tmp_path: Path) -> None:
+    package = _package_with_metadata(tmp_path)
+    metadata_path = package / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["unreal"]["assets"][0]["destination_path"] = "/OtherProject/OP/Heroes"
+    metadata_path.write_text(json.dumps(metadata))
+
+    importer = UnrealPackageImporter()
+
+    with pytest.raises(
+        UnrealImportError,
+        match="inside the Unreal '/Game' content root",
+    ):
+        importer.import_package(package, project="OP", asset_name="Hero")
+
+
+def test_unreal_importer_rejects_destination_path_with_parent_segments(
+    tmp_path: Path,
+) -> None:
+    package = _package_with_metadata(tmp_path)
+    metadata_path = package / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["unreal"]["assets"][0]["destination_path"] = "/Game/Shows/../OP/Heroes"
+    metadata_path.write_text(json.dumps(metadata))
+
+    importer = UnrealPackageImporter()
+
+    with pytest.raises(
+        UnrealImportError,
+        match="parent directory segments",
+    ):
         importer.import_package(package, project="OP", asset_name="Hero")
 
 

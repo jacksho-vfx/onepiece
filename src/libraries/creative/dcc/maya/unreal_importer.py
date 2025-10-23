@@ -168,6 +168,32 @@ def _collect_import_summaries(
                 "destination_path must resolve to a non-empty string"
             )
 
+        destination_path = destination_path.replace("\\", "/")
+        if not destination_path.startswith("/"):
+            destination_path = f"/{destination_path}"
+
+        if destination_path == "/Game":
+            normalised_destination = destination_path
+        elif destination_path.startswith("/Game/"):
+            normalised_destination = destination_path
+        else:
+            raise UnrealImportError(
+                "destination_path must be inside the Unreal '/Game' content root"
+            )
+
+        segments = normalised_destination.split("/")
+        for index, segment in enumerate(segments):
+            if index == 0 and segment == "":
+                continue
+            if segment == "":
+                raise UnrealImportError(
+                    "destination_path must not contain empty segments"
+                )
+            if segment == "..":
+                raise UnrealImportError(
+                    "destination_path must not contain parent directory segments"
+                )
+
         destination_name = raw_entry.get("destination_name")
         if destination_name is None:
             destination_name = metadata.get("asset_name") or asset_name
@@ -184,7 +210,7 @@ def _collect_import_summaries(
         summaries.append(
             UnrealImportSummary(
                 source=source,
-                destination_path=destination_path,
+                destination_path=normalised_destination,
                 destination_name=destination_name,
                 task_settings=task_settings,
                 factory_class=factory_class,
