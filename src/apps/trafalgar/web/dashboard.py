@@ -1,5 +1,6 @@
 """FastAPI dashboard exposing aggregated project status information."""
 
+import hmac
 import asyncio
 import json
 import os
@@ -69,7 +70,7 @@ def require_dashboard_auth(
         )
 
     provided = credentials.credentials if credentials else None
-    if not provided or provided != expected_token:
+    if not provided or not hmac.compare_digest(provided, expected_token):
         raise HTTPException(status_code=401, detail="Invalid authentication token.")
 
 

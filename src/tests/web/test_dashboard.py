@@ -10,6 +10,8 @@ from typing import Any, Callable, Generator, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
 import pytest
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from httpx import ASGITransport, AsyncClient
 
 from apps.trafalgar.providers.providers import (
@@ -128,6 +130,31 @@ class DummyReviewFacade:
     def summarise_projects(self, project_names: Iterable[str]) -> Mapping[str, Any]:
         self.project_calls.append(list(project_names))
         return self._summary
+
+
+def test_require_dashboard_auth_accepts_matching_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "super-secret")
+
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials="super-secret"
+    )
+
+    dashboard.require_dashboard_auth(credentials)
+
+
+def test_require_dashboard_auth_rejects_mismatched_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "super-secret")
+
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="nope")
+
+    with pytest.raises(HTTPException) as excinfo:
+        dashboard.require_dashboard_auth(credentials)
+
+    assert excinfo.value.status_code == 401
 
 
 @pytest.mark.anyio("asyncio")

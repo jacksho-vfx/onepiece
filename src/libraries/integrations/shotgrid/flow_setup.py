@@ -140,13 +140,13 @@ def setup_single_shot(
     episode_data = EpisodeData(code=episode_code, project_id=project["id"])
     episode = sg_client.get_or_create_episode(episode_data)
     scene_data = SceneData(
-        code=scene_code, project_id=project["id"], episode_id=episode["id"]
+        code=scene_code, project_id=project_id, episode_id=episode["id"]
     )
     scene = sg_client.get_or_create_scene(scene_data)
 
     shot_data = ShotData(
         code=shot_code,
-        project_id=project["id"],
+        project_id=project_id,
         scene_id=scene["id"],
     )
     sg_client.get_or_create_shot(shot_data)
