@@ -61,7 +61,7 @@ def test_scene_from_dict_creates_objects() -> None:
 
 def test_scene_object_requires_positive_size() -> None:
     payload = build_scene_dict()
-    payload["objects"][0]["size"] = [0, 4]
+    payload["objects"][0]["size"] = [0, 4]  # type: ignore[index]
 
     with pytest.raises(SceneError, match="positive width and height"):
         Scene.from_dict(payload)
@@ -69,7 +69,7 @@ def test_scene_object_requires_positive_size() -> None:
 
 def test_circle_requires_positive_diameter() -> None:
     payload = build_scene_dict()
-    payload["objects"][1]["size"] = [6, -1]
+    payload["objects"][1]["size"] = [6, -1]  # type: ignore[index]
 
     with pytest.raises(SceneError, match="positive width and height"):
         Scene.from_dict(payload)

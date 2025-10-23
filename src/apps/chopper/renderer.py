@@ -151,7 +151,9 @@ class SceneObject:
             width = float(size_data[0])
             height = float(size_data[1])
         except (TypeError, ValueError) as exc:
-            raise SceneError("Object size must contain numeric width and height values") from exc
+            raise SceneError(
+                "Object size must contain numeric width and height values"
+            ) from exc
 
         if not math.isfinite(width) or not math.isfinite(height):
             raise SceneError("Object size width and height must be finite numbers")
