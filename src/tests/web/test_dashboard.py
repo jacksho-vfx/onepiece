@@ -228,6 +228,41 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
     assert projects == ["cached", "env_project"]
 
 
+def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
+    tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry_path = tmp_path / "projects.json"
+    monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
+    monkeypatch.delenv("ONEPIECE_DASHBOARD_PROJECTS", raising=False)
+
+    class UnexpectedProjectClient(DummyShotgridClient):
+        def list_projects(self) -> None:
+            return None
+
+    captured_events: list[tuple[str, dict[str, Any]]] = []
+
+    class DummyLogger:
+        def warning(self, event: str, **context: Any) -> None:
+            captured_events.append((event, context))
+
+    monkeypatch.setattr(dashboard, "logger", DummyLogger())
+
+    client = UnexpectedProjectClient(
+        [
+            {"project": "omega"},
+        ]
+    )
+    service = dashboard.ShotGridService(client, known_projects={"omega"})
+
+    projects = service.discover_projects()
+
+    assert projects == ["omega"]
+    assert any(
+        event == "dashboard.project_discovery.unexpected_projects_payload"
+        for event, _ in captured_events
+    )
+
+
 def test_shotgrid_service_uses_discovered_projects_without_reinit(
     tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
 ) -> None:

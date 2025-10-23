@@ -399,6 +399,13 @@ class ShotGridService:
             fetch_projects = getattr(self._client, "list_projects", None)
             if callable(fetch_projects):
                 records = fetch_projects()
+                if not isinstance(records, Iterable):
+                    logger.warning(
+                        "dashboard.project_discovery.unexpected_projects_payload",
+                        payload_type=type(records).__name__,
+                    )
+                    records = []
+
                 for record in records:
                     name = _coerce_project_name(record)
                     if name:
