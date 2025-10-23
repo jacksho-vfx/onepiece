@@ -324,10 +324,17 @@ class Scene:
             raise SceneError("Scene objects must be supplied as a sequence")
 
         objects: list[SceneObject] = []
+        seen_ids: set[str] = set()
         for index, obj in enumerate(objects_data):
             if not isinstance(obj, Mapping):
                 raise SceneError(f"Scene object at index {index} must be a mapping")
-            objects.append(SceneObject.from_dict(dict(obj)))
+            scene_object = SceneObject.from_dict(dict(obj))
+            if scene_object.id in seen_ids:
+                raise SceneError(
+                    f"Scene object ID {scene_object.id!r} is defined multiple times"
+                )
+            seen_ids.add(scene_object.id)
+            objects.append(scene_object)
 
         return cls(
             width=width,

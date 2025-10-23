@@ -74,6 +74,22 @@ def test_scene_object_requires_positive_size() -> None:
         Scene.from_dict(payload)
 
 
+def test_scene_from_dict_rejects_duplicate_object_ids() -> None:
+    payload = build_scene_dict()
+    payload["objects"].append(
+        {
+            "id": "hero",
+            "type": "rectangle",
+            "color": "#ffffff",
+            "position": [0, 0],
+            "size": [1, 1],
+        }
+    )
+
+    with pytest.raises(SceneError, match="'hero'"):
+        Scene.from_dict(payload)
+
+
 def test_scene_object_rejects_unsupported_type(
     unsupported_scene_payload: dict[str, object],
 ) -> None:
