@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from typing import Any
+
 import pytest
 
 from libraries.automation.review import dailies
@@ -68,7 +71,9 @@ class _PaginatedShotGridClient:
                 ),
             ],
         ]
-        self.last_paginated_call: tuple[str, list[dict[str, object]], str, int] | None = None
+        self.last_paginated_call: (
+            tuple[str, list[dict[str, object]], str, int] | None
+        ) = None
 
     def get_project(self, project_name: str) -> dict[str, object]:
         return {"id": 5001, "name": project_name}
@@ -90,7 +95,9 @@ class _PaginatedShotGridClient:
             }
         }
 
-    def _get(self, *args, **kwargs):  # noqa: ANN001, D401, SLF001
+    def _get(
+        self, *args: Any, **kwargs: Any
+    ) -> AssertionError:  # noqa: ANN001, D401, SLF001
         """The dailies module should rely on pagination."""
 
         raise AssertionError("_get should not be used when fetching versions")
