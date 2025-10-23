@@ -14,11 +14,14 @@ from libraries.integrations.aws.s5_sync import s5_sync
 class DummyProcess:
     def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
-        self._stdout = stdout
-        self._stderr = stderr
+        self.stdout = stdout
+        self.stderr = stderr
 
     def communicate(self) -> tuple[str, str]:
-        return self._stdout, self._stderr
+        return self.stdout, self.stderr
+
+    def wait(self) -> tuple[str, str]:
+        return self.stdout, self.stderr
 
 
 @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
