@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 import requests
+from requests import RequestException
 import structlog
 
 from libraries.integrations.shotgrid.config import load_config
@@ -125,7 +126,11 @@ class ShotGridClient:
             "client_id": script_name,
             "client_secret": api_key,
         }
-        r = self._session.post(url, json=payload)
+        try:
+            r = self._session.post(url, json=payload)
+        except RequestException as exc:
+            log.error("auth_request_failed", error=str(exc))
+            raise ShotGridError(f"Authentication request failed: {exc}") from exc
         if not r.ok:
             log.error("auth_failed", status=r.status_code, text=r.text)
             raise ShotGridError(f"Authentication failed: {r.status_code}")
@@ -136,7 +141,11 @@ class ShotGridClient:
     def _get(self, entity: str, filters: List[Dict[str, Any]], fields: str) -> Any:
         url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
         params = self._build_query_params(filters, fields)
-        r = self._session.get(url, params=params)
+        try:
+            r = self._session.get(url, params=params)
+        except RequestException as exc:
+            log.error("http_get_exception", entity=entity, error=str(exc))
+            raise ShotGridError(f"GET {entity} request failed: {exc}") from exc
         if not r.ok:
             log.error(
                 "http_get_failed", entity=entity, status=r.status_code, text=r.text
@@ -161,7 +170,16 @@ class ShotGridClient:
                 fields,
                 extra={"page[number]": page, "page[size]": page_size},
             )
-            response = self._session.get(url, params=params)
+            try:
+                response = self._session.get(url, params=params)
+            except RequestException as exc:
+                log.error(
+                    "http_get_paginated_exception",
+                    entity=entity,
+                    page=page,
+                    error=str(exc),
+                )
+                raise ShotGridError(f"GET {entity} request failed: {exc}") from exc
             if not response.ok:
                 log.error(
                     "http_get_failed",
@@ -193,7 +211,11 @@ class ShotGridClient:
         payload: Dict[str, Any] = {"data": {"type": entity, "attributes": attributes}}
         if relationships:
             payload["data"]["relationships"] = relationships
-        r = self._session.post(url, json=payload)
+        try:
+            r = self._session.post(url, json=payload)
+        except RequestException as exc:
+            log.error("http_post_exception", entity=entity, error=str(exc))
+            raise ShotGridError(f"POST {entity} request failed: {exc}") from exc
         if not r.ok:
             log.error(
                 "http_post_failed", entity=entity, status=r.status_code, text=r.text
@@ -218,7 +240,18 @@ class ShotGridClient:
         }
         if relationships:
             payload["data"]["relationships"] = relationships
-        response = self._session.patch(url, json=payload)
+        try:
+            response = self._session.patch(url, json=payload)
+        except RequestException as exc:
+            log.error(
+                "http_patch_exception",
+                entity=entity,
+                entity_id=entity_id,
+                error=str(exc),
+            )
+            raise ShotGridError(
+                f"PATCH {entity} {entity_id} request failed: {exc}"
+            ) from exc
         if not response.ok:
             log.error(
                 "http_patch_failed",

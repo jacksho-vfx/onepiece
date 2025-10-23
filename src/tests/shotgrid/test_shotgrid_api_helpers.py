@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from requests import RequestException
 
 from libraries.integrations.shotgrid.api import (
     ShotGridClient,
@@ -48,6 +49,62 @@ class StubSession:
     def patch(self, url: str, *, json: dict[Any, Any]) -> StubResponse:
         self.patch_calls.append((url, json))
         return self._response
+
+
+def _make_request_exception(message: str = "boom") -> RequestException:
+    return RequestException(message)
+
+
+def test_authenticate_wraps_request_exception(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    session = MagicMock()
+    session.post.side_effect = _make_request_exception("auth failure")
+    client._session = session
+
+    with pytest.raises(ShotGridError, match="Authentication request failed: auth failure"):
+        client._authenticate("script", "key")
+
+
+def test_get_wraps_request_exception(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    session = MagicMock()
+    session.get.side_effect = _make_request_exception("network down")
+    client._session = session
+
+    with pytest.raises(ShotGridError, match="GET Playlist request failed: network down"):
+        client._get("Playlist", [], "id")
+
+
+def test_get_paginated_wraps_request_exception(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    session = MagicMock()
+    session.get.side_effect = _make_request_exception("timeout")
+    client._session = session
+
+    with pytest.raises(ShotGridError, match="GET Shot request failed: timeout"):
+        client._get_paginated("Shot", [], "id")
+
+
+def test_post_wraps_request_exception(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    session = MagicMock()
+    session.post.side_effect = _make_request_exception("post failed")
+    client._session = session
+
+    with pytest.raises(ShotGridError, match="POST Version request failed: post failed"):
+        client._post("Version", {"code": "v1"})
+
+
+def test_patch_wraps_request_exception(client: ShotGridClient) -> None:
+    client.base_url = "https://shotgrid.example"
+    session = MagicMock()
+    session.patch.side_effect = _make_request_exception("patch failed")
+    client._session = session
+
+    with pytest.raises(
+        ShotGridError, match="PATCH Version 1 request failed: patch failed"
+    ):
+        client._patch("Version", 1, {"code": "v1"})
 
 
 def test_get_or_create_episode_returns_existing(client: ShotGridClient) -> None:
