@@ -7,7 +7,7 @@ import socket
 from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, NotRequired, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -74,6 +74,14 @@ def _load_uvicorn() -> Any:
         ) from exc
 
 
+class DifferenceEntry(TypedDict):
+    """Structure describing a difference between current and default values."""
+
+    current: object
+    default: object | None
+    delta: NotRequired[float | int]
+
+
 def _format_value(value: object) -> str:
     """Render numeric values with thousands separators where possible."""
 
@@ -122,15 +130,15 @@ def _validate_settings_path(settings_path: Path | None) -> Path | None:
 
 def _format_difference_line(
     label: str,
-    entry: Mapping[str, object],
+    entry: DifferenceEntry,
     *,
     width: int,
     indent: str = "",
 ) -> str:
     """Render a single line describing a deviation from defaults."""
 
-    current = entry.get("current")
-    default = entry.get("default")
+    current = entry["current"]
+    default = entry["default"]
     delta = entry.get("delta")
     detail_parts: list[str] = []
     if delta is not None:
@@ -145,6 +153,14 @@ def _format_difference_line(
     return f"{indent}{label:<{width}} : {_format_value(current)}{suffix}"
 
 
+class SettingsDifferences(TypedDict, total=False):
+    """Structured collection of settings differences."""
+
+    baseline_cost_input: dict[str, DifferenceEntry]
+    target_error_rate: DifferenceEntry
+    pnl_baseline_cost: DifferenceEntry
+
+
 def _diff_numeric(current: object, default: object) -> float | int | None:
     """Return the numeric delta between two values when applicable."""
 
@@ -156,14 +172,14 @@ def _diff_numeric(current: object, default: object) -> float | int | None:
 
 def _diff_mapping(
     current: Mapping[str, object], default: Mapping[str, object]
-) -> dict[str, dict[str, object]]:
+) -> dict[str, DifferenceEntry]:
     """Identify key/value differences between two mappings."""
 
-    differences: dict[str, dict[str, object]] = {}
+    differences: dict[str, DifferenceEntry] = {}
     for key, value in current.items():
         default_value = default.get(key)
         if value != default_value:
-            entry: dict[str, object] = {"current": value, "default": default_value}
+            entry: DifferenceEntry = {"current": value, "default": default_value}
             delta = _diff_numeric(value, default_value)
             if delta is not None:
                 entry["delta"] = delta
@@ -175,19 +191,19 @@ def _calculate_settings_differences(
     baseline: Mapping[str, object],
     target_error_rate: float,
     pnl_baseline_cost: float,
-) -> dict[str, object]:
+) -> SettingsDifferences:
     """Return a structured diff against the baked-in Perona defaults."""
 
     baseline_defaults = asdict(DEFAULT_BASELINE_COST_INPUT)
     baseline_diffs = _diff_mapping(baseline, baseline_defaults)
-    differences: dict[str, object] = {}
+    differences: SettingsDifferences = {}
     if baseline_diffs:
         differences["baseline_cost_input"] = baseline_diffs
 
-    def _diff_scalar(current: object, default: object) -> dict[str, object] | None:
+    def _diff_scalar(current: object, default: object) -> DifferenceEntry | None:
         if current == default:
             return None
-        entry: dict[str, object] = {"current": current, "default": default}
+        entry: DifferenceEntry = {"current": current, "default": default}
         delta = _diff_numeric(current, default)
         if delta is not None:
             entry["delta"] = delta
@@ -210,7 +226,7 @@ def _format_settings_table(
     pnl_baseline_cost: float,
     *,
     settings_path: Path | None,
-    differences: Mapping[str, object] | None = None,
+    differences: SettingsDifferences | None = None,
 ) -> str:
     """Produce a readable summary of the resolved Perona settings."""
 
@@ -240,33 +256,37 @@ def _format_settings_table(
         if not differences:
             lines.append("No differences detected (using default settings).")
         else:
-            baseline_diffs = differences.get("baseline_cost_input", {})
+            baseline_diffs = differences.get("baseline_cost_input")
             if baseline_diffs:
                 lines.append("Baseline cost inputs")
                 for key in baseline:
-                    if key in baseline_diffs:  # type: ignore[operator]
-                        display_key = humanised_keys.get(key, _humanise_key(key))
-                        lines.append(
-                            _format_difference_line(
-                                display_key,
-                                baseline_diffs[key],  # type: ignore[index]
-                                width=width,
-                                indent="  ",
-                            )
+                    entry = baseline_diffs.get(key)
+                    if entry is None:
+                        continue
+                    display_key = humanised_keys.get(key, _humanise_key(key))
+                    lines.append(
+                        _format_difference_line(
+                            display_key,
+                            entry,
+                            width=width,
+                            indent="  ",
                         )
-            if "target_error_rate" in differences:
+                    )
+            target_diff = differences.get("target_error_rate")
+            if target_diff is not None:
                 lines.append(
                     _format_difference_line(
                         "Target error rate",
-                        differences["target_error_rate"],  # type: ignore[arg-type]
+                        target_diff,
                         width=width,
                     )
                 )
-            if "pnl_baseline_cost" in differences:
+            pnl_diff = differences.get("pnl_baseline_cost")
+            if pnl_diff is not None:
                 lines.append(
                     _format_difference_line(
                         "P&L baseline cost",
-                        differences["pnl_baseline_cost"],  # type: ignore[arg-type]
+                        pnl_diff,
                         width=width,
                     )
                 )
@@ -442,7 +462,7 @@ def settings(
     warnings = load_result.warnings
     resolved_path = load_result.settings_path
     baseline = asdict(engine.baseline_cost_input)
-    differences: dict[str, object] | None = None
+    differences: SettingsDifferences | None = None
     payload: dict[str, object] = {
         "baseline_cost_input": baseline,
         "target_error_rate": engine.target_error_rate,
@@ -459,9 +479,6 @@ def settings(
             engine.pnl_baseline_cost,
         )
         payload["differences"] = differences
-    elif diff is False:
-        differences = None
-
     fmt = str(output_format).lower()
     if fmt not in {"table", "json"}:
         raise typer.BadParameter("format must be either 'table' or 'json'.")
@@ -475,7 +492,7 @@ def settings(
                 engine.target_error_rate,
                 engine.pnl_baseline_cost,
                 settings_path=resolved_path,
-                differences=differences if diff else None,
+                differences=differences,
             )
         )
 
