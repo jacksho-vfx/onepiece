@@ -52,7 +52,9 @@ class FakeAssetToolsHelpers:
         return self._tools
 
 
-def _package_with_metadata(tmp_path: Path, status: str = "passed") -> Path:
+def _package_with_metadata(
+    tmp_path: Path, *, status: str = "passed", factory_class: str | None = None
+) -> Path:
     package = tmp_path / "package"
     renders = package / "renders"
     renders.mkdir(parents=True)
@@ -70,6 +72,11 @@ def _package_with_metadata(tmp_path: Path, status: str = "passed") -> Path:
                     "source": "renders/hero.fbx",
                     "task_options": {"replace_existing": True},
                     "factory_options": {"import_materials": False},
+                    **(
+                        {"factory_class": factory_class}
+                        if factory_class is not None
+                        else {}
+                    ),
                 }
             ],
         },
@@ -144,6 +151,19 @@ def test_unreal_importer_rejects_failed_validation(tmp_path: Path) -> None:
     importer = UnrealPackageImporter()
 
     with pytest.raises(UnrealImportError):
+        importer.import_package(package, project="OP", asset_name="Hero")
+
+
+def test_unreal_importer_requires_known_factory_class(tmp_path: Path) -> None:
+    package = _package_with_metadata(tmp_path, factory_class="MissingFactory")
+    tooling = FakeAssetTools()
+    unreal = _fake_unreal(tooling)
+
+    importer = UnrealPackageImporter(unreal_module=unreal)
+
+    with pytest.raises(
+        UnrealImportError, match="Unreal module missing factory class 'MissingFactory'"
+    ):
         importer.import_package(package, project="OP", asset_name="Hero")
 
 
