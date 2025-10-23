@@ -242,7 +242,7 @@ class S3DeliveryProvider(DeliveryProvider):
         if self._client is not None:
             return self._client
         try:
-            import boto3  # type: ignore[import-not-found]
+            import boto3
         except Exception:  # pragma: no cover - optional dependency
             self._logger.warning("s3_delivery_provider_missing_client")
             return None
