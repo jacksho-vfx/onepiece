@@ -109,6 +109,8 @@ def _validate_settings_path(settings_path: Path | None) -> Path | None:
     resolved = settings_path.expanduser()
     if not resolved.exists():
         raise typer.BadParameter(f"Settings file '{resolved}' does not exist.")
+    if not resolved.is_file():
+        raise typer.BadParameter(f"Settings path '{resolved}' must be a file.")
     if not os.access(resolved, os.R_OK):
         raise typer.BadParameter(f"Settings file '{resolved}' is not readable.")
 

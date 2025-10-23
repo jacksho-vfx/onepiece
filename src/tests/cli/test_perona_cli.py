@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import pytest_mock
 from typer.testing import CliRunner
@@ -63,3 +65,20 @@ def test_settings_reload_adds_default_scheme_for_env(
 
     assert result.exit_code == 0
     post_mock.assert_called_once_with("http://perona.cluster.example")
+
+
+def test_settings_rejects_directory_settings_path(
+    tmp_path: Path, mocker: pytest_mock.MockerFixture
+) -> None:
+    directory = tmp_path / "settings"
+    directory.mkdir()
+
+    from_settings = mocker.patch("apps.perona.app.PeronaEngine.from_settings")
+
+    result = runner.invoke(
+        perona_app, ["settings", "--settings-path", str(directory)]
+    )
+
+    assert result.exit_code == 2
+    assert "Settings path" in result.output
+    from_settings.assert_not_called()
