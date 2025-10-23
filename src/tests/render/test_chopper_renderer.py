@@ -73,6 +73,17 @@ def test_parse_color_accepts_various_inputs() -> None:
         parse_color((1, 2))
 
 
+def test_parse_color_rejects_out_of_range_components() -> None:
+    with pytest.raises(SceneError, match="0-255"):
+        parse_color((-1, 0, 0))
+
+    with pytest.raises(SceneError, match="0-255"):
+        parse_color((0, 0, 300))
+
+    with pytest.raises(SceneError, match="0-255"):
+        parse_color((0, 0, 0, 999))
+
+
 def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     scene = Scene.from_dict(build_scene_dict())
     renderer = Renderer(scene)
