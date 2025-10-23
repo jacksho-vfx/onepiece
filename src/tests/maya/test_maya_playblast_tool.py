@@ -34,6 +34,23 @@ def _create_request(tmp_path: Path, **overrides: Any) -> PlayblastRequest:
     return PlayblastRequest(**base)
 
 
+@pytest.mark.parametrize(
+    "resolution",
+    [
+        (0, 1080),
+        (1920, 0),
+        (-1280, 720),
+        (1920, -720),
+        ("1920", "0"),
+    ],
+)
+def test_playblast_request_rejects_invalid_resolution(
+    tmp_path: Path, resolution: tuple[int | str, int | str]
+) -> None:
+    with pytest.raises(ValueError):
+        _create_request(tmp_path, resolution=resolution)
+
+
 def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> Path:
     Path(target).write_bytes(b"playblast")
     return target

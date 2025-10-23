@@ -53,6 +53,14 @@ class PlayblastRequest:
             raise ValueError("version must be zero or greater")
         if len(self.resolution) != 2:
             raise ValueError("resolution must contain width and height")
+        try:
+            width = int(self.resolution[0])
+            height = int(self.resolution[1])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("resolution width and height must be integers") from exc
+        if width <= 0 or height <= 0:
+            raise ValueError("resolution width and height must be greater than zero")
+        self.resolution = (width, height)
 
 
 @dataclass(slots=True)
