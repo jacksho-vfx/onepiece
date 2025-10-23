@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +119,7 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     scene = Scene.from_dict(build_scene_dict())
     renderer = Renderer(scene)
 
-    frames = renderer.render()
+    frames = list(renderer.render())
     assert len(frames) == scene.frame_count
 
     first_frame = frames[0]
@@ -138,6 +139,21 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[0] == "P3"
     assert contents[1] == f"{scene.width} {scene.height}"
     assert contents[2] == "255"
+
+
+def test_renderer_render_is_iterator() -> None:
+    scene = Scene.from_dict(build_scene_dict())
+    renderer = Renderer(scene)
+
+    frames_iter = renderer.render()
+    assert isinstance(frames_iter, Iterator)
+
+    first_frame = next(frames_iter)
+    assert first_frame.index == 0
+
+    remaining = list(frames_iter)
+    assert len(remaining) == scene.frame_count - 1
+    assert remaining[-1].index == scene.frame_count - 1
 
 
 def test_frame_png_export_preserves_alpha(tmp_path: Path) -> None:
@@ -252,7 +268,7 @@ def test_scene_serialisation_round_trip(tmp_path: Path) -> None:
     scene = Scene.from_dict(json.loads(scene_path.read_text(encoding="utf-8")))
     renderer = Renderer(scene)
 
-    frames = renderer.render()
+    frames = list(renderer.render())
     assert isinstance(frames[0], Frame)
     assert frames[0].pixels[1][2] == (255, 136, 0)
 

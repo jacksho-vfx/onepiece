@@ -59,7 +59,7 @@ def render(
 
     parsed_scene = _load_scene(scene)
     renderer = Renderer(parsed_scene)
-    frames = renderer.render()
+    frames_iter = renderer.render()
 
     export_normalized = export.lower()
 
@@ -68,13 +68,15 @@ def render(
 
     if export_normalized in {"ppm", "png"}:
         output.mkdir(parents=True, exist_ok=True)
-        for frame in frames:
+        frame_count = 0
+        for frame in frames_iter:
             frame_path = output / f"frame_{frame.index:04d}.{export_normalized}"
             if export_normalized == "ppm":
                 frame.save_ppm(frame_path)
             else:
                 frame.save_png(frame_path)
-        typer.echo(f"Rendered {len(frames)} frame(s) to {output}")
+            frame_count += 1
+        typer.echo(f"Rendered {frame_count} frame(s) to {output}")
         return
 
     destination = output
@@ -83,6 +85,7 @@ def render(
         destination = destination.with_suffix(suffix)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    frames = list(frames_iter)
     writer = AnimationWriter(frames=frames, fps=fps)
     if export_normalized == "gif":
         writer.write_gif(destination)

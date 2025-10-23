@@ -417,18 +417,16 @@ class Renderer:
     def __init__(self, scene: Scene):
         self.scene = scene
 
-    def render(self) -> list[Frame]:
-        """Render every frame in the scene."""
+    def render(self) -> Iterator[Frame]:
+        """Yield each rendered frame in the scene lazily."""
 
-        frames: list[Frame] = []
         for index in range(self.scene.frame_count):
             frame = Frame.blank(
                 index, self.scene.width, self.scene.height, self.scene.background
             )
             for obj in self.scene.objects:
                 obj.render(frame, index)
-            frames.append(frame)
-        return frames
+            yield frame
 
 
 @dataclass(slots=True)
