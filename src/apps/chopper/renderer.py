@@ -506,13 +506,13 @@ def parse_color(value: object) -> Color:
                 return components
         except ValueError as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
-        components = (r, g, b)
+        components = (r, g, b)  # type: ignore[assignment]
         _validate_components(components)
         return components
 
     if isinstance(value, Sequence) and len(value) in {3, 4}:
         try:
-            components = tuple(int(component) for component in value)
+            components = tuple(int(component) for component in value)  # type: ignore[assignment]
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
         _validate_components(components)
