@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import socket
 from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
@@ -30,6 +31,8 @@ from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8065
+DEFAULT_SETTINGS_RELOAD_TIMEOUT = 5.0
+SETTINGS_RELOAD_TIMEOUT_ENV = "PERONA_SETTINGS_RELOAD_TIMEOUT"
 
 OutputFormat = Literal["table", "json"]
 
@@ -322,19 +325,51 @@ def _resolve_dashboard_url(explicit_url: str | None) -> str:
     return f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
 
 
+def _resolve_settings_reload_timeout() -> float:
+    """Return the timeout to use for dashboard reload requests."""
+
+    override = os.getenv(SETTINGS_RELOAD_TIMEOUT_ENV)
+    if override is None:
+        return DEFAULT_SETTINGS_RELOAD_TIMEOUT
+
+    try:
+        timeout = float(override)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise RuntimeError(
+            f"Environment variable {SETTINGS_RELOAD_TIMEOUT_ENV} must be numeric,"
+            f" got '{override}'.",
+        ) from exc
+
+    if timeout <= 0:  # pragma: no cover - defensive guard
+        raise RuntimeError(
+            f"Environment variable {SETTINGS_RELOAD_TIMEOUT_ENV} must be positive,"
+            f" got {timeout}.",
+        )
+
+    return timeout
+
+
 def _post_settings_reload(base_url: str) -> SettingsSummary:
     """Trigger the dashboard reload endpoint and return the response summary."""
 
     endpoint = urljoin(base_url.rstrip("/") + "/", "settings/reload")
     request = Request(endpoint, data=b"", method="POST")
     request.add_header("Content-Length", "0")
+    timeout = _resolve_settings_reload_timeout()
     try:
-        with urlopen(request) as response:
+        with urlopen(request, timeout=timeout) as response:
             payload = response.read()
             status = getattr(response, "status", response.getcode())
     except HTTPError as exc:  # pragma: no cover - network errors are surfaced in tests
         raise RuntimeError(f"Dashboard returned error: {exc}") from exc
     except URLError as exc:  # pragma: no cover - surfaced in tests when unreachable
+        reason = exc.reason
+        if isinstance(reason, (TimeoutError, socket.timeout)) or (
+            isinstance(reason, str) and "timed out" in reason.lower()
+        ):
+            raise RuntimeError(
+                f"Dashboard request timed out after {timeout} seconds."
+            ) from exc
         raise RuntimeError(
             f"Unable to reach dashboard at {endpoint}: {exc.reason}"
         ) from exc
