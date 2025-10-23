@@ -127,7 +127,9 @@ def setup_single_shot(
 
     if not project or "id" not in project:
         log.error("setup_single_shot_project_unavailable", project=project_name)
-        raise RuntimeError(f"Project '{project_name}' could not be retrieved or created")
+        raise RuntimeError(
+            f"Project '{project_name}' could not be retrieved or created"
+        )
 
     log.info(
         "setup_single_shot_project_ready",
