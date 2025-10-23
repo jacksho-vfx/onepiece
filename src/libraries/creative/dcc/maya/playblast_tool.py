@@ -127,7 +127,18 @@ def _default_playblast(
         end=frame_range[1],
         resolution=request.resolution,
     )
-    pm.playblast(**kwargs)
+    reported = pm.playblast(**kwargs)
+    if reported:
+        reported_path = Path(reported)
+        if reported_path != target:
+            log.warning(
+                "maya_playblast_path_mismatch",
+                expected=str(target),
+                reported=str(reported_path),
+            )
+        return reported_path
+
+    log.warning("maya_playblast_missing_path", expected=str(target))
     return target
 
 
