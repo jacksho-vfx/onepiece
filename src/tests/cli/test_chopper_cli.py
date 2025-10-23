@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import json
 import re
+import importlib
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
+import typer
 
 from apps.chopper.app import app
 from apps.chopper.renderer import Scene
+
+chopper_app_module = importlib.import_module("apps.chopper.app")
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
 
 
 def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
@@ -22,10 +32,6 @@ def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
     result = runner.invoke(app, [str(scene_path)])
 
     assert result.exit_code == 2
-
-    def strip_ansi(text: str) -> str:
-        return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
-
     assert "Usage: render" in strip_ansi(result.stderr)
 
 
@@ -94,3 +100,38 @@ def test_render_rejects_unknown_format(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "format must be one of" in result.stderr
+
+
+def test_load_scene_rejects_directory(tmp_path: Path) -> None:
+    with pytest.raises(typer.BadParameter, match="is a directory"):
+        chopper_app_module._load_scene(tmp_path)
+
+
+def test_load_scene_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text("{}", encoding="utf-8")
+
+    def fake_read_text(self: Path, *, encoding: str = "utf-8") -> str:
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(
+        chopper_app_module.Path, "read_text", fake_read_text, raising=False
+    )
+
+    with pytest.raises(typer.BadParameter, match="cannot be read due to permissions"):
+        chopper_app_module._load_scene(scene_path)
+
+
+def test_load_scene_other_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text("{}", encoding="utf-8")
+
+    def fake_read_text(self: Path, *, encoding: str = "utf-8") -> str:
+        raise OSError("disk I/O error")
+
+    monkeypatch.setattr(
+        chopper_app_module.Path, "read_text", fake_read_text, raising=False
+    )
+
+    with pytest.raises(typer.BadParameter, match="could not be read: disk I/O error"):
+        chopper_app_module._load_scene(scene_path)
