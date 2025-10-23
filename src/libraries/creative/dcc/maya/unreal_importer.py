@@ -310,6 +310,10 @@ class UnrealPackageImporter:
         factory_class = None
         if factory_class_name:
             factory_class = getattr(unreal, factory_class_name, None)
+            if factory_class is None:
+                raise UnrealImportError(
+                    f"Unreal module missing factory class '{factory_class_name}'"
+                )
 
         if factory_class is None:
             factory_class = getattr(unreal, "FbxImportUI", None)
