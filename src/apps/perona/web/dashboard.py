@@ -963,29 +963,31 @@ def _render_daily_pdf(summary: Mapping[str, Any]) -> bytes:
 
     dummy = Image.new("RGB", (1, 1), color="white")
     draw = ImageDraw.Draw(dummy)
-    text_heights = []
-    text_widths = []
+    text_heights: list[int] = []
+    text_widths: list[int] = []
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font)
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
+        width = int(bbox[2] - bbox[0])
+        height = int(bbox[3] - bbox[1])
         text_heights.append(height)
         text_widths.append(width)
 
-    padding_x = 24
-    padding_y = 24
-    line_spacing = 4
-    width = max(text_widths or [0]) + padding_x * 2
-    height = (
+    padding_x: int = 24
+    padding_y: int = 24
+    line_spacing: int = 4
+    width = int(max(text_widths or [0]) + padding_x * 2)
+    height = int(
         sum(text_heights or [0]) + padding_y * 2 + line_spacing * max(len(lines) - 1, 0)
     )
 
-    image = Image.new("RGB", (max(width, 200), max(height, 200)), color="white")  # type: ignore[arg-type]
+    image_width = int(max(width, 200))
+    image_height = int(max(height, 200))
+    image = Image.new("RGB", (image_width, image_height), color="white")
     draw = ImageDraw.Draw(image)
-    y = padding_y
+    y: int = padding_y
     for idx, line in enumerate(lines):
         draw.text((padding_x, y), line, fill="black", font=font)
-        y += text_heights[idx] + line_spacing  # type: ignore[assignment]
+        y += int(text_heights[idx] + line_spacing)
 
     buffer = BytesIO()
     image.save(buffer, format="PDF")
