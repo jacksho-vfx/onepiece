@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import urljoin
 
 import requests
@@ -335,6 +335,47 @@ class ShotGridClient:
         fields = "id,name,code,versions"
         return self._get_paginated("Playlist", filters, fields)
 
+    def list_versions_raw(
+        self,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        fields: Sequence[str] | str | None = None,
+        *,
+        page_size: Optional[int] = 100,
+    ) -> Any:
+        """Return raw ShotGrid Version entities matching *filters*.
+
+        Parameters
+        ----------
+        filters:
+            ShotGrid filters encoded as dictionaries. When ``None`` an empty filter
+            list is sent.
+        fields:
+            Field names to request. When ``None`` the full Version view is used.
+            A comma separated string or iterable of field names is accepted for
+            convenience.
+        page_size:
+            Desired page size when aggregating paginated results. Provide
+            ``None`` to perform a single page request.
+        """
+
+        resolved_filters = filters or []
+
+        if fields is None:
+            field_names = _version_view(summary=False)[0]
+        elif isinstance(fields, str):
+            field_names = fields.split(",")
+        else:
+            field_names = list(fields)
+
+        field_param = ",".join(field.strip() for field in field_names if field)
+
+        if page_size is None:
+            return self._get("Version", resolved_filters, field_param)
+
+        return self._get_paginated(
+            "Version", resolved_filters, field_param, page_size=page_size
+        )
+
     def expand_playlist_versions(
         self, playlist_record: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
@@ -371,7 +412,7 @@ class ShotGridClient:
 
         filters = [{"id[$in]": ",".join(str(version_id) for version_id in version_ids)}]
         fields, parser = _version_view(summary=False)
-        records = self._get("Version", filters, ",".join(fields))
+        records = self.list_versions_raw(filters, fields, page_size=None)
         return [parser(record) for record in records]
 
     # ------------------------------------------------------------------ #
@@ -460,7 +501,7 @@ class ShotGridClient:
             else [{"project": project_name}]
         )
         fields, parser = _version_view(summary=True)
-        records = self._get("Version", filters, ",".join(fields))
+        records = self.list_versions_raw(filters, fields, page_size=None)
 
         versions = [parser(record) for record in records]
 
@@ -482,7 +523,7 @@ class ShotGridClient:
             raise ValueError("Version lookup requires at least one identifying field.")
 
         fields, parser = _version_view(summary=False)
-        records = self._get("Version", filters, ",".join(fields))
+        records = self.list_versions_raw(filters, fields, page_size=None)
         if not records:
             log.info("sg.version_not_found", filters=filters)
             return None
