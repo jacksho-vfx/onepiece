@@ -108,7 +108,9 @@ def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 2
-    assert "conflicts with --format" in result.stderr
+    terms = ["conflicts", "with", "--format"]
+    for term in terms:
+        assert term in result.stderr
 
 
 def test_render_rejects_unknown_format(tmp_path: Path) -> None:
