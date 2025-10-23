@@ -107,7 +107,9 @@ def test_load_scene_rejects_directory(tmp_path: Path) -> None:
         chopper_app_module._load_scene(tmp_path)
 
 
-def test_load_scene_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_scene_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     scene_path = tmp_path / "scene.json"
     scene_path.write_text("{}", encoding="utf-8")
 
@@ -122,7 +124,9 @@ def test_load_scene_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyP
         chopper_app_module._load_scene(scene_path)
 
 
-def test_load_scene_other_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_scene_other_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     scene_path = tmp_path / "scene.json"
     scene_path.write_text("{}", encoding="utf-8")
 
