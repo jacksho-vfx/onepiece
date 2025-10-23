@@ -396,17 +396,13 @@ def test_list_versions_raw_supports_single_page_requests(
     result = client.list_versions_raw(None, None, page_size=None)
 
     assert result == [{"id": 2}]
-    client._get.assert_called_once_with(
-        "Version", [], ",".join(default_fields)
-    )
+    client._get.assert_called_once_with("Version", [], ",".join(default_fields))
 
 
 def test_list_versions_raw_normalises_string_fields(
     client: ShotGridClient,
 ) -> None:
-    client._get_paginated = MagicMock(
-        return_value=[{"id": 3}]
-    )
+    client._get_paginated = MagicMock(return_value=[{"id": 3}])
 
     result = client.list_versions_raw([], " code , version_number ")
 
@@ -414,6 +410,7 @@ def test_list_versions_raw_normalises_string_fields(
     client._get_paginated.assert_called_once_with(
         "Version", [], "code,version_number", page_size=100
     )
+
 
 def test_version_view_summary_fields_and_parser() -> None:
     fields, parser = _version_view(summary=True)

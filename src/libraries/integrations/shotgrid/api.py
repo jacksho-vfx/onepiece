@@ -341,7 +341,7 @@ class ShotGridClient:
         fields: Sequence[str] | str | None = None,
         *,
         page_size: Optional[int] = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> Any:
         """Return raw ShotGrid Version entities matching *filters*.
 
         Parameters
