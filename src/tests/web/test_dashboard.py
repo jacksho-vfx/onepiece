@@ -155,8 +155,8 @@ def test_require_dashboard_auth_rejects_mismatched_token(
         dashboard.require_dashboard_auth(credentials)
 
     assert excinfo.value.status_code == 401
-    
-    
+
+
 @pytest.mark.anyio("asyncio")
 async def test_render_dashboard_facade_offloads_job_listing() -> None:
     class SlowService:
