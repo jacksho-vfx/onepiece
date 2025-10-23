@@ -150,6 +150,7 @@ def test_optimization_backtest_endpoint() -> None:
     scenario = data["scenarios"][0]
     assert scenario["total_cost"] < data["baseline"]["total_cost"]
     assert scenario["savings_vs_baseline"] > 0
+    assert scenario["savings_percent"] > 0
 
 
 def test_shots_lifecycle_endpoint() -> None:

@@ -140,6 +140,7 @@ class OptimizationResult(BaseModel):
     gpu_hours: float
     render_hours: float
     savings_vs_baseline: float
+    savings_percent: float
     notes: str
 
     @classmethod
