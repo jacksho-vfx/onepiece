@@ -92,12 +92,12 @@ def test_provider_registry_loads_entry_points(monkeypatch: pytest.MonkeyPatch) -
     entry_points = [
         EntryPoint(
             name="entry-delivery",
-            value="tests.test_providers:EntryPointDeliveryProvider",
+            value="tests.providers.test_providers:EntryPointDeliveryProvider",
             group="onepiece.providers",
         ),
         EntryPoint(
             name="entry-reconcile",
-            value="tests.test_providers:EntryPointReconcileProvider",
+            value="tests.providers.test_providers:EntryPointReconcileProvider",
             group="onepiece.providers",
         ),
     ]
