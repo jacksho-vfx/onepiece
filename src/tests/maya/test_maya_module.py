@@ -10,11 +10,11 @@ import pytest
 def test_maya_module_errors_without_required_pymel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module_name = "libraries.dcc.maya.maya"
+    module_name = "libraries.creative.dcc.maya.maya"
 
     # Ensure a clean import state for the maya module.
     monkeypatch.delitem(sys.modules, module_name, raising=False)
-    monkeypatch.delitem(sys.modules, "libraries.dcc.maya", raising=False)
+    monkeypatch.delitem(sys.modules, "libraries.creative.dcc.maya", raising=False)
 
     stub_pymel = ModuleType("pymel")
     stub_core = ModuleType("pymel.core")

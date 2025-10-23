@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from libraries.render.analytics import cost_per_frame
+from libraries.automation.render.analytics import cost_per_frame
 from apps.trafalgar.web import render as render_module
 from apps.trafalgar.web.render import (
     RenderJobRequest,

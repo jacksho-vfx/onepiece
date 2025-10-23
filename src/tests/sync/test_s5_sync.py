@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from libraries.aws.s5_sync import s5_sync
+from libraries.integrations.aws.s5_sync import s5_sync
 
 
 class DummyProcess:
@@ -22,7 +22,7 @@ class DummyProcess:
         return self.returncode
 
 
-@patch("libraries.aws.s5_sync.subprocess.Popen")
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
 def test_s5_sync_raises_for_non_zero_return_code(mock_popen: Any) -> None:
     mock_popen.return_value = DummyProcess(
         returncode=2,
@@ -38,7 +38,7 @@ def test_s5_sync_raises_for_non_zero_return_code(mock_popen: Any) -> None:
     assert "failed to connect" in error_message
 
 
-@patch("libraries.aws.s5_sync.subprocess.Popen")
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
 def test_s5_sync_raises_for_non_zero_without_stderr(mock_popen: Any) -> None:
     mock_popen.return_value = DummyProcess(
         returncode=1,
@@ -52,7 +52,7 @@ def test_s5_sync_raises_for_non_zero_without_stderr(mock_popen: Any) -> None:
     assert "No additional error output from s5cmd" in str(excinfo.value)
 
 
-@patch("libraries.aws.s5_sync.subprocess.Popen")
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
 def test_s5_sync_upload_command_order(mock_popen: Any) -> None:
     mock_popen.return_value = DummyProcess(returncode=0, stdout="upload file\n")
 
@@ -78,7 +78,7 @@ def test_s5_sync_upload_command_order(mock_popen: Any) -> None:
     assert mock_popen.call_args.kwargs["env"] is None
 
 
-@patch("libraries.aws.s5_sync.subprocess.Popen")
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
 def test_s5_sync_download_command_order(mock_popen: Any) -> None:
     mock_popen.return_value = DummyProcess(returncode=0, stdout="download file\n")
 
@@ -97,7 +97,7 @@ def test_s5_sync_download_command_order(mock_popen: Any) -> None:
     assert mock_popen.call_args.args[0] == expected_cmd
 
 
-@patch("libraries.aws.s5_sync.subprocess.Popen")
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
 def test_s5_sync_sets_profile_env(mock_popen: Any) -> None:
     mock_popen.return_value = DummyProcess(returncode=0, stdout="upload file\n")
 

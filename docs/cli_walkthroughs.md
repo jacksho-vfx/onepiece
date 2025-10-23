@@ -272,8 +272,8 @@ MediaShuttle-ready package.
    python - <<'PY'
    from pathlib import Path
 
-   from src.libraries.shotgrid.client import ShotgridClient
-   from src.libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
+   from src.libraries.integrations.shotgrid.client import ShotgridClient
+   from src.libraries.integrations.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
 
    root = Path("$ONEPIECE_PLAYLIST_ROOT")
    client = ShotgridClient()
@@ -333,8 +333,8 @@ services provide context for show-level analytics:
 python - <<'PY'
 from pathlib import Path
 
-from libraries.dcc.client import BlenderClient
-from libraries.dcc.enums import DCC
+from libraries.creative.dcc.client import BlenderClient
+from libraries.creative.dcc.enums import DCC
 
 export_path = Path("/tmp/onepiece_dcc/metadata.json")
 client = BlenderClient(dcc=DCC.BLENDER)
@@ -347,7 +347,7 @@ PY
 
 The stub logs each action, writes a JSON template to the destination, and
 returns a dictionary that mirrors the file content. Replace `BlenderClient` with
-another client from `libraries.dcc.client` to rehearse the workflow for other
+another client from `libraries.creative.dcc.client` to rehearse the workflow for other
 applications. When you are ready to wire up a real integration, override the
 stub methods with application-specific logic and keep the CLI commands intact.
 

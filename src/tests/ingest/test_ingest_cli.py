@@ -16,7 +16,7 @@ from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-from libraries.ingest.service import (
+from libraries.automation.ingest.service import (
     IngestReport,
     IngestedMedia,
     MediaInfo,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from libraries.dcc import (
+from libraries.creative.dcc import (
     BaseDCCClient,
     BlenderClient,
     DCC,

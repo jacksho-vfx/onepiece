@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from libraries.dcc.maya.auto_rig_validator import (
+from libraries.creative.dcc.maya.auto_rig_validator import (
     DEFAULT_CONTROL_PREFIXES,
     DEFAULT_JOINT_PREFIXES,
     validate_rig_import,

@@ -10,8 +10,8 @@ from apps.trafalgar.web.ingest import (
     IngestRunProvider,
     IngestRunService,
 )
-from libraries.ingest.registry import IngestRunRecord
-from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
+from libraries.automation.ingest.registry import IngestRunRecord
+from libraries.automation.ingest.service import IngestReport, IngestedMedia, MediaInfo
 import fastapi.security
 import fastapi.security.api_key
 import apps.trafalgar.web.security as security

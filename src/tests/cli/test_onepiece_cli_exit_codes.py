@@ -10,7 +10,7 @@ import pytest
 from apps.onepiece import __main__ as cli_main
 from apps.onepiece.render import submit as submit_module
 from apps.onepiece.utils.errors import ExitCode
-from libraries.render.base import RenderSubmissionError
+from libraries.automation.render.base import RenderSubmissionError
 
 
 def _install_mock_adapter(

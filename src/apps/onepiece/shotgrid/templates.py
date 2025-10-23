@@ -14,7 +14,7 @@ from apps.onepiece.utils.errors import (
     OnePieceIOError,
     OnePieceValidationError,
 )
-from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
+from libraries.integrations.shotgrid.client import ShotgridClient, ShotgridOperationError
 
 from ._inputs import load_structured_mapping
 

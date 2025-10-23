@@ -19,8 +19,8 @@ if "nuke" not in sys.modules:
     nuke_stub.nodePaste = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
     sys.modules["nuke"] = nuke_stub
 
-from libraries.dcc.maya import maya
-from libraries.dcc.nuke import nuke as nuke_module
+from libraries.creative.dcc.maya import maya
+from libraries.creative.dcc.nuke import nuke as nuke_module
 
 
 def test_maya_save_scene_with_explicit_path(

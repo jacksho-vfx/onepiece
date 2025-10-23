@@ -1,4 +1,4 @@
-"""Tests for :mod:`libraries.shotgrid.api` helper logic."""
+"""Tests for :mod:`libraries.integrations.shotgrid.api` helper logic."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from libraries.shotgrid.api import ShotGridClient, ShotGridError, _version_view
-from libraries.shotgrid.models import EpisodeData, SceneData, ShotData
+from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError, _version_view
+from libraries.integrations.shotgrid.models import EpisodeData, SceneData, ShotData
 
 
 @pytest.fixture()
@@ -218,7 +218,7 @@ def test_update_version_raises_on_error(
     client._session = session
 
     log_error = MagicMock()
-    monkeypatch.setattr("libraries.shotgrid.api.log.error", log_error)
+    monkeypatch.setattr("libraries.integrations.shotgrid.api.log.error", log_error)
 
     with pytest.raises(ShotGridError) as excinfo:
         client.update_version(321, {"description": "Missing"})

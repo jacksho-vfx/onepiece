@@ -11,7 +11,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
-from libraries.render.base import RenderSubmissionError
+from libraries.automation.render.base import RenderSubmissionError
 from apps.onepiece.render import submit as submit_module
 from apps.onepiece.utils.errors import (
     ExitCode,

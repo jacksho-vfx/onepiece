@@ -15,7 +15,7 @@ import structlog
 import typer
 
 from apps.onepiece.config import load_profile
-from libraries.validations.dcc import SupportedDCC
+from libraries.platform.validations.dcc import SupportedDCC
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Display environment and configuration info")

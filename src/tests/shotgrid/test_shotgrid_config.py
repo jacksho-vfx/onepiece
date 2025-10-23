@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from libraries.shotgrid.config import load_config
+from libraries.integrations.shotgrid.config import load_config
 
 
 def test_load_config_requires_all_fields(monkeypatch: pytest.MonkeyPatch) -> None:

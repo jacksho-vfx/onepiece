@@ -8,7 +8,7 @@ import structlog
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.validations.dcc import (
+from libraries.platform.validations.dcc import (
     DCCEnvironmentReport,
     GPUValidation,
     PluginValidation,

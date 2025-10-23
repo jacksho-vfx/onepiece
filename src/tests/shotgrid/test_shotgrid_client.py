@@ -1,4 +1,4 @@
-"""Tests for the expanded :mod:`libraries.shotgrid.client` helpers."""
+"""Tests for the expanded :mod:`libraries.integrations.shotgrid.client` helpers."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from libraries.shotgrid.client import (
+from libraries.integrations.shotgrid.client import (
     EntityStore,
     HierarchyTemplate,
     RetryPolicy,

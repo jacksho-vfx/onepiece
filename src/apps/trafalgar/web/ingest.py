@@ -30,8 +30,8 @@ from apps.trafalgar.web.security import (
     create_protected_router,
     require_roles,
 )
-from libraries.ingest.registry import IngestRunRecord, IngestRunRegistry
-from libraries.ingest.service import IngestReport, IngestedMedia
+from libraries.automation.ingest.registry import IngestRunRecord, IngestRunRegistry
+from libraries.automation.ingest.service import IngestReport, IngestedMedia
 
 logger = structlog.get_logger(__name__)
 

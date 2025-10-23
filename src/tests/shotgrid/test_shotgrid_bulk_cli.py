@@ -11,10 +11,10 @@ from typer.testing import CliRunner
 
 from importlib import import_module
 import yaml
-from libraries.shotgrid.client import HierarchyTemplate, ShotgridClient
+from libraries.integrations.shotgrid.client import HierarchyTemplate, ShotgridClient
 
 
-from libraries.shotgrid.client import EntityPayload
+from libraries.integrations.shotgrid.client import EntityPayload
 
 shotgrid_cli = import_module("apps.onepiece.shotgrid.package_playlist")
 templates_cli = import_module("apps.onepiece.shotgrid.templates")

@@ -5,15 +5,20 @@ from typing import Any, List
 
 import sys
 import types
-from libraries.dcc.maya.character_selector import (
+
+sys.modules.setdefault("requests", types.ModuleType("requests"))
+try:
+    import libraries.integrations.ftrack  # noqa: F401  # ensure real module if present
+except ModuleNotFoundError:  # pragma: no cover - optional dependency guard
+    sys.modules.setdefault(
+        "libraries.integrations.ftrack", types.ModuleType("libraries.integrations.ftrack")
+    )
+
+from libraries.creative.dcc.maya.character_selector import (  # noqa: E402 - imported after stubs
     CharacterSelectorPanel,
     RigDescriptor,
     discover_rigs,
 )
-
-
-sys.modules.setdefault("requests", types.ModuleType("requests"))
-sys.modules.setdefault("libraries.ftrack", types.ModuleType("libraries.ftrack"))
 
 
 @dataclass

@@ -11,8 +11,8 @@ from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-from libraries.shotgrid.api import ShotGridClient
-from libraries.shotgrid.models import VersionData
+from libraries.integrations.shotgrid.api import ShotGridClient
+from libraries.integrations.shotgrid.models import VersionData
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Shotgrid related commands.")

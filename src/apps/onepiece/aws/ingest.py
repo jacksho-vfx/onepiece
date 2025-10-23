@@ -19,7 +19,7 @@ from apps.onepiece.utils.errors import (
     OnePieceValidationError,
 )
 from apps.onepiece.utils.progress import progress_tracker
-from libraries.ingest import (
+from libraries.automation.ingest import (
     Boto3Uploader,
     Delivery,
     DeliveryManifestError,
@@ -31,7 +31,7 @@ from libraries.ingest import (
     UploaderProtocol,
     load_delivery_manifest,
 )
-from libraries.shotgrid.client import ShotgridClient
+from libraries.integrations.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="AWS and S3 integration commands")
 

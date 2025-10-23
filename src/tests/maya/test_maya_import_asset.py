@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 import pytest
 
-from libraries.dcc.maya import maya
+from libraries.creative.dcc.maya import maya
 
 
 class DummyPath:

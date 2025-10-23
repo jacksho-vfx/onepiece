@@ -1,4 +1,4 @@
-from libraries.dcc.maya import (
+from libraries.creative.dcc.maya import (
     DEFAULT_ALLOWED_PREFIXES,
     DEFAULT_EXPECTED_ROOT,
     DEFAULT_REQUIRED_JOINTS,

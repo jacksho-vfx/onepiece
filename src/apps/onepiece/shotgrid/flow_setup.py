@@ -4,7 +4,7 @@ from pathlib import Path
 import structlog
 import typer
 
-from libraries.shotgrid.show_setup import setup_single_shot
+from libraries.integrations.shotgrid.show_setup import setup_single_shot
 from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)

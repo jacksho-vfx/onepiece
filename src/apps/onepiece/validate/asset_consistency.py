@@ -10,7 +10,7 @@ import structlog
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.validations.asset_consistency import (
+from libraries.platform.validations.asset_consistency import (
     S3ParityReport,
     check_shot_versions_local,
     check_shot_versions_s3,

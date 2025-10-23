@@ -11,14 +11,14 @@ import structlog
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
-from libraries.aws.s5_sync import s5_sync
-from libraries.delivery.manifest import (
+from libraries.integrations.aws.s5_sync import s5_sync
+from libraries.automation.delivery.manifest import (
     compute_checksum,
     write_csv_manifest,
     write_json_manifest,
 )
-from libraries.shotgrid.client import ShotgridClient
-from libraries.validations.filesystem import check_paths
+from libraries.integrations.shotgrid.client import ShotgridClient
+from libraries.platform.validations.filesystem import check_paths
 
 log = structlog.get_logger(__name__)
 

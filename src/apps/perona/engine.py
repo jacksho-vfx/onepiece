@@ -12,8 +12,8 @@ import statistics
 from typing import Iterable, Mapping, Sequence, Any
 import tomllib
 
-from libraries.perona import CostDriverDelta
-from libraries.render import optimization as render_optimization
+from libraries.analytics.perona import CostDriverDelta
+from libraries.automation.render import optimization as render_optimization
 
 
 LOGGER = logging.getLogger(__name__)

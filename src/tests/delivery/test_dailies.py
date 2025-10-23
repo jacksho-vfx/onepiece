@@ -1,6 +1,6 @@
 import pytest
 
-from libraries.review.dailies import _extract_duration
+from libraries.automation.review.dailies import _extract_duration
 
 
 def test_extract_duration_handles_zero_frame_count() -> None:

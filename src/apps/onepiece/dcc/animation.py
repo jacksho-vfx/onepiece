@@ -10,9 +10,9 @@ import structlog
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.dcc.maya.animation_debugger import debug_animation
-from libraries.dcc.maya.maya import cleanup_scene
-from libraries.dcc.maya.playblast_tool import PlayblastAutomationTool, PlayblastRequest
+from libraries.creative.dcc.maya.animation_debugger import debug_animation
+from libraries.creative.dcc.maya.maya import cleanup_scene
+from libraries.creative.dcc.maya.playblast_tool import PlayblastAutomationTool, PlayblastRequest
 
 
 log = structlog.get_logger(__name__)

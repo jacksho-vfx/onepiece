@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from libraries.ftrack import (
+from libraries.integrations.ftrack import (
     FtrackError,
     FtrackProject,
     FtrackRestClient,

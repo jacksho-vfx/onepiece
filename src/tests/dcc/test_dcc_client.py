@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from libraries.dcc.dcc_client import (
+from libraries.creative.dcc.dcc_client import (
     DCC_ASSET_REQUIREMENTS,
     DCCDependencyReport,
     DCCAssetStatus,
@@ -24,7 +24,7 @@ from libraries.dcc.dcc_client import (
     publish_scene,
     verify_dcc_dependencies,
 )
-from libraries.dcc.maya.unreal_export_checker import (
+from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportIssue,
     UnrealExportReport,
 )
@@ -61,7 +61,7 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 def test_build_launch_command_maya_binary(
     monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
 ) -> None:
-    monkeypatch.setattr("libraries.dcc.dcc_client.os", SimpleNamespace(name=os_name))
+    monkeypatch.setattr("libraries.creative.dcc.dcc_client.os", SimpleNamespace(name=os_name))
 
     scene_path = Path("/tmp/test_scene.mb")
     command = _build_launch_command(SupportedDCC.MAYA, scene_path)
@@ -251,7 +251,7 @@ def test_assemble_dependency_report_invokes_callback(
     callback = MagicMock()
 
     with patch(
-        "libraries.dcc.dcc_client.verify_dcc_dependencies",
+        "libraries.creative.dcc.dcc_client.verify_dcc_dependencies",
         return_value=report,
     ) as verify_mock:
         result = _assemble_dependency_report(
@@ -272,7 +272,7 @@ def test_assemble_dependency_report_invokes_callback(
     )
 
 
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_sync_package_to_s3_uses_expected_destination(
     sync_mock: MagicMock, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
@@ -304,7 +304,7 @@ def test_sync_package_to_s3_uses_expected_destination(
     assert "publish_scene_packaged" in caplog.text
 
 
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_supports_direct_upload(
     sync_mock: MagicMock, tmp_path: Path
 ) -> None:
@@ -351,8 +351,8 @@ def test_publish_scene_supports_direct_upload(
     assert json.loads(metadata_path.read_text()) == metadata
 
 
-@patch("libraries.dcc.dcc_client.validate_unreal_export")
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.validate_unreal_export")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_runs_maya_validation(
     sync_mock: MagicMock,
     validate_mock: MagicMock,
@@ -411,8 +411,8 @@ def test_publish_scene_runs_maya_validation(
     sync_mock.assert_called_once()
 
 
-@patch("libraries.dcc.dcc_client.validate_unreal_export")
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.validate_unreal_export")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_maya_validation_failure(
     sync_mock: MagicMock,
     validate_mock: MagicMock,
@@ -468,7 +468,7 @@ def test_publish_scene_maya_validation_failure(
     sync_mock.assert_not_called()
 
 
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
@@ -503,7 +503,7 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
     )
 
 
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_replaces_existing_file_targets(
     sync_mock: MagicMock, tmp_path: Path
 ) -> None:
@@ -539,7 +539,7 @@ def test_publish_scene_replaces_existing_file_targets(
     sync_mock.assert_called_once()
 
 
-@patch("libraries.dcc.dcc_client.s5_sync")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(
     sync_mock: MagicMock, tmp_path: Path
 ) -> None:

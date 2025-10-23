@@ -8,12 +8,12 @@ from typing import Callable, cast, Any
 
 import pytest
 
-from libraries.dcc.maya.batch_exporter import (
+from libraries.creative.dcc.maya.batch_exporter import (
     BatchExportItem,
     BatchExporter,
     ExportFormat,
 )
-from libraries.dcc.utils import normalize_frame_range, sanitize_token
+from libraries.creative.dcc.utils import normalize_frame_range, sanitize_token
 
 
 def _clock_factory(start: _dt.datetime) -> Callable[[], _dt.datetime]:

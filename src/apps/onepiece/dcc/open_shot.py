@@ -7,8 +7,8 @@ import structlog
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.dcc.dcc_client import open_scene
-from libraries.validations.dcc import (
+from libraries.creative.dcc.dcc_client import open_scene
+from libraries.platform.validations.dcc import (
     detect_dcc_from_file,
     validate_dcc,
     check_dcc_environment,

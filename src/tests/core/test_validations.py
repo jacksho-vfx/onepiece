@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from apps.onepiece.validate import app as validate_app
-from libraries.dcc.dcc_client import SupportedDCC
-from libraries.validations import dcc as dcc_validations
-from libraries.validations import filesystem, naming
-from libraries.validations import asset_consistency
-from libraries.validations.dcc import (
+from libraries.creative.dcc.dcc_client import SupportedDCC
+from libraries.platform.validations import dcc as dcc_validations
+from libraries.platform.validations import filesystem, naming
+from libraries.platform.validations import asset_consistency
+from libraries.platform.validations.dcc import (
     DCCEnvironmentReport,
     GPUValidation,
     PluginValidation,
 )
-from libraries.validations.naming_batch import validate_names_in_csv
+from libraries.platform.validations.naming_batch import validate_names_in_csv
 
 
 # ---------- Filesystem ----------
@@ -55,7 +55,7 @@ def test_validate_episode_scene_shot_names() -> None:
     assert not naming.validate_asset_name("ep101_sc01_0010-asset")
 
 
-@patch("libraries.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
+@patch("libraries.platform.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
 def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) -> None:
     env = {
         "PATH": "/opt/Nuke14",
@@ -71,7 +71,7 @@ def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) ->
     assert report.gpu.meets_requirement is True
 
 
-@patch("libraries.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
+@patch("libraries.platform.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
 def test_check_dcc_environment_normalises_plugin_inventory(
     mock_which: MagicMock,
 ) -> None:
@@ -86,7 +86,7 @@ def test_check_dcc_environment_normalises_plugin_inventory(
     assert report.plugins.missing == frozenset()
 
 
-@patch("libraries.validations.dcc.shutil.which", return_value=None)
+@patch("libraries.platform.validations.dcc.shutil.which", return_value=None)
 def test_check_dcc_environment_missing_gpu(mock_which: MagicMock) -> None:
     report = dcc_validations.check_dcc_environment(
         SupportedDCC.MAYA,
@@ -103,7 +103,7 @@ def test_check_dcc_environment_missing_gpu(mock_which: MagicMock) -> None:
 # ---------- CLI extensions ----------
 
 
-@patch("libraries.validations.asset_consistency.scan_s3_context")
+@patch("libraries.platform.validations.asset_consistency.scan_s3_context")
 def test_s3_parity_reports_missing_and_unexpected(mock_scan: MagicMock) -> None:
     manifest: Dict[str, List[str]] = {"sh001": ["v001", "v002"]}
     mock_scan.return_value = [
