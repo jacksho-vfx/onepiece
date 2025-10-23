@@ -720,13 +720,20 @@ class ShotGridClient:
             raise ValueError(f"Step '{step_name}' not found.")
         attributes = {**data.extra}
         if data.code:
-            attributes["code"] = (
+            code_value = (
                 data.code.value if isinstance(data.code, TaskCode) else data.code
             )
+            attributes["code"] = code_value
+            attributes.setdefault("content", code_value)
         relationships: Dict[str, Any] = {}
         if data.project_id:
             relationships["project"] = {
                 "data": {"type": "Project", "id": data.project_id}
+            }
+        if data.entity_id is not None:
+            entity_type = data.related_entity_type or "Shot"
+            relationships["entity"] = {
+                "data": {"type": entity_type, "id": data.entity_id}
             }
         return self._post("Task", attributes, relationships or None)
 

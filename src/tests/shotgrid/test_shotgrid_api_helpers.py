@@ -15,8 +15,11 @@ from libraries.integrations.shotgrid.api import (
 from libraries.integrations.shotgrid.models import (
     EpisodeData,
     PlaylistData,
+    PipelineStep,
     SceneData,
     ShotData,
+    TaskCode,
+    TaskData,
 )
 
 
@@ -223,6 +226,40 @@ def test_create_playlist_includes_version_relationships(
             {"type": "Version", "id": 22},
         ]
     }
+
+
+def test_create_task_includes_entity_relationship(client: ShotGridClient) -> None:
+    data = TaskData(
+        project_id=101,
+        entity_id=202,
+        related_entity_type="Asset",
+        code=TaskCode.FINAL_DELIVERY,
+    )
+    client._get_single = MagicMock(return_value={"id": 5, "code": "Comp"})
+    client._post = MagicMock(return_value={"id": 77})
+
+    result = client.create_task(data, PipelineStep.COMP)
+
+    assert result == {"id": 77}
+    entity_type, attributes, relationships = client._post.call_args.args
+    assert entity_type == "Task"
+    assert attributes["code"] == TaskCode.FINAL_DELIVERY.value
+    assert attributes["content"] == TaskCode.FINAL_DELIVERY.value
+    assert relationships["project"] == {"data": {"type": "Project", "id": 101}}
+    assert relationships["entity"] == {"data": {"type": "Asset", "id": 202}}
+
+
+def test_create_task_defaults_related_entity_type(client: ShotGridClient) -> None:
+    data = TaskData(project_id=303, entity_id=404)
+    client._get_single = MagicMock(return_value={"id": 9, "code": "Lighting"})
+    client._post = MagicMock(return_value={"id": 88})
+
+    client.create_task(data, PipelineStep.LIGHTING)
+
+    _, attributes, relationships = client._post.call_args.args
+    assert attributes == {}
+    assert relationships["project"] == {"data": {"type": "Project", "id": 303}}
+    assert relationships["entity"] == {"data": {"type": "Shot", "id": 404}}
 
 
 def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
