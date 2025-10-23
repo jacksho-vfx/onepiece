@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from statistics import fmean
 from threading import Lock
@@ -26,7 +27,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.version import PERONA_VERSION
 
-from apps.perona.engine import PeronaEngine, DEFAULT_SETTINGS_PATH
+from apps.perona.engine import (
+    DEFAULT_SETTINGS_PATH,
+    PeronaEngine,
+    ShotLifecycle,
+)
 from apps.perona.models import (
     CostEstimate,
     CostEstimateRequest,
@@ -127,6 +132,51 @@ async def ingest_render_metrics(
 
     background_tasks.add_task(_metrics_store.persist, records)
     return {"status": "accepted", "enqueued": len(records)}
+
+
+def _lifecycle_date_bounds(lifecycle: ShotLifecycle) -> tuple[datetime, datetime]:
+    """Return the earliest start and latest activity timestamps for a lifecycle."""
+
+    starts = [stage.started_at for stage in lifecycle.stages]
+    ends = [stage.completed_at or stage.started_at for stage in lifecycle.stages]
+    return min(starts), max(ends)
+
+
+def _filter_lifecycles(
+    lifecycles: Sequence[ShotLifecycle],
+    sequence: str | None,
+    artist: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> list[ShotLifecycle]:
+    """Filter lifecycles using the supplied query parameters."""
+
+    artist_lower = artist.lower() if artist else None
+
+    filtered: list[ShotLifecycle] = []
+    for lifecycle in lifecycles:
+        if sequence and lifecycle.sequence != sequence:
+            continue
+
+        if artist_lower:
+            matches_artist = any(
+                isinstance(stage.metrics.get("artist"), str)
+                and stage.metrics["artist"].lower() == artist_lower
+                for stage in lifecycle.stages
+            )
+            if not matches_artist:
+                continue
+
+        if start_date or end_date:
+            first_activity, last_activity = _lifecycle_date_bounds(lifecycle)
+            if start_date and last_activity < start_date:
+                continue
+            if end_date and first_activity > end_date:
+                continue
+
+        filtered.append(lifecycle)
+
+    return filtered
 
 
 class _EngineCacheEntry(NamedTuple):
@@ -408,28 +458,51 @@ def optimization_backtest(
 
 @app.get("/shots/lifecycle", response_model=list[Shot])
 def shots_lifecycle(
+    sequence: str | None = Query(None),
+    artist: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     engine: PeronaEngine = Depends(get_engine),
 ) -> list[Shot]:
     """Return lifecycle timelines for key monitored shots."""
 
-    return [Shot.from_entity(item) for item in engine.shot_lifecycle()]
+    lifecycles = _filter_lifecycles(
+        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+    )
+    return [Shot.from_entity(item) for item in lifecycles]
 
 
 @app.get("/shots/sequences", response_model=list[PeronaSequence])
 def shot_sequences(
+    sequence: str | None = Query(None),
+    artist: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     engine: PeronaEngine = Depends(get_engine),
 ) -> list[PeronaSequence]:
     """Return monitored shots grouped by sequence."""
 
-    sequences = sequences_from_lifecycles(engine.shot_lifecycle())
+    lifecycles = _filter_lifecycles(
+        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+    )
+    sequences = sequences_from_lifecycles(lifecycles)
     return list(sequences)
 
 
 @app.get("/shots")
-def shots_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+def shots_summary(
+    sequence: str | None = Query(None),
+    artist: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
+    engine: PeronaEngine = Depends(get_engine),
+) -> dict[str, Any]:
     """Return aggregated production status for monitored shots."""
 
-    lifecycles = list(engine.shot_lifecycle())
+    lifecycles = _filter_lifecycles(
+        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+    )
+    lifecycles = list(lifecycles)
     total = len(lifecycles)
     completed = sum(
         1
