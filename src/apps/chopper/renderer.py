@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -146,7 +147,21 @@ class SceneObject:
         size_data = payload.get("size", (0, 0))
         if not isinstance(size_data, Sequence) or len(size_data) != 2:
             raise SceneError("Object size must be a length two sequence")
-        size = float(size_data[0]), float(size_data[1])
+        try:
+            width = float(size_data[0])
+            height = float(size_data[1])
+        except (TypeError, ValueError) as exc:
+            raise SceneError("Object size must contain numeric width and height values") from exc
+
+        if not math.isfinite(width) or not math.isfinite(height):
+            raise SceneError("Object size width and height must be finite numbers")
+
+        if width <= 0 or height <= 0:
+            raise SceneError(
+                f"Object size must have positive width and height (got {width}x{height})"
+            )
+
+        size = width, height
 
         animation_data = payload.get("animation")
         animation = None
@@ -227,8 +242,14 @@ class SceneObject:
 
     def _render_circle(self, target: "Frame", frame_index: int) -> None:
         position = self.position_at(frame_index)
-        radius = self.size[0] / 2 if self.size[0] else self.size[1] / 2
-        radius = max(radius, 1.0)
+        width, height = self.size
+        min_diameter = min(width, height)
+        if min_diameter <= 0:
+            raise SceneError(
+                f"Circle '{self.id}' must have a positive diameter (got {width}x{height})"
+            )
+
+        radius = max(min_diameter / 2.0, 1.0)
         cx = position[0]
         cy = position[1]
         radius_sq = radius * radius
