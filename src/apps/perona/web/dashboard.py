@@ -5,11 +5,22 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections import Counter
 from pathlib import Path
+from statistics import fmean
 from threading import Lock
 from typing import Any, Mapping, NamedTuple, Sequence
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, status
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -279,6 +290,79 @@ async def render_feed_stream(
     return StreamingResponse(_generator(), media_type="application/x-ndjson")
 
 
+@app.get("/metrics")
+def metrics_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Return aggregated statistics for recent render telemetry."""
+
+    samples = list(engine.stream_render_metrics())
+    if not samples:
+        return {
+            "total_samples": 0,
+            "averages": {
+                "fps": 0.0,
+                "frame_time_ms": 0.0,
+                "gpu_utilisation": 0.0,
+                "error_count": 0.0,
+            },
+            "sequences": [],
+            "latest_sample": None,
+        }
+
+    def _rounded_mean(values: Sequence[float]) -> float:
+        return round(fmean(values), 3)
+
+    overall_averages = {
+        "fps": _rounded_mean([sample.fps for sample in samples]),
+        "frame_time_ms": _rounded_mean([sample.frame_time_ms for sample in samples]),
+        "gpu_utilisation": _rounded_mean(
+            [sample.gpu_utilisation for sample in samples]
+        ),
+        "error_count": _rounded_mean([sample.error_count for sample in samples]),
+    }
+
+    sequence_stats: dict[str, dict[str, Any]] = {}
+    for sample in samples:
+        entry = sequence_stats.setdefault(
+            sample.sequence,
+            {
+                "shots": set(),
+                "fps": [],
+                "frame_time_ms": [],
+                "gpu_utilisation": [],
+                "error_count": [],
+            },
+        )
+        entry["shots"].add(sample.shot_id)
+        entry["fps"].append(sample.fps)
+        entry["frame_time_ms"].append(sample.frame_time_ms)
+        entry["gpu_utilisation"].append(sample.gpu_utilisation)
+        entry["error_count"].append(sample.error_count)
+
+    sequences_summary = [
+        {
+            "sequence": name,
+            "shots": len(data["shots"]),
+            "avg_fps": _rounded_mean(data["fps"]),
+            "avg_frame_time_ms": _rounded_mean(data["frame_time_ms"]),
+            "avg_gpu_utilisation": _rounded_mean(data["gpu_utilisation"]),
+            "avg_error_count": _rounded_mean(data["error_count"]),
+        }
+        for name, data in sorted(sequence_stats.items())
+    ]
+
+    latest_sample = max(samples, key=lambda sample: sample.timestamp)
+    latest_payload = RenderMetric.from_entity(latest_sample).model_dump(
+        mode="json", by_alias=True
+    )
+
+    return {
+        "total_samples": len(samples),
+        "averages": overall_averages,
+        "sequences": sequences_summary,
+        "latest_sample": latest_payload,
+    }
+
+
 @app.post("/cost/estimate", response_model=CostEstimate)
 def cost_estimate(
     payload: CostEstimateRequest,
@@ -339,6 +423,146 @@ def shot_sequences(
 
     sequences = sequences_from_lifecycles(engine.shot_lifecycle())
     return list(sequences)
+
+
+@app.get("/shots")
+def shots_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Return aggregated production status for monitored shots."""
+
+    lifecycles = list(engine.shot_lifecycle())
+    total = len(lifecycles)
+    completed = sum(
+        1
+        for lifecycle in lifecycles
+        if all(stage.completed_at is not None for stage in lifecycle.stages)
+    )
+
+    by_stage = Counter(lifecycle.current_stage for lifecycle in lifecycles)
+    by_sequence = Counter(lifecycle.sequence for lifecycle in lifecycles)
+
+    active_shots: list[dict[str, Any]] = []
+    for lifecycle in lifecycles:
+        current_stage_name = lifecycle.current_stage
+        stage_details = next(
+            (stage for stage in lifecycle.stages if stage.name == current_stage_name),
+            None,
+        )
+        active_shots.append(
+            {
+                "sequence": lifecycle.sequence,
+                "shot_id": lifecycle.shot_id,
+                "current_stage": current_stage_name,
+                "stage_started_at": stage_details.started_at if stage_details else None,
+                "stage_completed_at": (
+                    stage_details.completed_at if stage_details else None
+                ),
+                "stage_metrics": dict(stage_details.metrics)
+                if stage_details is not None
+                else {},
+            }
+        )
+
+    active_shots.sort(key=lambda item: (item["sequence"], item["shot_id"]))
+
+    return {
+        "total": total,
+        "completed": completed,
+        "active": max(total - completed, 0),
+        "by_sequence": [
+            {"name": name, "shots": count}
+            for name, count in sorted(by_sequence.items())
+        ],
+        "by_stage": [
+            {"name": name, "shots": count}
+            for name, count in by_stage.most_common()
+        ],
+        "active_shots": active_shots,
+    }
+
+
+@app.get("/risk")
+def risk_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Return risk score distribution for the monitored shot portfolio."""
+
+    indicators = list(engine.risk_heatmap())
+    if not indicators:
+        return {
+            "count": 0,
+            "average_risk": 0.0,
+            "max_risk": None,
+            "min_risk": None,
+            "top_risks": [],
+            "critical": [],
+        }
+
+    average_risk = round(fmean(item.risk_score for item in indicators), 2)
+    top_three = [
+        RiskIndicator.from_entity(item).model_dump(mode="json")
+        for item in indicators[:3]
+    ]
+    critical = [
+        RiskIndicator.from_entity(item).model_dump(mode="json")
+        for item in indicators
+        if item.risk_score >= 75
+    ]
+
+    return {
+        "count": len(indicators),
+        "average_risk": average_risk,
+        "max_risk": indicators[0].risk_score,
+        "min_risk": indicators[-1].risk_score,
+        "top_risks": top_three,
+        "critical": critical,
+    }
+
+
+@app.get("/costs")
+def costs_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Return key spend metrics combining baseline and current projections."""
+
+    baseline_input = engine.baseline_cost_input
+    baseline_breakdown = engine.estimate_cost(baseline_input)
+    pnl_breakdown = engine.pnl_explainer()
+
+    baseline_payload = CostEstimate.from_breakdown(baseline_breakdown).model_dump(
+        mode="json"
+    )
+    pnl_payload = PnLBreakdown.from_entity(pnl_breakdown).model_dump(mode="json")
+
+    frame_count = max(baseline_breakdown.frame_count, 1)
+    baseline_cost_per_frame = round(baseline_breakdown.cost_per_frame, 4)
+    current_cost_per_frame = round(pnl_breakdown.current_cost / frame_count, 4)
+    delta_cost_per_frame = round(current_cost_per_frame - baseline_cost_per_frame, 4)
+
+    return {
+        "baseline": baseline_payload,
+        "pnl": pnl_payload,
+        "currency": baseline_breakdown.currency,
+        "cost_per_frame": {
+            "baseline": baseline_cost_per_frame,
+            "current": current_cost_per_frame,
+            "delta": delta_cost_per_frame,
+        },
+    }
+
+
+@app.websocket("/ws/metrics")
+async def metrics_websocket(websocket: WebSocket) -> None:
+    """Stream render telemetry samples over a WebSocket connection."""
+
+    await websocket.accept()
+    try:
+        while True:
+            engine = _load_engine(False)
+            for sample in engine.stream_render_metrics(limit=30):
+                payload = RenderMetric.from_entity(sample).model_dump(
+                    mode="json", by_alias=True
+                )
+                await websocket.send_json(payload)
+                await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        return
 
 
 __all__ = ["app", "get_engine", "invalidate_engine_cache", "reload_settings"]

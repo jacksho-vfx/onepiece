@@ -22,6 +22,7 @@ from apps.perona.web.dashboard import app, invalidate_engine_cache
 
 
 client = TestClient(app)
+KNOWN_SEQUENCES = {"SQ12", "SQ18", "SQ05", "SQ09"}
 
 
 def test_health_endpoint() -> None:
@@ -197,6 +198,60 @@ def test_render_feed_stream_filters() -> None:
     assert len(payloads) == 2
     assert {item["sequence"] for item in payloads} == {"SQ05"}
     assert {item["shot_id"] for item in payloads} == {"SQ05_SH045"}
+
+
+def test_metrics_summary_endpoint() -> None:
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_samples"] > 0
+    assert data["averages"]["fps"] > 0
+    assert data["latest_sample"]["sequence"] in KNOWN_SEQUENCES
+    assert any(entry["sequence"] in KNOWN_SEQUENCES for entry in data["sequences"])
+
+
+def test_shots_summary_endpoint() -> None:
+    response = client.get("/shots")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 4
+    sequences = {item["name"] for item in data["by_sequence"]}
+    assert KNOWN_SEQUENCES.issubset(sequences)
+    assert any(shot["current_stage"] for shot in data["active_shots"])
+
+
+def test_risk_summary_endpoint() -> None:
+    response = client.get("/risk")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] >= 3
+    assert data["max_risk"] >= data["min_risk"]
+    assert len(data["top_risks"]) <= 3
+    for critical in data["critical"]:
+        assert critical["risk_score"] >= 75
+
+
+def test_costs_summary_endpoint() -> None:
+    response = client.get("/costs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["baseline"]["currency"] == DEFAULT_CURRENCY
+    assert {"baseline", "current", "delta"}.issubset(data["cost_per_frame"].keys())
+    assert data["cost_per_frame"]["baseline"] == pytest.approx(
+        data["baseline"]["cost_per_frame"], rel=1e-6
+    )
+    expected_current = data["pnl"]["current_cost"] / data["baseline"]["frame_count"]
+    assert data["cost_per_frame"]["current"] == pytest.approx(expected_current, rel=1e-4)
+    delta = data["cost_per_frame"]["current"] - data["cost_per_frame"]["baseline"]
+    assert data["cost_per_frame"]["delta"] == pytest.approx(delta, rel=1e-4)
+
+
+def test_metrics_websocket_stream() -> None:
+    with client.websocket_connect("/ws/metrics") as websocket:
+        payload_one = websocket.receive_json()
+        payload_two = websocket.receive_json()
+    assert payload_one["sequence"] in KNOWN_SEQUENCES
+    assert payload_two["shot_id"].startswith("SQ")
 
 
 def test_settings_reload_between_requests(
