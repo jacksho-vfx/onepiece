@@ -110,12 +110,8 @@ def setup_single_shot(
     sg_client = client or ShotGridClient()
 
     try:
-        parts = shot_code.split("_")
-        if len(parts) != 3:
-            raise ValueError(
-                f"Invalid shot code: {shot_code}, expected ep_sc_shot format"
-            )
-        episode_code, scene_code, _shot_number = parts
+        episode_code, scene_code, _ = _parse_shot_code(shot_code)
+        scene_name = "_".join([episode_code, scene_code])
     except Exception as e:
         log.error("shot_code_parse_failed", shot_code=shot_code, error=str(e))
         raise
@@ -135,7 +131,7 @@ def setup_single_shot(
     episode_data = EpisodeData(code=episode_code, project_id=project_id)
     episode = sg_client.get_or_create_episode(episode_data)
     scene_data = SceneData(
-        code=scene_code, project_id=project_id, episode_id=episode["id"]
+        code=scene_name, project_id=project_id, episode_id=episode["id"]
     )
     scene = sg_client.get_or_create_scene(scene_data)
 
