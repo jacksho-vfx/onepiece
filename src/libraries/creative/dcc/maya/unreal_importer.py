@@ -140,6 +140,7 @@ def _collect_import_summaries(
         raise UnrealImportError("unreal.project_path must be a string when provided")
 
     summaries: list[UnrealImportSummary] = []
+    package_root = package_dir.resolve()
 
     for index, raw_entry in enumerate(assets):
         if not isinstance(raw_entry, Mapping):
@@ -149,7 +150,13 @@ def _collect_import_summaries(
         if not isinstance(source_rel, str) or not source_rel:
             raise UnrealImportError("Unreal asset entry missing 'source'")
 
-        source = package_dir / source_rel
+        source = (package_dir / source_rel).resolve()
+        try:
+            source.relative_to(package_root)
+        except ValueError as exc:
+            raise UnrealImportError(
+                "Unreal asset source must be inside the package directory"
+            ) from exc
         if not source.is_file():
             raise UnrealImportError(f"Unreal asset source does not exist: {source_rel}")
 
