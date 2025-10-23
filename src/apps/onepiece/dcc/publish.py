@@ -177,7 +177,7 @@ def publish(
         maya_report = unreal_report
 
     try:
-        package_path = publish_scene(
+        result = publish_scene(
             resolved_dcc,
             scene_name=scene_name,
             renders=renders,
@@ -199,8 +199,13 @@ def publish(
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--scene-name") from exc
 
-    log.info("cli_publish_completed", package=str(package_path))
-    typer.echo(f"Published package created at {package_path}")
+    log.info(
+        "cli_publish_completed",
+        package=str(result.package_dir),
+        destination=result.destination,
+    )
+    typer.echo(f"Published package created at {result.package_dir}")
+    typer.echo(f"Mirrored package to {result.destination}")
 
     if dependency_summary:
         if report is not None:

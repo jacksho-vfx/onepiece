@@ -29,6 +29,7 @@ __all__ = [
     "SupportedDCC",
     "open_scene",
     "publish_scene",
+    "PublishSceneResult",
     "verify_dcc_dependencies",
     "DCCDependencyReport",
     "DCCPluginStatus",
@@ -122,6 +123,14 @@ class DCCDependencyReport:
         """Return ``True`` when no plugin or asset requirements are missing."""
 
         return not self.plugins.missing and not self.assets.missing
+
+
+@dataclass(frozen=True)
+class PublishSceneResult:
+    """Result of packaging and mirroring a DCC scene."""
+
+    package_dir: Path
+    destination: str
 
 
 def _build_launch_command(dcc: SupportedDCC, path: Path) -> list[str]:
@@ -643,8 +652,12 @@ def publish_scene(
     required_plugins: Iterable[str] | None = None,
     required_assets: Sequence[str] | None = None,
     maya_validation_callback: Callable[[UnrealExportReport], None] | None = None,
-) -> Path:
-    """Package a scene's outputs locally and mirror them to S3."""
+) -> PublishSceneResult:
+    """Package a scene's outputs locally and mirror them to S3.
+
+    Returns a :class:`PublishSceneResult` containing the path to the packaged
+    directory on disk as well as the destination used for the mirrored upload.
+    """
 
     package_dir, renders_files, previews_files = _prepare_package_contents(
         scene_name,
@@ -700,7 +713,7 @@ def publish_scene(
         )
         raise RuntimeError(message)
 
-    _sync_package_to_s3(
+    destination_path = _sync_package_to_s3(
         package_dir,
         dcc=dcc,
         scene_name=scene_name,
@@ -712,4 +725,4 @@ def publish_scene(
         direct_s3_path=direct_s3_path,
     )
 
-    return package_dir
+    return PublishSceneResult(package_dir=package_dir, destination=destination_path)
