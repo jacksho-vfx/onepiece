@@ -717,7 +717,7 @@ class MediaIngestService:
         )
         results = self._execute_uploads(upload_jobs, checkpoint_store)
 
-        for result in results:
+        for result in results:  # type: ignore[union-attr]
             report.processed.append(result.media)
             report.warnings.extend(result.warnings)
             _notify(result.media.path, "uploaded")

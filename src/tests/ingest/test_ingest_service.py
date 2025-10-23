@@ -253,7 +253,9 @@ def test_ingest_service_raises_connectivity_error(tmp_path: Path) -> None:
     assert "retry" in message.lower()
 
 
-def _create_asyncio_service(tmp_path: Path) -> tuple[MediaIngestService, _UploadJob, _UploadResult]:
+def _create_asyncio_service(
+    tmp_path: Path,
+) -> tuple[MediaIngestService, _UploadJob, _UploadResult]:
     path = tmp_path / "SHOW01_ep001_sc01_0001_comp.mov"
     path.write_bytes(b"data")
     media_info = parse_media_filename(path.name)
@@ -292,7 +294,7 @@ def _create_asyncio_service(tmp_path: Path) -> tuple[MediaIngestService, _Upload
 def test_execute_uploads_asyncio_outside_event_loop(tmp_path: Path) -> None:
     service, job, expected = _create_asyncio_service(tmp_path)
     mock_runner = AsyncMock(return_value=[expected])
-    service._run_asyncio_jobs = mock_runner  # type: ignore[assignment]
+    service._run_asyncio_jobs = mock_runner
 
     results = service._execute_uploads([job], None)
 
@@ -303,7 +305,7 @@ def test_execute_uploads_asyncio_outside_event_loop(tmp_path: Path) -> None:
 def test_execute_uploads_asyncio_inside_event_loop(tmp_path: Path) -> None:
     service, job, expected = _create_asyncio_service(tmp_path)
     mock_runner = AsyncMock(return_value=[expected])
-    service._run_asyncio_jobs = mock_runner  # type: ignore[assignment]
+    service._run_asyncio_jobs = mock_runner
 
     async def _invoke() -> None:
         maybe_coro = service._execute_uploads([job], None)
