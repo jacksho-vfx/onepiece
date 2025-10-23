@@ -154,6 +154,19 @@ def test_unreal_importer_rejects_failed_validation(tmp_path: Path) -> None:
         importer.import_package(package, project="OP", asset_name="Hero")
 
 
+def test_unreal_importer_rejects_assets_outside_package(tmp_path: Path) -> None:
+    package = _package_with_metadata(tmp_path)
+    metadata_path = package / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["unreal"]["assets"][0]["source"] = "../malicious.fbx"
+    metadata_path.write_text(json.dumps(metadata))
+
+    importer = UnrealPackageImporter()
+
+    with pytest.raises(UnrealImportError, match="inside the package directory"):
+        importer.import_package(package, project="OP", asset_name="Hero")
+
+
 def test_unreal_importer_requires_known_factory_class(tmp_path: Path) -> None:
     package = _package_with_metadata(tmp_path, factory_class="MissingFactory")
     tooling = FakeAssetTools()
