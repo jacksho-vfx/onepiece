@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from io import StringIO
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -15,11 +14,11 @@ from libraries.integrations.aws.s5_sync import s5_sync
 class DummyProcess:
     def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
-        self.stdout = StringIO(stdout)
-        self.stderr = StringIO(stderr)
+        self._stdout = stdout
+        self._stderr = stderr
 
-    def wait(self) -> int:
-        return self.returncode
+    def communicate(self) -> tuple[str, str]:
+        return self._stdout, self._stderr
 
 
 @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
@@ -50,6 +49,21 @@ def test_s5_sync_raises_for_non_zero_without_stderr(mock_popen: Any) -> None:
         s5_sync(Path("/local/path"), "s3://bucket/context")
 
     assert "No additional error output from s5cmd" in str(excinfo.value)
+
+
+@patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
+def test_s5_sync_handles_stderr_output(mock_popen: Any) -> None:
+    mock_popen.return_value = DummyProcess(
+        returncode=0,
+        stdout="upload file.txt\n",
+        stderr="warning: throttling\n",
+    )
+
+    progress = Mock()
+
+    s5_sync(Path("/local/path"), "s3://bucket/context", progress_callback=progress)
+
+    progress.assert_called_once_with("upload file.txt")
 
 
 @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")

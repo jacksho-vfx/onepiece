@@ -65,16 +65,16 @@ def s5_sync(
         env=popen_env,
     )
 
-    stdout_lines: list[str] = []
-    if process.stdout is not None:
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            stdout_lines.append(line)
-            if progress_callback is not None:
-                progress_callback(line)
-        process.stdout.close()
+    stdout_output, stderr_output = process.communicate()
+    stdout_output = stdout_output or ""
+    stderr_output = stderr_output or ""
 
-    process.wait()
+    stdout_lines: list[str] = []
+    for raw_line in stdout_output.splitlines():
+        line = raw_line.strip()
+        stdout_lines.append(line)
+        if progress_callback is not None:
+            progress_callback(line)
 
     uploaded = skipped = failed = 0
 
@@ -101,14 +101,11 @@ def s5_sync(
     print(f"Skipped:    {skipped}")
     print(f"Failed:     {failed}")
 
-    stderr_output = process.stderr.read().strip() if process.stderr else ""
-    if process.stderr is not None:
-        process.stderr.close()
-
     if process.returncode != 0:
+        stderr_message = stderr_output.strip()
         error_details = (
-            f": {stderr_output}"
-            if stderr_output
+            f": {stderr_message}"
+            if stderr_message
             else ". No additional error output from s5cmd."
         )
         raise RuntimeError(
