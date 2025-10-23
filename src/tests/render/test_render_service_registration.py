@@ -31,9 +31,7 @@ def test_register_adapter_with_capabilities_tracks_source() -> None:
     service = RenderSubmissionService(adapters={})
     adapter = _make_adapter("job-with-capabilities")
 
-    service.register_adapter(
-        "bespoke", adapter, capabilities={"default_priority": 50}
-    )
+    service.register_adapter("bespoke", adapter, capabilities={"default_priority": 50})
 
     assert service._adapters["bespoke"] is adapter
     assert service._capability_sources["bespoke"] == {"default_priority": 50}
@@ -56,9 +54,7 @@ def test_register_adapter_without_capabilities_removes_stale_metadata() -> None:
     service = RenderSubmissionService(adapters={})
     adapter = _make_adapter("job-initial")
 
-    service.register_adapter(
-        "bespoke", adapter, capabilities={"default_priority": 70}
-    )
+    service.register_adapter("bespoke", adapter, capabilities={"default_priority": 70})
 
     assert "bespoke" in service._capability_sources
 
