@@ -6,6 +6,7 @@ import asyncio
 import getpass
 import os
 import re
+import threading
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -705,6 +706,7 @@ class RenderSubmissionService:
             entry = base_capabilities.get(name)
             if entry is not None:
                 self._capability_sources[name] = entry
+        self._lock = threading.RLock()
         self._jobs: OrderedDict[str, _JobRecord] = OrderedDict()
         self._store = job_store
         self._history_limit = (
@@ -878,8 +880,9 @@ class RenderSubmissionService:
             created_at=_utcnow(),
         )
         if job_id:
-            self._jobs[job_id] = record
-            self._enforce_history_limit()
+            with self._lock:
+                self._jobs[job_id] = record
+                self._enforce_history_limit()
             self._persist_jobs(force=True)
             self._emit_event("job.created", record)
         return result
@@ -906,40 +909,51 @@ class RenderSubmissionService:
             normalised = {value.strip().lower() for value in farm if value}
             farm_filter = normalised or None
 
-        jobs: list[RenderJobMetadata] = []
+        with self._lock:
+            records = list(self._jobs.values())
+
         dirty = False
-        for record in self._jobs.values():
+        for record in records:
             dirty = self._refresh_job(record) or dirty
 
-            if status_filter is not None:
-                record_status = (record.status or "").strip().lower()
-                if record_status not in status_filter:
-                    continue
+        jobs: list[RenderJobMetadata] = []
+        with self._lock:
+            for record in self._jobs.values():
+                if status_filter is not None:
+                    record_status = (record.status or "").strip().lower()
+                    if record_status not in status_filter:
+                        continue
 
-            if farm_filter is not None:
-                record_farm = (record.farm or "").strip().lower()
-                if record_farm not in farm_filter:
-                    continue
+                if farm_filter is not None:
+                    record_farm = (record.farm or "").strip().lower()
+                    if record_farm not in farm_filter:
+                        continue
 
-            jobs.append(record.snapshot())
+                jobs.append(record.snapshot())
 
-            if limit is not None and len(jobs) >= limit:
-                break
+                if limit is not None and len(jobs) >= limit:
+                    break
 
         if dirty:
             self._persist_jobs(force=True)
         return jobs
 
     def get_job(self, job_id: str) -> RenderJobMetadata:
-        record = self._jobs.get(job_id)
+        with self._lock:
+            record = self._jobs.get(job_id)
         if record is None:
             raise KeyError(job_id)
         if self._refresh_job(record):
             self._persist_jobs(force=True)
-        return record.snapshot()
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is None:
+                raise KeyError(job_id)
+            return current.snapshot()
 
     def cancel_job(self, job_id: str) -> RenderJobMetadata:
-        record = self._jobs.get(job_id)
+        with self._lock:
+            record = self._jobs.get(job_id)
         if record is None:
             raise KeyError(job_id)
         adapter = self._adapters.get(record.farm)
@@ -971,9 +985,15 @@ class RenderSubmissionService:
                 hint="Check connectivity to the render farm and retry the cancellation once the service is healthy.",
                 context={"farm": record.farm, "job_id": job_id},
             ) from exc
-        if self._update_record_from_result(record, result):
+        with self._lock:
+            changed = self._update_record_from_result(record, result)
+        if changed:
             self._persist_jobs(force=True)
-        return record.snapshot()
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is None:
+                raise KeyError(job_id)
+            return current.snapshot()
 
     def _refresh_job(self, record: _JobRecord) -> bool:
         adapter = self._adapters.get(record.farm)
@@ -997,7 +1017,11 @@ class RenderSubmissionService:
                 "render.job.status.error", job_id=record.job_id, farm=record.farm
             )
             return False
-        return self._update_record_from_result(record, result)
+        with self._lock:
+            current = self._jobs.get(record.job_id)
+            if current is None:
+                return False
+            return self._update_record_from_result(current, result)
 
     def _update_record_from_result(
         self, record: _JobRecord, result: SubmissionResult
@@ -1035,45 +1059,56 @@ class RenderSubmissionService:
         if not self._store:
             return
         loaded_records = sorted(self._store.load(), key=lambda entry: entry.created_at)
-        self._jobs = OrderedDict((record.job_id, record) for record in loaded_records)
-        previous_count = len(self._jobs)
-        self._enforce_history_limit()
-        if self._history_limit is not None and len(self._jobs) < previous_count:
+        with self._lock:
+            self._jobs = OrderedDict(
+                (record.job_id, record) for record in loaded_records
+            )
+            previous_count = len(self._jobs)
+            self._enforce_history_limit()
+            history_limit = self._history_limit
+            current_count = len(self._jobs)
+        if history_limit is not None and current_count < previous_count:
             self._persist_jobs(force=True)
 
     def _persist_jobs(self, *, force: bool = False) -> None:
-        if not self._store:
-            self._persist_pending = False
+        store = self._store
+        if not store:
+            with self._lock:
+                self._persist_pending = False
             return
         now = _utcnow()
-        if (
-            not force
-            and self._persist_throttle is not None
-            and self._last_persist_at is not None
-            and now - self._last_persist_at < self._persist_throttle
-        ):
-            self._persist_pending = True
-            return
-        self._store.save(self._jobs.values())
-        self._last_persist_at = now
-        self._persist_pending = False
+        with self._lock:
+            if (
+                not force
+                and self._persist_throttle is not None
+                and self._last_persist_at is not None
+                and now - self._last_persist_at < self._persist_throttle
+            ):
+                self._persist_pending = True
+                return
+            records = list(self._jobs.values())
+        store.save(records)
+        with self._lock:
+            self._last_persist_at = now
+            self._persist_pending = False
 
     def _enforce_history_limit(self) -> None:
-        if self._history_limit is None:
-            return
-        removed = 0
-        while len(self._jobs) > self._history_limit:
-            oldest_key, record = self._jobs.popitem(last=False)
-            self._emit_event(
-                "job.removed",
-                record,
-                payload_override={"job": {"job_id": record.job_id}},
-            )
-            removed += 1
-        if removed:
-            self._last_history_prune_at = _utcnow()
-            self._last_history_prune_count = removed
-            self._history_pruned_total += removed
+        with self._lock:
+            if self._history_limit is None:
+                return
+            removed = 0
+            while len(self._jobs) > self._history_limit:
+                oldest_key, record = self._jobs.popitem(last=False)
+                self._emit_event(
+                    "job.removed",
+                    record,
+                    payload_override={"job": {"job_id": record.job_id}},
+                )
+                removed += 1
+            if removed:
+                self._last_history_prune_at = _utcnow()
+                self._last_history_prune_count = removed
+                self._history_pruned_total += removed
 
     def start_background_polling(self) -> None:
         """Launch the asynchronous poller that refreshes job statuses."""
@@ -1102,28 +1137,40 @@ class RenderSubmissionService:
         assert self._poll_interval is not None
         try:
             while True:
+                with self._lock:
+                    records = list(self._jobs.values())
                 dirty = False
-                for record in list(self._jobs.values()):
+                for record in records:
                     dirty = self._refresh_job(record) or dirty
-                if dirty or self._persist_pending:
+                with self._lock:
+                    persist_pending = self._persist_pending
+                if dirty or persist_pending:
                     self._persist_jobs()
                 await asyncio.sleep(self._poll_interval)
         except asyncio.CancelledError:
             raise
         finally:
-            if self._persist_pending:
+            with self._lock:
+                pending = self._persist_pending
+            if pending:
                 self._persist_jobs(force=True)
 
     def get_metrics(self) -> dict[str, Any]:
         store_metrics: dict[str, Any] | None = None
         if self._store:
             store_metrics = self._store.stats.to_dict()
+        with self._lock:
+            history_size = len(self._jobs)
+            history_limit = self._history_limit
+            history_pruned_total = self._history_pruned_total
+            last_history_prune_at = self._last_history_prune_at
+            last_history_prune_count = self._last_history_prune_count
         return {
-            "history_size": len(self._jobs),
-            "history_limit": self._history_limit,
-            "history_pruned_total": self._history_pruned_total,
-            "last_history_prune_at": _serialise_datetime(self._last_history_prune_at),
-            "last_history_pruned": self._last_history_prune_count,
+            "history_size": history_size,
+            "history_limit": history_limit,
+            "history_pruned_total": history_pruned_total,
+            "last_history_prune_at": _serialise_datetime(last_history_prune_at),
+            "last_history_pruned": last_history_prune_count,
             "store": store_metrics,
         }
 
@@ -1133,17 +1180,38 @@ class RenderSubmissionService:
         """Compute aggregated analytics for render job history."""
 
         moment = now or _utcnow()
-        records = list(self._jobs.values())
+        with self._lock:
+            records = list(self._jobs.values())
 
-        status_totals: dict[str, dict[str, Any]] = {}
-        adapter_totals: dict[str, Any] = {}
+            status_totals: dict[str, dict[str, Any]] = {}
+            adapter_totals: dict[str, Any] = {}
 
-        for record in records:
-            record_updated = record.updated_at or record.created_at
-            durations = record.status_durations(now=moment)
-            for status_name, duration_seconds in durations.items():
+            for record in records:
+                record_updated = record.updated_at or record.created_at
+                durations = record.status_durations(now=moment)
+                for status_name, duration_seconds in durations.items():
+                    status_entry = status_totals.setdefault(
+                        status_name,
+                        {
+                            "jobs": set(),
+                            "total_duration": 0.0,
+                            "active": 0,
+                            "last_updated": None,
+                        },
+                    )
+                    # Track job identifiers per status so we can report the number of
+                    # distinct jobs that have visited the status rather than the number
+                    # of status transitions recorded in history.
+                    status_entry["jobs"].add(record.job_id)
+                    status_entry["total_duration"] += max(duration_seconds, 0.0)
+                    if record_updated is not None:
+                        last_updated: datetime | None = status_entry["last_updated"]
+                        if last_updated is None or record_updated > last_updated:
+                            status_entry["last_updated"] = record_updated
+
+                record_status = record.status or "unknown"
                 status_entry = status_totals.setdefault(
-                    status_name,
+                    record_status,
                     {
                         "jobs": set(),
                         "total_duration": 0.0,
@@ -1151,125 +1219,108 @@ class RenderSubmissionService:
                         "last_updated": None,
                     },
                 )
-                # Track job identifiers per status so we can report the number of
-                # distinct jobs that have visited the status rather than the number
-                # of status transitions recorded in history.
+                status_entry["active"] += 1
                 status_entry["jobs"].add(record.job_id)
-                status_entry["total_duration"] += max(duration_seconds, 0.0)
                 if record_updated is not None:
-                    last_updated: datetime | None = status_entry["last_updated"]
+                    last_updated = status_entry["last_updated"]
                     if last_updated is None or record_updated > last_updated:
                         status_entry["last_updated"] = record_updated
 
-            record_status = record.status or "unknown"
-            status_entry = status_totals.setdefault(
-                record_status,
-                {
-                    "jobs": set(),
-                    "total_duration": 0.0,
-                    "active": 0,
-                    "last_updated": None,
-                },
-            )
-            status_entry["active"] += 1
-            status_entry["jobs"].add(record.job_id)
-            if record_updated is not None:
-                last_updated = status_entry["last_updated"]
-                if last_updated is None or record_updated > last_updated:
-                    status_entry["last_updated"] = record_updated
+                adapter_entry = adapter_totals.setdefault(
+                    record.farm,
+                    {
+                        "total_jobs": 0,
+                        "statuses": defaultdict(int),
+                        "completed_jobs": 0,
+                        "total_completion": 0.0,
+                        "first_submission": None,
+                        "last_submission": None,
+                    },
+                )
+                adapter_entry["total_jobs"] += 1
+                adapter_entry["statuses"][record.status] += 1
 
-            adapter_entry = adapter_totals.setdefault(
-                record.farm,
-                {
-                    "total_jobs": 0,
-                    "statuses": defaultdict(int),
-                    "completed_jobs": 0,
-                    "total_completion": 0.0,
-                    "first_submission": None,
-                    "last_submission": None,
-                },
-            )
-            adapter_entry["total_jobs"] += 1
-            adapter_entry["statuses"][record.status] += 1
+                created_at = record.created_at
+                first_submission: datetime | None = adapter_entry["first_submission"]
+                if first_submission is None or created_at < first_submission:
+                    adapter_entry["first_submission"] = created_at
+                last_submission: datetime | None = adapter_entry["last_submission"]
+                if last_submission is None or created_at > last_submission:
+                    adapter_entry["last_submission"] = created_at
 
-            created_at = record.created_at
-            first_submission: datetime | None = adapter_entry["first_submission"]
-            if first_submission is None or created_at < first_submission:
-                adapter_entry["first_submission"] = created_at
-            last_submission: datetime | None = adapter_entry["last_submission"]
-            if last_submission is None or created_at > last_submission:
-                adapter_entry["last_submission"] = created_at
-
-            if record.completed_at is not None:
-                adapter_entry["completed_jobs"] += 1
-                completion_seconds = (
-                    record.completed_at - record.created_at
-                ).total_seconds()
-                adapter_entry["total_completion"] += max(completion_seconds, 0.0)
-
-        status_payload: dict[str, RenderStatusAnalytics] = {}
-        for status_name, entry in status_totals.items():
-            count = len(entry["jobs"])
-            active = entry["active"]
-            total_duration = entry["total_duration"]
-            effective_count = count or active
-            average = (total_duration / effective_count) if effective_count else None
-            status_payload[status_name] = RenderStatusAnalytics(
-                count=count,
-                active=active,
-                last_updated_at=entry["last_updated"],
-                durations=DurationMetrics(
-                    total_seconds=total_duration,
-                    average_seconds=average,
-                ),
-            )
-
-        adapter_payload: dict[str, RenderAdapterAnalytics] = {}
-        for adapter_name, entry in adapter_totals.items():
-            completed = entry["completed_jobs"]
-            total_completion = entry["total_completion"]
-            adapter_payload[adapter_name] = RenderAdapterAnalytics(
-                total_jobs=entry["total_jobs"],
-                statuses=dict(entry["statuses"]),
-                completed_jobs=completed,
-                average_completion_seconds=(
-                    total_completion / completed if completed else None
-                ),
-                first_submission_at=entry["first_submission"],
-                last_submission_at=entry["last_submission"],
-            )
-
-        window_payload: dict[str, RenderWindowAnalytics] = {}
-        for label, window in self.DEFAULT_SUBMISSION_WINDOWS.items():
-            cutoff = moment - window
-            total = 0
-            completed = 0
-            total_completion = 0.0
-            for record in records:
-                if record.created_at < cutoff:
-                    continue
-                total += 1
                 if record.completed_at is not None:
-                    completed += 1
+                    adapter_entry["completed_jobs"] += 1
                     completion_seconds = (
                         record.completed_at - record.created_at
                     ).total_seconds()
-                    total_completion += max(completion_seconds, 0.0)
-            window_payload[label] = RenderWindowAnalytics(
-                total_jobs=total,
-                completed_jobs=completed,
-                average_completion_seconds=(
-                    total_completion / completed if completed else None
-                ),
-            )
+                    adapter_entry["total_completion"] += max(
+                        completion_seconds, 0.0
+                    )
 
-        return RenderAnalyticsResponse(
-            generated_at=moment,
-            total_jobs=len(records),
-            statuses=status_payload,
-            adapters=adapter_payload,
-            submission_windows=window_payload,
-        )
+            status_payload: dict[str, RenderStatusAnalytics] = {}
+            for status_name, entry in status_totals.items():
+                count = len(entry["jobs"])
+                active = entry["active"]
+                total_duration = entry["total_duration"]
+                effective_count = count or active
+                average = (total_duration / effective_count) if effective_count else None
+                status_payload[status_name] = RenderStatusAnalytics(
+                    count=count,
+                    active=active,
+                    last_updated_at=entry["last_updated"],
+                    durations=DurationMetrics(
+                        total_seconds=total_duration,
+                        average_seconds=average,
+                    ),
+                )
+
+            adapter_payload: dict[str, RenderAdapterAnalytics] = {}
+            for adapter_name, entry in adapter_totals.items():
+                completed = entry["completed_jobs"]
+                total_completion = entry["total_completion"]
+                adapter_payload[adapter_name] = RenderAdapterAnalytics(
+                    total_jobs=entry["total_jobs"],
+                    statuses=dict(entry["statuses"]),
+                    completed_jobs=completed,
+                    average_completion_seconds=(
+                        total_completion / completed if completed else None
+                    ),
+                    first_submission_at=entry["first_submission"],
+                    last_submission_at=entry["last_submission"],
+                )
+
+            window_payload: dict[str, RenderWindowAnalytics] = {}
+            for label, window in self.DEFAULT_SUBMISSION_WINDOWS.items():
+                cutoff = moment - window
+                total = 0
+                completed = 0
+                total_completion = 0.0
+                for record in records:
+                    if record.created_at < cutoff:
+                        continue
+                    total += 1
+                    if record.completed_at is not None:
+                        completed += 1
+                        completion_seconds = (
+                            record.completed_at - record.created_at
+                        ).total_seconds()
+                        total_completion += max(completion_seconds, 0.0)
+                window_payload[label] = RenderWindowAnalytics(
+                    total_jobs=total,
+                    completed_jobs=completed,
+                    average_completion_seconds=(
+                        total_completion / completed if completed else None
+                    ),
+                )
+
+            response = RenderAnalyticsResponse(
+                generated_at=moment,
+                total_jobs=len(records),
+                statuses=status_payload,
+                adapters=adapter_payload,
+                submission_windows=window_payload,
+            )
+        return response
 
     def _emit_event(
         self,
