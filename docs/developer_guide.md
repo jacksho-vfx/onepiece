@@ -4,7 +4,7 @@ This guide describes how to set up a local development environment for OnePiece,
 
 > **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.
 >
-> **Latest merges:** Animation commands joined the CLI to debug Maya scenes, clean namespaces, and fire playblasts; the Unreal importer rebuilds published packages directly inside the editor; and publish safety checks now guard scene names while reporting Unreal validation summaries. Trafalgar's provider registry exposes delivery/reconciliation integrations through entry points, and the Maya modules handle missing PyMEL gracefully so unit tests run without DCC installations. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/apps/trafalgar/providers/providers.py†L1-L210】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+> **Latest merges:** Animation commands joined the CLI to debug Maya scenes, clean namespaces, and fire playblasts; the Unreal importer rebuilds published packages directly inside the editor; and publish safety checks now guard scene names while reporting Unreal validation summaries. Trafalgar's provider registry exposes delivery/reconciliation integrations through entry points, and the Maya modules handle missing PyMEL gracefully so unit tests run without DCC installations. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/apps/trafalgar/providers/providers.py†L1-L210】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Optional tooling that streamlines development:
 - [uv](https://github.com/astral-sh/uv) or [pipx](https://pipx.pypa.io/stable/) for managing virtual environments.
 - Docker for validating integrations that depend on external services.
 
-Maya-focused helpers lazily import PyMEL and surface friendly errors when the module is unavailable, so contributors can run the core test suite on machines without Autodesk software installed. Install the DCC-specific extras only when you need to exercise the integrations inside Maya itself. 【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+Maya-focused helpers lazily import PyMEL and surface friendly errors when the module is unavailable, so contributors can run the core test suite on machines without Autodesk software installed. Install the DCC-specific extras only when you need to exercise the integrations inside Maya itself. 【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
 
 ## Repository layout
 

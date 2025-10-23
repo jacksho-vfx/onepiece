@@ -93,7 +93,7 @@ onepiece dcc publish --dcc maya --scene-name ep101_seq010_sh010 --renders ./rend
   --bucket s3://studio-prod-shots --show-code XYZ --dependency-summary
 ```
 
-Scene names must now be simple package identifiers without directory separators, parent traversal, or absolute paths. The CLI normalises the supplied value before publishing and raises a validation error when the name would escape the package root. Maya exports that include Unreal metadata automatically trigger the new validation summary so scale, skeleton coverage, and naming issues are surfaced before uploads. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
+Scene names must now be simple package identifiers without directory separators, parent traversal, or absolute paths. The CLI normalises the supplied value before publishing and raises a validation error when the name would escape the package root. Maya exports that include Unreal metadata automatically trigger the new validation summary so scale, skeleton coverage, and naming issues are surfaced before uploads. 【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_export_checker.py†L1-L195】
 
 #### Submit a render job with profile defaults
 
@@ -122,7 +122,7 @@ onepiece dcc animation playblast \
   --metadata metadata/playblast.json --include-audio
 ```
 
-The animation command group relies on pure-Python helpers and lazy Maya imports, so the CLI exits cleanly when PyMEL is unavailable instead of crashing mid-command. Detailed structured logging accompanies every run to feed dashboards and alerting. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+The animation command group relies on pure-Python helpers and lazy Maya imports, so the CLI exits cleanly when PyMEL is unavailable instead of crashing mid-command. Detailed structured logging accompanies every run to feed dashboards and alerting. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
 
 #### Import a published package into Unreal Engine
 
@@ -131,7 +131,7 @@ The animation command group relies on pure-Python helpers and lazy Maya imports,
 onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK_Hero --dry-run
 ```
 
-Packages that include `metadata.json` with Unreal import details now drive automatically constructed `AssetImportTask` objects. Failed Maya-to-Unreal validations abort the process with actionable error messages, while dry-run mode prints the planned tasks as JSON for review. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
+Packages that include `metadata.json` with Unreal import details now drive automatically constructed `AssetImportTask` objects. Failed Maya-to-Unreal validations abort the process with actionable error messages, while dry-run mode prints the planned tasks as JSON for review. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】
 
 ### Operating the Perona dashboard
 
@@ -204,10 +204,10 @@ These resources provide a safe sandbox to explore the command surface before poi
 - **Resumable ingest controls** – `onepiece aws ingest` exposes flags and profile keys for asyncio orchestration, worker pools, resumable uploads, and checkpoint tuning so large deliveries can be retried safely.
 - **Capability-aware render submissions** – Render jobs automatically pick sensible priorities and chunk sizes from adapter metadata, with validation to reject values outside the advertised range before a request ever reaches the farm.
 
-- **Maya animation workflows** – A dedicated Typer sub-app debugs animation scenes, performs configurable cleanup, and launches playblasts with structured logging so teams can automate checklist-driven reviews. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】
-- **Unreal package import pipeline** – Published Maya exports can be validated and rehydrated inside Unreal using the bundled importer and CLI command, complete with dry-run previews of generated tasks. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
-- **Safer publishing defaults** – Scene names are strictly validated, dependency summaries now render correct paths, and Unreal export checks report skeleton, naming, and scale issues before uploads reach S3. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
-- **Resilient DCC detection** – Environment health checks treat plugin names case-insensitively, guard against missing PyMEL modules, and expose GPU/plugin overrides through environment variables to keep headless diagnostics reliable. 【F:src/libraries/validations/dcc.py†L1-L118】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+- **Maya animation workflows** – A dedicated Typer sub-app debugs animation scenes, performs configurable cleanup, and launches playblasts with structured logging so teams can automate checklist-driven reviews. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】
+- **Unreal package import pipeline** – Published Maya exports can be validated and rehydrated inside Unreal using the bundled importer and CLI command, complete with dry-run previews of generated tasks. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】
+- **Safer publishing defaults** – Scene names are strictly validated, dependency summaries now render correct paths, and Unreal export checks report skeleton, naming, and scale issues before uploads reach S3. 【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_export_checker.py†L1-L195】
+- **Resilient DCC detection** – Environment health checks treat plugin names case-insensitively, guard against missing PyMEL modules, and expose GPU/plugin overrides through environment variables to keep headless diagnostics reliable. 【F:src/libraries/platform/validations/dcc.py†L1-L194】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
 
 ### Trafalgar v1.0.0
 

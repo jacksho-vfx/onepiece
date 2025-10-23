@@ -4,7 +4,7 @@ These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. T
 
 > **Release spotlight (v1.0.0):** The CLI honours layered configuration profiles and resumable ingest toggles, Trafalgar introduces cache-tunable dashboards with job inspection endpoints, and the new Uta Control Center renders the command surface in your browser alongside the embedded dashboard.
 >
-> **Latest merges:** Animation-focused commands now debug Maya scenes, orchestrate cleanup operations, and generate logged playblasts from the CLI. Maya publishes validate scene names before packaging and report Unreal export readiness, while the new Unreal importer reconstructs assets directly inside the editor with a dry-run preview. Trafalgar reconciliations ride on a provider registry that ships with a default data source, keeping dashboards configurable without bespoke forks. 【F:src/apps/onepiece/dcc/animation.py†L1-L194】【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
+> **Latest merges:** Animation-focused commands now debug Maya scenes, orchestrate cleanup operations, and generate logged playblasts from the CLI. Maya publishes validate scene names before packaging and report Unreal export readiness, while the new Unreal importer reconstructs assets directly inside the editor with a dry-run preview. Trafalgar reconciliations ride on a provider registry that ships with a default data source, keeping dashboards configurable without bespoke forks. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Adjusting dashboard cache behaviour
 
@@ -121,7 +121,7 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
 
    The same `--report-format csv` flag streams a tabular version to stdout (or to `--report-path`) when you prefer spreadsheet tooling.
 
-4. Keep `--scene-name` restricted to a simple package identifier. Absolute paths, parent directory references, and separator characters now trigger an immediate validation error so publishes cannot escape the package directory on disk. When the package metadata includes a `maya_to_unreal` validation block, the CLI prints a summary covering scale checks, skeleton coverage, and naming compliance before uploading assets. 【F:src/apps/onepiece/dcc/publish.py†L58-L123】【F:src/libraries/dcc/maya/unreal_export_checker.py†L1-L120】
+4. Keep `--scene-name` restricted to a simple package identifier. Absolute paths, parent directory references, and separator characters now trigger an immediate validation error so publishes cannot escape the package directory on disk. When the package metadata includes a `maya_to_unreal` validation block, the CLI prints a summary covering scale checks, skeleton coverage, and naming compliance before uploading assets. 【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_export_checker.py†L1-L195】
 
 ## 4. Package a DCC publish for QA
 
@@ -198,7 +198,7 @@ notes,"QA dry run for onboarding"
      --metadata metadata/playblast.json --include-audio
    ```
 
-   Playblast automation reads optional JSON metadata and records the generated clip for downstream review systems. The command lazily imports PyMEL, exiting cleanly in headless environments where Maya is unavailable. 【F:src/apps/onepiece/dcc/animation.py†L150-L194】【F:src/libraries/dcc/maya/__init__.py†L1-L48】
+   Playblast automation reads optional JSON metadata and records the generated clip for downstream review systems. The command lazily imports PyMEL, exiting cleanly in headless environments where Maya is unavailable. 【F:src/apps/onepiece/dcc/animation.py†L149-L220】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
 
 ## 6. Import a package into Unreal Engine
 
@@ -218,7 +218,7 @@ notes,"QA dry run for onboarding"
    onepiece dcc import-unreal --package ./dist/seq010_sh010 --project OP --asset SK_Hero
    ```
 
-   Failed validations (for example an invalid scale or missing skeleton joints) abort the process with actionable errors so Unreal never receives an inconsistent package. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L83】【F:src/libraries/dcc/maya/unreal_importer.py†L58-L274】
+   Failed validations (for example an invalid scale or missing skeleton joints) abort the process with actionable errors so Unreal never receives an inconsistent package. 【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】
 
 ## 7. Bootstrap a ShotGrid project
 
