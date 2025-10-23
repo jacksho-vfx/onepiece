@@ -121,16 +121,27 @@ def setup_single_shot(
         raise
 
     project = sg_client.get_project(project_name)
-    episode_data = EpisodeData(code=episode_code, project_id=project["id"])
+    if not project:
+        message = f"ShotGrid project '{project_name}' was not found"
+        log.error("shotgrid_project_missing", project=project_name)
+        raise RuntimeError(message)
+
+    project_id = project.get("id")
+    if project_id is None:
+        message = f"ShotGrid project '{project_name}' is missing an id"
+        log.error("shotgrid_project_missing_id", project=project_name)
+        raise RuntimeError(message)
+
+    episode_data = EpisodeData(code=episode_code, project_id=project_id)
     episode = sg_client.get_or_create_episode(episode_data)
     scene_data = SceneData(
-        code=scene_code, project_id=project["id"], episode_id=episode["id"]
+        code=scene_code, project_id=project_id, episode_id=episode["id"]
     )
     scene = sg_client.get_or_create_scene(scene_data)
 
     shot_data = ShotData(
         code=shot_code,
-        project_id=project["id"],
+        project_id=project_id,
         scene_id=scene["id"],
     )
     sg_client.get_or_create_shot(shot_data)
