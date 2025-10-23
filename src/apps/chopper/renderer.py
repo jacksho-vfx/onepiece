@@ -14,11 +14,17 @@ except ImportError:  # pragma: no cover - handled lazily when export attempted
 
 if TYPE_CHECKING:
     import imageio.v3 as iio
+    import numpy as np
 else:
     try:
         import imageio.v3 as iio
     except ImportError:
         iio = None  # type: ignore[assignment]
+
+    try:
+        import numpy as np
+    except ImportError:
+        np = None  # type: ignore[assignment]
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
@@ -41,6 +47,16 @@ def _require_imageio() -> Any:
             "imageio is required for animation export. Install the 'onepiece[chopper-anim]' extra."
         )
     return iio
+
+
+def _require_numpy() -> Any:
+    """Return :mod:`numpy` or raise a helpful error if unavailable."""
+
+    if np is None:
+        raise RuntimeError(
+            "NumPy is required for animation export. Install the 'onepiece[chopper-anim]' extra."
+        )
+    return np
 
 
 class SceneError(ValueError):
@@ -443,11 +459,13 @@ class AnimationWriter:
             kwargs["bitrate"] = bitrate
 
         frames = self._ensure_frames()
+        numpy = _require_numpy()
         with module.get_writer(
             destination, format="ffmpeg", mode="I", **kwargs
         ) as stream:
             for frame in frames:
-                stream.append_data(frame.to_image(mode="RGB"))
+                image = frame.to_image(mode="RGB")
+                stream.append_data(numpy.asarray(image))
 
     def write(self, destination: Path) -> None:
         """Auto-detect the output format based on ``destination``'s suffix."""

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -213,6 +214,45 @@ async def test_render_job_stream_emits_created_events(
     payload = json.loads(payload_line.split(b": ", 1)[1].strip())
     assert payload["event"] == "job.created"
     assert payload["job"]["job_id"] == "stub-1"
+
+
+@pytest.mark.anyio("asyncio")
+async def test_render_job_stream_snapshot_offloads_job_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowService:
+        def list_jobs(self) -> list[Any]:
+            time.sleep(0.2)
+            return []
+
+    broadcaster = EventBroadcaster(max_buffer=4)
+    monkeypatch.setattr(render, "JOB_EVENTS", broadcaster)
+    monkeypatch.setattr(render, "get_render_service", lambda: SlowService())
+
+    class _Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    stream = render._job_event_stream(_Request())
+
+    marker = asyncio.Event()
+
+    async def _mark() -> None:
+        await asyncio.sleep(0.01)
+        marker.set()
+
+    setter_task = asyncio.create_task(_mark())
+    wait_task = asyncio.create_task(asyncio.wait_for(marker.wait(), timeout=0.1))
+
+    snapshot_chunk = await asyncio.wait_for(stream.__anext__(), timeout=1)
+
+    await wait_task
+    await setter_task
+
+    assert marker.is_set()
+    assert snapshot_chunk.startswith(b"event: jobs.snapshot")
+
+    await stream.aclose()
 
 
 @pytest.mark.anyio("asyncio")

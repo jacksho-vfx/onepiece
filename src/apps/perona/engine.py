@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 import logging
@@ -223,6 +224,7 @@ class OptimizationResult:
     gpu_hours: float
     render_hours: float
     savings_vs_baseline: float
+    savings_percent: float
     notes: str
 
 
@@ -398,6 +400,7 @@ class PeronaEngine:
         )
         self._telemetry = self._build_telemetry()
         self._render_log = self._build_render_log()
+        self._frame_times_by_shot = self._group_frame_times(self._render_log)
         self._lifecycle = self._build_lifecycle()
         self._pnl_contributions = self._build_pnl_contributions()
 
@@ -478,12 +481,10 @@ class PeronaEngine:
         target_error_rate = max(self._target_error_rate, 1e-6)
         weight_total = _VARIANCE_WEIGHT + _ERROR_WEIGHT + _DEADLINE_WEIGHT
         for telemetry in self._telemetry:
-            frame_times = [
-                sample.frame_time_ms
-                for sample in self._render_log
-                if sample.sequence == telemetry.sequence
-                and sample.shot_id == telemetry.shot_id
-            ]
+            frame_times = self._frame_times_by_shot.get(
+                (telemetry.sequence, telemetry.shot_id),
+                (),
+            )
             if len(frame_times) > 1:
                 variance = statistics.pvariance(frame_times)
                 mean_frame_time = statistics.fmean(frame_times)
@@ -553,6 +554,17 @@ class PeronaEngine:
             )
         return tuple(sorted(indicators, key=lambda item: item.risk_score, reverse=True))
 
+    @staticmethod
+    def _group_frame_times(
+        render_log: Sequence[RenderMetric],
+    ) -> dict[tuple[str, str], tuple[float, ...]]:
+        """Build an index of frame times keyed by (sequence, shot_id)."""
+
+        grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
+        for sample in render_log:
+            grouped[(sample.sequence, sample.shot_id)].append(sample.frame_time_ms)
+        return {key: tuple(values) for key, values in grouped.items()}
+
     def pnl_explainer(self) -> PnLBreakdown:
         """Explain the delta in render spend compared with the baseline."""
 
@@ -599,6 +611,7 @@ class PeronaEngine:
                     gpu_hours=breakdown.gpu_hours,
                     render_hours=breakdown.render_hours,
                     savings_vs_baseline=projection.savings,
+                    savings_percent=projection.savings_percent,
                     notes=notes,
                 )
             )

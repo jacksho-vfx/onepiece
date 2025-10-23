@@ -45,16 +45,18 @@ def build_burnin_filter(burnins: Sequence[BurnInMetadata]) -> str:
         return ""
 
     overlays: list[str] = []
-    for burnin in burnins:
+    for idx, burnin in enumerate(burnins):
         text = (
             f"Shot: {burnin.shot} | Version: {burnin.version} | "
             f"Frames: {burnin.frame_range} | User: {burnin.user}"
         )
         escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        y_offset = 24 + idx * 32
         overlays.append(
             "drawtext=text='"
             f"{escaped}'"
-            ":x=24:y=24:fontsize=24:fontcolor=white:"
+            ":x=24:"
+            f"y={y_offset}:fontsize=24:fontcolor=white:"
             "box=1:boxcolor=black@0.6"
         )
     return ",".join(overlays)

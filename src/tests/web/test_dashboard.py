@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any, Callable, Generator, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
@@ -115,7 +117,7 @@ class DummyRenderFacade:
         self._summary = summary
         self.calls: int = 0
 
-    def summarise_jobs(self) -> Mapping[str, Any]:
+    async def summarise_jobs(self) -> Mapping[str, Any]:
         self.calls += 1
         return self._summary
 
@@ -153,6 +155,33 @@ def test_require_dashboard_auth_rejects_mismatched_token(
         dashboard.require_dashboard_auth(credentials)
 
     assert excinfo.value.status_code == 401
+    
+    
+@pytest.mark.anyio("asyncio")
+async def test_render_dashboard_facade_offloads_job_listing() -> None:
+    class SlowService:
+        def list_jobs(self) -> list[Any]:
+            time.sleep(0.2)
+            return []
+
+    facade = dashboard.RenderDashboardFacade(service=SlowService())
+
+    marker = asyncio.Event()
+
+    async def _mark() -> None:
+        await asyncio.sleep(0.01)
+        marker.set()
+
+    setter_task = asyncio.create_task(_mark())
+    wait_task = asyncio.create_task(asyncio.wait_for(marker.wait(), timeout=0.1))
+
+    summary = await asyncio.wait_for(facade.summarise_jobs(), timeout=1)
+
+    await wait_task
+    await setter_task
+
+    assert marker.is_set()
+    assert summary == {"jobs": 0, "by_status": {}, "by_farm": {}}
 
 
 def test_shotgrid_service_discovers_projects_and_updates_registry(

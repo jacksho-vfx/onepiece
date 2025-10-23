@@ -288,7 +288,7 @@ class DemoIngestFacade:
 class DemoRenderFacade:
     """Surface render farm activity without hitting live services."""
 
-    def summarise_jobs(self) -> dict[str, Any]:
+    async def summarise_jobs(self) -> dict[str, Any]:
         return {
             "jobs": 14,
             "by_status": {

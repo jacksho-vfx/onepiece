@@ -80,6 +80,7 @@ def test_optimization_backtest_adjusts_cost(engine: PeronaEngine) -> None:
     assert scenario.total_cost < baseline.total_cost
     assert "gpu count" in scenario.notes
     assert scenario.savings_vs_baseline > 0
+    assert scenario.savings_percent > 0
 
 
 def test_shot_lifecycle_exposes_current_stage(engine: PeronaEngine) -> None:
