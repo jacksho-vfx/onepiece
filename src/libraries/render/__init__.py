@@ -9,6 +9,14 @@ from .analytics import (
     total_cost_per_shot,
 )
 from .base import RenderSubmissionError, SubmissionResult
+from .optimization import (
+    CostBreakdown,
+    CostModelInput,
+    OptimizationProjection,
+    OptimizationScenario,
+    estimate_cost,
+    simulate_optimizations,
+)
 
 __all__ = [
     "RenderSubmissionError",
@@ -19,4 +27,10 @@ __all__ = [
     "rolling_mean",
     "total_cost_per_sequence",
     "total_cost_per_shot",
+    "CostModelInput",
+    "CostBreakdown",
+    "OptimizationScenario",
+    "OptimizationProjection",
+    "estimate_cost",
+    "simulate_optimizations",
 ]
