@@ -12,6 +12,9 @@ import statistics
 from typing import Iterable, Mapping, Sequence, Any
 import tomllib
 
+from libraries.perona import CostDriverDelta
+from libraries.render import optimization as render_optimization
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,6 +81,23 @@ class CostModelInput:
     def __post_init__(self) -> None:
         object.__setattr__(self, "currency", _normalise_currency(self.currency))
 
+    def to_library(self) -> render_optimization.CostModelInput:
+        """Return the shared optimisation input representation."""
+
+        return render_optimization.CostModelInput(
+            frame_count=self.frame_count,
+            average_frame_time_ms=self.average_frame_time_ms,
+            gpu_hourly_rate=self.gpu_hourly_rate,
+            gpu_count=self.gpu_count,
+            render_hours=self.render_hours,
+            render_farm_hourly_rate=self.render_farm_hourly_rate,
+            storage_gb=self.storage_gb,
+            storage_rate_per_gb=self.storage_rate_per_gb,
+            data_egress_gb=self.data_egress_gb,
+            egress_rate_per_gb=self.egress_rate_per_gb,
+            misc_costs=self.misc_costs,
+        )
+
 
 @dataclass(frozen=True)
 class CostBreakdown:
@@ -98,6 +118,27 @@ class CostBreakdown:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "currency", _normalise_currency(self.currency))
+
+    @classmethod
+    def from_library(
+        cls, breakdown: render_optimization.CostBreakdown, *, currency: str
+    ) -> "CostBreakdown":
+        """Create a Perona breakdown from the shared optimisation result."""
+
+        return cls(
+            frame_count=breakdown.frame_count,
+            gpu_hours=breakdown.gpu_hours,
+            render_hours=breakdown.render_hours,
+            concurrency=breakdown.concurrency,
+            gpu_cost=breakdown.gpu_cost,
+            render_farm_cost=breakdown.render_farm_cost,
+            storage_cost=breakdown.storage_cost,
+            egress_cost=breakdown.egress_cost,
+            misc_cost=breakdown.misc_cost,
+            total_cost=breakdown.total_cost,
+            cost_per_frame=breakdown.cost_per_frame,
+            currency=currency,
+        )
 
 
 @dataclass(frozen=True)
@@ -158,6 +199,18 @@ class OptimizationScenario:
     resolution_scale: float = 1.0
     sampling_scale: float = 1.0
     notes: str = ""
+
+    def to_library(self) -> render_optimization.OptimizationScenario:
+        """Return the shared optimisation scenario representation."""
+
+        return render_optimization.OptimizationScenario(
+            name=self.name,
+            gpu_count=self.gpu_count,
+            gpu_hourly_rate=self.gpu_hourly_rate,
+            frame_time_scale=self.frame_time_scale,
+            resolution_scale=self.resolution_scale,
+            sampling_scale=self.sampling_scale,
+        )
 
 
 @dataclass(frozen=True)
@@ -415,43 +468,8 @@ class PeronaEngine:
     def estimate_cost(self, inputs: CostModelInput) -> CostBreakdown:
         """Estimate the render costs for the supplied model inputs."""
 
-        if inputs.frame_count <= 0:
-            raise ValueError("frame_count must be positive")
-        if inputs.average_frame_time_ms <= 0:
-            raise ValueError("average_frame_time_ms must be positive")
-        if inputs.gpu_hourly_rate < 0:
-            raise ValueError("gpu_hourly_rate cannot be negative")
-
-        frame_seconds = inputs.frame_count * inputs.average_frame_time_ms / 1000
-        gpu_hours = frame_seconds / 3600
-        concurrency = max(inputs.gpu_count, 1)
-        theoretical_render_hours = frame_seconds / 3600 / concurrency
-        render_hours = (
-            inputs.render_hours if inputs.render_hours > 0 else theoretical_render_hours
-        )
-        gpu_cost = gpu_hours * inputs.gpu_hourly_rate
-        render_farm_cost = render_hours * inputs.render_farm_hourly_rate
-        storage_cost = inputs.storage_gb * inputs.storage_rate_per_gb
-        egress_cost = inputs.data_egress_gb * inputs.egress_rate_per_gb
-        misc_cost = inputs.misc_costs
-        total_cost = (
-            gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
-        )
-        cost_per_frame = total_cost / inputs.frame_count
-        return CostBreakdown(
-            frame_count=inputs.frame_count,
-            gpu_hours=round(gpu_hours, 4),
-            render_hours=round(render_hours, 4),
-            concurrency=concurrency,
-            gpu_cost=round(gpu_cost, 2),
-            render_farm_cost=round(render_farm_cost, 2),
-            storage_cost=round(storage_cost, 2),
-            egress_cost=round(egress_cost, 2),
-            misc_cost=round(misc_cost, 2),
-            total_cost=round(total_cost, 2),
-            cost_per_frame=round(cost_per_frame, 4),
-            currency=inputs.currency,
-        )
+        breakdown = render_optimization.estimate_cost(inputs.to_library())
+        return CostBreakdown.from_library(breakdown, currency=inputs.currency)
 
     def risk_heatmap(self) -> Sequence[RiskIndicator]:
         """Return risk scores ordered from most to least critical."""
@@ -555,39 +573,32 @@ class PeronaEngine:
         """Simulate how different scenarios impact render cost and duration."""
 
         baseline_input = replace(self._baseline_cost_input)
-        baseline_breakdown = self.estimate_cost(baseline_input)
+        library_baseline_input = baseline_input.to_library()
+        library_scenarios = tuple(item.to_library() for item in scenarios)
+        library_baseline_breakdown, projections = (
+            render_optimization.simulate_optimizations(
+                library_baseline_input, library_scenarios
+            )
+        )
+        baseline_breakdown = CostBreakdown.from_library(
+            library_baseline_breakdown, currency=baseline_input.currency
+        )
         results: list[OptimizationResult] = []
-        for scenario in scenarios:
-            scenario_input = replace(baseline_input)
-            if scenario.gpu_count is not None:
-                scenario_input = replace(scenario_input, gpu_count=scenario.gpu_count)
-            if scenario.gpu_hourly_rate is not None:
-                scenario_input = replace(
-                    scenario_input, gpu_hourly_rate=scenario.gpu_hourly_rate
-                )
-            frame_time_multiplier = max(
-                scenario.frame_time_scale * scenario.sampling_scale, 0.05
+        for scenario, projection in zip(scenarios, projections):
+            breakdown = CostBreakdown.from_library(
+                projection.breakdown, currency=baseline_input.currency
             )
-            scenario_input = replace(
-                scenario_input,
-                average_frame_time_ms=baseline_input.average_frame_time_ms
-                * frame_time_multiplier,
-                storage_gb=baseline_input.storage_gb
-                * max(scenario.resolution_scale**2, 0.1),
-            )
-            breakdown = self.estimate_cost(scenario_input)
-            savings = round(baseline_breakdown.total_cost - breakdown.total_cost, 2)
             notes = scenario.notes or self._build_optimization_note(
                 scenario, breakdown, baseline_breakdown
             )
             results.append(
                 OptimizationResult(
-                    name=scenario.name,
+                    name=projection.name,
                     total_cost=breakdown.total_cost,
                     cost_per_frame=breakdown.cost_per_frame,
                     gpu_hours=breakdown.gpu_hours,
                     render_hours=breakdown.render_hours,
-                    savings_vs_baseline=savings,
+                    savings_vs_baseline=projection.savings,
                     notes=notes,
                 )
             )
@@ -805,38 +816,50 @@ class PeronaEngine:
         return tuple(lifecycles)
 
     def _build_pnl_contributions(self) -> tuple[PnLContribution, ...]:
-        return (
-            PnLContribution(
-                factor="Lighting complexity",
-                delta_cost=920.0,
-                percentage_points=10.4,
-                narrative="Additional volumetric bounce passes increased light cache time",
+        baseline_cost = self._pnl_baseline_cost
+        deltas = (
+            CostDriverDelta(
+                name="Resolution scale",
+                metric_change_pct=10.0,
+                cost_delta=round(baseline_cost * 0.15, 2),
+                metric_label="resolution",
             ),
-            PnLContribution(
-                factor="Volumetric FX iterations",
-                delta_cost=610.0,
-                percentage_points=6.8,
-                narrative="Two extra nebula simulations pushed GPU occupancy",
+            CostDriverDelta(
+                name="Sampling iterations",
+                metric_change_pct=8.0,
+                cost_delta=round(baseline_cost * 0.12, 2),
+                metric_label="sampling iterations",
             ),
-            PnLContribution(
-                factor="Cache rebuilds",
-                delta_cost=280.0,
-                percentage_points=3.1,
-                narrative="Downstream layout updates invalidated lighting caches",
+            CostDriverDelta(
+                name="Shot revisions",
+                metric_change_pct=5.0,
+                cost_delta=round(baseline_cost * 0.05, 2),
+                metric_label="shot revisions",
             ),
-            PnLContribution(
-                factor="GPU spot rate drift",
-                delta_cost=-350.0,
-                percentage_points=-3.9,
-                narrative="Night renders benefited from lower spot pricing",
+            CostDriverDelta(
+                name="GPU spot pricing",
+                metric_change_pct=-7.0,
+                cost_delta=round(-baseline_cost * 0.08, 2),
+                metric_label="spot pricing",
             ),
-            PnLContribution(
-                factor="Farm occupancy",
-                delta_cost=-120.0,
-                percentage_points=-1.4,
-                narrative="Better queue packing reduced idle nodes",
+            CostDriverDelta(
+                name="Queue efficiency",
+                metric_change_pct=-6.0,
+                cost_delta=round(-baseline_cost * 0.04, 2),
+                metric_label="queue idle time",
             ),
         )
+        contributions: list[PnLContribution] = []
+        for delta in deltas:
+            contributions.append(
+                PnLContribution(
+                    factor=delta.name,
+                    delta_cost=round(delta.cost_delta, 2),
+                    percentage_points=round(delta.cost_change_pct(baseline_cost), 1),
+                    narrative=delta.describe(baseline_cost, precision=1),
+                )
+            )
+        return tuple(contributions)
 
     def _build_optimization_note(
         self,
