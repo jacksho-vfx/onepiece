@@ -687,6 +687,63 @@ def test_list_versions_raw_normalises_string_fields(
     )
 
 
+def test_get_versions_for_project_aggregates_paginated_results(
+    client: ShotGridClient,
+) -> None:
+    client.base_url = "https://example.com"
+    client.get_project = MagicMock(return_value={"id": 42})
+
+    def _record(index: int) -> dict[str, Any]:
+        return {
+            "id": index,
+            "attributes": {
+                "code": f"shot{index:03}_v001",
+                "version_number": index,
+                "sg_status_list": "rev",
+                "sg_path_to_movie": f"/movie_{index}.mov",
+                "sg_uploaded_movie": None,
+            },
+            "relationships": {
+                "entity": {"data": {"name": f"SHOT_{index:03}"}},
+                "project": {"data": {"id": 42}},
+            },
+        }
+
+    first_page = StubResponse(
+        ok=True,
+        payload={
+            "data": [_record(index) for index in range(1, 101)],
+            "links": {"next": "token"},
+        },
+    )
+    second_page = StubResponse(
+        ok=True,
+        payload={
+            "data": [_record(index) for index in range(101, 151)],
+            "links": {},
+        },
+    )
+
+    session = MagicMock()
+    session.get.side_effect = [first_page, second_page]
+    client._session = session
+
+    versions = client.get_versions_for_project("Project X")
+
+    assert len(versions) == 150
+    assert versions[0]["shot"] == "SHOT_001"
+    assert versions[-1]["code"] == "shot150_v001"
+
+    assert session.get.call_count == 2
+    first_params = session.get.call_args_list[0].kwargs["params"]
+    second_params = session.get.call_args_list[1].kwargs["params"]
+    assert first_params["filter[0][project]"] == 42
+    assert first_params["page[number]"] == 1
+    assert first_params["page[size]"] == 100
+    assert second_params["page[number]"] == 2
+    assert second_params["page[size]"] == 100
+
+
 def test_version_view_summary_fields_and_parser() -> None:
     fields, parser = _version_view(summary=True)
 

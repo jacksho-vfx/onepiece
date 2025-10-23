@@ -544,7 +544,8 @@ class ShotGridClient:
             else [{"project": project_name}]
         )
         fields, parser = _version_view(summary=True)
-        records = self.list_versions_raw(filters, fields, page_size=None)
+        field_param = ",".join(field.strip() for field in fields if field)
+        records = self._get_paginated("Version", filters, field_param)
 
         versions = [parser(record) for record in records]
 
