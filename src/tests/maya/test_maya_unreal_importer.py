@@ -163,9 +163,7 @@ def test_unreal_importer_rejects_assets_outside_package(tmp_path: Path) -> None:
 
     importer = UnrealPackageImporter()
 
-    with pytest.raises(
-        UnrealImportError, match="inside the package directory"
-    ):
+    with pytest.raises(UnrealImportError, match="inside the package directory"):
         importer.import_package(package, project="OP", asset_name="Hero")
 
 
