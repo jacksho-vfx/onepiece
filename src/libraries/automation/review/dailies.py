@@ -188,11 +188,7 @@ def fetch_playlist_versions(
     log.info(
         "dailies.fetch_playlist_versions", project=project_name, playlist=playlist_name
     )
-    playlist = client._get_single(  # noqa: SLF001 - private API
-        "Playlist",
-        filters,
-        "id,name,code,versions",
-    )
+    playlist = client.get_playlist_record(filters, ("id", "name", "code", "versions"))
     if not playlist:
         log.warning(
             "dailies.playlist_not_found", project=project_name, playlist=playlist_name

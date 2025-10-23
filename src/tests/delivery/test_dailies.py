@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 
@@ -71,6 +71,7 @@ class _PaginatedShotGridClient:
                 ),
             ],
         ]
+        self.last_playlist_call: tuple[list[dict[str, object]], str] | None = None
         self.last_versions_call: (
             tuple[list[dict[str, object]], str, int | None] | None
         ) = None
@@ -78,11 +79,20 @@ class _PaginatedShotGridClient:
     def get_project(self, project_name: str) -> dict[str, object]:
         return {"id": 5001, "name": project_name}
 
-    def _get_single(
-        self, entity: str, filters: list[dict[str, object]], fields: str
-    ) -> dict[str, object]:  # noqa: SLF001 - private API
-        assert entity == "Playlist"
+    def get_playlist_record(
+        self,
+        filters: list[dict[str, object]],
+        fields: Sequence[str] | str = ("id", "name", "code", "versions"),
+    ) -> dict[str, object]:
         assert any(filter_.get("code") == "Editorial" for filter_ in filters)
+
+        if isinstance(fields, str):
+            field_param = fields
+        else:
+            field_param = ",".join(str(field).strip() for field in fields if field)
+
+        self.last_playlist_call = (filters, field_param)
+
         return {
             "relationships": {
                 "versions": {
@@ -138,6 +148,10 @@ def test_fetch_playlist_versions_aggregates_paginated_results() -> None:
         "shot_003_v001",
         "shot_004_v001",
     ]
+    assert client.last_playlist_call == (
+        [{"project": 5001}, {"code": "Editorial"}],
+        "id,name,code,versions",
+    )
     assert client.last_versions_call == (
         [{"id[$in]": "101,102,103,104"}],
         dailies.VERSION_FIELDS,
