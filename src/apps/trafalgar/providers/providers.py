@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any, ClassVar, Iterable, Mapping, Sequence, TypeVar
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +164,15 @@ class ProviderRegistry:
                 discovered = discovered_iterable.get("onepiece.providers", [])  # type: ignore[attr-defined]
 
         for entry_point in discovered or []:
-            provider_cls = entry_point.load()
+            try:
+                provider_cls = entry_point.load()
+            except Exception as exc:  # pragma: no cover - exercised via tests
+                logger.warning(
+                    "failed to load provider entry point '%s': %s",
+                    getattr(entry_point, "name", repr(entry_point)),
+                    exc,
+                )
+                continue
             self.register(provider_cls)
 
 

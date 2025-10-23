@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from importlib.metadata import EntryPoint
 from typing import Any, Mapping, Sequence
 
@@ -109,3 +110,32 @@ def test_provider_registry_loads_entry_points(monkeypatch: pytest.MonkeyPatch) -
 
     assert delivery.provider_type == EntryPointDeliveryProvider.provider_type
     assert reconcile.provider_type == EntryPointReconcileProvider.provider_type
+
+
+def test_provider_registry_logs_and_skips_failed_entry_points(caplog: pytest.LogCaptureFixture) -> None:
+    registry = ProviderRegistry()
+
+    class SimpleEntryPoint:
+        def __init__(self, name: str, loader: Any) -> None:
+            self.name = name
+            self.group = "onepiece.providers"
+            self._loader = loader
+
+        def load(self) -> Any:
+            return self._loader()
+
+    def raise_error() -> None:
+        raise RuntimeError("boom")
+
+    successful_entry = SimpleEntryPoint(
+        "entry-delivery", lambda: EntryPointDeliveryProvider
+    )
+    failing_entry = SimpleEntryPoint("broken-provider", raise_error)
+
+    with caplog.at_level(logging.WARNING):
+        registry.load_entry_points([failing_entry, successful_entry])
+
+    assert "failed to load provider entry point 'broken-provider': boom" in caplog.text
+
+    available = registry.available("delivery")
+    assert "entry-delivery" in available
