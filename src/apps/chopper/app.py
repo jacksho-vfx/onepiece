@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import click
+from click.core import ParameterSource
 import typer
 
 from .renderer import AnimationWriter, Renderer, Scene, SceneError
@@ -73,7 +75,33 @@ def render(
     renderer = Renderer(parsed_scene)
     frames_iter = renderer.render()
 
+    parameter_source = None
+    try:
+        ctx = click.get_current_context(silent=True)
+    except RuntimeError:  # pragma: no cover - defensive
+        ctx = None
+    if ctx is not None:
+        try:
+            parameter_source = ctx.get_parameter_source("export")
+        except (AttributeError, KeyError):  # pragma: no cover - defensive
+            parameter_source = None
+
+    suffix_map = {
+        ".ppm": "ppm",
+        ".png": "png",
+        ".gif": "gif",
+        ".mp4": "mp4",
+    }
     export_normalized = export.lower()
+    inferred_format = suffix_map.get(output.suffix.lower())
+    if inferred_format is not None:
+        if parameter_source in (None, ParameterSource.DEFAULT):
+            export_normalized = inferred_format
+        elif inferred_format != export_normalized:
+            suffix_display = output.suffix or ""
+            raise typer.BadParameter(
+                f"Output path suffix '{suffix_display}' conflicts with --format '{export}'."
+            )
 
     if export_normalized not in {"ppm", "png", "gif", "mp4"}:
         raise typer.BadParameter("format must be one of: ppm, png, gif, mp4")

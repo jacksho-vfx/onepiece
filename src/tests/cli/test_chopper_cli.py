@@ -82,13 +82,33 @@ def test_render_gif_animation(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        [str(scene_path), "--format", "gif", "--output", str(tmp_path / "animation")],
+        [str(scene_path), "--output", str(tmp_path / "animation.gif")],
     )
 
     assert result.exit_code == 0
     destination = tmp_path / "animation.gif"
     assert destination.exists()
     assert destination.read_bytes().startswith(b"GIF89a")
+
+
+def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            str(scene_path),
+            "--format",
+            "gif",
+            "--output",
+            str(tmp_path / "animation.mp4"),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "conflicts with --format" in result.stderr
 
 
 def test_render_rejects_unknown_format(tmp_path: Path) -> None:
