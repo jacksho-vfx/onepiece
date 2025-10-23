@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import typing_extensions
 
 from apps.chopper.renderer import (
     AnimationWriter,
@@ -152,7 +153,9 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
         assert second.getpixel((0, 0))[0] == 20
 
 
-def test_animation_writer_converts_frames_to_numpy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_animation_writer_converts_frames_to_numpy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     pytest.importorskip("PIL.Image")
     numpy = pytest.importorskip("numpy")
 
@@ -183,7 +186,7 @@ def test_animation_writer_converts_frames_to_numpy(tmp_path: Path, monkeypatch: 
                     exc_type: type[BaseException] | None,
                     exc: BaseException | None,
                     tb: object,
-                ) -> bool:
+                ) -> typing_extensions.Literal[False]:
                     return False
 
             return _Manager()
