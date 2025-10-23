@@ -768,7 +768,9 @@ def _flatten_summary_rows(
         if isinstance(value, Mapping):
             rows.extend(_flatten_summary_rows(value, full_key))
             continue
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        if isinstance(value, Sequence) and not isinstance(
+            value, (str, bytes, bytearray)
+        ):
             if not value:
                 rows.append((full_key, ""))
                 continue
@@ -897,8 +899,7 @@ def _summary_lines(summary: Mapping[str, Any]) -> list[str]:
         + _format_currency(costs.get("current_total_cost"), currency)
     )
     lines.append(
-        "  Delta total: "
-        + _format_currency(costs.get("delta_total_cost"), currency)
+        "  Delta total: " + _format_currency(costs.get("delta_total_cost"), currency)
     )
     lines.append(
         "  Cost per frame (baseline/current/delta): "
@@ -924,7 +925,7 @@ def _summary_lines(summary: Mapping[str, Any]) -> list[str]:
             lines.append(
                 "    - "
                 + f"{item.get('factor', 'Unknown')}: "
-                + _format_currency(item.get('delta_cost'), currency)
+                + _format_currency(item.get("delta_cost"), currency)
             )
     else:
         lines.append("  Key contributors: None")
@@ -953,14 +954,16 @@ def _render_daily_pdf(summary: Mapping[str, Any]) -> bytes:
     padding_y = 24
     line_spacing = 4
     width = max(text_widths or [0]) + padding_x * 2
-    height = sum(text_heights or [0]) + padding_y * 2 + line_spacing * max(len(lines) - 1, 0)
+    height = (
+        sum(text_heights or [0]) + padding_y * 2 + line_spacing * max(len(lines) - 1, 0)
+    )
 
-    image = Image.new("RGB", (max(width, 200), max(height, 200)), color="white")
+    image = Image.new("RGB", (max(width, 200), max(height, 200)), color="white")  # type: ignore[arg-type]
     draw = ImageDraw.Draw(image)
     y = padding_y
     for idx, line in enumerate(lines):
         draw.text((padding_x, y), line, fill="black", font=font)
-        y += text_heights[idx] + line_spacing
+        y += text_heights[idx] + line_spacing  # type: ignore[assignment]
 
     buffer = BytesIO()
     image.save(buffer, format="PDF")
@@ -992,9 +995,7 @@ def daily_report(
 
     date_tag = summary["generated_at"].split("T", 1)[0]
     filename = f"perona_daily_summary_{date_tag}.{extension}"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"'
-    }
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
 
     return StreamingResponse(
         iter([payload]),

@@ -295,9 +295,10 @@ def test_daily_report_csv_export() -> None:
     response = client.get("/reports/daily", params={"format": "csv"})
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert "attachment; filename=\"perona_daily_summary_" in response.headers[
-        "content-disposition"
-    ]
+    assert (
+        'attachment; filename="perona_daily_summary_'
+        in response.headers["content-disposition"]
+    )
 
     body = response.content.decode("utf-8")
     lines = body.splitlines()
