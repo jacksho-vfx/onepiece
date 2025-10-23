@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Iterable,
     List,
@@ -742,12 +743,17 @@ class MediaIngestService:
         self,
         jobs: Sequence[_UploadJob],
         checkpoint_store: UploadCheckpointStore | None,
-    ) -> list[_UploadResult]:
+    ) -> list[_UploadResult] | Awaitable[list[_UploadResult]]:
         if not jobs:
             return []
 
         if self.use_asyncio:
-            return asyncio.run(self._run_asyncio_jobs(jobs, checkpoint_store))
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return asyncio.run(self._run_asyncio_jobs(jobs, checkpoint_store))
+            else:
+                return self._run_asyncio_jobs(jobs, checkpoint_store)
 
         if self.max_workers <= 1:
             return [self._process_job(job, checkpoint_store) for job in jobs]

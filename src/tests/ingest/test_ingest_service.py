@@ -1,13 +1,20 @@
+import asyncio
+import inspect
 import logging
 from pathlib import Path
 
 import pytest
+from unittest.mock import AsyncMock
+from typing import Awaitable, cast
 
 from libraries.automation.ingest.service import (
+    IngestedMedia,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
     ShotgridSchemaError,
+    _UploadJob,
+    _UploadResult,
     parse_media_filename,
 )
 from libraries.integrations.shotgrid.client import (
@@ -244,3 +251,67 @@ def test_ingest_service_raises_connectivity_error(tmp_path: Path) -> None:
     message = str(excinfo.value)
     assert "ShotGrid did not respond" in message
     assert "retry" in message.lower()
+
+
+def _create_asyncio_service(tmp_path: Path) -> tuple[MediaIngestService, _UploadJob, _UploadResult]:
+    path = tmp_path / "SHOW01_ep001_sc01_0001_comp.mov"
+    path.write_bytes(b"data")
+    media_info = parse_media_filename(path.name)
+
+    job = _UploadJob(
+        path=path,
+        bucket="bucket",
+        key="bucket/key",
+        media_info=media_info,
+        delivery=None,
+        size=path.stat().st_size,
+    )
+
+    media = IngestedMedia(
+        path=path,
+        bucket="bucket",
+        key="bucket/key",
+        media_info=media_info,
+        delivery=None,
+    )
+
+    result = _UploadResult(media=media, warnings=[])
+
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=DummyUploader(),
+        shotgrid=ShotgridClient(),
+        use_asyncio=True,
+    )
+
+    return service, job, result
+
+
+def test_execute_uploads_asyncio_outside_event_loop(tmp_path: Path) -> None:
+    service, job, expected = _create_asyncio_service(tmp_path)
+    mock_runner = AsyncMock(return_value=[expected])
+    service._run_asyncio_jobs = mock_runner  # type: ignore[assignment]
+
+    results = service._execute_uploads([job], None)
+
+    assert results == [expected]
+    assert mock_runner.await_count == 1
+
+
+def test_execute_uploads_asyncio_inside_event_loop(tmp_path: Path) -> None:
+    service, job, expected = _create_asyncio_service(tmp_path)
+    mock_runner = AsyncMock(return_value=[expected])
+    service._run_asyncio_jobs = mock_runner  # type: ignore[assignment]
+
+    async def _invoke() -> None:
+        maybe_coro = service._execute_uploads([job], None)
+
+        assert inspect.isawaitable(maybe_coro)
+        results = await cast(Awaitable[list[_UploadResult]], maybe_coro)
+
+        assert results == [expected]
+
+    asyncio.run(_invoke())
+    assert mock_runner.await_count == 1
