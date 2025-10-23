@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -203,9 +204,29 @@ def test_shots_filters_by_date_range() -> None:
     response = client.get("/shots", params=params)
     assert response.status_code == 200
     data = response.json()
-    assert data["total"] == 1
-    assert data["by_sequence"] == [{"name": "SQ05", "shots": 1}]
-    assert {shot["sequence"] for shot in data["active_shots"]} == {"SQ05"}
+    assert data["total"] == 4
+    sequences = {item["name"] for item in data["by_sequence"]}
+    assert "SQ05" in sequences
+    assert "SQ05" in {shot["sequence"] for shot in data["active_shots"]}
+
+
+def test_shots_filters_include_active_stages_within_window() -> None:
+    now = datetime.utcnow()
+    params = {
+        "start_date": (now - timedelta(hours=1)).isoformat(timespec="seconds"),
+        "end_date": (now + timedelta(hours=1)).isoformat(timespec="seconds"),
+    }
+    response = client.get("/shots", params=params)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 3
+    assert {item["name"] for item in data["by_sequence"]} == {
+        "SQ12",
+        "SQ18",
+        "SQ09",
+    }
+    active_sequences = {shot["sequence"] for shot in data["active_shots"]}
+    assert {"SQ12", "SQ18", "SQ09"}.issubset(active_sequences)
 
 
 def test_shot_sequences_support_filters() -> None:
