@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import typing_extensions
 
 from apps.chopper.renderer import (
     AnimationWriter,
@@ -150,6 +151,57 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
         image.seek(1)
         second = image.convert("RGBA")
         assert second.getpixel((0, 0))[0] == 20
+
+
+def test_animation_writer_converts_frames_to_numpy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("PIL.Image")
+    numpy = pytest.importorskip("numpy")
+
+    frames = [
+        Frame(index=0, width=1, height=1, pixels=[[(12, 34, 56)]]),
+        Frame(index=1, width=1, height=1, pixels=[[(78, 90, 123)]]),
+    ]
+
+    class DummyStream:
+        def __init__(self) -> None:
+            self.captured: list[object] = []
+
+        def append_data(self, data: object) -> None:
+            self.captured.append(data)
+
+    stream = DummyStream()
+
+    class DummyModule:
+        def get_writer(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            stream.captured.clear()
+
+            class _Manager:
+                def __enter__(self_inner) -> DummyStream:
+                    return stream
+
+                def __exit__(
+                    self_inner,
+                    exc_type: type[BaseException] | None,
+                    exc: BaseException | None,
+                    tb: object,
+                ) -> typing_extensions.Literal[False]:
+                    return False
+
+            return _Manager()
+
+    monkeypatch.setattr("apps.chopper.renderer._require_imageio", lambda: DummyModule())
+
+    writer = AnimationWriter(frames=frames, fps=24)
+    writer.write_mp4(tmp_path / "animation.mp4")
+
+    assert len(stream.captured) == len(frames)
+    for frame, data in zip(frames, stream.captured, strict=True):
+        assert isinstance(data, numpy.ndarray)
+        assert data.shape == (frame.height, frame.width, 3)
+        assert data.dtype == numpy.uint8
+        assert tuple(int(value) for value in data[0, 0]) == frame.pixels[0][0]
 
 
 def test_scene_serialisation_round_trip(tmp_path: Path) -> None:
