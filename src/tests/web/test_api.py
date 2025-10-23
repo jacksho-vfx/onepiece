@@ -290,9 +290,7 @@ def test_metrics_summary_matches_manual_calculation() -> None:
 
     expected_averages = {
         "fps": _rounded_mean([sample.fps for sample in samples]),
-        "frame_time_ms": _rounded_mean(
-            [sample.frame_time_ms for sample in samples]
-        ),
+        "frame_time_ms": _rounded_mean([sample.frame_time_ms for sample in samples]),
         "gpu_utilisation": _rounded_mean(
             [sample.gpu_utilisation for sample in samples]
         ),

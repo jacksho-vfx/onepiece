@@ -416,9 +416,7 @@ def metrics_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any
             "sequence": name,
             "shots": len(data["shots"]),
             "avg_fps": _rounded_mean(data["fps_total"], data["count"]),
-            "avg_frame_time_ms": _rounded_mean(
-                data["frame_time_total"], data["count"]
-            ),
+            "avg_frame_time_ms": _rounded_mean(data["frame_time_total"], data["count"]),
             "avg_gpu_utilisation": _rounded_mean(
                 data["gpu_utilisation_total"], data["count"]
             ),
