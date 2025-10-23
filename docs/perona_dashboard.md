@@ -112,6 +112,24 @@ Available options:
 When a valid settings file is supplied the CLI exports `PERONA_SETTINGS_PATH` into the environment so the FastAPI app reads the
 same overrides on boot.
 
+### Launch the dummy demo dashboard
+
+For documentation, QA, or onboarding sessions you can boot a deterministic
+demo server that exposes the same API surface without touching production
+data:
+
+```bash
+# Run the demo on the dedicated port (defaults to 18065)
+perona web demo
+
+# Customise host/port and enable reloads for local tweaking
+perona web demo --host 0.0.0.0 --port 18065 --reload
+```
+
+The demo service reuses the bundled Perona defaults to generate repeatable
+responses and clearly labels itself as dummy data so dashboards can showcase
+expected behaviour even when render telemetry is unavailable.
+
 ### Version discovery
 
 Run `perona version` to print the packaged dashboard build number so deployment scripts can confirm the expected artefact.

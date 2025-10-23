@@ -32,6 +32,7 @@ from apps.perona.version import PERONA_VERSION
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8065
 DEFAULT_SETTINGS_RELOAD_TIMEOUT = 5.0
+DEFAULT_DEMO_PORT = 18065
 SETTINGS_RELOAD_TIMEOUT_ENV = "PERONA_SETTINGS_RELOAD_TIMEOUT"
 
 OutputFormat = Literal["table", "json"]
@@ -707,6 +708,51 @@ def dashboard(
     )
 
 
+@web_app.command("demo")
+def demo_dashboard(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Host interface to bind the demo dashboard server to.",
+        show_default=True,
+    ),
+    port: int = typer.Option(
+        DEFAULT_DEMO_PORT,
+        "--port",
+        "-p",
+        min=1,
+        max=65535,
+        help="Port to expose the Perona demo dashboard on.",
+        show_default=True,
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload/--no-reload",
+        help="Automatically reload when source files change.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        "info",
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+) -> None:
+    """Launch the static Perona demo dashboard using uvicorn."""
+
+    typer.echo(f"Starting Perona demo dashboard on http://{host}:{port}")
+    uvicorn = _load_uvicorn()
+
+    uvicorn.run(
+        "apps.perona.web.dummy_dashboard:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level=log_level,
+    )
+
+
 @app.command("settings-export")
 def settings_export(
     destination: Path = typer.Argument(
@@ -740,6 +786,7 @@ __all__ = [
     "app",
     "cost_estimate",
     "dashboard",
+    "demo_dashboard",
     "settings",
     "settings_export",
     "version",
