@@ -150,7 +150,9 @@ def test_upload_media_uses_configured_timeout(
 
 
 def test_init_applies_default_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = SimpleNamespace(base_url="https://example.com", script_name="script", api_key="key")
+    cfg = SimpleNamespace(
+        base_url="https://example.com", script_name="script", api_key="key"
+    )
     monkeypatch.setattr("libraries.integrations.shotgrid.api.load_config", lambda: cfg)
 
     captured: dict[str, tuple[str, str]] = {}
@@ -167,7 +169,9 @@ def test_init_applies_default_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_init_accepts_custom_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = SimpleNamespace(base_url="https://example.com", script_name="script", api_key="key")
+    cfg = SimpleNamespace(
+        base_url="https://example.com", script_name="script", api_key="key"
+    )
     monkeypatch.setattr("libraries.integrations.shotgrid.api.load_config", lambda: cfg)
 
     def fake_authenticate(self: ShotGridClient, script: str, key: str) -> None:
@@ -178,6 +182,8 @@ def test_init_accepts_custom_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     client = ShotGridClient(timeout=5.5)
 
     assert client.timeout == 5.5
+
+
 def test_get_or_create_episode_returns_existing(client: ShotGridClient) -> None:
     data = EpisodeData(code="EP01", project_id=101)
     episode = {"id": 11, "code": "EP01"}
