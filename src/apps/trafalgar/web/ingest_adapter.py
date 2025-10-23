@@ -108,7 +108,9 @@ class IngestRunDashboardFacade:
                 "successful": sum(1 for run in runs if _is_success(run)),
                 "failed": sum(1 for run in runs if _is_failure(run)),
                 "running": sum(
-                    1 for run in runs if _normalise_status(run.get("status")) == "running"
+                    1
+                    for run in runs
+                    if _normalise_status(run.get("status")) == "running"
                 ),
             },
             "last_success_at": _format_timestamp(last_success),
