@@ -92,6 +92,30 @@ def test_build_playblast_filename_uses_unknown_fallback(tmp_path: Path) -> None:
     assert sanitize_token("", fallback="UNKNOWN") in filename
 
 
+@pytest.mark.parametrize(
+    "format_value",
+    [
+        "../evil",
+        "..\\evil",
+        "mov;rm -rf",
+        "gif..",
+        "mp4?",
+    ],
+)
+def test_build_playblast_filename_rejects_malicious_formats(
+    tmp_path: Path, format_value: str
+) -> None:
+    request = _create_request(tmp_path, format=format_value)
+    request.output_directory.mkdir(parents=True, exist_ok=True)
+    timestamp = _dt.datetime(2024, 8, 1, 12, 0, 0)
+
+    filename = build_playblast_filename(request, timestamp)
+    resolved_output = (request.output_directory / filename).resolve()
+
+    assert filename.endswith(".mov")
+    assert resolved_output.parent == request.output_directory.resolve()
+
+
 def test_execute_uses_timeline_when_frame_range_missing(tmp_path: Path) -> None:
     timeline_calls = 0
 

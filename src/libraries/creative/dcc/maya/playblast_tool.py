@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import string
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping, Protocol
@@ -17,6 +18,8 @@ except Exception:  # pragma: no cover - fallback for non-Maya environments
 from libraries.creative.dcc.utils import normalize_frame_range, sanitize_token
 
 log = structlog.get_logger(__name__)
+
+_SAFE_FORMAT_CHARS = frozenset(string.ascii_lowercase + string.digits + "_")
 
 
 class ReviewUploader(Protocol):
@@ -82,7 +85,13 @@ def build_playblast_filename(request: PlayblastRequest, timestamp: _dt.datetime)
     )
 
     basename = "_".join(filter(None, parts))
-    extension = request.format.strip().lstrip(".").lower() or "mov"
+    candidate_extension = request.format.strip().lstrip(".").lower()
+    if not candidate_extension or any(
+        char not in _SAFE_FORMAT_CHARS for char in candidate_extension
+    ):
+        extension = "mov"
+    else:
+        extension = candidate_extension
     return f"{basename}.{extension}"
 
 
