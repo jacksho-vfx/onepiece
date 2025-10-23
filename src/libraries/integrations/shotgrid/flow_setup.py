@@ -121,23 +121,28 @@ def setup_single_shot(
         raise
 
     project = sg_client.get_project(project_name)
+    project_id = None
+
     if project is None:
         log.info("setup_single_shot_project_missing", project=project_name)
-        project = sg_client.get_or_create_project(project_name, template=None)
+        sg_client.get_or_create_project(project_name, template=None)
 
-    if not project or "id" not in project:
+    else:
+        project_id = sg_client.get_project_id_by_name(project_name)
+
+    if not project_id:
         log.error("setup_single_shot_project_unavailable", project=project_name)
         raise RuntimeError(
-            f"Project '{project_name}' could not be retrieved or created"
+            f"RuntimeError: Project '{project_name}' could not be retrieved or created"
         )
 
     log.info(
         "setup_single_shot_project_ready",
         project=project_name,
-        project_id=project["id"],
+        project_id=project_id,
     )
 
-    episode_data = EpisodeData(code=episode_code, project_id=project["id"])
+    episode_data = EpisodeData(code=episode_code, project_id=project_id)
     episode = sg_client.get_or_create_episode(episode_data)
     scene_data = SceneData(
         code=scene_code, project_id=project_id, episode_id=episode["id"]
