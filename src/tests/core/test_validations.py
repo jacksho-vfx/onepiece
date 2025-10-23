@@ -55,7 +55,10 @@ def test_validate_episode_scene_shot_names() -> None:
     assert not naming.validate_asset_name("ep101_sc01_0010-asset")
 
 
-@patch("libraries.platform.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/opt/Nuke14/Nuke14.0",
+)
 def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) -> None:
     env = {
         "PATH": "/opt/Nuke14",
@@ -71,7 +74,10 @@ def test_check_dcc_environment_reports_missing_plugins(mock_which: MagicMock) ->
     assert report.gpu.meets_requirement is True
 
 
-@patch("libraries.platform.validations.dcc.shutil.which", return_value="/opt/Nuke14/Nuke14.0")
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/opt/Nuke14/Nuke14.0",
+)
 def test_check_dcc_environment_normalises_plugin_inventory(
     mock_which: MagicMock,
 ) -> None:

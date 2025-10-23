@@ -11,7 +11,8 @@ try:
     import libraries.integrations.ftrack  # noqa: F401  # ensure real module if present
 except ModuleNotFoundError:  # pragma: no cover - optional dependency guard
     sys.modules.setdefault(
-        "libraries.integrations.ftrack", types.ModuleType("libraries.integrations.ftrack")
+        "libraries.integrations.ftrack",
+        types.ModuleType("libraries.integrations.ftrack"),
     )
 
 from libraries.creative.dcc.maya.character_selector import (  # noqa: E402 - imported after stubs

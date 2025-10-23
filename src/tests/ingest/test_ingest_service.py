@@ -10,7 +10,11 @@ from libraries.automation.ingest.service import (
     ShotgridSchemaError,
     parse_media_filename,
 )
-from libraries.integrations.shotgrid.client import ShotgridClient, ShotgridOperationError, Version
+from libraries.integrations.shotgrid.client import (
+    ShotgridClient,
+    ShotgridOperationError,
+    Version,
+)
 
 
 class DummyUploader:

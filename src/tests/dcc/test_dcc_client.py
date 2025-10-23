@@ -61,7 +61,9 @@ def test_open_maya_scene(mock_run: MagicMock) -> None:
 def test_build_launch_command_maya_binary(
     monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
 ) -> None:
-    monkeypatch.setattr("libraries.creative.dcc.dcc_client.os", SimpleNamespace(name=os_name))
+    monkeypatch.setattr(
+        "libraries.creative.dcc.dcc_client.os", SimpleNamespace(name=os_name)
+    )
 
     scene_path = Path("/tmp/test_scene.mb")
     command = _build_launch_command(SupportedDCC.MAYA, scene_path)

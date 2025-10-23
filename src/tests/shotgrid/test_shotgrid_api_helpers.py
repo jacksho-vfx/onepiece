@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError, _version_view
+from libraries.integrations.shotgrid.api import (
+    ShotGridClient,
+    ShotGridError,
+    _version_view,
+)
 from libraries.integrations.shotgrid.models import EpisodeData, SceneData, ShotData
 
 

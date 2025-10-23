@@ -25,7 +25,11 @@ from typing import (
     runtime_checkable,
 )
 
-from libraries.integrations.shotgrid.client import ShotgridClient, ShotgridOperationError, Version
+from libraries.integrations.shotgrid.client import (
+    ShotgridClient,
+    ShotgridOperationError,
+    Version,
+)
 from libraries.platform.validations.naming import (
     validate_episode_name,
     validate_scene_name,

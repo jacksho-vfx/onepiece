@@ -65,7 +65,9 @@ def test_convert_mov_to_exrs_exports_first_frame(
     tmp_path: Path, fake_modules: None
 ) -> None:
     sys.modules.pop("libraries.platform.media.transformations", None)
-    transformations = importlib.import_module("libraries.platform.media.transformations")
+    transformations = importlib.import_module(
+        "libraries.platform.media.transformations"
+    )
 
     output_dir = tmp_path / "exr"
     mov_path = tmp_path / "clip.mov"
