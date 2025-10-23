@@ -39,7 +39,7 @@ class StubRenderFacade:
         self.summary = summary
         self.calls = 0
 
-    def summarise_jobs(self) -> Mapping[str, Any]:
+    async def summarise_jobs(self) -> Mapping[str, Any]:
         self.calls += 1
         return self.summary
 
@@ -199,7 +199,7 @@ async def test_dashboard_mount_injects_base_path(
     )
 
     class StubRenderFacade:
-        def summarise_jobs(self) -> dict[str, object]:
+        async def summarise_jobs(self) -> dict[str, object]:
             return {
                 "jobs": 2,
                 "by_status": {"queued": 1, "running": 1},
