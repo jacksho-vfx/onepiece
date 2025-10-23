@@ -739,9 +739,16 @@ class ShotGridClient:
         )
 
     def create_playlist(self, data: PlaylistData) -> Any:
-        relationships = {
+        relationships: dict[str, dict[str, Any]] = {
             "project": {"data": {"type": "Project", "id": data.project_id}}
         }
+        if data.version_ids:
+            relationships["versions"] = {
+                "data": [
+                    {"type": "Version", "id": version_id}
+                    for version_id in data.version_ids
+                ]
+            }
         return self._post(
             data.entity_type,
             {"code": data.code, **data.extra},
