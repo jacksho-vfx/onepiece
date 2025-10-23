@@ -46,6 +46,13 @@ def build_scene_dict() -> dict[str, object]:
     }
 
 
+@pytest.fixture
+def unsupported_scene_payload() -> dict[str, object]:
+    payload = build_scene_dict()
+    payload["objects"][0]["type"] = "triangle"  # type: ignore[index]
+    return payload
+
+
 def test_scene_from_dict_creates_objects() -> None:
     payload = build_scene_dict()
     scene = Scene.from_dict(payload)
@@ -65,6 +72,13 @@ def test_scene_object_requires_positive_size() -> None:
 
     with pytest.raises(SceneError, match="positive width and height"):
         Scene.from_dict(payload)
+
+
+def test_scene_object_rejects_unsupported_type(
+    unsupported_scene_payload: dict[str, object],
+) -> None:
+    with pytest.raises(SceneError, match="Supported types are: rectangle, circle"):
+        Scene.from_dict(unsupported_scene_payload)
 
 
 def test_circle_requires_positive_diameter() -> None:

@@ -116,6 +116,9 @@ def pairwise(values: Iterable[Keyframe]) -> Iterator[tuple[Keyframe, Keyframe]]:
         prev = current
 
 
+SUPPORTED_OBJECT_TYPES: tuple[str, ...] = ("rectangle", "circle")
+
+
 @dataclass(slots=True)
 class SceneObject:
     """Renderable object within a scene."""
@@ -136,6 +139,13 @@ class SceneObject:
         if missing:
             joined = ", ".join(sorted(missing))
             raise SceneError(f"Scene object is missing required key(s): {joined}")
+
+        kind = str(payload["type"])
+        if kind not in SUPPORTED_OBJECT_TYPES:
+            supported = ", ".join(SUPPORTED_OBJECT_TYPES)
+            raise SceneError(
+                f"Unsupported object type: {kind!r}. Supported types are: {supported}"
+            )
 
         color = parse_color(payload["color"])
 
@@ -205,7 +215,7 @@ class SceneObject:
 
         return cls(
             id=str(payload["id"]),
-            kind=str(payload["type"]),
+            kind=kind,
             color=color,
             position=position,
             size=size,
@@ -227,7 +237,10 @@ class SceneObject:
         elif self.kind == "circle":
             self._render_circle(target, frame_index)
         else:  # pragma: no cover - defensive
-            raise SceneError(f"Unsupported object type: {self.kind}")
+            supported = ", ".join(SUPPORTED_OBJECT_TYPES)
+            raise SceneError(
+                f"Unsupported object type: {self.kind!r}. Supported types are: {supported}"
+            )
 
     def _render_rectangle(self, target: "Frame", frame_index: int) -> None:
         position = self.position_at(frame_index)
