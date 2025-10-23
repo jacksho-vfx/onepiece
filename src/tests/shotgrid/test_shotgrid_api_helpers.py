@@ -579,13 +579,66 @@ def test_expand_playlist_versions_fetches_and_normalises(
         },
     ]
 
+
+def test_expand_playlist_versions_respects_playlist_order(
+    client: ShotGridClient,
+) -> None:
+    playlist = {
+        "relationships": {
+            "versions": {
+                "data": [
+                    {"id": 201},
+                    {"id": 202},
+                ]
+            }
+        }
+    }
+
+    version_payloads = [
+        {
+            "id": 202,
+            "attributes": {
+                "code": "shot020_v001",
+                "version_number": 1,
+                "sg_status_list": "rev",
+                "sg_path_to_movie": None,
+                "sg_uploaded_movie": "/movie.mov",
+                "description": "Second",
+            },
+            "relationships": {
+                "entity": {"data": {"code": "SHOT_020"}},
+                "project": {"data": {"id": 7}},
+            },
+        },
+        {
+            "id": 201,
+            "attributes": {
+                "code": "shot010_v001",
+                "version_number": 1,
+                "sg_status_list": "apr",
+                "sg_path_to_movie": "/movie.mov",
+                "sg_uploaded_movie": None,
+                "description": "First",
+            },
+            "relationships": {
+                "entity": {"data": {"code": "SHOT_010"}},
+                "project": {"data": {"id": 7}},
+            },
+        },
+    ]
+
+    client.list_versions_raw = MagicMock(return_value=version_payloads)
+
+    result = client.expand_playlist_versions(playlist)
+
+    assert [version["id"] for version in result] == [201, 202]
+
     assert client.list_versions_raw.call_count == 1
     filters, fields = client.list_versions_raw.call_args.args
     kwargs = client.list_versions_raw.call_args.kwargs
-    assert filters == [{"id[$in]": "101,102"}]
-    assert list(fields) == _version_view(summary=False)[0]
+    assert filters == [{"id[$in]": "201,202"}]
+    assert fields == _version_view(summary=False)[0]
     assert kwargs == {"page_size": None}
-
 
 def test_list_versions_raw_uses_pagination_by_default(
     client: ShotGridClient,
