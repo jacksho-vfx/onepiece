@@ -24,7 +24,7 @@ def setup_single_shot(
 
     sg_client = client or ShotgridClient()
 
-    project = sg_client.get_or_create_project(project_name)
+    project = sg_client.get_or_create_project(project_name, template=template)
 
     log.info(
         "setup_single_shot", project=project_name, shot=shot_code, template=template
