@@ -84,7 +84,9 @@ def estimate_cost(inputs: CostModelInput) -> CostBreakdown:
     gpu_hours = frame_seconds / 3600
     concurrency = max(inputs.gpu_count, 1)
     theoretical_render_hours = frame_seconds / 3600 / concurrency
-    render_hours = inputs.render_hours if inputs.render_hours > 0 else theoretical_render_hours
+    render_hours = (
+        inputs.render_hours if inputs.render_hours > 0 else theoretical_render_hours
+    )
 
     gpu_cost = gpu_hours * inputs.gpu_hourly_rate
     render_farm_cost = render_hours * inputs.render_farm_hourly_rate
@@ -154,7 +156,9 @@ def _apply_scenario(
             raise ValueError("gpu_hourly_rate cannot be negative")
         adjusted = replace(adjusted, gpu_hourly_rate=scenario.gpu_hourly_rate)
 
-    frame_time_multiplier = max(scenario.frame_time_scale * scenario.sampling_scale, 0.05)
+    frame_time_multiplier = max(
+        scenario.frame_time_scale * scenario.sampling_scale, 0.05
+    )
     adjusted = replace(
         adjusted,
         average_frame_time_ms=baseline.average_frame_time_ms * frame_time_multiplier,

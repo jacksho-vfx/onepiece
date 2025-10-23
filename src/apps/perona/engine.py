@@ -1,4 +1,5 @@
 """Domain logic backing the Perona VFX analytics dashboard."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -520,8 +521,10 @@ class PeronaEngine:
         baseline_input = replace(self._baseline_cost_input)
         library_baseline_input = baseline_input.to_library()
         library_scenarios = tuple(item.to_library() for item in scenarios)
-        library_baseline_breakdown, projections = render_optimization.simulate_optimizations(
-            library_baseline_input, library_scenarios
+        library_baseline_breakdown, projections = (
+            render_optimization.simulate_optimizations(
+                library_baseline_input, library_scenarios
+            )
         )
         baseline_breakdown = CostBreakdown.from_library(
             library_baseline_breakdown, currency=baseline_input.currency
