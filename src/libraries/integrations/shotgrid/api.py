@@ -441,7 +441,22 @@ class ShotGridClient:
         filters = [{"id[$in]": ",".join(str(version_id) for version_id in version_ids)}]
         fields, parser = _version_view(summary=False)
         records = self.list_versions_raw(filters, fields, page_size=None)
-        return [parser(record) for record in records]
+
+        parsed_by_id: dict[int, dict[str, Any]] = {}
+        for record in records:
+            identifier = record.get("id") if isinstance(record, dict) else None
+            if identifier is None:
+                continue
+            try:
+                parsed_by_id[int(identifier)] = parser(record)
+            except (TypeError, ValueError):
+                continue
+
+        return [
+            parsed_by_id[version_id]
+            for version_id in version_ids
+            if version_id in parsed_by_id
+        ]
 
     # ------------------------------------------------------------------ #
     # Episodes
