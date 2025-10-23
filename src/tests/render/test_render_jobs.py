@@ -26,6 +26,7 @@ class StubJobAdapter:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._counter = 0
         self.cancelled: list[str] = []
+        self.status_requests: list[str] = []
 
     def __call__(
         self,
@@ -52,6 +53,7 @@ class StubJobAdapter:
         self._jobs[job_id]["message"] = message
 
     def get_job_status(self, job_id: str) -> dict[str, str | None]:
+        self.status_requests.append(job_id)
         state = self._jobs[job_id]
         payload: dict[str, str | None] = {
             "job_id": job_id,
@@ -313,7 +315,7 @@ async def test_list_jobs_supports_limit_and_filters(
     limited_payload = limited.json()
     assert len(limited_payload["jobs"]) == 2
     assert [job["job_id"] for job in limited_payload["jobs"]] == [
-        created_jobs[0][1],
+        created_jobs[2][1],
         created_jobs[1][1],
     ]
 
@@ -325,6 +327,67 @@ async def test_list_jobs_supports_limit_and_filters(
 
     combined_payload = combined.json()
     assert [job["job_id"] for job in combined_payload["jobs"]] == [created_jobs[2][1]]
+
+
+@pytest.mark.anyio("asyncio")
+async def test_list_jobs_limit_prioritises_recent_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        fastapi.security.HTTPBearer,
+        "__call__",
+        lambda self, request=None: HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="test-bearer-token"
+        ),
+    )
+    monkeypatch.setattr(
+        fastapi.security.api_key.APIKeyHeader,
+        "__call__",
+        lambda self, request=None: "test-api-key",
+    )
+
+    class DummyCredentialStore:
+        def authenticate_bearer(self, token: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="Bearer",
+                roles={render.ROLE_RENDER_READ, render.ROLE_RENDER_SUBMIT},
+            )
+
+        def authenticate_api_key(self, key: str) -> render.AuthenticatedPrincipal:
+            return render.AuthenticatedPrincipal(
+                identifier="mock-service",
+                scheme="APIKey",
+                roles={render.ROLE_RENDER_READ, render.ROLE_RENDER_SUBMIT},
+            )
+
+    monkeypatch.setattr(
+        security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
+    )
+
+    adapter = StubJobAdapter()
+    service = render.RenderSubmissionService({"mock": adapter})
+    render.app.dependency_overrides[render.get_render_service] = lambda: service
+
+    transport = ASGITransport(app=render.app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        job_ids: list[str] = []
+        for _ in range(3):
+            response = await client.post("/jobs", json=_job_payload())
+            assert response.status_code == 201, response.text
+            job_ids.append(response.json()["job_id"])
+
+        adapter.set_status(job_ids[0], "running")
+        adapter.set_status(job_ids[1], "completed")
+        adapter.set_status(job_ids[2], "failed")
+
+        adapter.status_requests.clear()
+        limited = await client.get("/jobs", params={"limit": 1})
+
+    assert limited.status_code == 200
+    payload = limited.json()
+    assert [job["job_id"] for job in payload["jobs"]] == [job_ids[2]]
+    assert adapter.status_requests == [job_ids[2]]
 
 
 @pytest.mark.anyio("asyncio")

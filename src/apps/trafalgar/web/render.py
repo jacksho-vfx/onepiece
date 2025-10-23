@@ -910,29 +910,39 @@ class RenderSubmissionService:
             farm_filter = normalised or None
 
         with self._lock:
-            records = list(self._jobs.values())
-
-        dirty = False
-        for record in records:
-            dirty = self._refresh_job(record) or dirty
+            job_ids = list(reversed(self._jobs.keys()))
 
         jobs: list[RenderJobMetadata] = []
-        with self._lock:
-            for record in self._jobs.values():
+        dirty = False
+        for job_id in job_ids:
+            if limit is not None and len(jobs) >= limit:
+                break
+
+            with self._lock:
+                record = self._jobs.get(job_id)
+            if record is None:
+                continue
+
+            dirty = self._refresh_job(record) or dirty
+
+            with self._lock:
+                current = self._jobs.get(job_id)
+                if current is None:
+                    continue
+
                 if status_filter is not None:
-                    record_status = (record.status or "").strip().lower()
+                    record_status = (current.status or "").strip().lower()
                     if record_status not in status_filter:
                         continue
 
                 if farm_filter is not None:
-                    record_farm = (record.farm or "").strip().lower()
+                    record_farm = (current.farm or "").strip().lower()
                     if record_farm not in farm_filter:
                         continue
 
-                jobs.append(record.snapshot())
+                snapshot = current.snapshot()
 
-                if limit is not None and len(jobs) >= limit:
-                    break
+            jobs.append(snapshot)
 
         if dirty:
             self._persist_jobs(force=True)
