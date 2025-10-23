@@ -247,9 +247,11 @@ def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
 
     monkeypatch.setattr(dashboard, "logger", DummyLogger())
 
-    client = UnexpectedProjectClient([
-        {"project": "omega"},
-    ])
+    client = UnexpectedProjectClient(
+        [
+            {"project": "omega"},
+        ]
+    )
     service = dashboard.ShotGridService(client, known_projects={"omega"})
 
     projects = service.discover_projects()
