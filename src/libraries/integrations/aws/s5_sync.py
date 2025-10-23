@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 from pathlib import Path
 from typing import Callable, List, Optional, Union
 
@@ -65,26 +66,41 @@ def s5_sync(
         env=popen_env,
     )
 
-    stdout_output, stderr_output = process.communicate()
-    stdout_output = stdout_output or ""
-    stderr_output = stderr_output or ""
+    stderr_lines: list[str] = []
+    stderr_thread: threading.Thread | None = None
 
-    stdout_lines: list[str] = []
-    for raw_line in stdout_output.splitlines():
-        line = raw_line.strip()
-        stdout_lines.append(line)
-        if progress_callback is not None:
-            progress_callback(line)
+    if process.stderr is not None:
+        stderr_stream = process.stderr
+
+        def _capture_stderr() -> None:
+            for raw_line in stderr_stream:
+                stderr_lines.append(raw_line)
+
+        stderr_thread = threading.Thread(target=_capture_stderr, daemon=True)
+        stderr_thread.start()
 
     uploaded = skipped = failed = 0
 
-    for line in stdout_lines:
-        if "upload" in line.lower():
-            uploaded += 1
-        elif "skip" in line.lower():
-            skipped += 1
-        elif "error" in line.lower():
-            failed += 1
+    if process.stdout is not None:
+        for raw_line in process.stdout:
+            line = raw_line.strip()
+            if progress_callback is not None:
+                progress_callback(line)
+
+            lowered_line = line.lower()
+            if "upload" in lowered_line:
+                uploaded += 1
+            elif "skip" in lowered_line:
+                skipped += 1
+            elif "error" in lowered_line:
+                failed += 1
+
+    process.wait()
+
+    if stderr_thread is not None:
+        stderr_thread.join()
+
+    stderr_output = "".join(stderr_lines)
 
     total = uploaded + skipped + failed
     log.info(
