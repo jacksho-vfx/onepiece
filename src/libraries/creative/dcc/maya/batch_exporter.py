@@ -228,9 +228,27 @@ class BatchExporter:
         self, item: BatchExportItem, format: ExportFormat, timestamp: _dt.datetime
     ) -> Path:
         extension = _EXTENSIONS[format]
-        stamp = timestamp.strftime("%Y%m%dT%H%M%S")
-        filename = f"{item.label}_{format.value.lower()}_{stamp}{extension}"
-        return item.output_directory / filename
+        base_stamp = timestamp.strftime("%Y%m%dT%H%M%S")
+        prefix = f"{item.label}_{format.value.lower()}_"
+
+        def _candidate(name: str) -> Path:
+            return item.output_directory / f"{prefix}{name}{extension}"
+
+        candidate = _candidate(base_stamp)
+        if not candidate.exists():
+            return candidate
+
+        micro_stamp = timestamp.strftime("%Y%m%dT%H%M%S%f")
+        candidate = _candidate(micro_stamp)
+        if not candidate.exists():
+            return candidate
+
+        counter = 1
+        while True:
+            candidate = _candidate(f"{micro_stamp}_{counter:02d}")
+            if not candidate.exists():
+                return candidate
+            counter += 1
 
 
 __all__ = [
