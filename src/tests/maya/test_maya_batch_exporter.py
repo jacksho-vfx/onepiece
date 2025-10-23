@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import datetime as _dt
 from pathlib import Path
-from typing import Callable, cast, Any
+from types import MappingProxyType
+from typing import Any, Callable, cast
 
 import pytest
 
@@ -196,3 +197,48 @@ def test_multiple_runs_produce_unique_paths(tmp_path: Path) -> None:
     assert first != second
     assert first.exists()
     assert second.exists()
+
+
+def test_exporter_mutations_do_not_leak_into_records(tmp_path: Path) -> None:
+    scene = tmp_path / "shot.ma"
+    scene.write_text("maya")
+
+    mutated_settings: dict[str, Any] = {}
+
+    def mutating_exporter(
+        scene_path: Path,
+        output_path: Path,
+        *,
+        root_nodes: tuple[str, ...],
+        settings: dict[str, Any],
+        frame_range: tuple[int, int] | None,
+    ) -> Path:
+        del scene_path, root_nodes, frame_range
+        settings["triangulate"] = False
+        settings["in_exporter"] = True
+        mutated_settings.clear()
+        mutated_settings.update(settings)
+        output_path.write_bytes(b"fbx")
+        return output_path
+
+    exporter = BatchExporter(exporters={ExportFormat.FBX: mutating_exporter})
+
+    item = BatchExportItem(
+        scene_path=scene,
+        output_directory=tmp_path / "exports",
+        root_nodes=("char:root",),
+        formats=(ExportFormat.FBX,),
+        custom_settings={ExportFormat.FBX: {"triangulate": True}},
+    )
+
+    result = exporter.export([item])[0]
+    record = result.exports[0]
+
+    assert isinstance(record.settings, MappingProxyType)
+    assert record.settings["triangulate"] is True
+    assert "in_exporter" not in record.settings
+    assert mutated_settings["triangulate"] is False
+    assert mutated_settings["in_exporter"] is True
+
+    with pytest.raises(TypeError):
+        record.settings["triangulate"] = False  # type: ignore[index]

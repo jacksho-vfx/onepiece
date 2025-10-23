@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import datetime as _dt
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, MutableMapping, Protocol
 
 import structlog
@@ -183,6 +185,7 @@ class BatchExporter:
 
             output_path = self._build_output_path(item, format, started)
             settings = self._resolve_settings(item, format)
+            exporter_settings = deepcopy(settings)
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
             log.info(
@@ -196,14 +199,14 @@ class BatchExporter:
                 item.scene_path,
                 output_path,
                 root_nodes=item.root_nodes,
-                settings=settings,
+                settings=exporter_settings,
                 frame_range=item.frame_range,
             )
             exports.append(
                 ExportRecord(
                     format=format,
                     output_path=Path(written_path),
-                    settings=settings,
+                    settings=MappingProxyType(settings),
                 )
             )
 
