@@ -800,6 +800,8 @@ class RenderSubmissionService:
             self._capability_sources[key] = dict(capabilities)
         elif capability_provider is not None:
             self._capability_sources[key] = capability_provider
+        else:
+            self._capability_sources.pop(key, None)
 
     def adapter_keys(self) -> tuple[str, ...]:
         """Return the set of registered adapter identifiers."""
