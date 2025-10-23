@@ -166,3 +166,32 @@ def test_missing_exporter_raises(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError):
         exporter.export([item])
+
+
+def test_multiple_runs_produce_unique_paths(tmp_path: Path) -> None:
+    scene = tmp_path / "shot.ma"
+    scene.write_text("maya")
+
+    clock = lambda: _dt.datetime(2024, 5, 1, 9, 30)
+
+    recorder = _Recorder(suffix=b"fbx")
+    exporter = BatchExporter(exporters={ExportFormat.FBX: recorder}, clock=clock)
+
+    item = BatchExportItem(
+        scene_path=scene,
+        output_directory=tmp_path / "exports",
+        root_nodes=("char:root",),
+        shot="ep01_sh010",
+        formats=(ExportFormat.FBX,),
+    )
+
+    exporter.export([item])
+    exporter.export([item])
+
+    assert len(recorder.calls) == 2
+    first = Path(recorder.calls[0]["output_path"])
+    second = Path(recorder.calls[1]["output_path"])
+
+    assert first != second
+    assert first.exists()
+    assert second.exists()
