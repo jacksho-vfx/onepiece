@@ -397,9 +397,7 @@ class ShotgridClient:
         payload: EntityPayload = {"id": next_id, "name": name, "type": "Project"}
         return cast(Project, self._store.add("Project", payload))
 
-    def get_or_create_project(
-        self, name: str, template: str | None = None
-    ) -> Project:
+    def get_or_create_project(self, name: str, template: str | None = None) -> Project:
         proj = self._find_project(name)
         if proj is not None:
             return proj

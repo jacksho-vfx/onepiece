@@ -15,4 +15,3 @@ def test_setup_single_shot_forwards_template_to_client() -> None:
         "My Project", template="cool-template"
     )
     assert result["project"] == {"id": 42}
-
