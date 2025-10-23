@@ -51,6 +51,20 @@ def test_playblast_request_rejects_invalid_resolution(
         _create_request(tmp_path, resolution=resolution)
 
 
+@pytest.mark.parametrize(
+    "extra_metadata",
+    [
+        ["not", "a", "mapping"],
+        {1: "invalid-key"},
+    ],
+)
+def test_playblast_request_rejects_invalid_extra_metadata(
+    tmp_path: Path, extra_metadata: Any
+) -> None:
+    with pytest.raises(TypeError, match="extra_metadata must be a mapping with string keys"):
+        _create_request(tmp_path, extra_metadata=extra_metadata)
+
+
 def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> Path:
     Path(target).write_bytes(b"playblast")
     return target

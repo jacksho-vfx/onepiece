@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import string
+from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping, Protocol
@@ -53,6 +54,13 @@ class PlayblastRequest:
             raise ValueError("version must be zero or greater")
         if len(self.resolution) != 2:
             raise ValueError("resolution must contain width and height")
+        if not isinstance(self.extra_metadata, MappingABC):
+            raise TypeError("extra_metadata must be a mapping with string keys")
+        for key in self.extra_metadata.keys():
+            if not isinstance(key, str):
+                raise TypeError(
+                    "extra_metadata must be a mapping with string keys"
+                )
         try:
             width = int(self.resolution[0])
             height = int(self.resolution[1])
