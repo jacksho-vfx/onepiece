@@ -317,7 +317,7 @@ def test_publish_scene_supports_direct_upload(
     def callback(report: DCCDependencyReport) -> None:
         callbacks.append(report)
 
-    package_path = publish_scene(
+    result = publish_scene(
         SupportedDCC.NUKE,
         scene_name="ep01_sh010",
         renders=renders,
@@ -337,7 +337,8 @@ def test_publish_scene_supports_direct_upload(
     )
 
     expected_package = destination / "ep01_sh010"
-    assert package_path == expected_package
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://custom/path"
     assert callbacks and callbacks[0].is_valid
 
     sync_mock.assert_called_once_with(
@@ -383,7 +384,7 @@ def test_publish_scene_runs_maya_validation(
 
     callbacks: list[UnrealExportReport] = []
 
-    package_path = publish_scene(
+    result = publish_scene(
         SupportedDCC.MAYA,
         scene_name="ep01_sh030",
         renders=renders,
@@ -400,7 +401,8 @@ def test_publish_scene_runs_maya_validation(
     )
 
     expected_package = destination / "ep01_sh030"
-    assert package_path == expected_package
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://libraries-bucket/ep01_sh030"
 
     validate_mock.assert_called_once()
     kwargs = validate_mock.call_args.kwargs
@@ -474,7 +476,7 @@ def test_publish_scene_maya_validation_failure(
 def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
-    package_path = publish_scene(
+    result = publish_scene(
         SupportedDCC.NUKE,
         scene_name="ep01_sh011",
         renders=renders,
@@ -492,7 +494,8 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
     )
 
     expected_package = destination / "ep01_sh011"
-    assert package_path == expected_package
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://libraries-bucket/ep01_sh011"
     assert (expected_package / "metadata.json").exists()
 
     sync_mock.assert_called_once_with(
@@ -516,7 +519,7 @@ def test_publish_scene_replaces_existing_file_targets(
     existing_target = existing_package / "previews"
     existing_target.write_text("stale")
 
-    package_path = publish_scene(
+    result = publish_scene(
         SupportedDCC.NUKE,
         scene_name="ep01_sh012",
         renders=renders,
@@ -533,7 +536,8 @@ def test_publish_scene_replaces_existing_file_targets(
     )
 
     expected_package = destination / "ep01_sh012"
-    assert package_path == expected_package
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://libraries-bucket/ep01_sh012"
     previews_dir = expected_package / "previews"
     assert previews_dir.is_dir()
     assert (previews_dir / "preview.jpg").read_text() == "preview"
