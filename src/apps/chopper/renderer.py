@@ -480,7 +480,14 @@ class AnimationWriter:
 
 
 def parse_color(value: object) -> Color:
-    """Parse ``value`` into an RGB tuple."""
+    """Parse ``value`` into an RGB(A) tuple with components in the 0-255 range."""
+
+    def _validate_components(components: Sequence[int]) -> None:
+        for component in components:
+            if not 0 <= component <= 255:
+                raise SceneError(
+                    f"Colour component {component} is outside the expected 0-255 range"
+                )
 
     if isinstance(value, str):
         text = value.lstrip("#")
@@ -494,16 +501,21 @@ def parse_color(value: object) -> Color:
             b = int(text[4:6], 16)
             if len(text) == 8:
                 a = int(text[6:8], 16)
-                return r, g, b, a
+                components = (r, g, b, a)
+                _validate_components(components)
+                return components
         except ValueError as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
-        return r, g, b
+        components = (r, g, b)  # type: ignore[assignment]
+        _validate_components(components)
+        return components
 
     if isinstance(value, Sequence) and len(value) in {3, 4}:
         try:
-            components = tuple(int(component) for component in value)
+            components = tuple(int(component) for component in value)  # type: ignore[assignment]
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
             raise SceneError(f"Could not parse colour value: {value!r}") from exc
+        _validate_components(components)
         if len(components) == 4:
             return components
         r, g, b = components
