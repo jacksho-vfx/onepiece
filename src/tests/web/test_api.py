@@ -6,6 +6,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from apps.perona.engine import (
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
 )
+from apps.perona.models import RenderMetric
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web.dashboard import app, invalidate_engine_cache
@@ -273,6 +275,71 @@ def test_metrics_summary_endpoint() -> None:
     assert data["averages"]["fps"] > 0
     assert data["latest_sample"]["sequence"] in KNOWN_SEQUENCES
     assert any(entry["sequence"] in KNOWN_SEQUENCES for entry in data["sequences"])
+
+
+def test_metrics_summary_matches_manual_calculation() -> None:
+    engine = dashboard_module.get_engine()
+    samples = list(engine.stream_render_metrics())
+
+    summary = dashboard_module.metrics_summary(engine=engine)
+
+    assert summary["total_samples"] == len(samples)
+
+    def _rounded_mean(values: list[float]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    expected_averages = {
+        "fps": _rounded_mean([sample.fps for sample in samples]),
+        "frame_time_ms": _rounded_mean(
+            [sample.frame_time_ms for sample in samples]
+        ),
+        "gpu_utilisation": _rounded_mean(
+            [sample.gpu_utilisation for sample in samples]
+        ),
+        "error_count": _rounded_mean([sample.error_count for sample in samples]),
+    }
+
+    assert summary["averages"] == expected_averages
+
+    expected_sequence_stats: dict[str, dict[str, Any]] = {}
+    for sample in samples:
+        entry = expected_sequence_stats.setdefault(
+            sample.sequence,
+            {
+                "shots": set(),
+                "fps": [],
+                "frame_time_ms": [],
+                "gpu_utilisation": [],
+                "error_count": [],
+            },
+        )
+        entry["shots"].add(sample.shot_id)
+        entry["fps"].append(sample.fps)
+        entry["frame_time_ms"].append(sample.frame_time_ms)
+        entry["gpu_utilisation"].append(sample.gpu_utilisation)
+        entry["error_count"].append(sample.error_count)
+
+    summary_sequences = {item["sequence"]: item for item in summary["sequences"]}
+
+    assert set(summary_sequences) == set(expected_sequence_stats)
+
+    for name, data in expected_sequence_stats.items():
+        expected_entry = {
+            "sequence": name,
+            "shots": len(data["shots"]),
+            "avg_fps": _rounded_mean(data["fps"]),
+            "avg_frame_time_ms": _rounded_mean(data["frame_time_ms"]),
+            "avg_gpu_utilisation": _rounded_mean(data["gpu_utilisation"]),
+            "avg_error_count": _rounded_mean(data["error_count"]),
+        }
+        assert summary_sequences[name] == expected_entry
+
+    latest_expected = max(samples, key=lambda sample: sample.timestamp)
+    expected_payload = RenderMetric.from_entity(latest_expected).model_dump(
+        mode="json", by_alias=True
+    )
+
+    assert summary["latest_sample"] == expected_payload
 
 
 def test_shots_summary_endpoint() -> None:
