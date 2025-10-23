@@ -223,6 +223,7 @@ class OptimizationResult:
     gpu_hours: float
     render_hours: float
     savings_vs_baseline: float
+    savings_percent: float
     notes: str
 
 
@@ -599,6 +600,7 @@ class PeronaEngine:
                     gpu_hours=breakdown.gpu_hours,
                     render_hours=breakdown.render_hours,
                     savings_vs_baseline=projection.savings,
+                    savings_percent=projection.savings_percent,
                     notes=notes,
                 )
             )
