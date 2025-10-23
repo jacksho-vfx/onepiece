@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import math
 import statistics
-from typing import Iterable, Mapping, Sequence, Any
+from typing import Iterable, Mapping, Sequence
 import tomllib
 
 from libraries.analytics.perona import CostDriverDelta
@@ -323,24 +323,78 @@ def _load_settings(
     return {}, None, tuple(warnings)
 
 
+def _coerce_int(value: object) -> int | None:
+    """Attempt to coerce *value* into an ``int``."""
+
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            try:
+                float_value = float(text)
+            except ValueError:
+                return None
+            if not math.isfinite(float_value) or not float_value.is_integer():
+                return None
+            return int(float_value)
+    return None
+
+
+def _coerce_float(value: object) -> float | None:
+    """Attempt to coerce *value* into a ``float``."""
+
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        result = float(value)
+        if not math.isfinite(result):
+            return None
+        return result
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            result = float(text)
+        except ValueError:
+            return None
+        if not math.isfinite(result):
+            return None
+        return result
+    return None
+
+
 def _coerce_cost_model_input(
     data: Mapping[str, object] | None, fallback: CostModelInput
 ) -> CostModelInput:
-    data = data or {}
+    source: Mapping[str, object]
+    if data is None:
+        source = dict[str, object]()
+    else:
+        source = data
 
-    def _as_int(name: str, default: int) -> Any:
-        value = data.get(name, default)
-        try:
-            return int(value)  # type: ignore[call-overload]
-        except (TypeError, ValueError):
+    def _as_int(name: str, default: int) -> int:
+        coerced = _coerce_int(source.get(name))
+        if coerced is None:
             return default
+        return coerced
 
-    def _as_float(name: str, default: float) -> Any:
-        value = data.get(name, default)
-        try:
-            return float(value)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+    def _as_float(name: str, default: float) -> float:
+        coerced = _coerce_float(source.get(name))
+        if coerced is None:
             return default
+        return coerced
 
     return CostModelInput(
         frame_count=_as_int("frame_count", fallback.frame_count),
@@ -360,7 +414,7 @@ def _coerce_cost_model_input(
         data_egress_gb=_as_float("data_egress_gb", fallback.data_egress_gb),
         egress_rate_per_gb=_as_float("egress_rate_per_gb", fallback.egress_rate_per_gb),
         misc_costs=_as_float("misc_costs", fallback.misc_costs),
-        currency=_normalise_currency(data.get("currency"), fallback.currency),
+        currency=_normalise_currency(source.get("currency"), fallback.currency),
     )
 
 
@@ -369,13 +423,13 @@ def _safe_float(value: object, default: float, *, setting: str) -> float:
 
     if value is None:
         return default
-    try:
-        return float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        LOGGER.warning(
-            "Ignoring invalid %s override %r; using default %s", setting, value, default
-        )
-        return default
+    coerced = _coerce_float(value)
+    if coerced is not None:
+        return coerced
+    LOGGER.warning(
+        "Ignoring invalid %s override %r; using default %s", setting, value, default
+    )
+    return default
 
 
 class PeronaEngine:
@@ -423,9 +477,21 @@ class PeronaEngine:
         """Instantiate the engine using configuration sourced from disk/env."""
 
         raw_settings, resolved_path, warnings = _load_settings(path)
-        baseline_settings: Mapping[str, object] = raw_settings.get(
-            "baseline_cost_input", {}
-        )  # type: ignore[assignment]
+        warning_messages = list(warnings)
+
+        baseline_settings_raw = raw_settings.get("baseline_cost_input")
+        if isinstance(baseline_settings_raw, Mapping):
+            baseline_settings: Mapping[str, object] = baseline_settings_raw
+        else:
+            baseline_settings = dict[str, object]()
+            if baseline_settings_raw is not None:
+                message = (
+                    "Ignoring invalid baseline_cost_input override "
+                    f"{baseline_settings_raw!r}; using defaults"
+                )
+                LOGGER.warning(message)
+                warning_messages.append(message)
+
         baseline_input = _coerce_cost_model_input(
             baseline_settings, DEFAULT_BASELINE_COST_INPUT
         )
@@ -445,7 +511,9 @@ class PeronaEngine:
             pnl_baseline_cost=pnl_baseline_cost,
         )
         return SettingsLoadResult(
-            engine=engine, settings_path=resolved_path, warnings=warnings
+            engine=engine,
+            settings_path=resolved_path,
+            warnings=tuple(warning_messages),
         )
 
     def stream_render_metrics(
