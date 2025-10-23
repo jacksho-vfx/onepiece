@@ -296,7 +296,7 @@ def test_get_playlist_record_delegates_to_single(client: ShotGridClient) -> None
 
 
 def test_get_playlist_record_accepts_sequence_fields(client: ShotGridClient) -> None:
-    filters = []
+    filters: list[dict[str, Any]] = []
     client._get_single = MagicMock(return_value=None)
 
     client.get_playlist_record(filters, ["id", "code"])
