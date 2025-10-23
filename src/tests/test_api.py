@@ -241,7 +241,9 @@ def test_costs_summary_endpoint() -> None:
         data["baseline"]["cost_per_frame"], rel=1e-6
     )
     expected_current = data["pnl"]["current_cost"] / data["baseline"]["frame_count"]
-    assert data["cost_per_frame"]["current"] == pytest.approx(expected_current, rel=1e-4)
+    assert data["cost_per_frame"]["current"] == pytest.approx(
+        expected_current, rel=1e-4
+    )
     delta = data["cost_per_frame"]["current"] - data["cost_per_frame"]["baseline"]
     assert data["cost_per_frame"]["delta"] == pytest.approx(delta, rel=1e-4)
 

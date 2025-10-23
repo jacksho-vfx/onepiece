@@ -456,9 +456,9 @@ def shots_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
                 "stage_completed_at": (
                     stage_details.completed_at if stage_details else None
                 ),
-                "stage_metrics": dict(stage_details.metrics)
-                if stage_details is not None
-                else {},
+                "stage_metrics": (
+                    dict(stage_details.metrics) if stage_details is not None else {}
+                ),
             }
         )
 
@@ -473,8 +473,7 @@ def shots_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
             for name, count in sorted(by_sequence.items())
         ],
         "by_stage": [
-            {"name": name, "shots": count}
-            for name, count in by_stage.most_common()
+            {"name": name, "shots": count} for name, count in by_stage.most_common()
         ],
         "active_shots": active_shots,
     }
