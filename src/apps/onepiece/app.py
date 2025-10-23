@@ -4,7 +4,7 @@ from apps.onepiece.aws import app as aws
 from apps.onepiece.dcc import app as dcc
 from apps.onepiece.shotgrid import app as shotgrid
 from apps.onepiece.misc.info import app as info
-from libraries.review import app as review
+from libraries.automation.review import app as review
 from apps.onepiece.render import app as render
 from apps.onepiece.notify import app as notify
 from apps.onepiece.validate import app as validate

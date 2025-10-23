@@ -8,7 +8,7 @@ pure-Python so it can be unit tested without Maya.
 ## Usage
 
 ```python
-from libraries.dcc.maya import CharacterSelectorPanel
+from libraries.creative.dcc.maya import CharacterSelectorPanel
 
 # Launch the dockable panel. When running inside Maya this will create a
 # workspace control if available, otherwise a floating window is displayed.

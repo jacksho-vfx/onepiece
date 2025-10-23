@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from libraries.dcc.utils import normalize_frame_range, sanitize_token
+from libraries.creative.dcc.utils import normalize_frame_range, sanitize_token
 
 
 def test_sanitize_token_uppercases_and_replaces_non_alnum() -> None:

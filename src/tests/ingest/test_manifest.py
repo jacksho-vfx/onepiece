@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from libraries.delivery import manifest
+from libraries.automation.delivery import manifest
 
 
 @pytest.fixture()

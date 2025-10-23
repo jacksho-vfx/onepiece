@@ -1,10 +1,10 @@
 # Ftrack client primer
 
-The :mod:`libraries.ftrack` package contains a lightweight REST client that
+The :mod:`libraries.integrations.ftrack` package contains a lightweight REST client that
 shares the ergonomics of the existing ShotGrid helpers while targeting the
 Ftrack API.  It provides:
 
-* a thin authentication-aware :class:`~libraries.ftrack.client.FtrackRestClient`
+* a thin authentication-aware :class:`~libraries.integrations.ftrack.client.FtrackRestClient`
   with helpers for issuing GET/POST requests;
 * pydantic models describing commonly accessed entities such as projects,
   shots and tasks; and
@@ -13,7 +13,7 @@ Ftrack API.  It provides:
 ## Quick start
 
 ```python
-from libraries.ftrack import FtrackRestClient
+from libraries.integrations.ftrack import FtrackRestClient
 
 client = FtrackRestClient(
     base_url="https://my.ftrack.server",
@@ -27,7 +27,7 @@ print(projects[0].name)
 
 The list helpers return instances of the pydantic models so calling code gets
 runtime validation for free.  Higher-level convenience methods such as
-:meth:`libraries.ftrack.client.FtrackRestClient.ensure_project` are defined but
+:meth:`libraries.integrations.ftrack.client.FtrackRestClient.ensure_project` are defined but
 raise :class:`NotImplementedError` to make the expected extension points
 explicit.
 
@@ -48,7 +48,7 @@ client = FtrackRestClient(
 )
 ```
 
-Use the `libraries.ftrack.auth.load_credentials` helper to read credentials from
+Use the `libraries.integrations.ftrack.auth.load_credentials` helper to read credentials from
 environment variables or JSON files—mirroring the Trafalgar authentication
 workflow—so workstation scripts and automation jobs behave consistently.
 

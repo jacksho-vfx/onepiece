@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from libraries.aws import s3_sync
+from libraries.integrations.aws import s3_sync
 
 
 def test_build_s3_uri_strips_extra_slashes() -> None:

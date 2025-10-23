@@ -2,7 +2,7 @@ from pathlib import Path
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
-from libraries.aws.s5_sync import s5_sync
+from libraries.integrations.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="AWS and S3 integration commands")
 

@@ -4,12 +4,12 @@ from typing import Any
 
 import pytest
 
-from libraries.ingest.service import (
+from libraries.automation.ingest.service import (
     MediaIngestService,
     UploadCheckpoint,
     UploadCheckpointStore,
 )
-from libraries.shotgrid.client import ShotgridClient
+from libraries.integrations.shotgrid.client import ShotgridClient
 
 
 class FlakyResumableUploader:

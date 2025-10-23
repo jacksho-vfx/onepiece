@@ -12,8 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 from apps.trafalgar.web import ingest, render
 from apps.trafalgar.web.events import EventBroadcaster, clear_keepalive_caches
-from libraries.ingest.registry import IngestRunRecord
-from libraries.ingest.service import IngestReport, IngestedMedia, MediaInfo
+from libraries.automation.ingest.registry import IngestRunRecord
+from libraries.automation.ingest.service import IngestReport, IngestedMedia, MediaInfo
 from tests.security_patches import patch_security
 
 

@@ -14,8 +14,11 @@ from apps.onepiece.utils.errors import (
     OnePieceValidationError,
 )
 from ._inputs import load_structured_array
-from libraries.shotgrid.client import ShotgridClient, ShotgridOperationError
-from libraries.shotgrid.playlist_delivery import (
+from libraries.integrations.shotgrid.client import (
+    ShotgridClient,
+    ShotgridOperationError,
+)
+from libraries.integrations.shotgrid.playlist_delivery import (
     Recipient,
     package_playlist_for_mediashuttle,
 )

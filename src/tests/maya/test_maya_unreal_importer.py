@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.utils.errors import OnePieceExternalServiceError
-from libraries.dcc.maya.unreal_importer import (
+from libraries.creative.dcc.maya.unreal_importer import (
     UnrealImportError,
     UnrealImportSummary,
     UnrealPackageImporter,

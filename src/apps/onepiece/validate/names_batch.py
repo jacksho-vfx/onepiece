@@ -3,7 +3,7 @@ from pathlib import Path
 import structlog
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.validations.naming_batch import (
+from libraries.platform.validations.naming_batch import (
     NameValidationResult,
     validate_names_in_csv,
     validate_names_in_dir,

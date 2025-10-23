@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from libraries.render.optimization import (
+from libraries.automation.render.optimization import (
     CostBreakdown,
     CostModelInput,
     OptimizationProjection,

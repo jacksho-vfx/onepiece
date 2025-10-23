@@ -13,8 +13,8 @@ from apps.trafalgar.web.security import (
     create_protected_router,
     require_roles,
 )
-from libraries.review.dailies import DailiesClip, fetch_playlist_versions
-from libraries.shotgrid.api import ShotGridClient, ShotGridError
+from libraries.automation.review.dailies import DailiesClip, fetch_playlist_versions
+from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError
 
 logger = structlog.get_logger(__name__)
 

@@ -23,17 +23,17 @@ from apps.trafalgar.providers.providers import (
     initialize_providers,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
-from libraries.delivery.manifest import get_manifest_data
-from libraries.reconcile import comparator
+from libraries.automation.delivery.manifest import get_manifest_data
+from libraries.automation.reconcile import comparator
 from .ingest_adapter import (
     IngestRunDashboardFacade,
     get_ingest_dashboard_facade,
 )
 from .render import RenderSubmissionService, get_render_service
 from . import review as review_module
-from libraries.review.dailies import fetch_playlist_versions
-from libraries.review.dailies import DailiesClip
-from libraries.shotgrid.api import ShotGridError
+from libraries.automation.review.dailies import fetch_playlist_versions
+from libraries.automation.review.dailies import DailiesClip
+from libraries.integrations.shotgrid.api import ShotGridError
 
 logger = structlog.get_logger(__name__)
 
@@ -1070,7 +1070,7 @@ class DeliveryService:
 
 def get_shotgrid_client() -> Any:  # pragma: no cover - runtime wiring
     try:
-        from libraries.shotgrid.client import ShotgridClient
+        from libraries.integrations.shotgrid.client import ShotgridClient
     except ImportError:  # pragma: no cover - fallback if optional dependency missing
         ShotgridClient = None
 

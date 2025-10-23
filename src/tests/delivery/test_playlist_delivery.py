@@ -6,8 +6,10 @@ from typing import cast
 
 import pytest
 
-from libraries.shotgrid.client import ShotgridClient
-from libraries.shotgrid.playlist_delivery import package_playlist_for_mediashuttle
+from libraries.integrations.shotgrid.client import ShotgridClient
+from libraries.integrations.shotgrid.playlist_delivery import (
+    package_playlist_for_mediashuttle,
+)
 
 
 @pytest.fixture()

@@ -9,13 +9,13 @@ from typing import Any
 
 import pytest
 
-from libraries.dcc.maya.playblast_tool import (
+from libraries.creative.dcc.maya.playblast_tool import (
     PlayblastAutomationTool,
     PlayblastRequest,
     build_playblast_filename,
 )
-from libraries.dcc.utils import normalize_frame_range, sanitize_token
-from libraries.shotgrid.client import ShotgridClient
+from libraries.creative.dcc.utils import normalize_frame_range, sanitize_token
+from libraries.integrations.shotgrid.client import ShotgridClient
 
 
 def _create_request(tmp_path: Path, **overrides: Any) -> PlayblastRequest:

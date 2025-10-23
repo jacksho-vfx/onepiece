@@ -12,13 +12,13 @@ import click
 import structlog
 import typer
 
-from libraries.render import deadline, mock, opencue, tractor
-from libraries.render.base import (
+from libraries.automation.render import deadline, mock, opencue, tractor
+from libraries.automation.render.base import (
     AdapterCapabilities,
     RenderAdapterNotImplementedError,
     RenderSubmissionError,
 )
-from libraries.render.models import CapabilityProvider, RenderAdapter
+from libraries.automation.render.models import CapabilityProvider, RenderAdapter
 
 from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,

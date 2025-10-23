@@ -9,7 +9,7 @@ from apps.trafalgar.web.ingest import (
     IngestRunProvider,
     IngestRunService,
 )
-from libraries.ingest.registry import IngestRunRegistry
+from libraries.automation.ingest.registry import IngestRunRegistry
 
 import fastapi.security
 import fastapi.security.api_key
@@ -71,7 +71,7 @@ def test_registry_serves_cached_records_when_reload_fails(
     def _failing_load(*args: Any, **kwargs: Any) -> None:
         raise json.JSONDecodeError("err", "doc", 0)
 
-    monkeypatch.setattr("libraries.ingest.registry.json.load", _failing_load)
+    monkeypatch.setattr("libraries.automation.ingest.registry.json.load", _failing_load)
 
     assert registry.get("run-1") is record
 

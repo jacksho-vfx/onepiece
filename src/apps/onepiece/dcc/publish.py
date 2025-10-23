@@ -7,15 +7,15 @@ from typing import Literal, cast, Any
 import structlog
 import typer
 
-from libraries.dcc.dcc_client import (
+from libraries.creative.dcc.dcc_client import (
     DCCAssetStatus,
     DCCDependencyReport,
     DCCPluginStatus,
     JSONValue,
     publish_scene,
 )
-from libraries.dcc.maya.unreal_export_checker import UnrealExportReport
-from libraries.validations.dcc import validate_dcc
+from libraries.creative.dcc.maya.unreal_export_checker import UnrealExportReport
+from libraries.platform.validations.dcc import validate_dcc
 
 
 log = structlog.get_logger(__name__)

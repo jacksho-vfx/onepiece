@@ -5,7 +5,7 @@ from __future__ import annotations
 import structlog
 import typer
 
-from libraries.notify.utils import get_notifier
+from libraries.automation.notify.utils import get_notifier
 
 log = structlog.get_logger(__name__)
 

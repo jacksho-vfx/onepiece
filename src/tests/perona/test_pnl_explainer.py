@@ -1,6 +1,10 @@
 """Tests for the Perona P&L explainer helpers."""
 
-from libraries.perona import CostDriverDelta, summarise_cost_deltas, total_cost_delta
+from libraries.analytics.perona import (
+    CostDriverDelta,
+    summarise_cost_deltas,
+    total_cost_delta,
+)
 
 
 def test_cost_driver_delta_description() -> None:

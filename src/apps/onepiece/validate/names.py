@@ -1,7 +1,7 @@
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.validations.naming import (
+from libraries.platform.validations.naming import (
     validate_show_name,
     validate_episode_name,
     validate_scene_name,

@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.validations.filesystem import preflight_report
+from libraries.platform.validations.filesystem import preflight_report
 
 app = typer.Typer(help="Validate filepaths")
 

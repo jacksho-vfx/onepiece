@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from libraries.ingest import (
+from libraries.automation.ingest import (
     Delivery,
     DeliveryManifestError,
     MediaIngestService,
     load_delivery_manifest,
 )
-from libraries.ingest.service import IngestReport
-from libraries.shotgrid.client import ShotgridClient
+from libraries.automation.ingest.service import IngestReport
+from libraries.integrations.shotgrid.client import ShotgridClient
 
 
 class DummyUploader:

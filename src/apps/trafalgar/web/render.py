@@ -42,13 +42,13 @@ from apps.onepiece.utils.errors import (
     OnePieceValidationError,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
-from libraries.render.base import (
+from libraries.automation.render.base import (
     AdapterCapabilities,
     RenderAdapterUnavailableError,
     RenderSubmissionError,
     SubmissionResult,
 )
-from libraries.render.models import CapabilityProvider, RenderAdapter
+from libraries.automation.render.models import CapabilityProvider, RenderAdapter
 
 from apps.trafalgar.web.events import EventBroadcaster, resolve_keepalive_interval
 from apps.trafalgar.web.job_store import JobStore

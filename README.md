@@ -325,7 +325,7 @@ supports production-ready features for dealing with large deliveries:
 - **Playlist deliveries** – package playlists with `onepiece shotgrid package-playlist`
   to generate MediaShuttle-ready folders for client or vendor review sessions.
 
-See ``libraries.shotgrid.client`` and ``libraries.shotgrid.playlist_delivery``
+See ``libraries.integrations.shotgrid.client`` and ``libraries.integrations.shotgrid.playlist_delivery``
 for usage examples and the accompanying unit tests for end-to-end
 demonstrations of the new capabilities. The delivery command
 (``onepiece shotgrid deliver``) complements these helpers by packaging approved

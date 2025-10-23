@@ -7,8 +7,8 @@ from typing import Any, Sequence
 import pytest
 from hypothesis import given, strategies as st
 
-from libraries.reconcile.job import ReconciliationJob
-from libraries.reconcile.rules import (
+from libraries.automation.reconcile.job import ReconciliationJob
+from libraries.automation.reconcile.rules import (
     ExactMatchRule,
     FuzzyMatchRule,
     ToleranceRule,

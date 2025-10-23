@@ -1,6 +1,6 @@
 """Tests for the Maya animation debugger helper utilities."""
 
-from libraries.dcc.maya.animation_debugger import (
+from libraries.creative.dcc.maya.animation_debugger import (
     AnimationDebuggerIssue,
     CacheLinkInfo,
     ConstraintInfo,

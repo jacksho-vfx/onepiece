@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.trafalgar.web import render as render_module
-from libraries.render.base import RenderAdapterUnavailableError
+from libraries.automation.render.base import RenderAdapterUnavailableError
 from tests.security_patches import patch_security
 
 
