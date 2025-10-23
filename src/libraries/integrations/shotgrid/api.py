@@ -100,16 +100,25 @@ class ShotGridError(Exception):
 class ShotGridClient:
     """REST client for Autodesk ShotGrid using xData models for create."""
 
+    DEFAULT_TIMEOUT: float = 10.0
+
     def __init__(
         self,
         base_url: Optional[str] = None,
         script_name: Optional[str] = None,
         api_key: Optional[str] = None,
+        timeout: float | tuple[float, float] | None = None,
     ) -> None:
         cfg = load_config()
         self.base_url = base_url or cfg.base_url
         script_name = script_name or cfg.script_name
         api_key = api_key or cfg.api_key
+
+        self.timeout: float | tuple[float, float]
+        if timeout is not None:
+            self.timeout = timeout
+        else:
+            self.timeout = self.DEFAULT_TIMEOUT
 
         self._session = requests.Session()
         self._session.headers.update({"Accept": "application/json"})
@@ -125,7 +134,7 @@ class ShotGridClient:
             "client_id": script_name,
             "client_secret": api_key,
         }
-        r = self._session.post(url, json=payload)
+        r = self._session.post(url, json=payload, timeout=self.timeout)
         if not r.ok:
             log.error("auth_failed", status=r.status_code, text=r.text)
             raise ShotGridError(f"Authentication failed: {r.status_code}")
@@ -136,7 +145,7 @@ class ShotGridClient:
     def _get(self, entity: str, filters: List[Dict[str, Any]], fields: str) -> Any:
         url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
         params = self._build_query_params(filters, fields)
-        r = self._session.get(url, params=params)
+        r = self._session.get(url, params=params, timeout=self.timeout)
         if not r.ok:
             log.error(
                 "http_get_failed", entity=entity, status=r.status_code, text=r.text
@@ -161,7 +170,7 @@ class ShotGridClient:
                 fields,
                 extra={"page[number]": page, "page[size]": page_size},
             )
-            response = self._session.get(url, params=params)
+            response = self._session.get(url, params=params, timeout=self.timeout)
             if not response.ok:
                 log.error(
                     "http_get_failed",
@@ -193,7 +202,7 @@ class ShotGridClient:
         payload: Dict[str, Any] = {"data": {"type": entity, "attributes": attributes}}
         if relationships:
             payload["data"]["relationships"] = relationships
-        r = self._session.post(url, json=payload)
+        r = self._session.post(url, json=payload, timeout=self.timeout)
         if not r.ok:
             log.error(
                 "http_post_failed", entity=entity, status=r.status_code, text=r.text
@@ -218,7 +227,7 @@ class ShotGridClient:
         }
         if relationships:
             payload["data"]["relationships"] = relationships
-        response = self._session.patch(url, json=payload)
+        response = self._session.patch(url, json=payload, timeout=self.timeout)
         if not response.ok:
             log.error(
                 "http_patch_failed",
@@ -661,7 +670,9 @@ class ShotGridClient:
         with media_path.open("rb") as fp:
             files = {"file": (media_path.name, fp, "application/octet-stream")}
             params = {"upload_type": upload_type}
-            response = self._session.post(url, files=files, params=params)
+            response = self._session.post(
+                url, files=files, params=params, timeout=self.timeout
+            )
 
         if not response.ok:
             log.error(

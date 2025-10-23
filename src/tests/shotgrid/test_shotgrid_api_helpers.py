@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -27,7 +29,9 @@ from libraries.integrations.shotgrid.models import (
 def client() -> ShotGridClient:
     """Return an uninitialised ``ShotGridClient`` for isolated testing."""
 
-    return ShotGridClient.__new__(ShotGridClient)
+    instance = ShotGridClient.__new__(ShotGridClient)
+    instance.timeout = ShotGridClient.DEFAULT_TIMEOUT
+    return instance
 
 
 class StubResponse:
@@ -51,11 +55,136 @@ class StubResponse:
 class StubSession:
     def __init__(self, response: StubResponse) -> None:
         self._response = response
-        self.patch_calls: list[tuple[str, dict[Any, Any]]] = []
+        self.patch_calls: list[tuple[str, dict[Any, Any], object | None]] = []
 
-    def patch(self, url: str, *, json: dict[Any, Any]) -> StubResponse:
-        self.patch_calls.append((url, json))
+    def patch(
+        self, url: str, *, json: dict[Any, Any], timeout: object | None = None
+    ) -> StubResponse:
+        self.patch_calls.append((url, json, timeout))
         return self._response
+
+
+def test_authenticate_uses_configured_timeout(
+    client: ShotGridClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    session.headers = {}
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"access_token": "token"}
+    session.post.return_value = response
+    client._session = session
+
+    client._authenticate("script", "key")
+
+    assert session.post.call_args.kwargs["timeout"] == client.timeout
+
+
+def test_get_uses_configured_timeout(client: ShotGridClient) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"data": []}
+    session.get.return_value = response
+    client._session = session
+
+    client._get("Shot", [], "id")
+
+    assert session.get.call_args.kwargs["timeout"] == client.timeout
+
+
+def test_get_paginated_honours_timeout(client: ShotGridClient) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    page_one = MagicMock()
+    page_one.ok = True
+    page_one.json.return_value = {
+        "data": [],
+        "links": {"next": "ignored"},
+    }
+    page_two = MagicMock()
+    page_two.ok = True
+    page_two.json.return_value = {
+        "data": [],
+        "links": {},
+    }
+    session.get.side_effect = [page_one, page_two]
+    client._session = session
+
+    client._get_paginated("Playlist", [], "id")
+
+    assert session.get.call_count == 2
+    for call in session.get.call_args_list:
+        assert call.kwargs["timeout"] == client.timeout
+
+
+def test_post_uses_configured_timeout(client: ShotGridClient) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"data": {"id": 1}}
+    session.post.return_value = response
+    client._session = session
+
+    client._post("Shot", {"code": "SHOT"})
+
+    assert session.post.call_args.kwargs["timeout"] == client.timeout
+
+
+def test_upload_media_uses_configured_timeout(
+    client: ShotGridClient, tmp_path: Path
+) -> None:
+    client.base_url = "https://example.com"
+    media = tmp_path / "clip.mov"
+    media.write_bytes(b"data")
+    session = MagicMock()
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"status": "ok"}
+    session.post.return_value = response
+    client._session = session
+
+    client.upload_media("Version", 101, media)
+
+    assert session.post.call_args.kwargs["timeout"] == client.timeout
+
+
+def test_init_applies_default_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = SimpleNamespace(
+        base_url="https://example.com", script_name="script", api_key="key"
+    )
+    monkeypatch.setattr("libraries.integrations.shotgrid.api.load_config", lambda: cfg)
+
+    captured: dict[str, tuple[str, str]] = {}
+
+    def fake_authenticate(self: ShotGridClient, script: str, key: str) -> None:
+        captured["args"] = (script, key)
+
+    monkeypatch.setattr(ShotGridClient, "_authenticate", fake_authenticate)
+
+    client = ShotGridClient()
+
+    assert client.timeout == ShotGridClient.DEFAULT_TIMEOUT
+    assert captured["args"] == (cfg.script_name, cfg.api_key)
+
+
+def test_init_accepts_custom_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = SimpleNamespace(
+        base_url="https://example.com", script_name="script", api_key="key"
+    )
+    monkeypatch.setattr("libraries.integrations.shotgrid.api.load_config", lambda: cfg)
+
+    def fake_authenticate(self: ShotGridClient, script: str, key: str) -> None:
+        return None
+
+    monkeypatch.setattr(ShotGridClient, "_authenticate", fake_authenticate)
+
+    client = ShotGridClient(timeout=5.5)
+
+    assert client.timeout == 5.5
 
 
 def test_get_or_create_episode_returns_existing(client: ShotGridClient) -> None:
@@ -179,7 +308,7 @@ def test_update_version_sends_patch_request(client: ShotGridClient) -> None:
     assert result == response_payload["data"]
     assert len(session.patch_calls) == 1
 
-    url, payload = session.patch_calls[0]
+    url, payload, timeout = session.patch_calls[0]
     assert url == "https://example.com/api/v1/entity/versions/123"
     assert payload == {
         "data": {
@@ -188,6 +317,7 @@ def test_update_version_sends_patch_request(client: ShotGridClient) -> None:
             "attributes": {"description": "Updated"},
         }
     }
+    assert timeout == client.timeout
 
 
 def test_update_version_includes_relationships(client: ShotGridClient) -> None:
@@ -199,8 +329,9 @@ def test_update_version_includes_relationships(client: ShotGridClient) -> None:
     relationships = {"project": {"data": {"type": "Project", "id": 42}}}
     client.update_version(55, {"code": "shot030_v001"}, relationships)
 
-    _, payload = session.patch_calls[0]
+    _, payload, timeout = session.patch_calls[0]
     assert payload["data"]["relationships"] == relationships
+    assert timeout == client.timeout
 
 
 def test_create_playlist_includes_version_relationships(
@@ -264,6 +395,7 @@ def test_create_task_defaults_related_entity_type(client: ShotGridClient) -> Non
 
 def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     client = ShotGridClient.__new__(ShotGridClient)
+    client.timeout = ShotGridClient.DEFAULT_TIMEOUT
     captured: dict[str, tuple[int, dict[Any, Any], dict[Any, Any] | None]] = {}
 
     def fake_update(

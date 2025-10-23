@@ -102,6 +102,7 @@ def test_upload_missing_project_id(
 
 def test_create_version_merges_entity_relationship() -> None:
     client = ShotGridClient.__new__(ShotGridClient)
+    client.timeout = ShotGridClient.DEFAULT_TIMEOUT
     captured: dict[str, object] = {}
 
     def fake_post(
