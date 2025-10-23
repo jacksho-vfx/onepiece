@@ -54,14 +54,22 @@ def _invalid_count(run: Mapping[str, Any]) -> int:
     return 0
 
 
+def _normalise_status(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip().lower()
+    return text or None
+
+
 def _is_success(run: Mapping[str, Any]) -> bool:
-    if run.get("status") != "completed":
+    if _normalise_status(run.get("status")) != "completed":
         return False
     return _invalid_count(run) == 0
 
 
 def _is_failure(run: Mapping[str, Any]) -> bool:
-    if run.get("status") != "completed":
+    if _normalise_status(run.get("status")) != "completed":
         return False
     return _invalid_count(run) > 0
 
@@ -99,7 +107,11 @@ class IngestRunDashboardFacade:
                 "total": len(runs),
                 "successful": sum(1 for run in runs if _is_success(run)),
                 "failed": sum(1 for run in runs if _is_failure(run)),
-                "running": sum(1 for run in runs if run.get("status") == "running"),
+                "running": sum(
+                    1
+                    for run in runs
+                    if _normalise_status(run.get("status")) == "running"
+                ),
             },
             "last_success_at": _format_timestamp(last_success),
             "failure_streak": failure_streak,
