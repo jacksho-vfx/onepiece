@@ -172,7 +172,8 @@ def test_multiple_runs_produce_unique_paths(tmp_path: Path) -> None:
     scene = tmp_path / "shot.ma"
     scene.write_text("maya")
 
-    clock = lambda: _dt.datetime(2024, 5, 1, 9, 30)
+    def clock() -> _dt.datetime:
+        return _dt.datetime(2024, 5, 1, 9, 30)
 
     recorder = _Recorder(suffix=b"fbx")
     exporter = BatchExporter(exporters={ExportFormat.FBX: recorder}, clock=clock)
@@ -189,8 +190,8 @@ def test_multiple_runs_produce_unique_paths(tmp_path: Path) -> None:
     exporter.export([item])
 
     assert len(recorder.calls) == 2
-    first = Path(recorder.calls[0]["output_path"])
-    second = Path(recorder.calls[1]["output_path"])
+    first = Path(recorder.calls[0]["output_path"])  # type: ignore[arg-type]
+    second = Path(recorder.calls[1]["output_path"])  # type: ignore[arg-type]
 
     assert first != second
     assert first.exists()
