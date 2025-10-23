@@ -1607,11 +1607,18 @@ def _resolve_render_keepalive_interval(request: Request) -> float:
     )
 
 
+async def _render_jobs_snapshot(
+    service: "RenderSubmissionService",
+) -> list[dict[str, Any]]:
+    jobs = await asyncio.to_thread(service.list_jobs)
+    return [job.model_dump(mode="json") for job in jobs]
+
+
 async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
     service = get_render_service()
     queue = await JOB_EVENTS.subscribe()
     try:
-        jobs_snapshot = [job.model_dump(mode="json") for job in service.list_jobs()]
+        jobs_snapshot = await _render_jobs_snapshot(service)
         snapshot_event = {"event": "jobs.snapshot", "jobs": jobs_snapshot}
         snapshot_payload = json.dumps(snapshot_event).encode("utf-8")
         yield _format_sse_chunk("jobs.snapshot", snapshot_payload)
@@ -1652,7 +1659,7 @@ async def jobs_websocket(
     await websocket.accept()
     queue = await JOB_EVENTS.subscribe()
     try:
-        jobs_snapshot = [job.model_dump(mode="json") for job in service.list_jobs()]
+        jobs_snapshot = await _render_jobs_snapshot(service)
         handshake: dict[str, Any] = {
             "type": "connected",
             "snapshot": {"event": "jobs.snapshot", "jobs": jobs_snapshot},

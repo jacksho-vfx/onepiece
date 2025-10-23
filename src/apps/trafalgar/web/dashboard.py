@@ -1,5 +1,6 @@
 """FastAPI dashboard exposing aggregated project status information."""
 
+import asyncio
 import json
 import os
 from collections import Counter, OrderedDict, defaultdict
@@ -713,8 +714,8 @@ class RenderDashboardFacade:
     def __init__(self, service: RenderSubmissionService | None = None) -> None:
         self._service = service or get_render_service()
 
-    def summarise_jobs(self) -> dict[str, Any]:
-        jobs = self._service.list_jobs()
+    async def summarise_jobs(self) -> dict[str, Any]:
+        jobs = await asyncio.to_thread(self._service.list_jobs)
         status_counts: Counter[str] = Counter()
         farm_counts: Counter[str] = Counter()
         for job in jobs:
@@ -1225,7 +1226,7 @@ async def status(
     errors = reconcile_service.list_errors()
     ingest_summary = ingest_facade.summarise_recent_runs()
 
-    render_raw = render_facade.summarise_jobs()
+    render_raw = await render_facade.summarise_jobs()
     if not isinstance(render_raw, Mapping):
         render_raw = {}
     render_summary = {
@@ -1320,7 +1321,7 @@ async def metrics(
         ),
     )
 
-    render_raw = render_facade.summarise_jobs()
+    render_raw = await render_facade.summarise_jobs()
     render_model = RenderSummaryModel(
         jobs=_parse_int(render_raw.get("jobs"), 0),
         by_status={
