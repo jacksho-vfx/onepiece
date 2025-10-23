@@ -291,6 +291,37 @@ def test_costs_summary_endpoint() -> None:
     assert data["cost_per_frame"]["delta"] == pytest.approx(delta, rel=1e-4)
 
 
+def test_daily_report_csv_export() -> None:
+    response = client.get("/reports/daily", params={"format": "csv"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert (
+        'attachment; filename="perona_daily_summary_'
+        in response.headers["content-disposition"]
+    )
+
+    body = response.content.decode("utf-8")
+    lines = body.splitlines()
+    assert lines[0] == "metric,value"
+    assert any(line.startswith("metrics.total_samples,") for line in lines)
+    assert any("risk.top_risks[1].risk_score" in line for line in lines)
+
+
+def test_daily_report_pdf_export() -> None:
+    response = client.get("/reports/daily", params={"format": "pdf"})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+    assert len(response.content) > 200
+
+
+def test_daily_report_rejects_unknown_format() -> None:
+    response = client.get("/reports/daily", params={"format": "txt"})
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Unsupported format. Use 'csv' or 'pdf'."
+
+
 def test_metrics_websocket_stream() -> None:
     with client.websocket_connect("/ws/metrics") as websocket:
         payload_one = websocket.receive_json()
