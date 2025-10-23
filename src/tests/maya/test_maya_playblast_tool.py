@@ -56,12 +56,29 @@ def _fake_playblast(_: PlayblastRequest, target: Path, __: tuple[int, int]) -> P
     return target
 
 
+def _fake_empty_playblast(_: PlayblastRequest, __: Path, ___: tuple[int, int]) -> Any:
+    return None
+
+
+def _fake_invalid_playblast(_: PlayblastRequest, __: Path, ___: tuple[int, int]) -> Any:
+    return 1234
+
+
 def _fake_mismatch_playblast(
     _: PlayblastRequest, target: Path, __: tuple[int, int]
 ) -> Path:
     reported = target.parent / "reported.mov"
     Path(reported).write_bytes(b"playblast")
     return reported
+
+
+def _fake_external_playblast(
+    _: PlayblastRequest, target: Path, __: tuple[int, int]
+) -> Path:
+    outside = target.parent.parent / "external" / target.name
+    outside.parent.mkdir(parents=True, exist_ok=True)
+    Path(outside).write_bytes(b"playblast")
+    return outside
 
 
 class _ReviewRecorder:
@@ -206,6 +223,48 @@ def test_execute_validates_frame_range(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         tool.execute(request)
+
+
+def test_execute_rejects_missing_playblast_path(tmp_path: Path) -> None:
+    request = _create_request(tmp_path)
+    tool = PlayblastAutomationTool(
+        timeline_query=lambda: (1, 2),
+        playblast_callback=_fake_empty_playblast,
+        clock=lambda: _dt.datetime(2024, 5, 1, 9, 0, 0),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        tool.execute(request)
+
+    assert "did not return an output path" in str(exc_info.value)
+
+
+def test_execute_rejects_invalid_playblast_path_type(tmp_path: Path) -> None:
+    request = _create_request(tmp_path)
+    tool = PlayblastAutomationTool(
+        timeline_query=lambda: (1, 2),
+        playblast_callback=_fake_invalid_playblast,
+        clock=lambda: _dt.datetime(2024, 5, 1, 9, 0, 0),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        tool.execute(request)
+
+    assert "unsupported path value" in str(exc_info.value)
+
+
+def test_execute_rejects_external_playblast_path(tmp_path: Path) -> None:
+    request = _create_request(tmp_path)
+    tool = PlayblastAutomationTool(
+        timeline_query=lambda: (1, 2),
+        playblast_callback=_fake_external_playblast,
+        clock=lambda: _dt.datetime(2024, 5, 1, 9, 0, 0),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        tool.execute(request)
+
+    assert "outside the requested directory" in str(exc_info.value)
 
 
 def test_execute_normalizes_windows_style_directory(tmp_path: Path) -> None:

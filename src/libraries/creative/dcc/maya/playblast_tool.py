@@ -222,7 +222,28 @@ class PlayblastAutomationTool:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         generated = self._playblast(request, target, frame_range)
-        generated_path = self._ensure_path(generated)
+        if not generated:
+            raise RuntimeError(
+                "Playblast callback did not return an output path; unable to continue."
+            )
+
+        try:
+            generated_path = self._ensure_path(generated)
+        except TypeError as exc:
+            raise RuntimeError(
+                "Playblast callback returned an unsupported path value; "
+                "expected a string or Path-like object."
+            ) from exc
+
+        output_root = output_directory.resolve()
+        generated_root = generated_path.resolve()
+
+        try:
+            generated_root.relative_to(output_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                "Playblast callback reported an output outside the requested directory."
+            ) from exc
 
         metadata = self._collect_metadata(request, frame_range, timestamp)
 
