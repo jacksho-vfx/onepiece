@@ -15,7 +15,14 @@ import json
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import StreamingResponse
 
 from apps.perona.engine import PeronaEngine
@@ -84,7 +91,7 @@ def render_feed(
     limit: int = Query(30, ge=1, le=250),
     sequence: str | None = Query(None),
     shot_id: str | None = Query(None),
-) -> list[RenderMetric]:
+) -> Any:
     """Return render telemetry samples from the demo engine."""
 
     return live_dashboard.render_feed(
@@ -97,7 +104,7 @@ async def render_feed_stream(
     limit: int = Query(30, ge=1, le=250),
     sequence: str | None = Query(None),
     shot_id: str | None = Query(None),
-) -> StreamingResponse:
+) -> Any:
     """Stream newline-delimited telemetry for widgets that expect live data."""
 
     return await live_dashboard.render_feed_stream(
@@ -106,7 +113,7 @@ async def render_feed_stream(
 
 
 @app.get("/metrics")
-def metrics_summary() -> dict[str, Any]:
+def metrics_summary() -> Any:
     """Expose aggregated statistics calculated from the demo telemetry."""
 
     return live_dashboard.metrics_summary(engine=_ENGINE)
@@ -120,7 +127,7 @@ def cost_estimate(payload: CostEstimateRequest) -> CostEstimate:
 
 
 @app.get("/risk-heatmap", response_model=list[RiskIndicator])
-def risk_heatmap() -> list[RiskIndicator]:
+def risk_heatmap() -> Any:
     """Return the static render risk ordering from the demo dataset."""
 
     return live_dashboard.risk_heatmap(engine=_ENGINE)
@@ -148,7 +155,7 @@ def shots_lifecycle(
     artist: str | None = Query(None),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
-) -> list[Shot]:
+) -> Any:
     """Return the canned lifecycle timelines for monitored demo shots."""
 
     return live_dashboard.shots_lifecycle(
@@ -166,7 +173,7 @@ def shot_sequences(
     artist: str | None = Query(None),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
-) -> list[PeronaSequence]:
+) -> Any:
     """Return demo shots grouped by sequence for gallery style views."""
 
     return live_dashboard.shots_sequences(
@@ -184,7 +191,7 @@ def shots_summary(
     artist: str | None = Query(None),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
-) -> dict[str, Any]:
+) -> Any:
     """Summarise shot progress using the deterministic lifecycle data."""
 
     return live_dashboard.shots_summary(
@@ -197,21 +204,21 @@ def shots_summary(
 
 
 @app.get("/risk")
-def risk_summary() -> dict[str, Any]:
+def risk_summary() -> Any:
     """Return aggregate risk metadata derived from the demo indicators."""
 
     return live_dashboard.risk_summary(engine=_ENGINE)
 
 
 @app.get("/costs")
-def costs_summary() -> dict[str, Any]:
+def costs_summary() -> Any:
     """Return combined cost and P&L data for the demo dataset."""
 
     return live_dashboard.costs_summary(engine=_ENGINE)
 
 
 @app.get("/reports/daily")
-def daily_report(format: str = Query("csv")) -> StreamingResponse:
+def daily_report(format: str = Query("csv")) -> Any:
     """Generate the daily summary report in CSV or PDF form."""
 
     return live_dashboard.daily_report(format=format, engine=_ENGINE)
