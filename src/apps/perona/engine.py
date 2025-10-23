@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence, Any
 import tomllib
 
+from libraries.perona import CostDriverDelta
 from libraries.render import optimization as render_optimization
 
 
@@ -758,38 +759,50 @@ class PeronaEngine:
         return tuple(lifecycles)
 
     def _build_pnl_contributions(self) -> tuple[PnLContribution, ...]:
-        return (
-            PnLContribution(
-                factor="Lighting complexity",
-                delta_cost=920.0,
-                percentage_points=10.4,
-                narrative="Additional volumetric bounce passes increased light cache time",
+        baseline_cost = self._pnl_baseline_cost
+        deltas = (
+            CostDriverDelta(
+                name="Resolution scale",
+                metric_change_pct=10.0,
+                cost_delta=round(baseline_cost * 0.15, 2),
+                metric_label="resolution",
             ),
-            PnLContribution(
-                factor="Volumetric FX iterations",
-                delta_cost=610.0,
-                percentage_points=6.8,
-                narrative="Two extra nebula simulations pushed GPU occupancy",
+            CostDriverDelta(
+                name="Sampling iterations",
+                metric_change_pct=8.0,
+                cost_delta=round(baseline_cost * 0.12, 2),
+                metric_label="sampling iterations",
             ),
-            PnLContribution(
-                factor="Cache rebuilds",
-                delta_cost=280.0,
-                percentage_points=3.1,
-                narrative="Downstream layout updates invalidated lighting caches",
+            CostDriverDelta(
+                name="Shot revisions",
+                metric_change_pct=5.0,
+                cost_delta=round(baseline_cost * 0.05, 2),
+                metric_label="shot revisions",
             ),
-            PnLContribution(
-                factor="GPU spot rate drift",
-                delta_cost=-350.0,
-                percentage_points=-3.9,
-                narrative="Night renders benefited from lower spot pricing",
+            CostDriverDelta(
+                name="GPU spot pricing",
+                metric_change_pct=-7.0,
+                cost_delta=round(-baseline_cost * 0.08, 2),
+                metric_label="spot pricing",
             ),
-            PnLContribution(
-                factor="Farm occupancy",
-                delta_cost=-120.0,
-                percentage_points=-1.4,
-                narrative="Better queue packing reduced idle nodes",
+            CostDriverDelta(
+                name="Queue efficiency",
+                metric_change_pct=-6.0,
+                cost_delta=round(-baseline_cost * 0.04, 2),
+                metric_label="queue idle time",
             ),
         )
+        contributions: list[PnLContribution] = []
+        for delta in deltas:
+            contributions.append(
+                PnLContribution(
+                    factor=delta.name,
+                    delta_cost=round(delta.cost_delta, 2),
+                    percentage_points=round(delta.cost_change_pct(baseline_cost), 1),
+                    narrative=delta.describe(baseline_cost, precision=1),
+                )
+            )
+        return tuple(contributions)
 
     def _build_optimization_note(
         self,
