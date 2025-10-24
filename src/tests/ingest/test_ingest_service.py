@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 from typing import Awaitable, cast
 
 from libraries.automation.ingest.service import (
+    IngestReport,
     IngestedMedia,
     MediaIngestService,
     ShotgridAuthenticationError,
@@ -317,3 +318,34 @@ def test_execute_uploads_asyncio_inside_event_loop(tmp_path: Path) -> None:
 
     asyncio.run(_invoke())
     assert mock_runner.await_count == 1
+
+
+def test_ingest_folder_handles_active_event_loop(tmp_path: Path) -> None:
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+
+    valid = incoming / "SHOW01_ep001_sc01_0001_comp.mov"
+    valid.write_bytes(b"data")
+
+    uploader = DummyUploader()
+    shotgrid = ShotgridClient()
+
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+        use_asyncio=True,
+    )
+
+    async def _invoke() -> IngestReport:
+        return service.ingest_folder(incoming, recursive=False)
+
+    report = asyncio.run(_invoke())
+
+    assert report.processed_count == 1
+    assert uploader.uploads
+    assert uploader.uploads[0][0] == valid
