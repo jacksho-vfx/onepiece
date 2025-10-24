@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.8.0",
     "pydantic-settings>=2.3.3",
     "PyYAML>=6.0.0",
+    "Pillow>=10.4.0",
     "requests>=2.32.0",
     "rich>=13.7.0",
     "structlog>=23.3.0",
