@@ -567,6 +567,7 @@ class MediaIngestService:
                 manifest_entries = list(manifest)
 
         manifest_lookup = _build_manifest_index(manifest_entries)
+        matched_manifest_entries: set[Delivery] = set()
 
         report = IngestReport()
         candidates: Iterable[Path]
@@ -610,6 +611,7 @@ class MediaIngestService:
                     )
                     report.warnings.append(warning)
                 else:
+                    matched_manifest_entries.add(delivery_entry)
                     mismatches: list[str] = []
                     if _normalise_identifier(
                         delivery_entry.show
@@ -689,6 +691,28 @@ class MediaIngestService:
                     size=size,
                 )
             )
+
+        if manifest_entries:
+            unmatched_entries = [
+                entry
+                for entry in manifest_entries
+                if entry not in matched_manifest_entries
+            ]
+            for entry in unmatched_entries:
+                warning = (
+                    "Manifest entry for "
+                    f"'{entry.delivery_path.as_posix()}' "
+                    f"(shot {entry.shot_name}) was not found on disk."
+                )
+                log.warning(
+                    "ingest.manifest_unmatched_entry",
+                    delivery_path=str(entry.delivery_path),
+                    show=entry.show,
+                    episode=entry.episode,
+                    scene=entry.scene,
+                    shot=entry.shot,
+                )
+                report.warnings.append(warning)
 
         if not upload_jobs:
             return report
