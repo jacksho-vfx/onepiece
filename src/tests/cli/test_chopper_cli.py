@@ -13,6 +13,7 @@ from apps.chopper.app import app
 from apps.chopper.renderer import Scene
 
 chopper_app_module = importlib.import_module("apps.chopper.app")
+chopper_renderer_module = importlib.import_module("apps.chopper.renderer")
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
@@ -72,6 +73,35 @@ def test_render_png_frames(tmp_path: Path) -> None:
     )
 
 
+def test_render_png_reports_missing_pillow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    def fake_require_pillow() -> None:
+        raise RuntimeError(
+            "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
+        )
+
+    monkeypatch.setattr(
+        chopper_renderer_module, "_require_pillow", fake_require_pillow, raising=True
+    )
+
+    output_dir = tmp_path / "png"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [str(scene_path), "--format", "png", "--output", str(output_dir)],
+    )
+
+    assert result.exit_code == 2
+    message = strip_ansi(result.stderr)
+    terms = ["Install", "the", "'onepiece[chopper-images]'", "extra"]
+    for term in terms:
+        assert term in message
+
+
 def test_render_gif_animation(tmp_path: Path) -> None:
     pytest.importorskip("PIL.Image")
     pytest.importorskip("imageio")
@@ -89,6 +119,34 @@ def test_render_gif_animation(tmp_path: Path) -> None:
     destination = tmp_path / "animation.gif"
     assert destination.exists()
     assert destination.read_bytes().startswith(b"GIF89a")
+
+
+def test_render_gif_reports_missing_pillow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    def fake_require_pillow() -> None:
+        raise RuntimeError(
+            "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
+        )
+
+    monkeypatch.setattr(
+        chopper_renderer_module, "_require_pillow", fake_require_pillow, raising=True
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [str(scene_path), "--output", str(tmp_path / "animation.gif")],
+    )
+
+    assert result.exit_code == 2
+    message = strip_ansi(result.stderr)
+    terms = ["Install", "the", "'onepiece[chopper-images]'", "extra"]
+    for term in terms:
+        assert term in message
 
 
 def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
@@ -122,6 +180,40 @@ def test_render_rejects_unknown_format(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "format must be one of" in result.stderr
+
+
+def test_render_mp4_reports_missing_animation_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    def fake_require_imageio() -> None:
+        raise RuntimeError(
+            "imageio is required for animation export. Install the 'onepiece[chopper-anim]' extra."
+        )
+
+    monkeypatch.setattr(
+        chopper_renderer_module, "_require_imageio", fake_require_imageio, raising=True
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            str(scene_path),
+            "--format",
+            "mp4",
+            "--output",
+            str(tmp_path / "animation.mp4"),
+        ],
+    )
+
+    assert result.exit_code == 2
+    message = strip_ansi(result.stderr)
+    terms = ["Install", "the", "'onepiece[chopper-anim]'", "extra"]
+    for term in terms:
+        assert term in message
 
 
 def test_load_scene_rejects_directory(tmp_path: Path) -> None:
