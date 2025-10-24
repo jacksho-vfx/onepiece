@@ -24,7 +24,9 @@ def test_convert_audio_to_mono_raises_when_no_audio(
 
     def _fake_open(path: str, mode: str | None = None) -> _FakeAudioContainer:
         if mode == "w":  # pragma: no cover - defensive
-            pytest.fail("Output container should not be opened when no audio streams exist")
+            pytest.fail(
+                "Output container should not be opened when no audio streams exist"
+            )
         return container
 
     monkeypatch.setitem(sys.modules, "av", SimpleNamespace(open=_fake_open))
