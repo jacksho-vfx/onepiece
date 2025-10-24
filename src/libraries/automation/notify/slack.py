@@ -1,6 +1,7 @@
 """Slack notification backend."""
 
 import os
+from html import escape
 from typing import Sequence
 
 import requests
@@ -52,6 +53,8 @@ class SlackNotifier(Notifier):
 
     @staticmethod
     def _format_message(subject: str, message: str) -> str:
+        escaped_message = escape(message, quote=False)
         if subject:
-            return f"*{subject}*\n{message}"
-        return message
+            escaped_subject = escape(subject, quote=False)
+            return f"*{escaped_subject}*\n{escaped_message}"
+        return escaped_message
