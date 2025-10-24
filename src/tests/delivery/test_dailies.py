@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
+from typer.testing import CliRunner
 
+from apps.onepiece import app as onepiece_app
 from libraries.automation.review import dailies
 from libraries.automation.review.dailies import DailiesClip, _extract_duration
+
+
+runner = CliRunner()
 
 
 def _make_version_record(
@@ -158,3 +164,84 @@ def test_fetch_playlist_versions_aggregates_paginated_results() -> None:
         100,
     )
     assert all(isinstance(clip, DailiesClip) for clip in clips)
+
+
+def test_dailies_cli_creates_missing_output_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "nested" / "dailies.mov"
+    assert not output.parent.exists()
+
+    clips = [
+        DailiesClip(
+            shot="shot_001",
+            version="shot_001_v001",
+            source_path=str(tmp_path / "shot_001_v001.mov"),
+            frame_range="1001-1050",
+            user="artist_a",
+            duration_seconds=5.0,
+        )
+    ]
+
+    clips[0].source_path and Path(clips[0].source_path).write_bytes(b"frames")
+
+    monkeypatch.setattr(dailies, "get_shotgrid_client", lambda: object())
+    monkeypatch.setattr(
+        dailies, "fetch_playlist_versions", lambda client, project, playlist: clips
+    )
+
+    def _unused_fetch_today(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+        pytest.fail("fetch_today_approved_versions should not be called")
+
+    monkeypatch.setattr(dailies, "fetch_today_approved_versions", _unused_fetch_today)
+
+    def _fake_create_concat_file(sources: Sequence[str], directory: Path) -> Path:
+        concat = directory / "concat.txt"
+        concat.write_text("\n".join(sources), encoding="utf-8")
+        return concat
+
+    monkeypatch.setattr(dailies, "create_concat_file", _fake_create_concat_file)
+
+    ffmpeg_calls: list[Path] = []
+
+    def _fake_run_ffmpeg_concat(
+        concat_path: Path,
+        output_path: Path,
+        *,
+        codec: str,
+        burnins: Sequence[Any] | None,
+    ) -> None:
+        ffmpeg_calls.append(output_path)
+        assert output_path.parent.exists()
+        output_path.write_bytes(b"rendered")
+
+    monkeypatch.setattr(dailies, "run_ffmpeg_concat", _fake_run_ffmpeg_concat)
+
+    def _fake_write_manifest(
+        output_path: Path, clips_arg: Sequence[Any], *, codec: str
+    ) -> Path:
+        manifest_path = output_path.with_name(f"{output_path.name}.manifest.json")
+        manifest_path.write_text("{}", encoding="utf-8")
+        return manifest_path
+
+    monkeypatch.setattr(dailies, "write_manifest", _fake_write_manifest)
+
+    result = runner.invoke(
+        onepiece_app.app,
+        [
+            "review",
+            "dailies",
+            "--project",
+            "My Show",
+            "--playlist",
+            "Editorial",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert output.exists()
+    assert ffmpeg_calls == [output]
+    manifest_path = output.with_name(f"{output.name}.manifest.json")
+    assert manifest_path.exists()
