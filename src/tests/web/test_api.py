@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -112,6 +113,58 @@ def test_cost_estimate_endpoint_supports_currency_override() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["currency"] == "USD"
+
+
+def test_cost_insights_endpoint_returns_payload() -> None:
+    invalidate_engine_cache()
+    response = client.get("/api/cost/insights", params={"top_n": 2})
+
+    assert response.status_code == 200
+    data = response.json()
+    statistics = data["statistics"]
+    assert isinstance(statistics, list)
+    assert statistics, "Expected telemetry statistics to be returned"
+    first_stat = statistics[0]
+    assert {
+        "name",
+        "mean",
+        "stddev",
+        "minimum",
+        "maximum",
+    }.issubset(first_stat.keys())
+
+    recommendations = data["recommendations"]
+    assert isinstance(recommendations, list)
+    assert len(recommendations) == 2
+    assert data["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+
+
+def test_cost_insights_endpoint_handles_missing_dataset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invalidate_engine_cache()
+
+    mock_engine = Mock()
+    mock_engine.cost_insights.return_value = ((), ())
+
+    signature = ("ENV", "path", 1.23)
+    memo = dashboard_module._CostInsightsMemo()
+    entry = dashboard_module._EngineCacheEntry(
+        engine=mock_engine,
+        signature=signature,
+        settings_path=None,
+        warnings=(),
+        insights=memo,
+    )
+
+    monkeypatch.setattr(dashboard_module, "_engine_cache", entry, raising=False)
+    monkeypatch.setattr(dashboard_module, "_settings_signature", lambda: signature)
+    monkeypatch.setattr(dashboard_module, "_load_engine", lambda refresh: mock_engine)
+
+    response = client.get("/api/cost/insights")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "No telemetry statistics available."}
 
 
 def test_risk_heatmap_endpoint() -> None:

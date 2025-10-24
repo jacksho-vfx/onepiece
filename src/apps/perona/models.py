@@ -26,6 +26,7 @@ from .engine import (
     ShotLifecycle,
     ShotLifecycleStage,
 )
+from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 
 class RenderMetric(BaseModel):
@@ -198,6 +199,50 @@ class Sequence(BaseModel):
         return cls(name=name, shots=ordered)
 
 
+class CostFeatureStat(BaseModel):
+    """Summary statistics for a render cost feature."""
+
+    name: str
+    mean: float
+    stddev: float
+    minimum: float
+    maximum: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_entity(cls, statistics: FeatureStatistics) -> "CostFeatureStat":
+        """Create a serialisable model from :class:`FeatureStatistics`."""
+
+        return cls.model_validate(statistics)
+
+
+class CostInsightResponse(BaseModel):
+    """Payload returned by the cost insights API."""
+
+    statistics: tuple[CostFeatureStat, ...] = Field(default_factory=tuple)
+    recommendations: tuple[str, ...] = Field(default_factory=tuple)
+    settings_path: Path | None = None
+
+    @classmethod
+    def from_results(
+        cls,
+        statistics: Iterable[FeatureStatistics],
+        recommendations: Iterable[str],
+        *,
+        settings_path: Path | None,
+    ) -> "CostInsightResponse":
+        """Return a response populated from engine cost insights."""
+
+        return cls(
+            statistics=tuple(
+                CostFeatureStat.from_entity(entry) for entry in statistics
+            ),
+            recommendations=tuple(recommendations),
+            settings_path=settings_path,
+        )
+
+
 class CostEstimateRequest(BaseModel):
     """Payload accepted by the cost estimate endpoint."""
 
@@ -339,6 +384,8 @@ def sequences_from_lifecycles(
 
 
 __all__ = [
+    "CostFeatureStat",
+    "CostInsightResponse",
     "CostEstimate",
     "CostEstimateRequest",
     "OptimizationBacktestRequest",
