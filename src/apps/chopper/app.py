@@ -129,6 +129,12 @@ def render(
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     frames = list(frames_iter)
+
+    if fps <= 0:
+        raise typer.BadParameter(
+            "Frames per second must be greater than zero when encoding animations."
+        )
+
     writer = AnimationWriter(frames=frames, fps=fps)
     try:
         if export_normalized == "gif":
