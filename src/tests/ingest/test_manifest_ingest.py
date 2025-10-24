@@ -263,3 +263,38 @@ def test_ingest_folder_rejects_manifest_mismatch(
     assert any(
         "Manifest metadata does not match" in warning for warning in report.warnings
     )
+
+
+def test_ingest_folder_warns_for_unmatched_manifest(
+    tmp_path: Path, manifest_entry: Delivery
+) -> None:
+    folder = tmp_path / "incoming"
+    folder.mkdir()
+
+    uploader = DummyUploader()
+    shotgrid = ShotgridClient()
+
+    service = MediaIngestService(
+        project_name="Demo",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=shotgrid,
+        dry_run=True,
+    )
+
+    report = service.ingest_folder(
+        folder,
+        recursive=False,
+        manifest=[manifest_entry],
+    )
+
+    assert report.processed_count == 0
+    assert any(
+        manifest_entry.delivery_path.name in warning
+        and "was not found on disk" in warning
+        for warning in report.warnings
+    )
+    assert any(
+        manifest_entry.shot_name in warning for warning in report.warnings
+    ), "Expected unmatched manifest warning to reference the shot"
