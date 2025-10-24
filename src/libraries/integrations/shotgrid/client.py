@@ -12,7 +12,16 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, NotRequired, cast, Mapping, Optional, Sequence, TypedDict, TypeVar
+from typing import (
+    Any,
+    NotRequired,
+    cast,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    TypeVar,
+)
 
 log = logging.getLogger(__name__)
 
