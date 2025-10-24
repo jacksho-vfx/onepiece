@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pytest import LogCaptureFixture
 
 from libraries.automation.ingest.service import (
     MediaIngestService,
@@ -216,3 +217,27 @@ def test_resume_discards_stale_checkpoint_metadata(tmp_path: Path) -> None:
     assert not list(
         checkpoint_dir.glob("*.json")
     ), "Stale checkpoints should be cleared after upload"
+
+
+def test_checkpoint_store_skips_invalid_payload(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    checkpoint_dir = tmp_path / "checkpoints"
+    store = UploadCheckpointStore(checkpoint_dir)
+
+    bucket = "vendor_in"
+    key = "SHOW01/path.mov"
+    entry_path = store._entry_path(bucket, key)
+    entry_path.write_text(
+        json.dumps({"bucket": bucket, "key": key}),
+        encoding="utf-8",
+    )
+
+    caplog.set_level("WARNING")
+
+    checkpoint = store.load(bucket, key)
+
+    assert checkpoint is None
+    assert any(
+        "ingest.checkpoint_invalid" in record.getMessage() for record in caplog.records
+    )

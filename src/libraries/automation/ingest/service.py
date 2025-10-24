@@ -151,7 +151,15 @@ class UploadCheckpointStore:
         except json.JSONDecodeError:
             log.warning("ingest.checkpoint_corrupt", checkpoint=str(path))
             return None
-        return UploadCheckpoint.from_payload(payload)
+        try:
+            return UploadCheckpoint.from_payload(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            log.warning(
+                "ingest.checkpoint_invalid",
+                checkpoint=str(path),
+                error=str(exc),
+            )
+            return None
 
     def save(self, checkpoint: UploadCheckpoint) -> None:
         path = self._entry_path(checkpoint.bucket, checkpoint.key)
