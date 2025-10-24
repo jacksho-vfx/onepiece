@@ -258,9 +258,20 @@ class ShotGridClient:
         extra: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {"fields": fields}
+
+        def encode(prefix: str, value: Any) -> None:
+            if isinstance(value, dict):
+                for nested_key, nested_value in value.items():
+                    encode(f"{prefix}[{nested_key}]", nested_value)
+            elif isinstance(value, (list, tuple)):
+                for nested_index, nested_value in enumerate(value):
+                    encode(f"{prefix}[{nested_index}]", nested_value)
+            else:
+                params[prefix] = value
+
         for idx, filter_entry in enumerate(filters):
             for key, value in filter_entry.items():
-                params[f"filter[{idx}][{key}]"] = value
+                encode(f"filter[{idx}][{key}]", value)
         if extra:
             params.update(extra)
         return params

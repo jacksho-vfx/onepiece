@@ -170,6 +170,45 @@ def test_upload_media_uses_configured_timeout(
     assert session.post.call_args.kwargs["timeout"] == client.timeout
 
 
+def test_build_query_params_handles_nested_filters(client: ShotGridClient) -> None:
+    params = client._build_query_params(
+        [
+            {"entity": {"type": "Shot", "id": 123}},
+            {"content": "Anim"},
+            {"in": [{"id": 1}, {"id": 2}]},
+        ],
+        "id,content",
+    )
+
+    assert params == {
+        "fields": "id,content",
+        "filter[0][entity][type]": "Shot",
+        "filter[0][entity][id]": 123,
+        "filter[1][content]": "Anim",
+        "filter[2][in][0][id]": 1,
+        "filter[2][in][1][id]": 2,
+    }
+
+
+def test_get_task_uses_nested_filter_encoding(client: ShotGridClient) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"data": [{"id": 42, "content": "Anim"}]}
+    session.get.return_value = response
+    client._session = session
+
+    result = client.get_task(101, "Anim")
+
+    assert result == {"id": 42, "content": "Anim"}
+    params = session.get.call_args.kwargs["params"]
+    assert params["filter[0][entity][type]"] == "Shot"
+    assert params["filter[0][entity][id]"] == 101
+    assert params["filter[1][content]"] == "Anim"
+    assert params["page[size]"] == 1
+
+
 def test_init_applies_default_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = SimpleNamespace(
         base_url="https://example.com", script_name="script", api_key="key"
