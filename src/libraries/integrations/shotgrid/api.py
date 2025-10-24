@@ -258,7 +258,7 @@ class ShotGridClient:
         extra: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {"fields": fields}
-        
+
         def encode(prefix: str, value: Any) -> None:
             if isinstance(value, dict):
                 for nested_key, nested_value in value.items():
