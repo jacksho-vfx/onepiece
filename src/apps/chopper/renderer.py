@@ -313,6 +313,11 @@ class Scene:
     def from_dict(cls, payload: dict[str, Any]) -> "Scene":
         """Create a :class:`Scene` instance from ``payload``."""
 
+        if not isinstance(payload, Mapping):
+            raise SceneError("Scene description must be a mapping")
+
+        payload = dict(payload)
+
         required = {"width", "height", "frames"}
         missing = required - payload.keys()
         if missing:
