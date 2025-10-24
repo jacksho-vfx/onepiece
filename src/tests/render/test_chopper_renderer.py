@@ -181,6 +181,40 @@ def test_frame_png_export_preserves_alpha(tmp_path: Path) -> None:
         assert image.getpixel((1, 0)) == (0, 0, 255, 255)
 
 
+def test_frame_to_image_rgb_matches_bytes() -> None:
+    pytest.importorskip("PIL.Image")
+
+    frame = Frame(
+        index=0,
+        width=2,
+        height=1,
+        pixels=[[(255, 0, 0), (0, 255, 0)]],
+    )
+
+    image = frame.to_image()
+
+    assert image.mode == "RGB"
+    assert image.size == (2, 1)
+    assert image.tobytes() == frame.to_bytes()
+
+
+def test_frame_to_image_rgba_matches_bytes() -> None:
+    pytest.importorskip("PIL.Image")
+
+    frame = Frame(
+        index=0,
+        width=2,
+        height=1,
+        pixels=[[(255, 0, 0, 128), (0, 0, 255, 255)]],
+    )
+
+    image = frame.to_image()
+
+    assert image.mode == "RGBA"
+    assert image.size == (2, 1)
+    assert image.tobytes() == frame.to_bytes(mode="RGBA")
+
+
 def test_animation_writer_creates_gif(tmp_path: Path) -> None:
     pytest.importorskip("PIL.Image")
     pytest.importorskip("imageio")
