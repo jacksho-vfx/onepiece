@@ -751,14 +751,11 @@ class PeronaEngine:
             if key in telemetry_index:
                 metrics_by_shot[key].append(sample)
 
-        default_render_hours = (
-            self._baseline_cost_input.render_hours
-            or (
-                self._baseline_cost_input.frame_count
-                * self._baseline_cost_input.average_frame_time_ms
-                / 1000.0
-                / 3600.0
-            )
+        default_render_hours = self._baseline_cost_input.render_hours or (
+            self._baseline_cost_input.frame_count
+            * self._baseline_cost_input.average_frame_time_ms
+            / 1000.0
+            / 3600.0
         )
 
         examples: list[TrainingExample] = []
@@ -786,7 +783,9 @@ class PeronaEngine:
                 if render_hours <= 0:
                     render_hours = default_render_hours
 
-                frame_count = telemetry.frames_rendered or self._baseline_cost_input.frame_count
+                frame_count = (
+                    telemetry.frames_rendered or self._baseline_cost_input.frame_count
+                )
 
                 adjusted_input = replace(
                     self._baseline_cost_input,

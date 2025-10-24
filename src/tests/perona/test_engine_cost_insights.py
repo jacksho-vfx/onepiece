@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from apps.perona.engine import (
     CostModelInput,
@@ -14,16 +17,16 @@ from apps.perona.engine import (
 
 
 class _StubMetricStore:
-    def __init__(self, path):
+    def __init__(self, path: Path) -> None:
         self._path = path
 
     @property
-    def path(self):
+    def path(self) -> Path:
         return self._path
 
 
 @pytest.fixture()
-def engine_with_stubbed_data(tmp_path, monkeypatch):
+def engine_with_stubbed_data(tmp_path: Path, monkeypatch: MonkeyPatch) -> Any:
     baseline = CostModelInput(
         frame_count=100,
         average_frame_time_ms=100.0,
@@ -90,7 +93,9 @@ def engine_with_stubbed_data(tmp_path, monkeypatch):
     return engine
 
 
-def test_cost_training_dataset_includes_live_and_persisted_metrics(engine_with_stubbed_data):
+def test_cost_training_dataset_includes_live_and_persisted_metrics(
+    engine_with_stubbed_data: PeronaEngine,
+) -> None:
     dataset = engine_with_stubbed_data._build_cost_training_dataset()
 
     assert len(dataset) == 2
@@ -112,7 +117,9 @@ def test_cost_training_dataset_includes_live_and_persisted_metrics(engine_with_s
     assert second.cost == pytest.approx(3.0, rel=1e-3)
 
 
-def test_cost_insights_returns_statistics_and_recommendations(engine_with_stubbed_data):
+def test_cost_insights_returns_statistics_and_recommendations(
+    engine_with_stubbed_data: PeronaEngine,
+) -> None:
     stats, recommendations = engine_with_stubbed_data.cost_insights(top_n=2)
 
     frame_time_stats = next(stat for stat in stats if stat.name == "frame_time_ms")
@@ -123,4 +130,13 @@ def test_cost_insights_returns_statistics_and_recommendations(engine_with_stubbe
 
     assert len(recommendations) == 2
     for message in recommendations:
-        assert any(feature in message for feature in ("render_hours", "frame_time_ms", "gpu_utilisation", "error_count", "cache_health"))
+        assert any(
+            feature in message
+            for feature in (
+                "render_hours",
+                "frame_time_ms",
+                "gpu_utilisation",
+                "error_count",
+                "cache_health",
+            )
+        )
