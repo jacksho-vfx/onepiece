@@ -786,7 +786,7 @@ def cost_insights(
             "recommendations": list(recommendations),
         }
         if settings_result.settings_path is not None:
-            payload["settings_path"] = str(settings_result.settings_path)
+            payload["settings_path"] = str(settings_result.settings_path)  # type: ignore[assignment]
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 

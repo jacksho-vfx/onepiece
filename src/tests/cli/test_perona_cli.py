@@ -316,9 +316,7 @@ def test_cost_insights_emits_json_payload(
     assert stat["stddev"] == pytest.approx(0.3)
     assert stat["minimum"] == pytest.approx(0.6)
     assert stat["maximum"] == pytest.approx(1.8)
-    assert payload["recommendations"] == [
-        "Optimise render_hours with caching tweaks."
-    ]
+    assert payload["recommendations"] == ["Optimise render_hours with caching tweaks."]
     assert payload["settings_path"] == str(settings_file)
 
 
