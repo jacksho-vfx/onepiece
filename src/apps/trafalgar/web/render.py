@@ -865,7 +865,16 @@ class RenderSubmissionService:
             user=resolved_user,
             chunk_size=resolved_chunk,
         )
-        job_id = result.get("job_id", "")
+        raw_job_id = result.get("job_id")
+        job_id: str = ""
+        if raw_job_id is not None:
+            if isinstance(raw_job_id, bytes):
+                if raw_job_id:
+                    job_id = raw_job_id.decode("utf-8", errors="replace")
+            else:
+                text = str(raw_job_id)
+                if text:
+                    job_id = text
         stored_request = request.model_copy(
             update={"priority": resolved_priority, "chunk_size": resolved_chunk},
             deep=True,
