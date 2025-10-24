@@ -200,6 +200,28 @@ def test_render_gif_reports_missing_pillow(
         assert term in message
 
 
+@pytest.mark.parametrize("fps", [0, -12])
+def test_render_gif_rejects_invalid_fps(tmp_path: Path, fps: int) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            str(scene_path),
+            "--output",
+            str(tmp_path / "animation.gif"),
+            "--fps",
+            str(fps),
+        ],
+    )
+
+    assert result.exit_code == 2
+    message = strip_ansi(result.stderr)
+    assert "Frames per second must be greater than zero" in message
+
+
 def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     _write_scene(scene_path)
