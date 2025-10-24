@@ -239,6 +239,5 @@ def test_checkpoint_store_skips_invalid_payload(
 
     assert checkpoint is None
     assert any(
-        "ingest.checkpoint_invalid" in record.getMessage()
-        for record in caplog.records
+        "ingest.checkpoint_invalid" in record.getMessage() for record in caplog.records
     )
