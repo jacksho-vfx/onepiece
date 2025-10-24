@@ -156,7 +156,9 @@ class SceneObject:
             position_x = float(position_data[0])
             position_y = float(position_data[1])
         except (TypeError, ValueError) as exc:
-            raise SceneError("Object position must contain numeric x and y values") from exc
+            raise SceneError(
+                "Object position must contain numeric x and y values"
+            ) from exc
 
         if not math.isfinite(position_x) or not math.isfinite(position_y):
             raise SceneError("Object position coordinates must be finite numbers")
