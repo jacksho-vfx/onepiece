@@ -32,3 +32,26 @@ def test_build_burnin_filter_increments_y_offsets() -> None:
     expected_offsets = [24, 56, 88]
     for overlay, expected_offset in zip(overlays, expected_offsets):
         assert f":y={expected_offset}:" in overlay
+
+
+def test_build_burnin_filter_returns_comma_separated_overlays() -> None:
+    burnins = [
+        BurnInMetadata(
+            shot="sh040",
+            version="v004",
+            frame_range="1301-1400",
+            user="luffy",
+        ),
+        BurnInMetadata(
+            shot="sh050",
+            version="v005",
+            frame_range="1401-1500",
+            user="zoro",
+        ),
+    ]
+
+    result = build_burnin_filter(burnins)
+
+    assert "," in result
+    assert "Shot\\: sh040" in result
+    assert "Shot\\: sh050" in result

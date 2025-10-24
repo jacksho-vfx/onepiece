@@ -52,13 +52,17 @@ def build_burnin_filter(burnins: Sequence[BurnInMetadata]) -> str:
         )
         escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         y_offset = 24 + idx * 32
-        overlays.append(
-            "drawtext=text='"
-            f"{escaped}'"
+        overlay = (
+            "drawtext="
+            f"text='{escaped}'"
             ":x=24:"
-            f"y={y_offset}:fontsize=24:fontcolor=white:"
-            "box=1:boxcolor=black@0.6"
+            f"y={y_offset}:"
+            "fontsize=24:"
+            "fontcolor=white:"
+            "box=1:"
+            "boxcolor=black@0.6"
         )
+        overlays.append(overlay)
     return ",".join(overlays)
 
 
