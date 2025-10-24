@@ -747,19 +747,22 @@ class ShotGridClient:
     def create_task(
         self,
         data: TaskData,
-        step: PipelineStep | str,
+        step: PipelineStep | str | None,
     ) -> Any:
         if not data.project_id:
             raise ValueError("Project not provided.")
 
-        step_name = step.value if isinstance(step, PipelineStep) else step
-        step_record = self._get_single(
-            "Step",
-            [{"code": step_name}],
-            "id,code",
-        )
-        if not step_record:
-            raise ValueError(f"Step '{step_name}' not found.")
+        step_id: int | None = None
+        if step is not None:
+            step_name = step.value if isinstance(step, PipelineStep) else step
+            step_record = self._get_single(
+                "Step",
+                [{"code": step_name}],
+                "id,code",
+            )
+            if not step_record:
+                raise ValueError(f"Step '{step_name}' not found.")
+            step_id = step_record["id"]
         attributes = {**data.extra}
         if data.code:
             code_value = (
@@ -777,6 +780,8 @@ class ShotGridClient:
             relationships["entity"] = {
                 "data": {"type": entity_type, "id": data.entity_id}
             }
+        if step_id is not None:
+            relationships["step"] = {"data": {"type": "Step", "id": step_id}}
         return self._post("Task", attributes, relationships or None)
 
     # ------------------------------------------------------------------ #

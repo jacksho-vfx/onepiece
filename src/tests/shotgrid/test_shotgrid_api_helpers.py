@@ -421,6 +421,7 @@ def test_create_task_includes_entity_relationship(client: ShotGridClient) -> Non
     assert attributes["content"] == TaskCode.FINAL_DELIVERY.value
     assert relationships["project"] == {"data": {"type": "Project", "id": 101}}
     assert relationships["entity"] == {"data": {"type": "Asset", "id": 202}}
+    assert relationships["step"] == {"data": {"type": "Step", "id": 5}}
 
 
 def test_create_task_defaults_related_entity_type(client: ShotGridClient) -> None:
@@ -434,6 +435,21 @@ def test_create_task_defaults_related_entity_type(client: ShotGridClient) -> Non
     assert attributes == {}
     assert relationships["project"] == {"data": {"type": "Project", "id": 303}}
     assert relationships["entity"] == {"data": {"type": "Shot", "id": 404}}
+    assert relationships["step"] == {"data": {"type": "Step", "id": 9}}
+
+
+def test_create_task_without_step_omits_relationship(client: ShotGridClient) -> None:
+    data = TaskData(project_id=505)
+    client._get_single = MagicMock()
+    client._post = MagicMock(return_value={"id": 66})
+
+    client.create_task(data, None)
+
+    client._get_single.assert_not_called()
+    _, attributes, relationships = client._post.call_args.args
+    assert attributes == {}
+    assert relationships["project"] == {"data": {"type": "Project", "id": 505}}
+    assert "step" not in relationships
 
 
 def test_update_version_status_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
