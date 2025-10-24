@@ -8,6 +8,7 @@ import pytest_mock
 from typer.testing import CliRunner
 
 from apps.perona.engine import CostBreakdown, CostModelInput, SettingsLoadResult
+from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.app import app as perona_app
 from apps.perona.models import BaselineCostInput, SettingsSummary
 
@@ -231,3 +232,107 @@ def test_cost_estimate_settings_path_overrides_defaults(
 
     assert from_settings.call_args_list[0].kwargs == {"path": None}
     assert from_settings.call_args_list[1].kwargs == {"path": settings_file}
+
+
+def test_cost_insights_renders_table_output(
+    mocker: pytest_mock.MockerFixture, tmp_path: Path
+) -> None:
+    statistics = (
+        FeatureStatistics(
+            name="frame_time_ms",
+            mean=124.5,
+            stddev=12.3,
+            minimum=110.0,
+            maximum=140.0,
+        ),
+        FeatureStatistics(
+            name="gpu_utilisation",
+            mean=0.78,
+            stddev=0.08,
+            minimum=0.62,
+            maximum=0.89,
+        ),
+    )
+    recommendations = (
+        "Trim shading passes to reduce frame_time_ms.",
+        "Balance workloads to stabilise gpu_utilisation.",
+    )
+    engine = mocker.Mock()
+    engine.cost_insights.return_value = (statistics, recommendations)
+    settings_file = tmp_path / "perona.toml"
+    settings_result = SettingsLoadResult(
+        engine=engine, settings_path=settings_file, warnings=()
+    )
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["cost", "insights"])
+
+    assert result.exit_code == 0
+    engine.cost_insights.assert_called_once_with()
+    output = result.output
+    assert f"Settings file: {settings_file}" in output
+    assert "Cost telemetry insights" in output
+    assert "Frame Time ms" in output
+    assert "GPU Utilisation" in output
+    assert "Recommendations" in output
+    assert "- Trim shading passes" in output
+
+
+def test_cost_insights_emits_json_payload(
+    mocker: pytest_mock.MockerFixture, tmp_path: Path
+) -> None:
+    statistics = (
+        FeatureStatistics(
+            name="render_hours",
+            mean=1.2,
+            stddev=0.3,
+            minimum=0.6,
+            maximum=1.8,
+        ),
+    )
+    recommendations = ("Optimise render_hours with caching tweaks.",)
+    engine = mocker.Mock()
+    engine.cost_insights.return_value = (statistics, recommendations)
+    settings_file = tmp_path / "overrides.toml"
+    settings_result = SettingsLoadResult(
+        engine=engine, settings_path=settings_file, warnings=()
+    )
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["cost", "insights", "--format", "json"])
+
+    assert result.exit_code == 0
+    engine.cost_insights.assert_called_once_with()
+    payload = json.loads(result.output)
+    stats = payload["statistics"]
+    assert len(stats) == 1
+    stat = stats[0]
+    assert stat["name"] == "render_hours"
+    assert stat["mean"] == pytest.approx(1.2)
+    assert stat["stddev"] == pytest.approx(0.3)
+    assert stat["minimum"] == pytest.approx(0.6)
+    assert stat["maximum"] == pytest.approx(1.8)
+    assert payload["recommendations"] == ["Optimise render_hours with caching tweaks."]
+    assert payload["settings_path"] == str(settings_file)
+
+
+def test_cost_insights_handles_missing_data(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    engine = mocker.Mock()
+    engine.cost_insights.return_value = ((), ())
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["cost", "insights"])
+
+    assert result.exit_code == 0
+    engine.cost_insights.assert_called_once_with()
+    assert "No telemetry statistics available." in result.output
+    assert "No recommendations generated." in result.output
