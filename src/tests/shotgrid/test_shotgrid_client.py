@@ -95,6 +95,17 @@ def test_entity_store_next_id_handles_sparse_ids() -> None:
     assert store.next_id("Shot") == 4
 
 
+def test_entity_store_delete_handles_non_string_unique_keys() -> None:
+    store = EntityStore()
+    identifier = Path("asset/model")
+    store.add("Asset", {"id": 1, "type": "Asset", "code": identifier})
+
+    store.delete("Asset", 1)
+
+    index = store._indices["Asset"]
+    assert str(identifier) not in index
+
+
 @dataclass
 class FlakyStore(EntityStore):  # type: ignore[misc]
     """Entity store that fails the first ``add`` invocation."""
