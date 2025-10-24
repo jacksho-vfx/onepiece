@@ -6,6 +6,32 @@ OnePiece is a Typer-powered command line toolkit designed for ingesting, packagi
 >
 > **Recent merges** extend the DCC tooling with a dedicated animation command group, an Unreal Engine importer, and tighter publish validation. Maya-specific helpers now guard against missing PyMEL installations, plugin discovery treats module names case-insensitively, and scene-name validation rejects unsafe paths. Trafalgar introduces a pluggable provider registry with sensible defaults so delivery and reconciliation data sources can be extended without forking the service.
 
+## Toolkit components
+
+- **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, and validation helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
+- **Trafalgar services** – FastAPI applications and CLI commands for the production dashboard, ingest run history, and render API. The `trafalgar` entry point launches these servers and includes utilities for generating demo dashboards and authentication tokens. 【F:src/apps/trafalgar/app.py†L1-L120】
+- **Perona dashboard** – a dedicated CLI and FastAPI service for render cost analytics and configuration inspection. Use the `perona` console script to operate the service or query settings. 【F:src/apps/perona/app.py†L1-L160】
+- **Chopper utility** – a lightweight CLI for exercising the render pipeline without DCC dependencies. The `chopper` entry point renders deterministic sample scenes for QA and demonstrations. 【F:src/apps/chopper/app.py†L1-L120】
+- **Uta Control Center** – a FastAPI surface that mirrors the OnePiece command tree in a browser, embedding the Trafalgar dashboard for supervisors. Launch it via `python -m apps.uta` or by importing `apps.uta.app`. 【F:src/apps/uta/app.py†L1-L140】
+
+## Documentation map
+
+The `docs/` directory breaks down end-user and operator guidance by topic:
+
+| Guide | Focus |
+| --- | --- |
+| [`docs/cli_examples.md`](docs/cli_examples.md) | Command-by-command reference covering ingest, DCC, render, notification, and validation helpers. |
+| [`docs/cli_walkthroughs.md`](docs/cli_walkthroughs.md) | End-to-end task walkthroughs using the bundled example assets. |
+| [`docs/configuration_profiles.md`](docs/configuration_profiles.md) | Layered configuration profile discovery and recommended keys. |
+| [`docs/developer_guide.md`](docs/developer_guide.md) | Development environment setup, contribution workflow, and QA tips. |
+| [`docs/dashboard_api.md`](docs/dashboard_api.md) & [`docs/trafalgar-authentication.md`](docs/trafalgar-authentication.md) | Trafalgar dashboard API contracts and authentication flows. |
+| [`docs/render_api.md`](docs/render_api.md) | Render API capabilities and adapter registration guidance. |
+| [`docs/perona_dashboard.md`](docs/perona_dashboard.md) | Operating the Perona CLI, configuration layering, and API usage. |
+| [`docs/maya_character_selector.md`](docs/maya_character_selector.md) | Maya utility panel for discovering and selecting rigs. |
+| [`docs/ftrack.md`](docs/ftrack.md) | Overview of the experimental Ftrack REST client package. |
+
+Sample manifests, OTIO timelines, and telemetry payloads live under [`docs/examples/`](docs/examples) for repeatable demos.
+
 ## Quick start
 
 ```bash

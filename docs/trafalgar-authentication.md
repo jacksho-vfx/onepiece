@@ -95,14 +95,16 @@ and the associated change request for traceability.
 ## Testing credentials locally
 
 Launch the Trafalgar services with temporary credentials to validate new
-integrations before sharing them:
+integrations before sharing them. The `trafalgar web render` command wraps the
+uvicorn loader defined in `apps.trafalgar.app`, keeping the CLI in sync with the
+FastAPI surface used in production. 【F:src/apps/trafalgar/app.py†L1-L120】
 
 ```bash
 export TRAFALGAR_SERVICE_CREDENTIALS='[
   {"id": "local-render", "key": "demo-key", "secret": "demo-secret", "roles": ["render:read", "render:submit"]}
 ]'
 
-onepiece trafalgar web render --host 127.0.0.1 --port 8001
+trafalgar web render --host 127.0.0.1 --port 8001
 ```
 
 Then call the API with matching headers:

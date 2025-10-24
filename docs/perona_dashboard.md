@@ -4,7 +4,7 @@
 
 The Perona CLI and FastAPI service ship together so teams can launch the web dashboard, inspect configuration, and script against
 render and finance telemetry. This guide captures the day-to-day commands, configuration layers, and HTTP endpoints that were
-added for the 1.0 release.
+added for the 1.0 release. 【F:src/apps/perona/app.py†L1-L220】
 
 ## CLI usage
 

@@ -3,7 +3,7 @@
 The character selector panel provides a lightweight dockable UI for animators to
 discover and select character rigs that exist in the current Maya scene. The
 tool relies on PyMEL / `maya.cmds` for its UI but keeps the discovery logic
-pure-Python so it can be unit tested without Maya.
+pure-Python so it can be unit tested without Maya. 【F:src/libraries/creative/dcc/maya/character_selector.py†L1-L120】
 
 ## Usage
 
@@ -17,7 +17,7 @@ CharacterSelectorPanel.show_panel()
 
 The panel lists the rigs discovered via :func:`discover_rigs`. Buttons are
 generated for each rig and selecting one will call ``maya.cmds.select`` on the
-rig root.
+rig root. 【F:src/libraries/creative/dcc/maya/character_selector.py†L122-L210】
 
 ## Rig discovery heuristics
 
@@ -26,7 +26,7 @@ Rig roots are detected using two inexpensive heuristics:
 * Nodes exposing the boolean attribute ``isCharacterRig`` set to ``True`` are
   automatically included.
 * Nodes whose names end with ``Rig`` or ``_Rig`` are assumed to be character
-  rig roots.
+  rig roots. 【F:src/libraries/creative/dcc/maya/character_selector.py†L26-L63】
 
 These heuristics cover most internal rigs but the discovery call can be
 customised downstream by providing a predicate function when calling

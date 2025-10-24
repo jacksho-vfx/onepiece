@@ -3,7 +3,7 @@
 The Trafalgar dashboard exposes a consolidated metrics endpoint that surfaces
 status information across ingest, render, and review systems. The endpoint is
 protected with bearer token authentication so the aggregated production data can
-be shared securely.
+be shared securely. 【F:src/apps/trafalgar/web/dashboard.py†L1-L220】
 
 > **Release spotlight (v1.0.0):** Dashboard requests now respect configurable
 > cache TTLs and capacity limits, discovered projects are persisted locally for
@@ -102,7 +102,7 @@ by the dashboard.
 ## Real-time render and ingest updates
 
 Trafalgar now exposes Server-Sent Events (SSE) and WebSocket feeds so clients
-can react to render job and ingest run lifecycle changes without polling.
+can react to render job and ingest run lifecycle changes without polling. 【F:src/apps/trafalgar/web/render.py†L1468-L1785】【F:src/apps/trafalgar/web/ingest.py†L1-L220】
 
 For hands-on walkthroughs (including authentication troubleshooting and
 keepalive strategies), see
@@ -247,7 +247,7 @@ endpoints.
 ### Environment variables
 
 Set the following environment variables before launching the dashboard to
-control cache behaviour:
+control cache behaviour: 【F:src/apps/trafalgar/web/dashboard.py†L240-L320】
 
 - `ONEPIECE_DASHBOARD_CACHE_TTL` – duration in seconds that a cached response
   remains valid. Expired entries are lazily refreshed on the next request. Use a
