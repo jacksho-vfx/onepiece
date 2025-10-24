@@ -155,23 +155,56 @@ def test_get_approved_versions_filters_episodes_case_insensitively(
     media = tmp_path / "clip.mov"
     media.write_bytes(b"data")
 
-    client.register_version(
+    episode_one = client.register_version(
         "Project X",
         "SHOW_EP01_SC001_SH010_COMP",
         media,
         description="Episode 1",
     )
-    client.register_version(
+    episode_two = client.register_version(
         "Project X",
         "SHOW_EP02_SC010_SH020_COMP",
         media,
         description="Episode 2",
     )
 
+    client.bulk_update_entities(
+        "Version",
+        [
+            {"id": episode_one["id"], "status": "apr"},
+            {"id": episode_two["id"], "status": "apr"},
+        ],
+    )
+
     filtered = client.get_approved_versions("Project X", ["ep01", "  EP02  "])
 
     shots = [entry["shot"] for entry in filtered]
     assert shots == ["SHOW_EP01_SC001_SH010_COMP", "SHOW_EP02_SC010_SH020_COMP"]
+
+
+def test_get_approved_versions_filters_by_status(tmp_path: Path) -> None:
+    client = ShotgridClient(sleep=lambda _: None)
+
+    media = tmp_path / "clip.mov"
+    media.write_bytes(b"data")
+
+    approved = client.register_version("Project X", "SHOT_APPROVED", media)
+    rejected = client.register_version("Project X", "SHOT_REJECTED", media)
+    other_project = client.register_version("Project Y", "SHOT_APPROVED", media)
+
+    client.bulk_update_entities(
+        "Version",
+        [
+            {"id": approved["id"], "status": "APR"},
+            {"id": rejected["id"], "status": "rej"},
+            {"id": other_project["id"], "status": "apr"},
+        ],
+    )
+
+    filtered = client.get_approved_versions("Project X")
+
+    assert [entry["shot"] for entry in filtered] == ["SHOT_APPROVED"]
+    assert filtered[0]["status"] == "APR"
 
 
 def test_list_versions_for_shot_filters_project_shot_and_status(

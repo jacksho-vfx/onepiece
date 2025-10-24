@@ -639,12 +639,23 @@ class ShotgridClient:
                     for filter_value in episode_filters
                 ):
                     continue
+
+            status_value: Any = version.get("status")
+            if status_value is None:
+                status_value = version.get("sg_status_list")
+
+            if status_value is None:
+                continue
+
+            normalized_status = str(status_value).strip().lower()
+            if normalized_status != "apr":
+                continue
             approved.append(
                 {
                     "shot": shot_code,
                     "version": version.get("code", 0),
                     "file_path": version.get("path", ""),
-                    "status": "apr",
+                    "status": status_value,
                 }
             )
         return approved
