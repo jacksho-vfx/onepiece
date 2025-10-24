@@ -36,6 +36,25 @@ class DummyShotgridClient:
         return self._versions
 
 
+def test_shotgrid_service_accepts_generator_versions() -> None:
+    versions = [
+        {"project": "alpha", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": "beta", "shot": "EP01_SC002_SH0010", "version": "v002"},
+    ]
+
+    class GeneratorShotgridClient:
+        def list_versions(self) -> Iterable[dict[str, Any]]:
+            return (dict(item) for item in versions)
+
+    service = dashboard.ShotGridService(
+        GeneratorShotgridClient(), known_projects={"alpha", "beta"}
+    )
+
+    fetched = service._fetch_versions()
+
+    assert fetched == versions
+
+
 class FakeMonotonic:
     def __init__(self) -> None:
         self._value = 0.0
