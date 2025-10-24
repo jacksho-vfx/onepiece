@@ -172,3 +172,44 @@ def test_convert_audio_to_mono_recreates_directory_and_closes_on_failure(
     assert output_dir.exists()
 
     sys.modules.pop("libraries.platform.media.manipulations", None)
+
+
+@pytest.mark.parametrize("is_windows", [False, True])
+def test_renumber_sequence_handles_existing_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, is_windows: bool
+) -> None:
+    seq_dir = tmp_path / "seq"
+    seq_dir.mkdir()
+
+    original = seq_dir / "frame.0001.exr"
+    original.write_text("original")
+
+    preexisting = seq_dir / "frame.1001.exr"
+    preexisting.write_text("preexisting")
+
+    monkeypatch.setitem(sys.modules, "av", SimpleNamespace())
+    sys.modules.pop("libraries.platform.media.manipulations", None)
+    manipulations = importlib.import_module("libraries.platform.media.manipulations")
+
+    recorded_moves: list[tuple[str, str]] = []
+    real_move = manipulations.shutil.move
+
+    def _move(src: str, dst: str, *, _real=real_move) -> str:
+        dst_path = Path(dst)
+        if is_windows and dst_path.exists():
+            raise PermissionError("Cannot replace existing file on Windows")
+        recorded_moves.append((Path(src).name, dst_path.name))
+        return _real(src, dst)
+
+    monkeypatch.setattr(manipulations.shutil, "move", _move)
+
+    manipulations.renumber_sequence(seq_dir, start_number=1001)
+
+    final_frames = sorted(p.name for p in seq_dir.glob("*.exr"))
+    assert final_frames == ["frame.1001.exr", "frame.1002.exr"]
+    assert (seq_dir / "frame.1001.exr").read_text() == "original"
+    assert not original.exists()
+    assert any("renumber_tmp" in dst for _, dst in recorded_moves)
+
+    sys.modules.pop("libraries.platform.media.manipulations", None)
+    sys.modules.pop("av", None)
