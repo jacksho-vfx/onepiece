@@ -541,6 +541,8 @@ def shots_summary(
 
     active_shots: list[dict[str, Any]] = []
     for lifecycle in lifecycles:
+        if all(stage.completed_at is not None for stage in lifecycle.stages):
+            continue
         current_stage_name = lifecycle.current_stage
         stage_details = next(
             (stage for stage in lifecycle.stages if stage.name == current_stage_name),
