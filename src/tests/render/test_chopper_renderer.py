@@ -111,7 +111,9 @@ def test_scene_object_animation_requires_keyframes() -> None:
     payload = build_scene_dict()
     payload["objects"][1]["animation"] = []  # type: ignore[index]
 
-    with pytest.raises(SceneError, match="animation must contain at least one keyframe"):
+    with pytest.raises(
+        SceneError, match="animation must contain at least one keyframe"
+    ):
         Scene.from_dict(payload)
 
 

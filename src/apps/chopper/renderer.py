@@ -227,7 +227,9 @@ class SceneObject:
                 keyframes.append(Keyframe(frame=frame, x=x, y=y))
 
             if not keyframes:
-                raise SceneError("Object's animation must contain at least one keyframe")
+                raise SceneError(
+                    "Object's animation must contain at least one keyframe"
+                )
 
             keyframes.sort(key=lambda keyframe: keyframe.frame)
             animation = Animation(keyframes=keyframes)
