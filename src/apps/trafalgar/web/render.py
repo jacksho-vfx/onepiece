@@ -95,11 +95,13 @@ def _parse_timestamp(value: Any) -> datetime:
             text = f"{text[:-1]}+00:00"
         try:
             timestamp = datetime.fromisoformat(text)
-        except ValueError as exc:
+        except ValueError:
             try:
                 numeric = float(text)
             except ValueError as float_exc:
-                raise ValueError(f"Unsupported timestamp value: {value!r}") from float_exc
+                raise ValueError(
+                    f"Unsupported timestamp value: {value!r}"
+                ) from float_exc
             try:
                 timestamp = datetime.fromtimestamp(numeric, tz=timezone.utc)
             except (OverflowError, OSError, ValueError) as ts_exc:
@@ -606,7 +608,9 @@ class _JobRecord:
         try:
             created_at = _parse_timestamp(created_at_raw)
         except ValueError as exc:
-            raise ValueError("Stored job record has an invalid created_at timestamp.") from exc
+            raise ValueError(
+                "Stored job record has an invalid created_at timestamp."
+            ) from exc
         updated_at_raw = payload.get("updated_at")
         if updated_at_raw:
             try:
