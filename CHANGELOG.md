@@ -13,6 +13,9 @@ All notable changes to the OnePiece pipeline toolkit.
 - Improved the Chopper CLI's scene loading diagnostics so directory paths, permission
   errors, and other I/O failures surface actionable guidance instead of generic
   tracebacks.
+- Added walkthroughs for Perona's telemetry-driven cost insights, covering the
+  `perona cost insights` command, the `/api/cost/insights` endpoint, and how to supply
+  custom metric stores for automated recommendations.
 
 ---
 

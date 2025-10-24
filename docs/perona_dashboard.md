@@ -109,6 +109,21 @@ Key options:
 - `--format table|json` &mdash; toggles between human-readable output and machine-friendly JSON.
 - `--settings-path PATH` &mdash; optional, reuses the same override validation as other cost commands before building the engine.
 
+#### Walkthroughs
+
+1. **Triage GPU spend spikes** &mdash; Run `perona cost insights --format table` after a render push to compare the latest averages
+   against the historic minima and maxima. Features with widening spreads (for example, frame time standard deviation growing
+   week-over-week) highlight where to profile render setups. Follow up on the recommendation lines to identify the telemetry
+   fields that currently carry the steepest cost slope.
+2. **Automate alerting** &mdash; Pipe JSON output into your monitoring system with
+   `perona cost insights --format json | tee build/perona-insights.json`. The payload includes both statistics and text
+   recommendations, so you can file tickets automatically whenever the CLI suggests reducing a feature such as
+   `average_frame_time_ms`.
+3. **Validate configuration overrides** &mdash; Supply the same TOML file used by production runs via
+   `perona cost insights --settings-path /srv/perona/settings.toml`. When overrides resolve correctly, the table banner prints
+   `Settings file: …`, confirming the engine analysed telemetry with those defaults. A missing banner indicates the CLI fell
+   back to packaged defaults, so double-check permissions and the path.
+
 ### Launch the web dashboard
 
 Use `perona web dashboard` to boot the uvicorn-powered FastAPI service:
@@ -235,6 +250,26 @@ curl -N "http://127.0.0.1:8065/render-feed/live?limit=50"
 
 Each metric contains sequence, shot identifiers, frame timing, and GPU/cache health indicators.
 
+### Telemetry ingestion and custom metric stores
+
+- `POST /api/metrics` &mdash; accepts a JSON body matching the `RenderMetric` schema and persists each sample as NDJSON on disk.
+
+```bash
+curl -X POST http://127.0.0.1:8065/api/metrics \
+  -H "Content-Type: application/json" \
+  -d @docs/examples/trafalgar_render_metrics.json
+```
+
+Tips for supplying bespoke metric stores:
+
+- Set `PERONA_METRICS_PATH=/var/perona/render-metrics.ndjson` before launching the API or CLI to point ingestion at a shared
+  filesystem. The service creates parent directories automatically, so you only need to ensure the process user can write to the
+  directory.
+- When running multiple dashboard instances behind a load balancer, mount the same network path on each host so `/api/metrics`
+  appends to a shared NDJSON file. The append-only writes are guarded by a process lock to avoid interleaving records.
+- Rotate large stores by copying the NDJSON file to archival storage and truncating the original path. Because Perona streams the
+  file lazily, rotations take effect on the next ingestion without a restart.
+
 ### Cost estimation
 
 - `POST /cost/estimate` &mdash; accepts a JSON body that mirrors the `perona settings` cost inputs and returns a detailed cost
@@ -257,6 +292,59 @@ curl -X POST http://127.0.0.1:8065/cost/estimate \
 
 - `GET /risk-heatmap` &mdash; surfaces risk indicators per shot, including error rates and cache stability drivers.
 - `GET /pnl` &mdash; returns baseline versus current spend alongside narrative contributions.
+
+### Cost insights API
+
+- `GET /api/cost/insights` &mdash; returns descriptive statistics and the top optimisation recommendations derived from recent
+  telemetry.
+
+Query parameters:
+
+- `top_n` (default `3`) &mdash; limits how many recommendations the response includes. The API caps the value at 10.
+- `refresh_telemetry` (default `false`) &mdash; force the engine to reload any persisted metrics before recomputing statistics.
+
+```bash
+curl "http://127.0.0.1:8065/api/cost/insights?top_n=5" | jq
+```
+
+Example response:
+
+```json
+{
+  "statistics": [
+    {
+      "name": "average_frame_time_ms",
+      "mean": 158.2,
+      "stddev": 11.6,
+      "minimum": 132.4,
+      "maximum": 198.5
+    },
+    {
+      "name": "gpu_utilisation",
+      "mean": 0.78,
+      "stddev": 0.04,
+      "minimum": 0.71,
+      "maximum": 0.85
+    },
+    {
+      "name": "error_rate",
+      "mean": 0.019,
+      "stddev": 0.007,
+      "minimum": 0.008,
+      "maximum": 0.034
+    }
+  ],
+  "recommendations": [
+    "Reduce average_frame_time_ms where possible; each unit increases cost by approximately 1.92.",
+    "Monitor gpu_utilisation – its relationship to cost is currently neutral.",
+    "Consider investing more in error_rate; each unit is associated with a cost reduction of roughly 0.42."
+  ],
+  "settings_path": "/opt/perona/perona.toml"
+}
+```
+
+The endpoint responds with HTTP 404 when no telemetry exists yet. Populate data by ingesting metrics through
+[`POST /api/metrics`](#telemetry-ingestion-and-custom-metric-stores) or by running the CLI cost commands locally first.
 
 ### Optimisation backtests
 
