@@ -36,6 +36,57 @@ def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
     assert "Usage: render" in strip_ansi(result.stderr)
 
 
+def test_render_reports_non_numeric_scene_width(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps({"width": "wide", "height": 12, "frames": 1}),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, [str(scene_path)])
+
+    assert result.exit_code == 2
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "Scene width must be an integer value" in clean_text
+    assert "'wide'" in clean_text
+
+
+def test_render_reports_malformed_scene_height(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps({"width": 12, "height": {"value": 4}, "frames": 1}),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, [str(scene_path)])
+
+    assert result.exit_code == 2
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "Scene height must be an integer value" in clean_text
+    assert "{'value': 4}" in clean_text
+
+
+def test_render_reports_non_numeric_frame_count(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps({"width": 12, "height": 8, "frames": "many"}),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, [str(scene_path)])
+
+    assert result.exit_code == 2
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "Scene frame count must be an integer value" in clean_text
+    assert "'many'" in clean_text
+
+
 def _write_scene(path: Path) -> None:
     payload = {
         "width": 4,
