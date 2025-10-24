@@ -132,6 +132,14 @@ class DummyReviewFacade:
         return self._summary
 
 
+def test_delivery_service_uses_default_provider() -> None:
+    service = dashboard.DeliveryService()
+
+    payload = service.list_deliveries("alpha")
+
+    assert payload == []
+
+
 def test_require_dashboard_auth_accepts_matching_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1027,6 +1035,27 @@ async def test_deliveries_endpoint_handles_missing_entries() -> None:
     data = response.json()
     assert data[0]["items"] == []
     assert data[0]["file_count"] == 0
+
+
+@pytest.mark.anyio("asyncio")
+async def test_deliveries_endpoint_uses_default_provider() -> None:
+    previous = dashboard.app.dependency_overrides.pop(
+        dashboard.get_delivery_service, None
+    )
+    try:
+        transport = ASGITransport(app=dashboard.app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            response = await client.get("/deliveries/alpha")
+
+        assert response.status_code == 200
+        assert response.json() == []
+    finally:
+        if previous is not None:
+            dashboard.app.dependency_overrides[dashboard.get_delivery_service] = (
+                previous
+            )
 
 
 @pytest.mark.anyio("asyncio")
