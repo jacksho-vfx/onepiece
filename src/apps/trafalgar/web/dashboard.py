@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from apps.trafalgar.providers.providers import (
     DeliveryProvider,
+    ProviderNotFoundError,
     ReconcileDataProvider,
     initialize_providers,
 )
@@ -909,6 +910,48 @@ class CacheSettingsUpdateModel(BaseModel):
     flush: bool = False
 
 
+def _resolve_delivery_provider(
+    provider: DeliveryProvider | str | None,
+) -> DeliveryProvider:
+    """Return a :class:`DeliveryProvider` instance for *provider*.
+
+    Accepts provider objects directly, resolves named providers using the
+    registry, and falls back to the default provider when *provider* is ``None``.
+    """
+
+    if isinstance(provider, DeliveryProvider):
+        return provider
+
+    if provider is not None and not isinstance(provider, str):
+        msg = (
+            "DeliveryService provider must be a DeliveryProvider instance,"
+            " a provider name, or None."
+        )
+        raise TypeError(msg)
+
+    registry = initialize_providers()
+    try:
+        if isinstance(provider, str):
+            resolved = registry.create("delivery", provider)
+        else:
+            resolved = registry.create_default("delivery")
+    except ProviderNotFoundError as exc:
+        if provider is None:
+            msg = "No default delivery provider is configured."
+        else:
+            msg = f"Unknown delivery provider '{provider}'."
+        raise RuntimeError(msg) from exc
+
+    if not isinstance(resolved, DeliveryProvider):
+        msg = (
+            "Resolved delivery provider does not implement DeliveryProvider: "
+            f"{type(resolved).__name__}"
+        )
+        raise TypeError(msg)
+
+    return resolved
+
+
 class DeliveryService:
     def __init__(
         self,
@@ -916,10 +959,7 @@ class DeliveryService:
         *,
         manifest_cache_size: int = 32,
     ) -> None:
-        if isinstance(provider, str):
-            self._provider = initialize_providers()
-        else:
-            self._provider = provider
+        self._provider = _resolve_delivery_provider(provider)
         self._manifest_cache: OrderedDict[Hashable, dict[str, Any]] = OrderedDict()
         self._manifest_cache_size = max(0, manifest_cache_size)
 
@@ -1106,7 +1146,8 @@ def get_reconcile_service() -> ReconcileService:
 
 
 def get_delivery_service() -> DeliveryService:
-    return DeliveryService()
+    provider = _resolve_delivery_provider(None)
+    return DeliveryService(provider=provider)
 
 
 # ---------------------------------------------------------------------------
