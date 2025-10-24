@@ -245,3 +245,69 @@ def test_render_analytics_mixed_jobs() -> None:
     assert six_hours.total_jobs == 3
     assert six_hours.completed_jobs == 2
     assert six_hours.average_completion_seconds == pytest.approx(540.0)
+
+
+def test_render_analytics_normalises_status_keys() -> None:
+    base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    request = _request()
+
+    job_upper = _JobRecord(
+        job_id="job-upper",
+        farm="mock",
+        farm_type="mock",
+        status="RUNNING",
+        message=None,
+        request=request.model_copy(deep=True),
+        created_at=base_time,
+        updated_at=base_time + timedelta(minutes=1),
+        status_history=[
+            ("Queued", base_time),
+            ("RUNNING", base_time + timedelta(minutes=1)),
+        ],
+    )
+
+    job_lower = _JobRecord(
+        job_id="job-lower",
+        farm="mock",
+        farm_type="mock",
+        status="running",
+        message=None,
+        request=request.model_copy(deep=True),
+        created_at=base_time + timedelta(minutes=5),
+        updated_at=base_time + timedelta(minutes=6),
+        status_history=[
+            ("queued", base_time + timedelta(minutes=5)),
+            ("running", base_time + timedelta(minutes=6)),
+        ],
+    )
+
+    job_unknown = _JobRecord(
+        job_id="job-unknown",
+        farm="tractor",
+        farm_type="tractor",
+        status=None,
+        message=None,
+        request=request.model_copy(deep=True),
+        created_at=base_time + timedelta(minutes=10),
+        updated_at=base_time + timedelta(minutes=12),
+    )
+
+    service = RenderSubmissionService(adapters={})
+    service._jobs = OrderedDict(
+        (job.job_id, job)
+        for job in (
+            job_upper,
+            job_lower,
+            job_unknown,
+        )
+    )
+
+    analytics = service.get_render_analytics(now=base_time + timedelta(minutes=15))
+
+    assert set(analytics.statuses) == {"queued", "running", "unknown"}
+    assert "RUNNING" not in analytics.statuses
+    assert None not in analytics.statuses
+    assert analytics.statuses["running"].count == 2
+    assert analytics.statuses["queued"].count == 2
+    assert analytics.adapters["mock"].statuses == {"running": 2}
+    assert analytics.adapters["tractor"].statuses == {"unknown": 1}
