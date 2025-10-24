@@ -114,7 +114,10 @@ def render(
             if export_normalized == "ppm":
                 frame.save_ppm(frame_path)
             else:
-                frame.save_png(frame_path)
+                try:
+                    frame.save_png(frame_path)
+                except RuntimeError as exc:
+                    raise typer.BadParameter(str(exc)) from exc
             frame_count += 1
         typer.echo(f"Rendered {frame_count} frame(s) to {output}")
         return
@@ -127,10 +130,13 @@ def render(
 
     frames = list(frames_iter)
     writer = AnimationWriter(frames=frames, fps=fps)
-    if export_normalized == "gif":
-        writer.write_gif(destination)
-    else:
-        writer.write_mp4(destination)
+    try:
+        if export_normalized == "gif":
+            writer.write_gif(destination)
+        else:
+            writer.write_mp4(destination)
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(f"Rendered {len(frames)} frame(s) to {destination}")
 
