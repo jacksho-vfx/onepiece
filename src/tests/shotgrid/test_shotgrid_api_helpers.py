@@ -95,6 +95,24 @@ def test_get_uses_configured_timeout(client: ShotGridClient) -> None:
     assert session.get.call_args.kwargs["timeout"] == client.timeout
 
 
+def test_get_single_limits_page_size_and_returns_none(
+    client: ShotGridClient,
+) -> None:
+    client.base_url = "https://example.com"
+    session = MagicMock()
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"data": []}
+    session.get.return_value = response
+    client._session = session
+
+    result = client._get_single("Shot", [], "id")
+
+    assert result is None
+    params = session.get.call_args.kwargs["params"]
+    assert params["page[size]"] == 1
+
+
 def test_get_paginated_honours_timeout(client: ShotGridClient) -> None:
     client.base_url = "https://example.com"
     session = MagicMock()
