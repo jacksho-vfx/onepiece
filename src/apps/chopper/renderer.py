@@ -357,14 +357,21 @@ class Frame:
     def _has_alpha(self) -> bool:
         return any(len(pixel) == 4 for row in self.pixels for pixel in row)
 
-    def to_bytes(self) -> bytes:
-        """Return the frame encoded as 24-bit RGB bytes."""
+    def to_bytes(self, *, mode: str = "RGB") -> bytes:
+        """Return the frame encoded as ``mode`` bytes."""
 
+        if mode not in {"RGB", "RGBA"}:  # pragma: no cover - defensive
+            raise ValueError(f"Unsupported image mode: {mode}")
+
+        include_alpha = mode == "RGBA"
         raw = bytearray()
         for row in self.pixels:
             for pixel in row:
                 r, g, b = pixel[:3]
                 raw.extend((r, g, b))
+                if include_alpha:
+                    alpha = pixel[3] if len(pixel) == 4 else 255
+                    raw.append(alpha)
         return bytes(raw)
 
     def save_ppm(self, destination: Path) -> None:
@@ -385,21 +392,10 @@ class Frame:
         if resolved_mode not in {"RGB", "RGBA"}:  # pragma: no cover - defensive
             raise ValueError(f"Unsupported image mode: {resolved_mode}")
 
-        pixels: list[tuple[int, ...]] = []
-        for row in self.pixels:
-            for pixel in row:
-                if len(pixel) == 4:
-                    r, g, b, a = pixel
-                else:
-                    r, g, b = pixel
-                    a = 255
-                if resolved_mode == "RGB":
-                    pixels.append((r, g, b))
-                else:
-                    pixels.append((r, g, b, a))
-
-        image: PILImage.Image = pillow.new(resolved_mode, (self.width, self.height))
-        image.putdata(pixels)
+        data = self.to_bytes(mode=resolved_mode)
+        image: PILImage.Image = pillow.frombytes(
+            resolved_mode, (self.width, self.height), data
+        )
         return image
 
     def save_png(
