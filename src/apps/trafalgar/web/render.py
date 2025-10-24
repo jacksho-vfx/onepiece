@@ -85,27 +85,27 @@ def _parse_timestamp(value: Any) -> datetime:
     elif isinstance(value, (int, float)):
         try:
             timestamp = datetime.fromtimestamp(value, tz=timezone.utc)
-        except (OverflowError, OSError, ValueError):
-            timestamp = None
+        except (OverflowError, OSError, ValueError) as exc:
+            raise ValueError(f"Unsupported timestamp value: {value!r}") from exc
     elif isinstance(value, str):
         text = value.strip()
+        if not text:
+            raise ValueError("Timestamp strings cannot be empty.")
         if text.endswith(("Z", "z")):
             text = f"{text[:-1]}+00:00"
         try:
             timestamp = datetime.fromisoformat(text)
-        except ValueError:
+        except ValueError as exc:
             try:
                 numeric = float(text)
-            except ValueError:
-                timestamp = None
-            else:
-                try:
-                    timestamp = datetime.fromtimestamp(numeric, tz=timezone.utc)
-                except (OverflowError, OSError, ValueError):
-                    timestamp = None
-
-    if timestamp is None:
-        return _utcnow()
+            except ValueError as float_exc:
+                raise ValueError(f"Unsupported timestamp value: {value!r}") from float_exc
+            try:
+                timestamp = datetime.fromtimestamp(numeric, tz=timezone.utc)
+            except (OverflowError, OSError, ValueError) as ts_exc:
+                raise ValueError(f"Unsupported timestamp value: {value!r}") from ts_exc
+    else:
+        raise ValueError(f"Unsupported timestamp value: {value!r}")
 
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
@@ -603,13 +603,26 @@ class _JobRecord:
     @classmethod
     def from_storage(cls, payload: Mapping[str, Any]) -> "_JobRecord":
         created_at_raw = payload.get("created_at")
-        created_at = _parse_timestamp(created_at_raw)
+        try:
+            created_at = _parse_timestamp(created_at_raw)
+        except ValueError as exc:
+            raise ValueError("Stored job record has an invalid created_at timestamp.") from exc
         updated_at_raw = payload.get("updated_at")
-        updated_at = _parse_timestamp(updated_at_raw) if updated_at_raw else created_at
+        if updated_at_raw:
+            try:
+                updated_at = _parse_timestamp(updated_at_raw)
+            except ValueError:
+                updated_at = created_at
+        else:
+            updated_at = created_at
         completed_at_raw = payload.get("completed_at")
-        completed_at = (
-            _parse_timestamp(completed_at_raw) if completed_at_raw is not None else None
-        )
+        if completed_at_raw is not None:
+            try:
+                completed_at = _parse_timestamp(completed_at_raw)
+            except ValueError:
+                completed_at = None
+        else:
+            completed_at = None
         history_payload = payload.get("status_history") or []
         history: list[tuple[str, datetime]] = []
         for entry in history_payload:
@@ -617,11 +630,13 @@ class _JobRecord:
                 continue
             status_value = str(entry.get("status", payload.get("status", "unknown")))
             timestamp_raw = entry.get("timestamp")
-            timestamp = (
-                _parse_timestamp(timestamp_raw)
-                if timestamp_raw is not None
-                else created_at
-            )
+            if timestamp_raw is None:
+                timestamp = created_at
+            else:
+                try:
+                    timestamp = _parse_timestamp(timestamp_raw)
+                except ValueError:
+                    continue
             history.append((status_value, timestamp))
         if not history:
             history.append((str(payload.get("status", "unknown")), created_at))
