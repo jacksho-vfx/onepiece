@@ -32,14 +32,19 @@ class FilepathHandler(FilepathHandlerProtocol):  # type: ignore[misc]
         path = self.get_project_dir(project_name) / "episodes" / episode
         return self._ensure(path)
 
+    def get_sequence_dir(self, project_name: str, episode: str, sequence: str) -> Path:
+        path = self.get_episode_dir(project_name, episode) / "scenes" / sequence
+        return self._ensure(path)
+
     def get_scene_dir(self, project_name: str, episode: str, scene: str) -> Path:
-        path = self.get_episode_dir(project_name, episode) / "scenes" / scene
+        """Alias for :meth:`get_sequence_dir` for backwards compatibility."""
+        path = self.get_sequence_dir(project_name, episode, scene)
         return self._ensure(path)
 
     def get_shot_dir(
         self, project_name: str, episode: str, scene: str, shot: str
     ) -> Path:
-        path = self.get_scene_dir(project_name, episode, scene) / "shots" / shot
+        path = self.get_sequence_dir(project_name, episode, scene) / "shots" / shot
         return self._ensure(path)
 
     # --- Media -------------------------------------------------------------- #
