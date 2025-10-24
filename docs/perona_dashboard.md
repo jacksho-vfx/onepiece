@@ -86,6 +86,29 @@ Key options:
 - `--currency GBP|USD` &mdash; controls which currency the CLI and API use for monetary outputs.
 - `--settings-path PATH` &mdash; optional, seeds the engine with a custom settings file before calculating costs.
 
+### Analyse telemetry-driven insights
+
+Use `perona cost insights` to surface descriptive statistics and recommended actions derived from recent telemetry:
+
+```bash
+# Display the aligned statistics table and recommendation list
+perona cost insights
+
+# Emit JSON for automation or dashboards
+perona cost insights --format json > build/perona-insights.json
+
+# Prime the engine with a specific settings file before analysing telemetry
+perona cost insights --settings-path /opt/perona/perona.toml
+```
+
+The table view highlights per-feature averages, spread, and range so teams can spot anomalies quickly. The JSON response mirrors
+the structured statistics returned by the engine for downstream automation.
+
+Key options:
+
+- `--format table|json` &mdash; toggles between human-readable output and machine-friendly JSON.
+- `--settings-path PATH` &mdash; optional, reuses the same override validation as other cost commands before building the engine.
+
 ### Launch the web dashboard
 
 Use `perona web dashboard` to boot the uvicorn-powered FastAPI service:

@@ -26,6 +26,7 @@ from apps.perona.engine import (
     get_currency_symbol,
 )
 from apps.perona.models import CostEstimate, CostEstimateRequest, SettingsSummary
+from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.version import PERONA_VERSION
 
 DEFAULT_HOST = "127.0.0.1"
@@ -329,6 +330,79 @@ def _format_cost_breakdown_table(estimate: CostEstimate) -> str:
         else:
             display = _format_value(value)
         lines.append(f"{label:<{width}} : {display}")
+    return "\n".join(lines)
+
+
+def _format_cost_insights(
+    statistics: tuple[FeatureStatistics, ...],
+    recommendations: tuple[str, ...],
+    *,
+    settings_path: Path | None,
+) -> str:
+    """Render cost telemetry statistics and recommendations."""
+
+    lines: list[str] = []
+    if settings_path is not None:
+        lines.append(f"Settings file: {settings_path}")
+        lines.append("")
+
+    header = "Cost telemetry insights"
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    if statistics:
+        display_rows: list[tuple[str, FeatureStatistics]] = [
+            (_humanise_key(entry.name), entry) for entry in statistics
+        ]
+        name_width = max(len("Feature"), *(len(name) for name, _ in display_rows))
+        mean_values = [_format_value(entry.mean) for _, entry in display_rows]
+        stddev_values = [_format_value(entry.stddev) for _, entry in display_rows]
+        min_values = [_format_value(entry.minimum) for _, entry in display_rows]
+        max_values = [_format_value(entry.maximum) for _, entry in display_rows]
+
+        mean_width = max(len("Mean"), *(len(value) for value in mean_values))
+        stddev_width = max(len("Std dev"), *(len(value) for value in stddev_values))
+        min_width = max(len("Minimum"), *(len(value) for value in min_values))
+        max_width = max(len("Maximum"), *(len(value) for value in max_values))
+
+        header_line = (
+            f"{'Feature':<{name_width}}  "
+            f"{'Mean':>{mean_width}}  "
+            f"{'Std dev':>{stddev_width}}  "
+            f"{'Minimum':>{min_width}}  "
+            f"{'Maximum':>{max_width}}"
+        )
+        lines.append(header_line)
+        lines.append(
+            f"{'-' * name_width}  "
+            f"{'-' * mean_width}  "
+            f"{'-' * stddev_width}  "
+            f"{'-' * min_width}  "
+            f"{'-' * max_width}"
+        )
+
+        for (name, entry), mean_value, stddev_value, min_value, max_value in zip(
+            display_rows, mean_values, stddev_values, min_values, max_values
+        ):
+            lines.append(
+                f"{name:<{name_width}}  "
+                f"{mean_value:>{mean_width}}  "
+                f"{stddev_value:>{stddev_width}}  "
+                f"{min_value:>{min_width}}  "
+                f"{max_value:>{max_width}}"
+            )
+    else:
+        lines.append("No telemetry statistics available.")
+
+    lines.append("")
+    rec_header = "Recommendations"
+    lines.append(rec_header)
+    lines.append("-" * len(rec_header))
+    if recommendations:
+        lines.extend(f"- {message}" for message in recommendations)
+    else:
+        lines.append("No recommendations generated.")
+
     return "\n".join(lines)
 
 
@@ -680,6 +754,51 @@ def cost_estimate(
     typer.echo(_format_cost_breakdown_table(estimate))
 
 
+@cost_app.command("insights")
+def cost_insights(
+    output_format: OutputFormat = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format for the insights (table or json).",
+        case_sensitive=False,
+    ),
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file to seed defaults.",
+    ),
+) -> None:
+    """Summarise telemetry statistics and cost optimisation recommendations."""
+
+    validated_settings_path = _validate_settings_path(settings_path)
+    settings_result = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = settings_result.engine
+    statistics, recommendations = engine.cost_insights()
+
+    fmt = str(output_format).lower()
+    if fmt not in {"table", "json"}:
+        raise typer.BadParameter("format must be either 'table' or 'json'.")
+
+    if fmt == "json":
+        payload = {
+            "statistics": [asdict(entry) for entry in statistics],
+            "recommendations": list(recommendations),
+        }
+        if settings_result.settings_path is not None:
+            payload["settings_path"] = str(settings_result.settings_path)
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    typer.echo(
+        _format_cost_insights(
+            statistics,
+            recommendations,
+            settings_path=settings_result.settings_path,
+        )
+    )
+
+
 @web_app.command("dashboard")
 def dashboard(
     host: str = typer.Option(
@@ -814,6 +933,7 @@ def settings_export(
 __all__ = [
     "app",
     "cost_estimate",
+    "cost_insights",
     "dashboard",
     "demo_dashboard",
     "settings",
