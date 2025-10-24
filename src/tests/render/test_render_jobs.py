@@ -685,6 +685,64 @@ def test_reload_jobs_with_unregistered_adapter(
     assert jobs[0].request.farm == legacy_farm
 
 
+def test_submit_job_normalises_integer_job_id() -> None:
+    store = RecordingJobStore()
+
+    def adapter(
+        *,
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, object]:
+        return {"job_id": 0, "status": "queued", "farm_type": "mock"}
+
+    service = render.RenderSubmissionService({"mock": adapter}, job_store=store)
+    request = render.RenderJobRequest(**_job_payload())
+
+    result = service.submit_job(request)
+
+    assert result["job_id"] == 0
+    assert list(service._jobs.keys()) == ["0"]
+
+    jobs = service.list_jobs()
+    assert [job.job_id for job in jobs] == ["0"]
+
+    assert store.saved_batches and store.saved_batches[-1] == ["0"]
+
+
+def test_submit_job_normalises_bytes_job_id() -> None:
+    store = RecordingJobStore()
+
+    def adapter(
+        *,
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, object]:
+        return {"job_id": b"mock-007", "status": "queued", "farm_type": "mock"}
+
+    service = render.RenderSubmissionService({"mock": adapter}, job_store=store)
+    request = render.RenderJobRequest(**_job_payload())
+
+    result = service.submit_job(request)
+
+    assert result["job_id"] == b"mock-007"
+    assert list(service._jobs.keys()) == ["mock-007"]
+
+    jobs = service.list_jobs()
+    assert [job.job_id for job in jobs] == ["mock-007"]
+
+    assert store.saved_batches and store.saved_batches[-1] == ["mock-007"]
+
+
 @pytest.mark.anyio("asyncio")
 async def test_history_limit_removes_old_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
