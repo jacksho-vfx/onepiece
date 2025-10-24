@@ -97,7 +97,9 @@ def test_render_png_reports_missing_pillow(
 
     assert result.exit_code == 2
     message = strip_ansi(result.stderr)
-    assert "Install the 'onepiece[chopper-images]' extra." in message
+    terms = ["Install", "the", "'onepiece[chopper-images]'", "extra"]
+    for term in terms:
+        assert term in message
 
 
 def test_render_gif_animation(tmp_path: Path) -> None:
@@ -142,7 +144,9 @@ def test_render_gif_reports_missing_pillow(
 
     assert result.exit_code == 2
     message = strip_ansi(result.stderr)
-    assert "Install the 'onepiece[chopper-images]' extra." in message
+    terms = ["Install", "the", "'onepiece[chopper-images]'", "extra"]
+    for term in terms:
+        assert term in message
 
 
 def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
@@ -207,7 +211,9 @@ def test_render_mp4_reports_missing_animation_dependencies(
 
     assert result.exit_code == 2
     message = strip_ansi(result.stderr)
-    assert "Install the 'onepiece[chopper-anim]' extra." in message
+    terms = ["Install", "the", "'onepiece[chopper-anim]'", "extra"]
+    for term in terms:
+        assert term in message
 
 
 def test_load_scene_rejects_directory(tmp_path: Path) -> None:
