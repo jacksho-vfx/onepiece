@@ -3,6 +3,7 @@ Manipulations: audio conversion and sequence renumbering using PyAV.
 """
 
 from pathlib import Path
+import uuid
 
 import structlog
 import av
@@ -57,9 +58,27 @@ def renumber_sequence(
     if not frames:
         raise FileNotFoundError(f"No EXR files found in {input_dir}")
 
+    temp_moves: list[tuple[Path, Path]] = []
+    temp_prefix = f".renumber_tmp_{uuid.uuid4().hex}"
+
     for i, frame in enumerate(frames):
         new_num = start_number + i
         new_name = pattern % new_num
         new_path = input_dir / new_name
-        log.debug("renumbering", old=str(frame), new=str(new_path))
-        shutil.move(str(frame), new_path)
+
+        if frame == new_path:
+            log.debug("renumbering", old=str(frame), new=str(new_path))
+            continue
+
+        temp_path = input_dir / f"{temp_prefix}_{i}{frame.suffix}"
+        log.debug("renumbering_stage", old=str(frame), temp=str(temp_path))
+        shutil.move(str(frame), temp_path)
+        temp_moves.append((temp_path, new_path))
+
+    for temp_path, new_path in temp_moves:
+        if new_path.exists():
+            log.debug("renumbering_overwrite", target=str(new_path))
+            new_path.unlink()
+
+        log.debug("renumbering_finalize", temp=str(temp_path), new=str(new_path))
+        shutil.move(str(temp_path), new_path)
