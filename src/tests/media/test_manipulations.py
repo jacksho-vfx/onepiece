@@ -5,6 +5,7 @@ import shutil
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Generator
 
 import pytest
 
@@ -59,7 +60,7 @@ def test_convert_audio_to_mono_raises_when_no_audio(
 
 
 class _FakeDecodingFrame:
-    def to_ndarray(self, *, layout: str) -> list[int]:  # pragma: no cover - trivial
+    def to_ndarray(self, *, layout: str) -> list[Any]:  # pragma: no cover - trivial
         return [layout]
 
 
@@ -82,7 +83,9 @@ class _FakeInputContainer:
     def close(self) -> None:  # pragma: no cover - trivial
         self.closed = True
 
-    def decode(self, stream: object):  # pragma: no cover - defensive
+    def decode(
+        self, stream: object
+    ) -> Generator[_FakeDecodingFrame, Any, None]:  # pragma: no cover - defensive
         yield _FakeDecodingFrame()
 
 
@@ -90,7 +93,9 @@ class _FakeOutputStream:
     def __init__(self) -> None:
         self.channels = 0
 
-    def encode(self, frame: object | None = None):  # pragma: no cover - defensive
+    def encode(
+        self, frame: object | None = None
+    ) -> RuntimeError | list[None]:  # pragma: no cover - defensive
         if frame is None:
             return []
         raise RuntimeError("boom")
@@ -115,7 +120,9 @@ class _FakeOutputContainer:
     def close(self) -> None:  # pragma: no cover - trivial
         self.closed = True
 
-    def add_stream(self, codec: str, *, rate: int) -> _FakeOutputStream:  # pragma: no cover - defensive
+    def add_stream(
+        self, codec: str, *, rate: int
+    ) -> _FakeOutputStream:  # pragma: no cover - defensive
         return self.stream
 
     def mux(self, packet: object) -> None:  # pragma: no cover - defensive
@@ -126,9 +133,9 @@ class _FakeAudioFrame:
     @classmethod
     def from_ndarray(cls, array: list[int], *, layout: str) -> "_FakeAudioFrame":
         frame = cls()
-        frame.array = array
-        frame.layout = layout
-        frame.sample_rate = 0
+        frame.array = array  # type: ignore[attr-defined]
+        frame.layout = layout  # type: ignore[attr-defined]
+        frame.sample_rate = 0  # type: ignore[attr-defined]
         return frame
 
 
@@ -148,7 +155,7 @@ def test_convert_audio_to_mono_recreates_directory_and_closes_on_failure(
     in_container = _FakeInputContainer()
     out_container = _FakeOutputContainer()
 
-    def _fake_open(path: str, mode: str | None = None):
+    def _fake_open(path: str, mode: str | None = None) -> object:
         return out_container if mode == "w" else in_container
 
     fake_av = SimpleNamespace(open=_fake_open, AudioFrame=_FakeAudioFrame)
