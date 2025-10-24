@@ -31,7 +31,9 @@ class _StubCostEngine:
         storage_cost = inputs.storage_gb * inputs.storage_rate_per_gb
         egress_cost = inputs.data_egress_gb * inputs.egress_rate_per_gb
         misc_cost = inputs.misc_costs
-        total_cost = gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
+        total_cost = (
+            gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
+        )
         cost_per_frame = total_cost / inputs.frame_count if inputs.frame_count else 0.0
         return CostBreakdown(
             frame_count=inputs.frame_count,
@@ -190,11 +192,17 @@ def test_cost_estimate_settings_path_overrides_defaults(
 
     def _from_settings(*, path: Path | None) -> SettingsLoadResult:
         if path is None:
-            return SettingsLoadResult(engine=default_engine, settings_path=None, warnings=())
+            return SettingsLoadResult(
+                engine=default_engine, settings_path=None, warnings=()
+            )
         assert path == settings_file
-        return SettingsLoadResult(engine=override_engine, settings_path=path, warnings=())
+        return SettingsLoadResult(
+            engine=override_engine, settings_path=path, warnings=()
+        )
 
-    from_settings = mocker.patch("apps.perona.app.PeronaEngine.from_settings", side_effect=_from_settings)
+    from_settings = mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", side_effect=_from_settings
+    )
 
     default_result = runner.invoke(perona_app, ["cost", "estimate", "--format", "json"])
     override_result = runner.invoke(

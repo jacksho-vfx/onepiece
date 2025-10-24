@@ -631,7 +631,9 @@ def cost_estimate(
             gpu_hourly_rate if gpu_hourly_rate is not None else baseline.gpu_hourly_rate
         ),
         "gpu_count": gpu_count if gpu_count is not None else baseline.gpu_count,
-        "render_hours": render_hours if render_hours is not None else baseline.render_hours,
+        "render_hours": (
+            render_hours if render_hours is not None else baseline.render_hours
+        ),
         "render_farm_hourly_rate": (
             render_farm_hourly_rate
             if render_farm_hourly_rate is not None
