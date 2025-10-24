@@ -55,6 +55,24 @@ def test_shotgrid_service_accepts_generator_versions() -> None:
     assert fetched == versions
 
 
+def test_shotgrid_service_filters_versions_case_insensitively() -> None:
+    versions = [
+        {"project": "ALPHA", "shot": "EP01_SC001_SH0010", "version": "v001"},
+        {"project": {"name": "Alpha"}, "shot": "EP01_SC002_SH0020", "version": "v002"},
+        {"project": "Alpha", "shot": "EP02_SC003_SH0030", "version": "v003"},
+        {"project": "beta", "shot": "EP99_SC100_SH0500", "version": "v010"},
+    ]
+
+    service = dashboard.ShotGridService(DummyShotgridClient(versions))  # type: ignore[arg-type]
+
+    filtered = service._filter_versions("aLpHa")
+
+    assert [item["version"] for item in filtered] == ["v001", "v002", "v003"]
+    assert filtered[0]["project"] == "ALPHA"
+    assert filtered[1]["project"] == {"name": "Alpha"}
+    assert filtered[2]["project"] == "Alpha"
+
+
 class FakeMonotonic:
     def __init__(self) -> None:
         self._value = 0.0
@@ -869,7 +887,7 @@ async def test_admin_cache_endpoint_updates_settings_and_flushes(
 async def test_project_detail_returns_summary() -> None:
     versions: list[dict[str, Any]] = [
         {
-            "project": "alpha",
+            "project": "ALPHA",
             "shot": "EP01_SC001_SH0010",
             "version": "v001",
             "status": "APR",
@@ -885,7 +903,7 @@ async def test_project_detail_returns_summary() -> None:
             "timestamp": "2024-01-01T10:00:00Z",
         },
         {
-            "project": "alpha",
+            "project": "Alpha",
             "shot": "EP02_SC003_SH0020",
             "version": "v003",
             "status": "Published",
@@ -906,11 +924,11 @@ async def test_project_detail_returns_summary() -> None:
 
     transport = ASGITransport(app=dashboard.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get("/projects/alpha")
+        response = await client.get("/projects/AlPhA")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["project"] == "alpha"
+    assert data["project"] == "AlPhA"
     assert data["episodes"] == 2
     assert data["shots"] == 2
     assert data["versions"] == 3
@@ -1478,7 +1496,7 @@ def test_delivery_service_disables_manifest_cache_when_size_zero(
 async def test_project_episode_endpoint_returns_grouped_stats() -> None:
     versions = [
         {
-            "project": "alpha",
+            "project": "ALPHA",
             "episode": "EP01",
             "shot": "EP01_SC001_SH0010",
             "version": "v001",
@@ -1491,7 +1509,7 @@ async def test_project_episode_endpoint_returns_grouped_stats() -> None:
             "status": "pub",
         },
         {
-            "project": "alpha",
+            "project": "Alpha",
             "shot": "EP02_SC001_SH0100",
             "version": "v003",
             "status": "WIP",
@@ -1504,11 +1522,11 @@ async def test_project_episode_endpoint_returns_grouped_stats() -> None:
 
     transport = ASGITransport(app=dashboard.app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get("/projects/alpha/episodes")
+        response = await client.get("/projects/AlPhA/episodes")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["project"] == "alpha"
+    assert data["project"] == "AlPhA"
     assert data["status_totals"] == {"approved": 1, "published": 1, "wip": 1}
     episodes = {entry["episode"]: entry for entry in data["episodes"]}
     assert episodes["EP01"]["versions"] == 2

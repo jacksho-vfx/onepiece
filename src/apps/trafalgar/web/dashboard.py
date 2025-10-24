@@ -429,22 +429,20 @@ class ShotGridService:
         return discovered
 
     def _filter_versions(self, project_name: str) -> list[Mapping[str, Any]]:
-        target_name = _coerce_project_name(project_name) or str(project_name).strip()
+        def _canonical_project_key(value: Any) -> str:
+            coerced = _coerce_project_name(value)
+            if coerced is None:
+                text = str(value).strip()
+            else:
+                text = coerced
+            return text.casefold()
+
+        target_key = _canonical_project_key(project_name)
 
         versions = [
             version
             for version in self._fetch_versions()
-            if (
-                (
-                    _coerce_project_name(version.get("project"))
-                    or (
-                        str(version.get("project")).strip()
-                        if version.get("project") is not None
-                        else None
-                    )
-                )
-                == target_name
-            )
+            if _canonical_project_key(version.get("project")) == target_key
         ]
 
         if not versions and project_name not in self._configured_projects:
