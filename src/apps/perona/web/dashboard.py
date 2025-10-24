@@ -39,6 +39,7 @@ from apps.perona.engine import (
 from apps.perona.models import (
     CostEstimate,
     CostEstimateRequest,
+    CostInsightResponse,
     OptimizationBacktestRequest,
     OptimizationBacktestResponse,
     OptimizationResult,
@@ -50,6 +51,7 @@ from apps.perona.models import (
     sequences_from_lifecycles,
 )
 from apps.perona.models import Sequence as PeronaSequence
+from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 
 class RenderMetricBatch(BaseModel):
@@ -184,11 +186,26 @@ def _filter_lifecycles(
     return filtered
 
 
+class _CostInsightsMemo:
+    """In-memory cache for cost insights keyed by ``top_n``."""
+
+    __slots__ = ("statistics", "recommendations_by_top_n")
+
+    def __init__(self) -> None:
+        self.statistics: tuple[FeatureStatistics, ...] | None = None
+        self.recommendations_by_top_n: dict[int, tuple[str, ...]] = {}
+
+    def clear(self) -> None:
+        self.statistics = None
+        self.recommendations_by_top_n.clear()
+
+
 class _EngineCacheEntry(NamedTuple):
     engine: PeronaEngine
     signature: tuple[str | None, str, float | None]
     settings_path: Path | None
     warnings: tuple[str, ...]
+    insights: _CostInsightsMemo
 
 
 _engine_lock = Lock()
@@ -242,6 +259,7 @@ def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:
                 signature=signature,
                 settings_path=load_result.settings_path,
                 warnings=load_result.warnings,
+                insights=_CostInsightsMemo(),
             )
             _engine_cache = cache_entry
         return cache_entry
@@ -259,6 +277,40 @@ def invalidate_engine_cache() -> None:
     global _engine_cache
     with _engine_lock:
         _engine_cache = None
+
+
+def _resolve_cost_insights(
+    engine: PeronaEngine,
+    *,
+    top_n: int,
+    refresh_telemetry: bool,
+) -> tuple[tuple[FeatureStatistics, ...], tuple[str, ...]]:
+    """Return cost insights using cached results when available."""
+
+    cached_statistics: tuple[FeatureStatistics, ...] | None = None
+    cached_recommendations: tuple[str, ...] | None = None
+
+    with _engine_lock:
+        cache_entry = _engine_cache
+        if cache_entry is not None and cache_entry.engine is engine:
+            if refresh_telemetry:
+                cache_entry.insights.clear()
+            memo = cache_entry.insights
+            cached_statistics = memo.statistics
+            cached_recommendations = memo.recommendations_by_top_n.get(top_n)
+            if cached_statistics is not None and cached_recommendations is not None:
+                return cached_statistics, cached_recommendations
+
+    statistics, recommendations = engine.cost_insights(top_n=top_n)
+
+    with _engine_lock:
+        cache_entry = _engine_cache
+        if cache_entry is not None and cache_entry.engine is engine:
+            memo = cache_entry.insights
+            memo.statistics = statistics
+            memo.recommendations_by_top_n[top_n] = recommendations
+
+    return statistics, recommendations
 
 
 def _settings_summary_from_cache(force_refresh: bool = False) -> SettingsSummary:
@@ -448,6 +500,34 @@ def cost_estimate(
 
     breakdown = engine.estimate_cost(payload.to_entity())
     return CostEstimate.from_breakdown(breakdown)
+
+
+@app.get("/api/cost/insights", response_model=CostInsightResponse)
+def cost_insights(
+    top_n: int = Query(3, ge=1, le=10),
+    refresh_telemetry: bool = Query(
+        False, alias="refresh_telemetry", description="Reload persisted telemetry"
+    ),
+    engine: PeronaEngine = Depends(get_engine),
+) -> CostInsightResponse:
+    """Return descriptive statistics and optimisation suggestions."""
+
+    statistics, recommendations = _resolve_cost_insights(
+        engine, top_n=top_n, refresh_telemetry=refresh_telemetry
+    )
+
+    if not statistics:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No telemetry statistics available.",
+        )
+
+    cache_entry = _get_engine_cache_entry()
+    return CostInsightResponse.from_results(
+        statistics,
+        recommendations,
+        settings_path=cache_entry.settings_path,
+    )
 
 
 @app.get("/risk-heatmap", response_model=list[RiskIndicator])
