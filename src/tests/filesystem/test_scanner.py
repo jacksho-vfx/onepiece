@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from libraries.platform.filesystem import scanner
 from libraries.platform.filesystem.scanner import scan_project_files
 
 
@@ -44,3 +45,42 @@ def test_scan_project_files_returns_sorted_results(tmp_path: Path) -> None:
         ("ep101_sc01_0010", "v010"),
         ("ep101_sc02_0010", "v001"),
     ]
+
+
+def test_scan_project_files_skips_unreadable_directories(tmp_path: Path, monkeypatch) -> None:
+    readable_file = tmp_path / "seq" / "ep101_sc01_0010" / "playblast_v001.mov"
+    unreadable_dir = tmp_path / "seq" / "ep101_sc02_0010"
+    unreadable_file = unreadable_dir / "playblast_v010.mov"
+
+    _touch(readable_file)
+    _touch(unreadable_file)
+
+    original_iterdir = Path.iterdir
+
+    def fake_iterdir(self: Path):  # type: ignore[override]
+        if self == unreadable_dir:
+            raise PermissionError("access denied")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+
+    class DummyLog:
+        def __init__(self) -> None:
+            self.warning_calls = []
+
+        def warning(self, *args, **kwargs) -> None:
+            self.warning_calls.append((args, kwargs))
+
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - not asserted
+            pass
+
+    dummy_log = DummyLog()
+    monkeypatch.setattr(scanner, "log", dummy_log)
+
+    results = scan_project_files(tmp_path)
+
+    assert results == [
+        {"shot": "ep101_sc01_0010", "version": "v001", "path": str(readable_file)}
+    ]
+    assert dummy_log.warning_calls
+    assert dummy_log.warning_calls[0][0][0] == "filesystem.scan.unreadable_path"
