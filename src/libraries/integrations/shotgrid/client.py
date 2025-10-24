@@ -188,8 +188,10 @@ class EntityStore:
         index = self._indices.get(entity_type)
         if index:
             unique_key = entity.get("name") or entity.get("code")
-            if unique_key and unique_key in index:
-                del index[str(unique_key)]
+            if unique_key is not None:
+                key_text = str(unique_key)
+                if key_text and key_text in index:
+                    del index[key_text]
 
     def next_id(self, entity_type: str) -> int:
         store = self._ensure_type(entity_type)
