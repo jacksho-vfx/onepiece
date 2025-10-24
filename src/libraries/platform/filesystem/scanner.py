@@ -30,13 +30,36 @@ def scan_project_files(
         return []
 
     results: List[Dict[str, str]] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
+    pending: List[Path] = [root]
+    while pending:
+        current = pending.pop()
+        if not current.is_dir():
+            if current.is_file():
+                entity, version = extract_from_path(current, scope=normalised_scope)
+                if entity and version:
+                    results.append(
+                        {"shot": entity, "version": version, "path": str(current)}
+                    )
             continue
-        entity, version = extract_from_path(path, scope=normalised_scope)
-        if not entity or not version:
+        try:
+            entries = list(current.iterdir())
+        except (OSError, PermissionError) as error:
+            log.warning(
+                "filesystem.scan.unreadable_path",
+                root=str(current),
+                error=str(error),
+            )
             continue
-        results.append({"shot": entity, "version": version, "path": str(path)})
+        for path in entries:
+            if path.is_dir():
+                pending.append(path)
+                continue
+            if not path.is_file():
+                continue
+            entity, version = extract_from_path(path, scope=normalised_scope)
+            if not entity or not version:
+                continue
+            results.append({"shot": entity, "version": version, "path": str(path)})
 
     log.info(
         "filesystem.scan.complete",
