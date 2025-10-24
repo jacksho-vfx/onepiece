@@ -1,16 +1,54 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import pytest_mock
 from typer.testing import CliRunner
 
+from apps.perona.engine import CostBreakdown, CostModelInput, SettingsLoadResult
 from apps.perona.app import app as perona_app
 from apps.perona.models import BaselineCostInput, SettingsSummary
 
 
 runner = CliRunner()
+
+
+class _StubCostEngine:
+    def __init__(self, baseline: CostModelInput) -> None:
+        self._baseline = baseline
+        self.last_inputs: CostModelInput | None = None
+
+    @property
+    def baseline_cost_input(self) -> CostModelInput:
+        return self._baseline
+
+    def estimate_cost(self, inputs: CostModelInput) -> CostBreakdown:
+        self.last_inputs = inputs
+        gpu_cost = inputs.gpu_hourly_rate * inputs.gpu_count
+        render_farm_cost = inputs.render_farm_hourly_rate
+        storage_cost = inputs.storage_gb * inputs.storage_rate_per_gb
+        egress_cost = inputs.data_egress_gb * inputs.egress_rate_per_gb
+        misc_cost = inputs.misc_costs
+        total_cost = (
+            gpu_cost + render_farm_cost + storage_cost + egress_cost + misc_cost
+        )
+        cost_per_frame = total_cost / inputs.frame_count if inputs.frame_count else 0.0
+        return CostBreakdown(
+            frame_count=inputs.frame_count,
+            gpu_hours=inputs.render_hours,
+            render_hours=inputs.render_hours,
+            concurrency=inputs.gpu_count,
+            gpu_cost=gpu_cost,
+            render_farm_cost=render_farm_cost,
+            storage_cost=storage_cost,
+            egress_cost=egress_cost,
+            misc_cost=misc_cost,
+            total_cost=total_cost,
+            cost_per_frame=cost_per_frame,
+            currency=inputs.currency,
+        )
 
 
 def _make_settings_summary() -> SettingsSummary:
@@ -80,3 +118,116 @@ def test_settings_rejects_directory_settings_path(
     assert result.exit_code == 2
     assert "Settings path" in result.output
     from_settings.assert_not_called()
+
+
+def test_cost_estimate_applies_baseline_defaults_in_table_output(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=987,
+        average_frame_time_ms=118.0,
+        gpu_hourly_rate=7.25,
+        gpu_count=6,
+        render_hours=12.0,
+        render_farm_hourly_rate=4.25,
+        storage_gb=9.5,
+        storage_rate_per_gb=0.55,
+        data_egress_gb=1.8,
+        egress_rate_per_gb=0.22,
+        misc_costs=45.0,
+        currency="USD",
+    )
+    engine = _StubCostEngine(baseline)
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings",
+        return_value=SettingsLoadResult(engine=engine, settings_path=None, warnings=()),
+    )
+
+    result = runner.invoke(perona_app, ["cost", "estimate"])
+
+    assert result.exit_code == 0
+    assert engine.last_inputs is not None
+    assert engine.last_inputs.frame_count == baseline.frame_count
+    assert engine.last_inputs.gpu_hourly_rate == baseline.gpu_hourly_rate
+    assert "Currency" in result.output
+    assert "USD" in result.output
+    assert "$" in result.output
+
+
+def test_cost_estimate_settings_path_overrides_defaults(
+    tmp_path: Path, mocker: pytest_mock.MockerFixture
+) -> None:
+    default_baseline = CostModelInput(
+        frame_count=1024,
+        average_frame_time_ms=140.0,
+        gpu_hourly_rate=8.0,
+        gpu_count=8,
+        render_hours=10.0,
+        render_farm_hourly_rate=5.0,
+        storage_gb=12.0,
+        storage_rate_per_gb=0.4,
+        data_egress_gb=2.0,
+        egress_rate_per_gb=0.3,
+        misc_costs=100.0,
+        currency="GBP",
+    )
+    override_baseline = CostModelInput(
+        frame_count=2048,
+        average_frame_time_ms=132.0,
+        gpu_hourly_rate=9.5,
+        gpu_count=12,
+        render_hours=14.0,
+        render_farm_hourly_rate=6.5,
+        storage_gb=18.0,
+        storage_rate_per_gb=0.6,
+        data_egress_gb=3.5,
+        egress_rate_per_gb=0.4,
+        misc_costs=150.0,
+        currency="USD",
+    )
+    default_engine = _StubCostEngine(default_baseline)
+    override_engine = _StubCostEngine(override_baseline)
+    settings_file = tmp_path / "perona.toml"
+    settings_file.write_text("# overrides")
+
+    def _from_settings(*, path: Path | None) -> SettingsLoadResult:
+        if path is None:
+            return SettingsLoadResult(
+                engine=default_engine, settings_path=None, warnings=()
+            )
+        assert path == settings_file
+        return SettingsLoadResult(
+            engine=override_engine, settings_path=path, warnings=()
+        )
+
+    from_settings = mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", side_effect=_from_settings
+    )
+
+    default_result = runner.invoke(perona_app, ["cost", "estimate", "--format", "json"])
+    override_result = runner.invoke(
+        perona_app,
+        [
+            "cost",
+            "estimate",
+            "--format",
+            "json",
+            "--settings-path",
+            str(settings_file),
+        ],
+    )
+
+    assert default_result.exit_code == 0
+    assert override_result.exit_code == 0
+
+    default_payload = json.loads(default_result.output)
+    override_payload = json.loads(override_result.output)
+
+    assert default_payload["currency"] == default_baseline.currency
+    assert override_payload["currency"] == override_baseline.currency
+    assert default_payload["frame_count"] == default_baseline.frame_count
+    assert override_payload["frame_count"] == override_baseline.frame_count
+    assert default_payload != override_payload
+
+    assert from_settings.call_args_list[0].kwargs == {"path": None}
+    assert from_settings.call_args_list[1].kwargs == {"path": settings_file}
