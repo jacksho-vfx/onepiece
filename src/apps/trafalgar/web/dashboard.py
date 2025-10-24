@@ -482,10 +482,17 @@ class ShotGridService:
             versions_result = list(fetcher(self._client))
         elif hasattr(self._client, "list_versions"):
             versions_raw: Any = getattr(self._client, "list_versions")()
-            if isinstance(versions_raw, Sequence):
-                versions_result = [dict(item) for item in versions_raw]
+            if isinstance(versions_raw, Sequence) and not isinstance(
+                versions_raw, (str, bytes)
+            ):
+                versions_iterable: Iterable[Mapping[str, Any]] = versions_raw
+            elif isinstance(versions_raw, Iterable) and not isinstance(
+                versions_raw, (str, bytes)
+            ):
+                versions_iterable = versions_raw
             else:
-                versions_result = []
+                versions_iterable = []
+            versions_result = [dict(item) for item in versions_iterable]
         else:
             project_names: set[str] = set(self._configured_projects)
             all_versions: list[Mapping[str, Any]] = []
@@ -501,12 +508,21 @@ class ShotGridService:
                             error=str(exc),
                         )
                         continue
-                    if isinstance(results, Sequence):
-                        for item in results:
-                            record = dict(item)
-                            if not record.get("project"):
-                                record["project"] = name
-                            all_versions.append(record)
+                    if isinstance(results, Sequence) and not isinstance(
+                        results, (str, bytes)
+                    ):
+                        results_iterable: Iterable[Mapping[str, Any]] = results
+                    elif isinstance(results, Iterable) and not isinstance(
+                        results, (str, bytes)
+                    ):
+                        results_iterable = results
+                    else:
+                        results_iterable = []
+                    for item in results_iterable:
+                        record = dict(item)
+                        if not record.get("project"):
+                            record["project"] = name
+                        all_versions.append(record)
             versions_result = all_versions
 
         can_cache = self._cache_ttl > 0
