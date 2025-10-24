@@ -152,7 +152,16 @@ class SceneObject:
         position_data = payload["position"]
         if not isinstance(position_data, Sequence) or len(position_data) != 2:
             raise SceneError("Object position must be a length two sequence")
-        position = float(position_data[0]), float(position_data[1])
+        try:
+            position_x = float(position_data[0])
+            position_y = float(position_data[1])
+        except (TypeError, ValueError) as exc:
+            raise SceneError("Object position must contain numeric x and y values") from exc
+
+        if not math.isfinite(position_x) or not math.isfinite(position_y):
+            raise SceneError("Object position coordinates must be finite numbers")
+
+        position = position_x, position_y
 
         size_data = payload.get("size", (0, 0))
         if not isinstance(size_data, Sequence) or len(size_data) != 2:
@@ -207,6 +216,11 @@ class SceneObject:
                     raise SceneError(
                         f"Object animation entry at index {index} has invalid coordinate values"
                     ) from exc
+
+                if not math.isfinite(x) or not math.isfinite(y):
+                    raise SceneError(
+                        f"Object animation entry at index {index} must have finite coordinate values"
+                    )
 
                 keyframes.append(Keyframe(frame=frame, x=x, y=y))
 
