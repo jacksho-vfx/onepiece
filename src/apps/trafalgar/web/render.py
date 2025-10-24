@@ -1196,12 +1196,19 @@ class RenderSubmissionService:
             status_totals: dict[str, dict[str, Any]] = {}
             adapter_totals: dict[str, Any] = {}
 
+            def normalise_status(value: str | None) -> str:
+                if value is None:
+                    return "unknown"
+                text = str(value).strip().lower()
+                return text or "unknown"
+
             for record in records:
                 record_updated = record.updated_at or record.created_at
                 durations = record.status_durations(now=moment)
                 for status_name, duration_seconds in durations.items():
+                    status_key = normalise_status(status_name)
                     status_entry = status_totals.setdefault(
-                        status_name,
+                        status_key,
                         {
                             "jobs": set(),
                             "total_duration": 0.0,
@@ -1219,7 +1226,7 @@ class RenderSubmissionService:
                         if last_updated is None or record_updated > last_updated:
                             status_entry["last_updated"] = record_updated
 
-                record_status = record.status or "unknown"
+                record_status = normalise_status(record.status)
                 status_entry = status_totals.setdefault(
                     record_status,
                     {
@@ -1248,7 +1255,7 @@ class RenderSubmissionService:
                     },
                 )
                 adapter_entry["total_jobs"] += 1
-                adapter_entry["statuses"][record.status] += 1
+                adapter_entry["statuses"][record_status] += 1
 
                 created_at = record.created_at
                 first_submission: datetime | None = adapter_entry["first_submission"]
