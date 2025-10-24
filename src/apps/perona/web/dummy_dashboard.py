@@ -60,7 +60,7 @@ _SETTINGS_SUMMARY = SettingsSummary.from_engine(
     settings_path=None,
     warnings=(
         "Serving dummy data sourced from the packaged defaults. "
-        "Values do not reflect a live render farm."
+        "Values do not reflect a live render farm.",
     ),
 )
 
@@ -176,7 +176,7 @@ def shot_sequences(
 ) -> Any:
     """Return demo shots grouped by sequence for gallery style views."""
 
-    return live_dashboard.shots_sequences(
+    return live_dashboard.shot_sequences(
         sequence=sequence,
         artist=artist,
         start_date=start_date,
