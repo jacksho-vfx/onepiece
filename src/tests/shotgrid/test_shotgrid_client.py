@@ -25,22 +25,38 @@ def sg_client() -> ShotgridClient:
 
 def test_get_or_create_project_creates_new(sg_client: ShotgridClient) -> None:
     sg_client._find_project = MagicMock(return_value=None)
-    sg_client._create_project = MagicMock(return_value={"id": 123, "name": "TestShow"})
+    sg_client._create_project = MagicMock(
+        return_value={"id": 123, "name": "TestShow", "template": None}
+    )
 
     project = sg_client.get_or_create_project("TestShow")
-    sg_client._create_project.assert_called_once_with("TestShow")
+    sg_client._create_project.assert_called_once_with("TestShow", template=None)
     assert project["name"] == "TestShow"
 
 
 def test_get_or_create_project_returns_existing(sg_client: ShotgridClient) -> None:
     sg_client._find_project = MagicMock(
-        return_value={"id": 456, "name": "ExistingShow"}
+        return_value={"id": 456, "name": "ExistingShow", "template": "episodic"}
     )
     sg_client._create_project = MagicMock()
 
     project = sg_client.get_or_create_project("ExistingShow")
     sg_client._create_project.assert_not_called()
     assert project["id"] == 456
+    assert project["template"] == "episodic"
+
+
+def test_get_or_create_project_stores_and_returns_template() -> None:
+    client = ShotgridClient(sleep=lambda _: None)
+
+    created = client.get_or_create_project("TemplateShow", template="episodic")
+
+    assert created["template"] == "episodic"
+
+    fetched = client.get_or_create_project("TemplateShow", template="other-template")
+
+    assert fetched is created
+    assert fetched["template"] == "episodic"
 
 
 def test_bulk_create_update_delete_entities() -> None:

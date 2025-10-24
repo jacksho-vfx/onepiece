@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast, Mapping, Optional, Sequence, TypedDict, TypeVar
+from typing import Any, NotRequired, cast, Mapping, Optional, Sequence, TypedDict, TypeVar
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ class EntityPayload(TypedDict, total=False):
     description: str
     playlist_name: str
     version_ids: list[int]
+    template: str | None
 
 
 class Project(TypedDict):
@@ -56,6 +57,7 @@ class Project(TypedDict):
 
     id: int
     name: str
+    template: NotRequired[str | None]
 
 
 class Version(TypedDict):
@@ -392,16 +394,24 @@ class ShotgridClient:
         proj = self._store.get_by_unique_key("Project", name)
         return cast(Project | None, proj)
 
-    def _create_project(self, name: str) -> Project:
+    def _create_project(self, name: str, template: str | None = None) -> Project:
         next_id = self._store.next_id("Project")
-        payload: EntityPayload = {"id": next_id, "name": name, "type": "Project"}
+        payload: EntityPayload = {
+            "id": next_id,
+            "name": name,
+            "type": "Project",
+            "template": template,
+        }
         return cast(Project, self._store.add("Project", payload))
 
     def get_or_create_project(self, name: str, template: str | None = None) -> Project:
         proj = self._find_project(name)
         if proj is not None:
             return proj
-        return cast(Project, self._execute_with_retry(self._create_project, name))
+        return cast(
+            Project,
+            self._execute_with_retry(self._create_project, name, template=template),
+        )
 
     # Retry helpers ----------------------------------------------------
 
