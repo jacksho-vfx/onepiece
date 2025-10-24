@@ -194,7 +194,7 @@ def test_renumber_sequence_handles_existing_targets(
     recorded_moves: list[tuple[str, str]] = []
     real_move = manipulations.shutil.move
 
-    def _move(src: str, dst: str, *, _real=real_move) -> str:
+    def _move(src: str, dst: str, *, _real=real_move) -> Any:  # type: ignore[no-untyped-def]
         dst_path = Path(dst)
         if is_windows and dst_path.exists():
             raise PermissionError("Cannot replace existing file on Windows")
