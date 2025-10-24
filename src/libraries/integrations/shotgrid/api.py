@@ -346,10 +346,15 @@ class ShotGridClient:
         filters: List[Dict[str, Any]] = []
         if project_name:
             project = self.get_project(project_name)
-            if project and project.get("id") is not None:
-                filters.append({"project": project["id"]})
-            else:
-                filters.append({"project": project_name})
+            project_id = project.get("id") if isinstance(project, dict) else None
+            if project_id is None:
+                log.info(
+                    "sg.list_playlists.project_missing",
+                    project=project_name,
+                )
+                return []
+
+            filters.append({"project": project_id})
 
         fields = "id,name,code,versions"
         return self._get_paginated("Playlist", filters, fields)

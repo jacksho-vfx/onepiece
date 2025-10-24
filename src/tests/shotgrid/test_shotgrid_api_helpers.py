@@ -524,6 +524,27 @@ def test_list_playlists_filters_by_project_and_paginates(
     assert second_call_kwargs["params"]["page[number]"] == 2
 
 
+def test_list_playlists_returns_empty_when_project_missing(
+    client: ShotGridClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.base_url = "https://example.com"
+    client.get_project = MagicMock(return_value=None)
+
+    session = MagicMock()
+    client._session = session
+
+    log_info = MagicMock()
+    monkeypatch.setattr("libraries.integrations.shotgrid.api.log.info", log_info)
+
+    result = client.list_playlists("Unknown Project")
+
+    assert result == []
+    session.get.assert_not_called()
+    log_info.assert_called_once_with(
+        "sg.list_playlists.project_missing", project="Unknown Project"
+    )
+
+
 def test_get_playlist_record_delegates_to_single(client: ShotGridClient) -> None:
     filters = [{"project": 77}, {"code": "Editorial"}]
 
