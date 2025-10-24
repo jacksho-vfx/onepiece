@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,30 @@ def test_scene_object_requires_positive_size() -> None:
     payload["objects"][0]["size"] = [0, 4]  # type: ignore[index]
 
     with pytest.raises(SceneError, match="positive width and height"):
+        Scene.from_dict(payload)
+
+
+def test_scene_object_requires_numeric_position_values() -> None:
+    payload = build_scene_dict()
+    payload["objects"][0]["position"] = ["left", 1]  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="numeric x and y"):
+        Scene.from_dict(payload)
+
+
+def test_scene_object_requires_finite_position_values() -> None:
+    payload = build_scene_dict()
+    payload["objects"][0]["position"] = [math.nan, 1.0]  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="finite numbers"):
+        Scene.from_dict(payload)
+
+
+def test_scene_object_animation_requires_finite_coordinates() -> None:
+    payload = build_scene_dict()
+    payload["objects"][1]["animation"][0]["x"] = float("nan")  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="finite coordinate values"):
         Scene.from_dict(payload)
 
 
