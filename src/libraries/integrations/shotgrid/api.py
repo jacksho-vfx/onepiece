@@ -142,9 +142,16 @@ class ShotGridClient:
         self._session.headers.update({"Authorization": f"Bearer {token}"})
         log.info("auth_success", base_url=str(self.base_url))
 
-    def _get(self, entity: str, filters: List[Dict[str, Any]], fields: str) -> Any:
+    def _get(
+        self,
+        entity: str,
+        filters: List[Dict[str, Any]],
+        fields: str,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         url = self._build_url("api", "v1", f"entities/{entity.lower()}s")
-        params = self._build_query_params(filters, fields)
+        params = self._build_query_params(filters, fields, extra=extra)
         r = self._session.get(url, params=params, timeout=self.timeout)
         if not r.ok:
             log.error(
@@ -266,7 +273,7 @@ class ShotGridClient:
     def _get_single(
         self, entity: str, filters: List[Dict[str, Any]], fields: str = "id,name,code"
     ) -> Optional[Dict[str, Any]]:
-        results = self._get(entity, filters, fields)
+        results = self._get(entity, filters, fields, extra={"page[size]": 1})
         return results[0] if results else None
 
     def _get_or_create_entity(
