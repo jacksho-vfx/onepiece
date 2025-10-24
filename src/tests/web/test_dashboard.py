@@ -62,6 +62,13 @@ class DummyReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
         return self._payload
 
 
+def test_reconcile_service_uses_default_provider() -> None:
+    service = dashboard.ReconcileService()
+
+    assert service.list_errors() == []
+    assert service.summarise_errors() == []
+
+
 class DummyDeliveryProvider(DeliveryProvider):  # type: ignore[misc]
     metadata = ProviderMetadata(
         name="test-delivery",

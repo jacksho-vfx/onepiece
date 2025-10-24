@@ -660,6 +660,44 @@ class ShotGridService:
         return payload
 
 
+def _resolve_reconcile_provider(
+    provider: ReconcileDataProvider | str | None,
+) -> ReconcileDataProvider:
+    """Return a :class:`ReconcileDataProvider` instance for *provider*."""
+
+    if isinstance(provider, ReconcileDataProvider):
+        return provider
+
+    if provider is not None and not isinstance(provider, str):
+        msg = (
+            "ReconcileService provider must be a ReconcileDataProvider instance,"
+            " a provider name, or None."
+        )
+        raise TypeError(msg)
+
+    registry = initialize_providers()
+    try:
+        if isinstance(provider, str):
+            resolved = registry.create("reconcile", provider)
+        else:
+            resolved = registry.create_default("reconcile")
+    except ProviderNotFoundError as exc:
+        if provider is None:
+            msg = "No default reconcile provider is configured."
+        else:
+            msg = f"Unknown reconcile provider '{provider}'."
+        raise RuntimeError(msg) from exc
+
+    if not isinstance(resolved, ReconcileDataProvider):
+        msg = (
+            "Resolved reconcile provider does not implement ReconcileDataProvider: "
+            f"{type(resolved).__name__}"
+        )
+        raise TypeError(msg)
+
+    return resolved
+
+
 class ReconcileService:
     def __init__(
         self,
@@ -667,10 +705,7 @@ class ReconcileService:
         *,
         comparator_fn: Callable[..., Sequence[Mapping[str, Any]]] | None = None,
     ) -> None:
-        if isinstance(provider, str):
-            self._provider = initialize_providers()
-        else:
-            self._provider = provider
+        self._provider = _resolve_reconcile_provider(provider)
         self._comparator = comparator_fn or comparator.compare_datasets
 
     def list_errors(self) -> list[Mapping[str, Any]]:
@@ -1142,7 +1177,10 @@ def get_shotgrid_service() -> ShotGridService:
 
 
 def get_reconcile_service() -> ReconcileService:
-    return ReconcileService()
+    try:
+        return ReconcileService()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def get_delivery_service() -> DeliveryService:
