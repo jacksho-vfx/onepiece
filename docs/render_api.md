@@ -2,7 +2,8 @@
 
 The Trafalgar render service exposes the `/farms` endpoint so CLI tools and UI
 widgets can discover registered adapters along with the behaviour they support.
-The response now returns structured capability descriptors for each adapter.
+The response now returns structured capability descriptors for each adapter,
+mirroring the data model used by the FastAPI application. 【F:src/apps/trafalgar/web/render.py†L1-L220】
 
 > **Release spotlight (v1.0.0):** Capability descriptors now include
 > cancellation flags and chunking ranges, `/render/health` reports job-history
@@ -56,7 +57,7 @@ same guard rails and defaults without reaching into adapter internals.
 
 The Trafalgar service now sources its adapter list from the runtime
 `RenderSubmissionService` registry. Projects integrating bespoke farm managers
-can register additional adapters during startup:
+can register additional adapters during startup: 【F:src/apps/trafalgar/web/render.py†L1373-L1498】
 
 ```python
 from apps.trafalgar.web.render import get_render_service

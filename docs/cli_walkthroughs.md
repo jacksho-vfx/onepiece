@@ -4,7 +4,7 @@ These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. T
 
 > **Release spotlight (v1.0.0):** The CLI honours layered configuration profiles and resumable ingest toggles, Trafalgar introduces cache-tunable dashboards with job inspection endpoints, and the new Uta Control Center renders the command surface in your browser alongside the embedded dashboard.
 >
-> **Latest merges:** Animation-focused commands now debug Maya scenes, orchestrate cleanup operations, and generate logged playblasts from the CLI. Maya publishes validate scene names before packaging and report Unreal export readiness, while the new Unreal importer reconstructs assets directly inside the editor with a dry-run preview. Trafalgar reconciliations ride on a provider registry that ships with a default data source, keeping dashboards configurable without bespoke forks. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
+> **Latest merges:** Animation-focused commands now debug Maya scenes, orchestrate cleanup operations, and generate logged playblasts from the CLI. Maya publishes validate scene names before packaging and report Unreal export readiness, while the new Unreal importer reconstructs assets directly inside the editor with a dry-run preview. Trafalgar reconciliations ride on a provider registry that ships with a default data source, keeping dashboards configurable without bespoke forks. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/publish.py†L39-L203】【F:src/libraries/creative/dcc/maya/unreal_importer.py†L1-L332】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Adjusting dashboard cache behaviour
 
@@ -71,8 +71,8 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
      --bucket studio-demo-ingest \
      --show-code DEMO \
      --folder plates \
-     --manifest docs/examples/ingest_manifest.csv \
      --local-path "$ONEPIECE_INGEST_ROOT" \
+     --include "plates/**" \
      --dry-run \
      --profile studio-dev
    ```
@@ -121,8 +121,6 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
 
    The same `--report-format csv` flag streams a tabular version to stdout (or to `--report-path`) when you prefer spreadsheet tooling.
 
-4. Keep `--scene-name` restricted to a simple package identifier. Absolute paths, parent directory references, and separator characters now trigger an immediate validation error so publishes cannot escape the package directory on disk. When the package metadata includes a `maya_to_unreal` validation block, the CLI prints a summary covering scale checks, skeleton coverage, and naming compliance before uploading assets. 【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/creative/dcc/maya/unreal_export_checker.py†L1-L195】
-
 ## 4. Package a DCC publish for QA
 
 This scenario simulates a Maya lighting publish that bundles render outputs, previews, and metadata before pushing them to S3.
@@ -151,10 +149,10 @@ notes,"QA dry run for onboarding"
    └── metadata/publish.json
    ```
 
-3. Run the publish command in report-only mode to confirm everything resolves:
+3. Run the publish command in dry-run mode to confirm everything resolves:
 
    ```bash
-   onepiece publish \
+   onepiece dcc publish \
      --dcc maya \
      --scene-name seq010_sh010_lighting_v002 \
      --renders /projects/demo/seq010/sh010/renders/lighting/v002 \
@@ -164,14 +162,14 @@ notes,"QA dry run for onboarding"
      --bucket studio-demo-publish \
      --show-code DEMO \
      --show-type vfx \
-     --report-only
+     --dry-run
    ```
 
    When `--direct-upload-path` is omitted, the publish mirrors to
    `s3://<bucket>/<show_type>/<show_code>/<scene_name>`, keeping different show
    types isolated inside the same bucket.
 
-4. Inspect the generated report for any validation warnings. When the report looks good, rerun the command without `--report-only` to build and upload the package.
+4. Inspect the generated summary for any validation warnings. Keep `--scene-name` restricted to a simple package identifier—absolute paths, parent traversal, and separators trigger validation errors so packages cannot escape the publish directory. When the package metadata includes a `maya_to_unreal` validation block, the CLI prints a summary covering scale checks, skeleton coverage, and naming compliance before uploading assets. Rerun the command without `--dry-run` once the results look good. 【F:src/apps/onepiece/dcc/publish.py†L39-L203】【F:src/libraries/creative/dcc/maya/unreal_export_checker.py†L1-L195】
 
 ## 5. Debug a Maya animation scene
 

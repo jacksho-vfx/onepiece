@@ -68,15 +68,11 @@ status code, and response payload, making it easy to log structured error data.
 
 ## CLI integration
 
-The `onepiece ftrack` command group wraps the REST client to provide
-operator-friendly tasks:
-
-- `onepiece ftrack projects list` – print a tabulated summary of accessible
-  projects, including their status and the time of the last update.
-- `onepiece ftrack tasks ensure --project Demo --show-code DEMO --shot seq010_sh010 --task-type lighting` – create tasks in
-  bulk, mirroring the ShotGrid `show-setup` helpers.
-- `onepiece ftrack sync-status --from shotgrid --project Demo` – copy status
-  values from ShotGrid using the shared reconciliation utilities.
-
-Refer to `onepiece ftrack --help` for the full command surface; the CLI mirrors
-the client's dataclasses so flags and outputs stay aligned with the Python API.
+A dedicated CLI surface has not shipped yet. Until it does, embed the
+`FtrackRestClient` directly inside automation scripts or Typer commands. The
+client is intentionally thin so wiring it into a future `onepiece ftrack`
+command group or a bespoke deployment-specific tool requires minimal effort.
+Follow the patterns in the ShotGrid helpers when authoring CLI wrappers: accept
+credentials via environment variables, reuse the shared `structlog`
+configuration, and raise `typer.BadParameter` for validation errors so the user
+experience mirrors the existing command groups. 【F:src/apps/onepiece/utils/errors.py†L1-L120】【F:src/libraries/integrations/ftrack/client.py†L1-L211】

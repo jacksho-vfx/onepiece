@@ -75,11 +75,11 @@ onepiece/
 3. **Use the in-repo CLI for rapid feedback**. While iterating, run commands directly from the source tree:
 
    ```bash
-   python -m src.apps.onepiece --help
-   python -m src.apps.onepiece publish --help
+   PYTHONPATH=src python -m apps.onepiece --help
+   PYTHONPATH=src python -m apps.onepiece dcc publish --help
    ```
 
-4. **Adhere to coding standards**. The project leans on Ruff and mypy for style and type safety. Avoid `print` statements in favour of the shared logging utilities inside `src/libraries/logging` and prefer `Path` objects over string paths. When authoring new CLI commands, use the shared progress helpers described below so user-facing tools behave consistently.
+4. **Adhere to coding standards**. The project leans on Ruff and mypy for style and type safety. Avoid `print` statements in favour of the shared `structlog` logger pattern used across the CLIs (`structlog.get_logger(__name__)`) and prefer `Path` objects over string paths. When authoring new CLI commands, use the shared progress helpers described below so user-facing tools behave consistently. 【F:src/apps/onepiece/dcc/animation.py†L1-L25】【F:src/apps/onepiece/utils/progress.py†L1-L120】
 
 5. **Run the quality suite** before opening a pull request. Continuous integration mirrors the commands listed earlier; matching the same sequence locally prevents surprises.
 

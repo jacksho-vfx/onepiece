@@ -1,8 +1,8 @@
 # CLI Examples 
 
-## OnePiece CLI (`python -m apps.onepiece …`)
+## OnePiece CLI (`onepiece …` / `python -m apps.onepiece …`)
 
-The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`, `shotgrid`, and `validate` command groups (including the reconciliation helper) under `python -m apps.onepiece`.
+The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`, `shotgrid`, and `validate` command groups under the `onepiece` console script. When developing inside the repository you can invoke the same tree with `python -m apps.onepiece` after exporting `PYTHONPATH=src`. 【F:src/apps/onepiece/app.py†L3-L24】
 
 > **Release spotlight (v1.0.0):** Configuration profiles can now be layered across user, project, and workspace scopes, ingest commands expose resumable upload controls, render submissions validate adapter capabilities up-front, and the brand-new Uta Control Center mirrors every CLI command in a browser alongside the Trafalgar dashboard.
 >
@@ -41,14 +41,13 @@ If the ingest command exits early, review the CLI heading and take the suggested
 - `python -m apps.onepiece dcc import-unreal --package <dir> --project <project> --asset <asset> [--dry-run]` — rebuild an Unreal asset from a published package, previewing the generated `AssetImportTask` payloads with `--dry-run`.
 
 ### Review & render
-- `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--burnin/--no-burnin --codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest.
-- `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --chunk-size <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging and adapter-aware defaults.
-- `python -m apps.onepiece render preset save <name> --farm <deadline|tractor|…> [--dcc <dcc>] [--scene <scene>] [--frames <range>] [--output <path>] [--priority <n> --chunk-size <n> --user <user>]` — persist a reusable render submission preset to disk.
+- `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest using the helpers in `libraries.automation.review`. 【F:src/libraries/automation/review/dailies.py†L1-L320】
+- `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --chunk-size <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging and adapter-aware defaults. 【F:src/apps/onepiece/render/submit.py†L1-L308】
+- `python -m apps.onepiece render preset save <name> --farm <deadline|tractor|…> [--dcc <dcc>] [--scene <scene>] [--frames <range>] [--output <path>] [--priority <n> --chunk-size <n> --user <user>]` — persist a reusable render submission preset to disk. 【F:src/apps/onepiece/render/submit.py†L309-L388】
 
 ### Notifications and status tracking
-- `python -m apps.onepiece notify email --to prod@example.com --subject "Daily ingest status" --body-file reports/ingest-summary.md` — send a templated email summary once ingest completes. The body file may contain Markdown; the CLI renders it to HTML automatically.
-- `python -m apps.onepiece notify slack --channel "#pipeline" --message "Render batch completed" --attachments renders/report.json` — post structured status updates to Slack, including optional attachment uploads for manifests or reports.
-- `python -m apps.onepiece review annotate --playlist <playlist-id> --note "Ready for client review" [--frame <frame-number>]` — append a note to a ShotGrid playlist while capturing per-frame context when needed.
+- `python -m apps.onepiece notify email --subject "Daily ingest status" --message "Ingest completed successfully" [--recipients user@example.com,user2@example.com --mock]` — send a simple email summary once ingest completes. Provide a comma-separated recipient list or run with `--mock` to log instead of sending. 【F:src/apps/onepiece/notify/email.py†L1-L61】
+- `python -m apps.onepiece notify slack --subject "Render batch" --message "Renders completed" [--mock]` — post status updates to Slack through the configured notifier backend. 【F:src/apps/onepiece/notify/slack.py†L1-L47】
 
 ### Validation helpers
 - `python -m apps.onepiece validate reconcile ingest --delivery ./deliveries/EP101 --report reports/EP101.json` — compare a delivery folder against the last ingest report and surface deltas before re-running ingest.

@@ -3,7 +3,7 @@
 The `onepiece` CLI discovers configuration profiles from multiple locations to
 provide defaults for commands like `aws ingest`. Profiles are defined in
 `onepiece.toml` files and merged in the following order (lowest precedence
-first):
+first): 【F:src/apps/onepiece/config.py†L1-L120】
 
 > **Release spotlight (v1.0.0):** Profile resolution now includes workspace-level overrides, the active profile can be inspected with `onepiece profile`, and ingest commands honour new keys for resumable uploads, checkpoint tuning, and asyncio orchestration.
 
