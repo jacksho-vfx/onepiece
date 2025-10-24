@@ -184,8 +184,9 @@ def test_shots_summary_filters_by_sequence() -> None:
     data = response.json()
     assert data["total"] == 1
     assert data["completed"] == 1
+    assert data["active"] == 0
     assert data["by_sequence"] == [{"name": "SQ05", "shots": 1}]
-    assert {shot["sequence"] for shot in data["active_shots"]} == {"SQ05"}
+    assert not data["active_shots"]
 
 
 def test_shots_lifecycle_filters_by_artist() -> None:
@@ -209,7 +210,7 @@ def test_shots_filters_by_date_range() -> None:
     assert data["total"] == 4
     sequences = {item["name"] for item in data["by_sequence"]}
     assert "SQ05" in sequences
-    assert "SQ05" in {shot["sequence"] for shot in data["active_shots"]}
+    assert "SQ05" not in {shot["sequence"] for shot in data["active_shots"]}
 
 
 def test_shots_filters_include_active_stages_within_window() -> None:
