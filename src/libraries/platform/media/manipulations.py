@@ -18,9 +18,18 @@ def convert_audio_to_mono(input_audio: Path, output_audio: Path) -> Path:
     log.info("convert_audio_to_mono", src=str(input_audio), dst=str(output_audio))
 
     in_container = av.open(str(input_audio))
+
+    audio_streams = in_container.streams.audio
+    if not audio_streams:
+        in_container.close()
+        raise ValueError(
+            f"No audio streams found in input file '{input_audio}'. "
+            "Cannot convert to mono."
+        )
+
     out_container = av.open(str(output_audio), mode="w")
 
-    in_stream = in_container.streams.audio[0]
+    in_stream = audio_streams[0]
     out_stream = out_container.add_stream("pcm_s16le", rate=in_stream.rate)
     out_stream.channels = 1
 
