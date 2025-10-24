@@ -18,7 +18,6 @@ from pydantic import ValidationError
 
 from apps.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
-    DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
@@ -549,45 +548,48 @@ def settings_reload(
 
 @cost_app.command("estimate")
 def cost_estimate(
-    frame_count: int = typer.Option(
-        ..., "--frame-count", "-n", help="Total number of frames to render."
+    frame_count: int | None = typer.Option(
+        None, "--frame-count", "-n", help="Total number of frames to render."
     ),
-    average_frame_time_ms: float = typer.Option(
-        ...,
+    average_frame_time_ms: float | None = typer.Option(
+        None,
         "--average-frame-time-ms",
         "-t",
         help="Average render time per frame in milliseconds.",
     ),
-    gpu_hourly_rate: float = typer.Option(
-        ..., "--gpu-hourly-rate", "-r", help="Hourly GPU cost in the chosen currency."
+    gpu_hourly_rate: float | None = typer.Option(
+        None,
+        "--gpu-hourly-rate",
+        "-r",
+        help="Hourly GPU cost in the chosen currency.",
     ),
-    gpu_count: int = typer.Option(
-        1, "--gpu-count", "-g", help="Concurrent GPUs utilised for the render."
+    gpu_count: int | None = typer.Option(
+        None, "--gpu-count", "-g", help="Concurrent GPUs utilised for the render."
     ),
-    render_hours: float = typer.Option(
-        0.0,
+    render_hours: float | None = typer.Option(
+        None,
         "--render-hours",
         help="Actual render farm hours (defaults to theoretical if omitted).",
     ),
-    render_farm_hourly_rate: float = typer.Option(
-        0.0,
+    render_farm_hourly_rate: float | None = typer.Option(
+        None,
         "--render-farm-hourly-rate",
         help="Hourly cost for managed render farm usage.",
     ),
-    storage_gb: float = typer.Option(
-        0.0, "--storage-gb", help="Storage consumed in gigabytes."
+    storage_gb: float | None = typer.Option(
+        None, "--storage-gb", help="Storage consumed in gigabytes."
     ),
-    storage_rate_per_gb: float = typer.Option(
-        0.0, "--storage-rate-per-gb", help="Storage cost per gigabyte."
+    storage_rate_per_gb: float | None = typer.Option(
+        None, "--storage-rate-per-gb", help="Storage cost per gigabyte."
     ),
-    data_egress_gb: float = typer.Option(
-        0.0, "--data-egress-gb", help="Data egress volume in gigabytes."
+    data_egress_gb: float | None = typer.Option(
+        None, "--data-egress-gb", help="Data egress volume in gigabytes."
     ),
-    egress_rate_per_gb: float = typer.Option(
-        0.0, "--egress-rate-per-gb", help="Data egress cost per gigabyte."
+    egress_rate_per_gb: float | None = typer.Option(
+        None, "--egress-rate-per-gb", help="Data egress cost per gigabyte."
     ),
-    misc_costs: float = typer.Option(
-        0.0, "--misc-costs", help="Additional miscellaneous costs."
+    misc_costs: float | None = typer.Option(
+        None, "--misc-costs", help="Additional miscellaneous costs."
     ),
     output_format: OutputFormat = typer.Option(
         "table",
@@ -601,8 +603,8 @@ def cost_estimate(
         "--settings-path",
         help="Optional path to a Perona settings file to seed defaults.",
     ),
-    currency: str = typer.Option(
-        DEFAULT_CURRENCY,
+    currency: str | None = typer.Option(
+        None,
         "--currency",
         help=(
             "Currency code for monetary values. Supported codes: "
@@ -613,21 +615,48 @@ def cost_estimate(
 ) -> None:
     """Estimate render costs for a given workload."""
 
+    validated_settings_path = _validate_settings_path(settings_path)
+    settings_result = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = settings_result.engine
+    baseline = engine.baseline_cost_input
+
+    payload_data = {
+        "frame_count": frame_count if frame_count is not None else baseline.frame_count,
+        "average_frame_time_ms": (
+            average_frame_time_ms
+            if average_frame_time_ms is not None
+            else baseline.average_frame_time_ms
+        ),
+        "gpu_hourly_rate": (
+            gpu_hourly_rate if gpu_hourly_rate is not None else baseline.gpu_hourly_rate
+        ),
+        "gpu_count": gpu_count if gpu_count is not None else baseline.gpu_count,
+        "render_hours": render_hours if render_hours is not None else baseline.render_hours,
+        "render_farm_hourly_rate": (
+            render_farm_hourly_rate
+            if render_farm_hourly_rate is not None
+            else baseline.render_farm_hourly_rate
+        ),
+        "storage_gb": storage_gb if storage_gb is not None else baseline.storage_gb,
+        "storage_rate_per_gb": (
+            storage_rate_per_gb
+            if storage_rate_per_gb is not None
+            else baseline.storage_rate_per_gb
+        ),
+        "data_egress_gb": (
+            data_egress_gb if data_egress_gb is not None else baseline.data_egress_gb
+        ),
+        "egress_rate_per_gb": (
+            egress_rate_per_gb
+            if egress_rate_per_gb is not None
+            else baseline.egress_rate_per_gb
+        ),
+        "misc_costs": misc_costs if misc_costs is not None else baseline.misc_costs,
+        "currency": currency if currency is not None else baseline.currency,
+    }
+
     try:
-        payload = CostEstimateRequest(
-            frame_count=frame_count,
-            average_frame_time_ms=average_frame_time_ms,
-            gpu_hourly_rate=gpu_hourly_rate,
-            gpu_count=gpu_count,
-            render_hours=render_hours,
-            render_farm_hourly_rate=render_farm_hourly_rate,
-            storage_gb=storage_gb,
-            storage_rate_per_gb=storage_rate_per_gb,
-            data_egress_gb=data_egress_gb,
-            egress_rate_per_gb=egress_rate_per_gb,
-            misc_costs=misc_costs,
-            currency=currency,
-        )
+        payload = CostEstimateRequest(**payload_data)
     except ValidationError as exc:
         messages = []
         for error in exc.errors():
@@ -635,8 +664,6 @@ def cost_estimate(
             messages.append(f"{location}: {error.get('msg')}")
         raise typer.BadParameter("; ".join(messages)) from exc
 
-    validated_settings_path = _validate_settings_path(settings_path)
-    engine = PeronaEngine.from_settings(path=validated_settings_path).engine
     breakdown = engine.estimate_cost(payload.to_entity())
     estimate = CostEstimate.from_breakdown(breakdown)
 
