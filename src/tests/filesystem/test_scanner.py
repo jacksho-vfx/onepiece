@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterator, Any
+
+from _pytest.monkeypatch import MonkeyPatch
 
 from libraries.platform.filesystem import scanner
 from libraries.platform.filesystem.scanner import scan_project_files
@@ -47,7 +50,9 @@ def test_scan_project_files_returns_sorted_results(tmp_path: Path) -> None:
     ]
 
 
-def test_scan_project_files_skips_unreadable_directories(tmp_path: Path, monkeypatch) -> None:
+def test_scan_project_files_skips_unreadable_directories(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     readable_file = tmp_path / "seq" / "ep101_sc01_0010" / "playblast_v001.mov"
     unreadable_dir = tmp_path / "seq" / "ep101_sc02_0010"
     unreadable_file = unreadable_dir / "playblast_v010.mov"
@@ -57,7 +62,7 @@ def test_scan_project_files_skips_unreadable_directories(tmp_path: Path, monkeyp
 
     original_iterdir = Path.iterdir
 
-    def fake_iterdir(self: Path):  # type: ignore[override]
+    def fake_iterdir(self: Path) -> Iterator[Path]:
         if self == unreadable_dir:
             raise PermissionError("access denied")
         return original_iterdir(self)
@@ -66,12 +71,14 @@ def test_scan_project_files_skips_unreadable_directories(tmp_path: Path, monkeyp
 
     class DummyLog:
         def __init__(self) -> None:
-            self.warning_calls = []
+            self.warning_calls: list[Any] = []
 
-        def warning(self, *args, **kwargs) -> None:
+        def warning(self, *args: Any, **kwargs: Any) -> None:
             self.warning_calls.append((args, kwargs))
 
-        def info(self, *args, **kwargs) -> None:  # pragma: no cover - not asserted
+        def info(
+            self, *args: Any, **kwargs: Any
+        ) -> None:  # pragma: no cover - not asserted
             pass
 
     dummy_log = DummyLog()
