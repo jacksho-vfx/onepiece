@@ -11,6 +11,7 @@ from _pytest.logging import LogCaptureFixture
 
 from apps.perona.engine import (
     CostModelInput,
+    DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_PNL_BASELINE_COST,
@@ -172,6 +173,33 @@ def test_from_settings_ignores_invalid_numeric_overrides(
         DEFAULT_PNL_BASELINE_COST
     )
     assert any("target_error_rate" in record.message for record in caplog.records)
+    assert result.settings_path == config_path
+    assert result.warnings == ()
+
+
+def test_from_settings_ignores_fractional_integer_overrides(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    config_path = tmp_path / "fractional.toml"
+    config_path.write_text(
+        dedent(
+            """
+            [baseline_cost_input]
+            frame_count = 1440.5
+            gpu_count = 47.2
+            """
+        ).strip()
+    )
+
+    with caplog.at_level("WARNING"):
+        result = PeronaEngine.from_settings(path=config_path)
+
+    baseline = result.engine.baseline_cost_input
+    assert baseline.frame_count == DEFAULT_BASELINE_COST_INPUT.frame_count
+    assert baseline.gpu_count == DEFAULT_BASELINE_COST_INPUT.gpu_count
+    messages = [record.message for record in caplog.records]
+    assert any("baseline_cost_input.frame_count" in message for message in messages)
+    assert any("baseline_cost_input.gpu_count" in message for message in messages)
     assert result.settings_path == config_path
     assert result.warnings == ()
 

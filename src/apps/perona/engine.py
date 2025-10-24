@@ -331,7 +331,7 @@ def _coerce_int(value: object) -> int | None:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
-        if not math.isfinite(value):
+        if not math.isfinite(value) or not value.is_integer():
             return None
         return int(value)
     if isinstance(value, str):
@@ -385,8 +385,16 @@ def _coerce_cost_model_input(
         source = data
 
     def _as_int(name: str, default: int) -> int:
-        coerced = _coerce_int(source.get(name))
+        raw_value = source.get(name)
+        coerced = _coerce_int(raw_value)
         if coerced is None:
+            if raw_value is not None:
+                LOGGER.warning(
+                    "Ignoring invalid %s override %r; using default %s",
+                    f"baseline_cost_input.{name}",
+                    raw_value,
+                    default,
+                )
             return default
         return coerced
 
