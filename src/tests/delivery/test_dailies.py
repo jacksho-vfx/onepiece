@@ -14,7 +14,6 @@ from libraries.automation.review.dailies import DailiesClip, _extract_duration
 runner = CliRunner()
 
 
-
 def _make_version_record(
     identifier: int,
     *,
