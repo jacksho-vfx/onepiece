@@ -100,3 +100,36 @@ def test_job_store_prunes_on_load(
     assert stats.last_pruned_count == 1
     assert stats.retained_records == 1
     assert stats.last_rotation_at is not None
+
+
+def test_job_store_skips_records_with_invalid_timestamps(
+    tmp_path: Path, job_request: RenderJobRequest
+) -> None:
+    path = tmp_path / "jobs.json"
+    payload = [
+        {
+            "job_id": "invalid",
+            "farm": "mock",
+            "farm_type": "mock",
+            "status": "submitted",
+            "message": None,
+            "request": job_request.model_dump(),
+            "created_at": "not-a-timestamp",
+            "updated_at": "",  # present but empty should be ignored
+        },
+        {
+            "job_id": "valid",
+            "farm": "mock",
+            "farm_type": "mock",
+            "status": "submitted",
+            "message": None,
+            "request": job_request.model_dump(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    store = JobStore(path)
+    records = store.load()
+
+    assert [record.job_id for record in records] == ["valid"]
