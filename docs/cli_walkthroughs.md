@@ -167,6 +167,10 @@ notes,"QA dry run for onboarding"
      --report-only
    ```
 
+   When `--direct-upload-path` is omitted, the publish mirrors to
+   `s3://<bucket>/<show_type>/<show_code>/<scene_name>`, keeping different show
+   types isolated inside the same bucket.
+
 4. Inspect the generated report for any validation warnings. When the report looks good, rerun the command without `--report-only` to build and upload the package.
 
 ## 5. Debug a Maya animation scene
