@@ -17,34 +17,31 @@ def convert_audio_to_mono(input_audio: Path, output_audio: Path) -> Path:
     """
     log.info("convert_audio_to_mono", src=str(input_audio), dst=str(output_audio))
 
-    in_container = av.open(str(input_audio))
+    output_audio.parent.mkdir(parents=True, exist_ok=True)
 
-    audio_streams = in_container.streams.audio
-    if not audio_streams:
-        in_container.close()
-        raise ValueError(
-            f"No audio streams found in input file '{input_audio}'. "
-            "Cannot convert to mono."
-        )
+    with av.open(str(input_audio)) as in_container:
+        audio_streams = in_container.streams.audio
+        if not audio_streams:
+            raise ValueError(
+                f"No audio streams found in input file '{input_audio}'. "
+                "Cannot convert to mono."
+            )
 
-    out_container = av.open(str(output_audio), mode="w")
+        in_stream = audio_streams[0]
 
-    in_stream = audio_streams[0]
-    out_stream = out_container.add_stream("pcm_s16le", rate=in_stream.rate)
-    out_stream.channels = 1
+        with av.open(str(output_audio), mode="w") as out_container:
+            out_stream = out_container.add_stream("pcm_s16le", rate=in_stream.rate)
+            out_stream.channels = 1
 
-    for frame in in_container.decode(in_stream):
-        mono = frame.to_ndarray(layout="mono")  # type: ignore[call-arg]
-        out_frame = av.AudioFrame.from_ndarray(mono, layout="mono")
-        out_frame.sample_rate = in_stream.rate
-        for packet in out_stream.encode(out_frame):
-            out_container.mux(packet)
+            for frame in in_container.decode(in_stream):
+                mono = frame.to_ndarray(layout="mono")  # type: ignore[call-arg]
+                out_frame = av.AudioFrame.from_ndarray(mono, layout="mono")
+                out_frame.sample_rate = in_stream.rate
+                for packet in out_stream.encode(out_frame):
+                    out_container.mux(packet)
 
-    for packet in out_stream.encode():
-        out_container.mux(packet)
-
-    out_container.close()
-    in_container.close()
+            for packet in out_stream.encode():
+                out_container.mux(packet)
     return output_audio
 
 
