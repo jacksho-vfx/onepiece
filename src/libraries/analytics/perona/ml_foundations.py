@@ -15,8 +15,15 @@ from dataclasses import dataclass
 import math
 import random
 from statistics import mean
-from typing import Callable, Iterable, Mapping, MutableSequence, Sequence
-
+from typing import (
+    Callable,
+    Iterable,
+    Mapping,
+    MutableSequence,
+    Sequence,
+    Union,
+    overload,
+)
 
 FeatureTransform = Callable[[float], float]
 
@@ -71,7 +78,17 @@ class Dataset(Sequence[TrainingExample]):
     def __len__(self) -> int:
         return len(self._examples)
 
-    def __getitem__(self, index: int) -> TrainingExample:
+    @overload
+    def __getitem__(self, index: int) -> TrainingExample: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[TrainingExample]: ...
+
+    def __getitem__(
+        self, index: Union[int, slice]
+    ) -> Union[TrainingExample, Sequence[TrainingExample]]:
+        if isinstance(index, slice):
+            return self._examples[index]
         return self._examples[index]
 
     @property
@@ -96,7 +113,10 @@ class Dataset(Sequence[TrainingExample]):
 
         if features is None:
             return [
-                [example.feature_values.get(name, fill_value) for name in self._feature_names]
+                [
+                    example.feature_values.get(name, fill_value)
+                    for name in self._feature_names
+                ]
                 for example in self._examples
             ]
 
@@ -269,4 +289,3 @@ __all__ = [
     "compute_feature_statistics",
     "recommend_best_practices",
 ]
-

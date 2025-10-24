@@ -100,5 +100,7 @@ def test_recommendations_capture_relationship_trends() -> None:
 
     assert isinstance(importances[0], FeatureImportance)
     assert any("Reduce renders" in message for message in recommendations)
-    assert any("Monitor revisions" in message or "Consider investing" in message for message in recommendations)
-
+    assert any(
+        "Monitor revisions" in message or "Consider investing" in message
+        for message in recommendations
+    )
