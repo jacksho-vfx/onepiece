@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+import json
 import logging
 import os
 from pathlib import Path
@@ -14,6 +15,14 @@ from typing import Iterable, Mapping, Sequence
 import tomllib
 
 from libraries.analytics.perona import CostDriverDelta
+from libraries.analytics.perona.ml_foundations import (
+    Dataset,
+    FeatureStatistics,
+    TrainingExample,
+    analyse_cost_relationships,
+    compute_feature_statistics,
+    recommend_best_practices,
+)
 from libraries.automation.render import optimization as render_optimization
 
 
@@ -640,6 +649,176 @@ class PeronaEngine:
         for sample in render_log:
             grouped[(sample.sequence, sample.shot_id)].append(sample.frame_time_ms)
         return {key: tuple(values) for key, values in grouped.items()}
+
+    @staticmethod
+    def _parse_metric_timestamp(value: str) -> datetime | None:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def _load_persisted_render_metrics(self) -> tuple[RenderMetric, ...]:
+        """Return metrics ingested via the API that are not in the boot log."""
+
+        try:
+            from apps.perona.web import dashboard as dashboard_module
+        except Exception:  # pragma: no cover - defensive guard for optional import
+            return ()
+
+        metrics_store = getattr(dashboard_module, "_metrics_store", None)
+        path = getattr(metrics_store, "path", None)
+        if not isinstance(path, Path) or not path.exists():
+            return ()
+
+        existing = {
+            (metric.sequence, metric.shot_id, metric.timestamp)
+            for metric in self._render_log
+        }
+        fresh: list[RenderMetric] = []
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for raw_line in handle:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    timestamp_raw = payload.get("timestamp")
+                    if not isinstance(timestamp_raw, str):
+                        continue
+                    timestamp = self._parse_metric_timestamp(timestamp_raw)
+                    if timestamp is None:
+                        continue
+
+                    sequence = payload.get("sequence")
+                    shot_id = payload.get("shot_id")
+                    frame_time = payload.get("frame_time_ms")
+                    gpu_utilisation = payload.get("gpuUtilisation")
+                    cache_health = payload.get("cacheHealth")
+
+                    if not (
+                        isinstance(sequence, str)
+                        and isinstance(shot_id, str)
+                        and frame_time is not None
+                        and gpu_utilisation is not None
+                        and cache_health is not None
+                    ):
+                        continue
+
+                    key = (sequence, shot_id, timestamp)
+                    if key in existing:
+                        continue
+
+                    try:
+                        metric = RenderMetric(
+                            sequence=sequence,
+                            shot_id=shot_id,
+                            timestamp=timestamp,
+                            fps=float(payload.get("fps", 0.0)),
+                            frame_time_ms=float(frame_time),
+                            error_count=int(payload.get("error_count", 0)),
+                            gpu_utilisation=float(gpu_utilisation),
+                            cache_health=float(cache_health),
+                        )
+                    except (TypeError, ValueError):
+                        continue
+
+                    existing.add(key)
+                    fresh.append(metric)
+        except OSError:
+            return ()
+
+        fresh.sort(key=lambda metric: metric.timestamp)
+        return tuple(fresh)
+
+    def _build_cost_training_dataset(self) -> Dataset:
+        """Assemble a dataset that links render telemetry to realised costs."""
+
+        telemetry_index = {
+            (item.sequence, item.shot_id): item for item in self._telemetry
+        }
+
+        samples: list[RenderMetric] = list(self._render_log)
+        samples.extend(self._load_persisted_render_metrics())
+        samples.sort(key=lambda metric: metric.timestamp)
+
+        metrics_by_shot: dict[tuple[str, str], list[RenderMetric]] = defaultdict(list)
+        for sample in samples:
+            key = (sample.sequence, sample.shot_id)
+            if key in telemetry_index:
+                metrics_by_shot[key].append(sample)
+
+        default_render_hours = self._baseline_cost_input.render_hours or (
+            self._baseline_cost_input.frame_count
+            * self._baseline_cost_input.average_frame_time_ms
+            / 1000.0
+            / 3600.0
+        )
+
+        examples: list[TrainingExample] = []
+        for key, telemetry in telemetry_index.items():
+            samples_for_shot = metrics_by_shot.get(key)
+            if not samples_for_shot:
+                estimated_errors = telemetry.error_rate * telemetry.frames_rendered
+                samples_for_shot = [
+                    RenderMetric(
+                        sequence=telemetry.sequence,
+                        shot_id=telemetry.shot_id,
+                        timestamp=telemetry.deadline,
+                        fps=telemetry.fps,
+                        frame_time_ms=telemetry.average_frame_time_ms,
+                        error_count=int(round(estimated_errors)),
+                        gpu_utilisation=0.75,
+                        cache_health=telemetry.cache_stability,
+                    )
+                ]
+
+            for sample in samples_for_shot:
+                render_hours = (
+                    telemetry.frames_rendered * sample.frame_time_ms / 1000.0 / 3600.0
+                )
+                if render_hours <= 0:
+                    render_hours = default_render_hours
+
+                frame_count = (
+                    telemetry.frames_rendered or self._baseline_cost_input.frame_count
+                )
+
+                adjusted_input = replace(
+                    self._baseline_cost_input,
+                    average_frame_time_ms=sample.frame_time_ms,
+                    frame_count=frame_count,
+                    render_hours=render_hours,
+                )
+                breakdown = self.estimate_cost(adjusted_input)
+
+                features = {
+                    "frame_time_ms": float(sample.frame_time_ms),
+                    "gpu_utilisation": float(sample.gpu_utilisation),
+                    "error_count": float(sample.error_count),
+                    "cache_health": float(sample.cache_health),
+                    "render_hours": float(render_hours),
+                }
+
+                examples.append(
+                    TrainingExample(feature_values=features, cost=breakdown.total_cost)
+                )
+
+        return Dataset(examples)
+
+    def cost_insights(
+        self, top_n: int = 3
+    ) -> tuple[tuple[FeatureStatistics, ...], tuple[str, ...]]:
+        """Return feature statistics and actionable recommendations."""
+
+        dataset = self._build_cost_training_dataset()
+        statistics = compute_feature_statistics(dataset)
+        importances = analyse_cost_relationships(dataset)
+        recommendations = recommend_best_practices(importances, top_n=top_n)
+        return statistics, recommendations
 
     def pnl_explainer(self) -> PnLBreakdown:
         """Explain the delta in render spend compared with the baseline."""
