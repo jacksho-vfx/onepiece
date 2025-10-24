@@ -63,7 +63,7 @@ def test_shotgrid_service_filters_versions_case_insensitively() -> None:
         {"project": "beta", "shot": "EP99_SC100_SH0500", "version": "v010"},
     ]
 
-    service = dashboard.ShotGridService(DummyShotgridClient(versions))
+    service = dashboard.ShotGridService(DummyShotgridClient(versions))  # type: ignore[arg-type]
 
     filtered = service._filter_versions("aLpHa")
 
