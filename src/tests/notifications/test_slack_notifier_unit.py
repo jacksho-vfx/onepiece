@@ -16,7 +16,9 @@ class DummyResponse:
             raise RuntimeError("request failed")
 
 
-def test_slack_notifier_escapes_reserved_characters(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_slack_notifier_escapes_reserved_characters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Slack payloads must escape reserved characters while keeping formatting."""
 
     captured: dict[str, object] = {}
@@ -37,4 +39,3 @@ def test_slack_notifier_escapes_reserved_characters(monkeypatch: pytest.MonkeyPa
     assert captured["url"] == "https://hooks.slack.test/"
     assert captured["timeout"] == 5
     assert captured["json"] == {"text": "*&lt;Alert&gt;*\nCheck &amp; fix"}
-
