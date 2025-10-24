@@ -269,6 +269,8 @@ def _render_dailies(
     if not sources:
         raise NoVersionsFoundError("No versions resolved after filtering.")
 
+    output.parent.mkdir(parents=True, exist_ok=True)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         concat_path = create_concat_file(sources, Path(tmp_dir))
         burnin_metadata = _build_burnin_metadata(clips) if burnin else None
