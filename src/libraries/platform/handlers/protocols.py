@@ -13,6 +13,10 @@ class FilepathHandlerProtocol(Protocol):
 
     def get_episode_dir(self, project_name: str, episode: str) -> Path: ...
 
+    def get_sequence_dir(
+        self, project_name: str, episode: str, sequence: str
+    ) -> Path: ...
+
     def get_scene_dir(self, project_name: str, episode: str, scene: str) -> Path: ...
 
     def get_shot_dir(
