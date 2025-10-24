@@ -6,6 +6,7 @@ import asyncio
 import concurrent.futures
 import csv
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -717,12 +718,7 @@ class MediaIngestService:
         )
         results = self._execute_uploads(upload_jobs, checkpoint_store)
 
-        for result in results:  # type: ignore[union-attr]
-            report.processed.append(result.media)
-            report.warnings.extend(result.warnings)
-            _notify(result.media.path, "uploaded")
-
-        return report
+        return self._finalise_ingest(report, results, _notify)
 
     def _resolve_bucket(self) -> str:
         source_normalized = self.source.lower()
@@ -771,6 +767,61 @@ class MediaIngestService:
                 results[job.path] = future.result()
 
         return [results[job.path] for job in jobs]
+
+    def _finalise_ingest(
+        self,
+        report: IngestReport,
+        results: list[_UploadResult] | Awaitable[list[_UploadResult]],
+        notify: Callable[[Path, str], None],
+    ) -> IngestReport:
+        resolved_results = self._resolve_upload_results(results)
+
+        for result in resolved_results:
+            report.processed.append(result.media)
+            report.warnings.extend(result.warnings)
+            notify(result.media.path, "uploaded")
+
+        return report
+
+    def _resolve_upload_results(
+        self, results: list[_UploadResult] | Awaitable[list[_UploadResult]]
+    ) -> list[_UploadResult]:
+        if inspect.isawaitable(results):
+            return self._await_upload_results(results)
+        return list(results)
+
+    def _await_upload_results(
+        self, awaitable: Awaitable[list[_UploadResult]]
+    ) -> list[_UploadResult]:
+        async def _consume() -> list[_UploadResult]:
+            return await awaitable
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(_consume())
+
+        result: list[_UploadResult] | None = None
+        error: BaseException | None = None
+
+        def _runner() -> None:
+            nonlocal result, error
+            try:
+                result = asyncio.run(_consume())
+            except BaseException as exc:  # pragma: no cover - defensive
+                error = exc
+
+        thread = threading.Thread(
+            target=_runner,
+            name="MediaIngestAwaitableRunner",
+        )
+        thread.start()
+        thread.join()
+
+        if error is not None:
+            raise error
+        assert result is not None
+        return result
 
     async def _run_asyncio_jobs(
         self,
