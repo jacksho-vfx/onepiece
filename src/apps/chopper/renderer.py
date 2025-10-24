@@ -303,15 +303,33 @@ class Scene:
             joined = ", ".join(sorted(missing))
             raise SceneError(f"Scene is missing required key(s): {joined}")
 
-        width = int(payload["width"])
+        width_value = payload["width"]
+        try:
+            width = int(width_value)
+        except (TypeError, ValueError) as exc:
+            raise SceneError(
+                f"Scene width must be an integer value (got {width_value!r})"
+            ) from exc
         if width <= 0:
             raise SceneError(f"Scene width must be greater than zero (got {width})")
 
-        height = int(payload["height"])
+        height_value = payload["height"]
+        try:
+            height = int(height_value)
+        except (TypeError, ValueError) as exc:
+            raise SceneError(
+                f"Scene height must be an integer value (got {height_value!r})"
+            ) from exc
         if height <= 0:
             raise SceneError(f"Scene height must be greater than zero (got {height})")
 
-        frame_count = int(payload["frames"])
+        frames_value = payload["frames"]
+        try:
+            frame_count = int(frames_value)
+        except (TypeError, ValueError) as exc:
+            raise SceneError(
+                f"Scene frame count must be an integer value (got {frames_value!r})"
+            ) from exc
         if frame_count <= 0:
             raise SceneError(
                 f"Scene frame count must be greater than zero (got {frame_count})"
