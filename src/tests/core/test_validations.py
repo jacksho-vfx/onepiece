@@ -42,8 +42,9 @@ def test_preflight_report(tmp_path: Path) -> None:
 def test_validate_show_name() -> None:
     assert naming.validate_show_name("blob01")
     assert naming.validate_show_name("frog99")
+    assert naming.validate_show_name("frog")
+    assert naming.validate_show_name("XYZ")
     assert not naming.validate_show_name("01frog")
-    assert not naming.validate_show_name("frog")
 
 
 def test_validate_episode_scene_shot_names() -> None:
