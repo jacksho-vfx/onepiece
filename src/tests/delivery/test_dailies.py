@@ -166,6 +166,18 @@ def test_fetch_playlist_versions_aggregates_paginated_results() -> None:
     assert all(isinstance(clip, DailiesClip) for clip in clips)
 
 
+def test_write_manifest_creates_parent_directory(tmp_path: Path) -> None:
+    output = tmp_path / "nested" / "review.mov"
+    assert not output.parent.exists()
+
+    manifest_path = dailies.write_manifest(output, [], codec="prores")
+
+    expected_path = output.with_name(f"{output.name}.manifest.json")
+    assert manifest_path == expected_path
+    assert manifest_path.exists()
+    assert manifest_path.parent == output.parent
+
+
 def test_dailies_cli_creates_missing_output_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
