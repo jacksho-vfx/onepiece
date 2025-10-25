@@ -42,6 +42,7 @@ def write_manifest(
     """Write a manifest JSON file describing the rendered dailies clips."""
 
     manifest_path = output.with_name(f"{output.name}.manifest.json")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "output": str(output),
         "codec": codec,
