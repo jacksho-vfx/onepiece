@@ -1,4 +1,5 @@
 import os
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -30,6 +31,28 @@ def test_info_masks_shotgrid_key(
     assert log_calls["event"] == "info_report"
     assert isinstance(log_calls["kwargs"], dict)
     assert log_calls["kwargs"].get("shotgrid_key") == expected_masked
+
+
+def test_info_supports_json_format(
+    monkeypatch: MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ONEPIECE_SHOTGRID_KEY", "supersecretkey")
+    monkeypatch.setenv("ONEPIECE_SHOTGRID_URL", "https://shotgrid.example")
+    monkeypatch.setenv("ONEPIECE_SHOTGRID_SCRIPT", "luffy")
+    monkeypatch.setenv("AWS_PROFILE", "straw-hat")
+
+    monkeypatch.setattr(info_module.metadata, "version", lambda _: "9.9.9")
+    monkeypatch.setattr(info_module, "detect_installed_dccs", lambda: ["Maya"])
+
+    info_module.info(output_format="json")
+
+    captured = capsys.readouterr().out
+    payload = json.loads(captured)
+
+    assert payload["onepiece_version"] == "9.9.9"
+    assert payload["shotgrid"]["key"].endswith("tkey")
+    assert payload["aws_profile"] == "straw-hat"
+    assert payload["detected_dccs"] == ["Maya"]
 
 
 def test_mask_sensitive_value_handles_edge_cases() -> None:
