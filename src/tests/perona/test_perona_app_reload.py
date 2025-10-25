@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 from urllib.error import URLError
+from urllib.request import Request
 
 import pytest
 import pytest_mock
@@ -55,6 +56,34 @@ def test_post_settings_reload_uses_default_timeout(
 
     assert result.model_dump() == summary.model_dump()
     assert urlopen_mock.call_args.kwargs["timeout"] == DEFAULT_SETTINGS_RELOAD_TIMEOUT
+
+
+def test_post_settings_reload_preserves_path_and_query(
+    monkeypatch: pytest.MonkeyPatch, mocker: pytest_mock.MockerFixture
+) -> None:
+    monkeypatch.delenv(SETTINGS_RELOAD_TIMEOUT_ENV, raising=False)
+    summary = _make_settings_summary()
+    payload = json.dumps(summary.model_dump(mode="json")).encode("utf-8")
+
+    response = mocker.MagicMock()
+    response.__enter__.return_value = response
+    response.read.return_value = payload
+    response.status = 200
+
+    urlopen_mock = mocker.patch("apps.perona.app.urlopen", return_value=response)
+
+    base_url = "https://perona.test/dashboard?token=abc"
+
+    result = _post_settings_reload(base_url)
+
+    assert result.model_dump() == summary.model_dump()
+
+    request_arg = urlopen_mock.call_args.args[0]
+    assert isinstance(request_arg, Request)
+    assert (
+        request_arg.full_url
+        == "https://perona.test/dashboard/settings/reload?token=abc"
+    )
 
 
 def test_post_settings_reload_reports_timeout(

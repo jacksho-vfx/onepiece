@@ -9,7 +9,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, Mapping, NotRequired, Sequence, TypedDict
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 import typer
@@ -524,7 +524,10 @@ def _resolve_settings_reload_timeout() -> float:
 def _post_settings_reload(base_url: str) -> SettingsSummary:
     """Trigger the dashboard reload endpoint and return the response summary."""
 
-    endpoint = urljoin(base_url.rstrip("/") + "/", "settings/reload")
+    parsed = urlparse(base_url)
+    path = parsed.path or "/"
+    combined_path = urljoin(path.rstrip("/") + "/", "settings/reload")
+    endpoint = urlunparse(parsed._replace(path=combined_path, fragment=""))
     request = Request(endpoint, data=b"", method="POST")
     request.add_header("Content-Length", "0")
     timeout = _resolve_settings_reload_timeout()
