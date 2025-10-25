@@ -479,9 +479,7 @@ def _format_risk_heatmap(
 
     if len(indicators) < total_count:
         lines.append("")
-        lines.append(
-            f"Showing top {len(indicators)} of {total_count} indicators."
-        )
+        lines.append(f"Showing top {len(indicators)} of {total_count} indicators.")
 
     return "\n".join(lines)
 

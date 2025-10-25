@@ -390,9 +390,7 @@ def test_risk_heatmap_renders_top_n_table(
         ),
     )
     engine = _StubCostEngine(baseline, risk_indicators=indicators)
-    settings_result = SettingsLoadResult(
-        engine=engine, settings_path=None, warnings=()
-    )
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
     mocker.patch(
         "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
     )
