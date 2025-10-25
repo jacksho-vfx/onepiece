@@ -36,6 +36,14 @@ def _record(
     )
 
 
+def test_job_store_reports_zero_retention(tmp_path: Path) -> None:
+    store = JobStore(tmp_path / "jobs.json", retention=timedelta(seconds=0))
+
+    stats = store.stats.to_dict()
+
+    assert stats["retention_seconds"] == 0
+
+
 def test_job_store_prunes_expired_records(
     tmp_path: Path, job_request: RenderJobRequest
 ) -> None:

@@ -44,9 +44,12 @@ class JobStoreStats:
 
     def to_dict(self) -> dict[str, object]:
         data = asdict(self)
-        data["retention_seconds"] = (
-            int(self.retention.total_seconds()) if self.retention else None
-        )
+        retention_seconds: int | None
+        if self.retention is None:
+            retention_seconds = None
+        else:
+            retention_seconds = int(self.retention.total_seconds())
+        data["retention_seconds"] = retention_seconds
         data.pop("retention")
         data["last_pruned_at"] = _serialise_datetime(self.last_pruned_at)
         data["last_load_at"] = _serialise_datetime(self.last_load_at)
