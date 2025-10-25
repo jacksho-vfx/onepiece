@@ -14,9 +14,11 @@ from libraries.creative.dcc.dcc_client import (
     DCCDependencyReport,
     DCCAssetStatus,
     DCCPluginStatus,
+    DCCGPUStatus,
     SupportedDCC,
     _assemble_dependency_report,
     _build_launch_command,
+    _format_dependency_error,
     _prepare_package_contents,
     _sync_package_to_s3,
     _write_metadata_and_thumbnails,
@@ -103,10 +105,16 @@ def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
         SupportedDCC.NUKE,
         package,
         plugin_inventory=["CaraVR", "OCIO"],
+        env={"ONEPIECE_NUKE_GPU": "OpenGL 4.1"},
     )
 
     assert report.plugins.missing == frozenset()
     assert report.assets.missing == tuple()
+    assert report.gpu == DCCGPUStatus(
+        required="OpenGL 4.1",
+        detected="OpenGL 4.1",
+        meets_requirement=True,
+    )
     assert report.is_valid is True
 
 
@@ -121,12 +129,62 @@ def test_verify_dcc_dependencies_handles_mixed_case_plugin_inventory(
         package,
         plugin_inventory=["CaraVR", "OCIO", "CustomPlugin"],
         required_plugins=["CustomPlugin"],
+        env={"ONEPIECE_NUKE_GPU": "OpenGL 4.1"},
     )
 
     expected = frozenset({"caravr", "ocio", "customplugin"})
     assert report.plugins.available == expected
     assert report.plugins.required == expected
     assert report.plugins.missing == frozenset()
+
+
+def test_verify_dcc_dependencies_detects_gpu_failure(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]:
+        target = package / asset
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("payload")
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.NUKE,
+        package,
+        plugin_inventory=["CaraVR", "OCIO"],
+        env={"ONEPIECE_NUKE_GPU": "Integrated Graphics 6000"},
+    )
+
+    assert report.gpu == DCCGPUStatus(
+        required="OpenGL 4.1",
+        detected="Integrated Graphics 6000",
+        meets_requirement=False,
+    )
+    assert report.is_valid is False
+
+
+def test_format_dependency_error_includes_gpu_details(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    report = DCCDependencyReport(
+        dcc=SupportedDCC.NUKE,
+        plugins=DCCPluginStatus(
+            required=frozenset(),
+            available=frozenset(),
+            missing=frozenset(),
+        ),
+        assets=DCCAssetStatus(required=(), present=(), missing=()),
+        gpu=DCCGPUStatus(
+            required="OpenGL 4.1",
+            detected="Integrated Graphics 6000",
+            meets_requirement=False,
+        ),
+    )
+
+    message = _format_dependency_error(report, package)
+
+    assert "GPU requirement not met" in message
+    assert "Integrated Graphics 6000" in message
 
 
 def _create_publish_inputs(
@@ -271,6 +329,8 @@ def test_assemble_dependency_report_invokes_callback(
         env=None,
         required_plugins=None,
         required_assets=None,
+        gpu_description=None,
+        required_gpu=None,
     )
 
 
@@ -335,6 +395,7 @@ def test_publish_scene_supports_direct_upload(
         plugin_inventory=["CaraVR", "OCIO"],
         required_plugins=[],
         required_assets=(),
+        gpu_description="OpenGL 4.1",
     )
 
     expected_package = destination / "ep01_sh010"
@@ -398,6 +459,7 @@ def test_publish_scene_runs_maya_validation(
         show_type="vfx",
         plugin_inventory=["mtoa", "bifrost"],
         required_assets=(),
+        gpu_description="DirectX 11",
         maya_validation_callback=callbacks.append,
     )
 
@@ -465,6 +527,7 @@ def test_publish_scene_maya_validation_failure(
             show_type="vfx",
             plugin_inventory=["mtoa", "bifrost"],
             required_assets=(),
+            gpu_description="DirectX 11",
             maya_validation_callback=callbacks.append,
         )
 
@@ -492,6 +555,7 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
         plugin_inventory=["CaraVR", "OCIO"],
         required_plugins=[],
         required_assets=(),
+        gpu_description="OpenGL 4.1",
     )
 
     expected_package = destination / "ep01_sh011"
@@ -534,6 +598,7 @@ def test_publish_scene_replaces_existing_file_targets(
         plugin_inventory=["CaraVR", "OCIO"],
         required_plugins=[],
         required_assets=(),
+        gpu_description="OpenGL 4.1",
     )
 
     expected_package = destination / "ep01_sh012"
@@ -567,9 +632,40 @@ def test_publish_scene_dependency_failure_blocks_upload(
             plugin_inventory=["CaraVR"],
             required_plugins=["OCIO"],
             required_assets=("renders/beauty.exr", "missing/asset.txt"),
+            gpu_description="OpenGL 4.1",
         )
 
     message = str(excinfo.value)
     assert "missing plugins: ocio" in message
     assert "missing assets: missing/asset.txt" in message
+    sync_mock.assert_not_called()
+
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_gpu_failure_blocks_upload(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        publish_scene(
+            SupportedDCC.NUKE,
+            scene_name="ep01_sh021",
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata,
+            destination=destination,
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            plugin_inventory=["CaraVR", "OCIO"],
+            required_plugins=[],
+            required_assets=(),
+            gpu_description="Legacy GPU without OpenGL",
+        )
+
+    message = str(excinfo.value)
+    assert "GPU requirement not met" in message
+    assert "Legacy GPU" in message
     sync_mock.assert_not_called()
