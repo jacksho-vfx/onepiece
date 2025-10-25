@@ -63,4 +63,4 @@ def test_progress_handle_succeed_uses_task_lookup() -> None:
 
     assert handle._finished is True
     assert progress.updates == [(task_id, {"completed": 3.0})]
-    assert "✔ Finished ingest" in console.file.getvalue()
+    assert "✔ Finished ingest" in console.file.getvalue()  # type: ignore[attr-defined]
