@@ -1,8 +1,8 @@
 import re
 
 SHOW_PATTERN = re.compile(
-    r"^[a-zA-Z]+[0-9]{2}$"
-)  # e.g., show01, blah01, stop10, frog99
+    r"^[a-zA-Z][a-zA-Z0-9]+$"
+)  # e.g., XYZ, show01, blah01, stop10, frog99
 EPISODE_PATTERN = re.compile(r"^ep\d{3}$", re.IGNORECASE)  # e.g., ep101
 SCENE_PATTERN = re.compile(r"^sc\d{2}$", re.IGNORECASE)  # e.g., sc01
 SHOT_PATTERN = re.compile(r"^\d{4}$")  # e.g., 0010

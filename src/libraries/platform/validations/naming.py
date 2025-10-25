@@ -11,7 +11,15 @@ __all__ = [
     "validate_asset_name",
 ]
 
-_SHOW_PATTERN = re.compile(r"^[a-zA-Z]+[0-9]{2}$")
+# Historically we restricted show codes to an alpha prefix followed by two
+# digits.  That proved too rigid in practice because the CLI regularly needs to
+# ingest assets for shows whose canonical codes are purely alphabetic (for
+# example the documentation references a show code of ``XYZ``).  The overly
+# strict validation cascaded into filename parsing errors which prevented media
+# from being processed.  Accept any alpha-numeric sequence that starts with a
+# letter so codes like ``XYZ`` and ``frog99`` remain valid while values such as
+# ``01frog`` are still rejected.
+_SHOW_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9]+$")
 _EPISODE_PATTERN = re.compile(r"^ep\d{3}$", re.IGNORECASE)
 _SCENE_PATTERN = re.compile(r"^sc\d{2}$", re.IGNORECASE)
 _SHOT_PATTERN = re.compile(r"^\d{4}$")

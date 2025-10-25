@@ -82,7 +82,7 @@ def test_parse_media_filename_success() -> None:
     "filename",
     [
         "SHOW01_ep001_sc01_0001.mov",  # missing descriptor
-        "SHOW_ep001_sc01_0001_comp.mov",  # invalid show
+        "01SHOW_ep001_sc01_0001_comp.mov",  # invalid show
         "SHOW01_ep1_sc01_0001_comp.mov",  # invalid episode
     ],
 )
