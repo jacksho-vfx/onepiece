@@ -37,6 +37,7 @@ __all__ = [
     "DCC_PLUGIN_REQUIREMENTS",
     "DCC_GPU_REQUIREMENTS",
     "DCC_ASSET_REQUIREMENTS",
+    "DCCGPUStatus",
 ]
 
 
@@ -111,18 +112,31 @@ class DCCAssetStatus:
 
 
 @dataclass
+class DCCGPUStatus:
+    """Summary of GPU compatibility for a DCC package."""
+
+    required: str | None
+    detected: str | None
+    meets_requirement: bool
+
+
+@dataclass
 class DCCDependencyReport:
     """Aggregate report describing dependency readiness for a DCC package."""
 
     dcc: SupportedDCC
     plugins: DCCPluginStatus
     assets: DCCAssetStatus
+    gpu: DCCGPUStatus | None = None
 
     @property
     def is_valid(self) -> bool:
         """Return ``True`` when no plugin or asset requirements are missing."""
 
-        return not self.plugins.missing and not self.assets.missing
+        gpu_ok = True
+        if self.gpu is not None:
+            gpu_ok = self.gpu.meets_requirement
+        return (not self.plugins.missing) and (not self.assets.missing) and gpu_ok
 
 
 @dataclass(frozen=True)
@@ -169,6 +183,15 @@ def _plugins_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> frozenset[st
     raw_plugins = env.get(key, "")
     plugins = {item.strip().lower() for item in raw_plugins.split(",") if item.strip()}
     return frozenset(plugins)
+
+
+def _gpu_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> str | None:
+    """Return the GPU description sourced from the environment when available."""
+
+    dcc_key = f"ONEPIECE_{dcc.name}_GPU"
+    if gpu := env.get(dcc_key):
+        return gpu
+    return env.get("ONEPIECE_GPU")
 
 
 def _normalise_required_plugins(
@@ -222,8 +245,10 @@ def verify_dcc_dependencies(
     env: Mapping[str, str] | None = None,
     required_plugins: Iterable[str] | None = None,
     required_assets: Sequence[str] | None = None,
+    gpu_description: str | None = None,
+    required_gpu: str | None = None,
 ) -> DCCDependencyReport:
-    """Return a dependency report validating packaged assets and plugins."""
+    """Return a dependency report validating packaged assets, plugins, and GPU."""
 
     env_mapping = dict(env or os.environ)
     if plugin_inventory is None:
@@ -244,10 +269,33 @@ def verify_dcc_dependencies(
     asset_entries = _normalise_required_assets(dcc, required_assets)
     assets_status = _resolve_asset_status(package_root, asset_entries)
 
+    gpu_requirement = required_gpu if required_gpu is not None else DCC_GPU_REQUIREMENTS.get(dcc)
+    detected_gpu: str | None
+    if gpu_description is not None:
+        detected_gpu = gpu_description
+    else:
+        detected_gpu = _gpu_from_env(dcc, env_mapping)
+
+    meets_gpu_requirement = True
+    if gpu_requirement:
+        if detected_gpu:
+            meets_gpu_requirement = gpu_requirement.lower() in detected_gpu.lower()
+        else:
+            meets_gpu_requirement = False
+
+    gpu_status: DCCGPUStatus | None = None
+    if gpu_requirement or detected_gpu is not None:
+        gpu_status = DCCGPUStatus(
+            required=gpu_requirement,
+            detected=detected_gpu,
+            meets_requirement=meets_gpu_requirement,
+        )
+
     return DCCDependencyReport(
         dcc=dcc,
         plugins=plugins_status,
         assets=assets_status,
+        gpu=gpu_status,
     )
 
 
@@ -306,6 +354,14 @@ def _format_dependency_error(report: DCCDependencyReport, package_dir: Path) -> 
             except ValueError:  # pragma: no cover - defensive fallback
                 missing_assets.append(str(path))
         problems.append(f"missing assets: {', '.join(missing_assets)}")
+
+    if report.gpu and not report.gpu.meets_requirement:
+        if report.gpu.required:
+            requirement = report.gpu.required
+        else:  # pragma: no cover - defensive fallback
+            requirement = "compatible GPU"
+        detected = report.gpu.detected or "not detected"
+        problems.append(f"GPU requirement not met (required {requirement}; detected {detected})")
 
     if not problems:
         problems.append("unresolved dependency issues")
@@ -575,6 +631,8 @@ def _assemble_dependency_report(
     env: Mapping[str, str] | None = None,
     required_plugins: Iterable[str] | None = None,
     required_assets: Sequence[str] | None = None,
+    gpu_description: str | None = None,
+    required_gpu: str | None = None,
 ) -> DCCDependencyReport:
     """Create and optionally dispatch a dependency report for the package."""
 
@@ -585,6 +643,8 @@ def _assemble_dependency_report(
         env=env,
         required_plugins=required_plugins,
         required_assets=required_assets,
+        gpu_description=gpu_description,
+        required_gpu=required_gpu,
     )
 
     if dependency_callback is not None:
@@ -658,12 +718,17 @@ def publish_scene(
     env: Mapping[str, str] | None = None,
     required_plugins: Iterable[str] | None = None,
     required_assets: Sequence[str] | None = None,
+    gpu_description: str | None = None,
+    required_gpu: str | None = None,
     maya_validation_callback: Callable[[UnrealExportReport], None] | None = None,
 ) -> PublishSceneResult:
     """Package a scene's outputs locally and mirror them to S3.
 
     Returns a :class:`PublishSceneResult` containing the path to the packaged
     directory on disk as well as the destination used for the mirrored upload.
+    When provided, ``gpu_description`` records the detected GPU capability in the
+    dependency report while ``required_gpu`` allows overriding the default
+    :data:`DCC_GPU_REQUIREMENTS` entry for ad-hoc validations.
     """
 
     package_dir, renders_files, previews_files = _prepare_package_contents(
@@ -708,6 +773,8 @@ def publish_scene(
         env=env,
         required_plugins=required_plugins,
         required_assets=required_assets,
+        gpu_description=gpu_description,
+        required_gpu=required_gpu,
     )
 
     if not report.is_valid:
