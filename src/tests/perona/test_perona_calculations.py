@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import time
 
 import pytest
@@ -11,6 +11,7 @@ from apps.perona.engine import (
     DEFAULT_CURRENCY,
     PeronaEngine,
     RenderMetric,
+    ShotLifecycleStage,
     ShotTelemetry,
 )
 
@@ -18,6 +19,35 @@ from apps.perona.engine import (
 @pytest.fixture()
 def engine() -> PeronaEngine:
     return PeronaEngine()
+
+
+def test_shot_lifecycle_stage_duration_handles_timezone_mismatch() -> None:
+    """Duration calculation should support naive/aware datetimes."""
+
+    stage = ShotLifecycleStage(
+        name="lighting",
+        started_at=datetime(2024, 5, 1, 12, 0, tzinfo=timezone.utc),
+        completed_at=None,
+        metrics={},
+    )
+
+    duration = stage.duration_hours
+
+    assert isinstance(duration, float)
+    assert duration >= 0
+
+
+def test_shot_lifecycle_stage_duration_aligns_naive_and_aware_values() -> None:
+    """Mixed timezone data should produce a sensible positive duration."""
+
+    stage = ShotLifecycleStage(
+        name="comp",
+        started_at=datetime(2024, 5, 1, 9, 30),
+        completed_at=datetime(2024, 5, 2, 9, 30, tzinfo=timezone.utc),
+        metrics={},
+    )
+
+    assert stage.duration_hours == pytest.approx(24.0)
 
 
 def test_cost_breakdown_for_baseline_inputs(engine: PeronaEngine) -> None:
