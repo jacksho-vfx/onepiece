@@ -325,7 +325,10 @@ Typer commands described above (`trafalgar web dashboard`, `trafalgar web
 ingest`, `trafalgar web review`, and `trafalgar web render`). When you want to
 demo the interface without live data, add `--demo-port <port>` to `trafalgar web
 dashboard` to spin up a parallel instance loaded with studio-style sample
-metrics.
+metrics. Include `--open-browser` to automatically launch the dashboard in your
+default browser, or pair it with `--browser-path <alias>` when you need to
+target a specific browser profile while presenting the refreshed workflows to a
+team.
 
 Use the snippet
 below to export placeholder metadata with the existing DCC stubs while the web

@@ -10,6 +10,9 @@ All notable changes to the OnePiece pipeline toolkit.
   yields to streaming clients, avoiding mismatched annotations during type checks.
 - Documented Trafalgar render job history retention controls and the `/render/health`
   metrics so operators can tune pruning windows and alert on persistence issues.
+- Added `--open-browser` and `--browser-path` switches to `trafalgar web dashboard`
+  so teams can immediately open the UI in a preferred browser when the service
+  starts.
 - Improved the Chopper CLI's scene loading diagnostics so directory paths, permission
   errors, and other I/O failures surface actionable guidance instead of generic
   tracebacks.

@@ -40,6 +40,33 @@ def test_dashboard_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) ->
     )
 
 
+def test_dashboard_command_can_open_browser(mocker: pytest_mock.MockerFixture) -> None:
+    uvicorn_mock = SimpleNamespace(run=Mock())
+    mocker.patch("apps.trafalgar.app._load_uvicorn", return_value=uvicorn_mock)
+    browser_controller = SimpleNamespace(open=Mock(return_value=True))
+    browser_get = mocker.patch(
+        "apps.trafalgar.app.webbrowser.get", return_value=browser_controller
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        [
+            "web",
+            "dashboard",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9050",
+            "--open-browser",
+        ],
+    )
+
+    assert result.exit_code == 0
+    browser_get.assert_called_once_with()
+    browser_controller.open.assert_called_once_with("http://0.0.0.0:9050", new=2)
+    uvicorn_mock.run.assert_called_once()
+
+
 def test_ingest_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -> None:
     uvicorn_mock = SimpleNamespace(run=Mock())
     mocker.patch("apps.trafalgar.app._load_uvicorn", return_value=uvicorn_mock)
