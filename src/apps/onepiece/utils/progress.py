@@ -44,10 +44,23 @@ class ProgressHandle:
         """Mark the progress as completed and display a success message."""
 
         if not self._finished:
-            task = self._progress.tasks[self._task_id]
-            self._progress.update(
-                self._task_id, completed=task.total if task.total else task.completed
-            )
+            task: object | None = None
+            get_task = getattr(self._progress, "get_task", None)
+            if callable(get_task):
+                try:
+                    task = get_task(self._task_id)
+                except Exception:  # pragma: no cover - defensive fallback.
+                    task = None
+            if task is None:
+                try:
+                    task = self._progress.tasks[self._task_id]
+                except (IndexError, KeyError, TypeError, AttributeError):
+                    task = None
+            if task is not None:
+                total = getattr(task, "total", None)
+                completed = getattr(task, "completed", 0)
+                target = total if total else completed
+                self._progress.update(self._task_id, completed=target)
         self._finished = True
         self._console.print(f"[bold green]✔ {message}[/bold green]")
 
