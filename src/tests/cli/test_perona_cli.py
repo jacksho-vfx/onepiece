@@ -7,7 +7,12 @@ import pytest
 import pytest_mock
 from typer.testing import CliRunner
 
-from apps.perona.engine import CostBreakdown, CostModelInput, SettingsLoadResult
+from apps.perona.engine import (
+    CostBreakdown,
+    CostModelInput,
+    RiskIndicator,
+    SettingsLoadResult,
+)
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.app import app as perona_app
 from apps.perona.models import BaselineCostInput, SettingsSummary
@@ -17,9 +22,15 @@ runner = CliRunner()
 
 
 class _StubCostEngine:
-    def __init__(self, baseline: CostModelInput) -> None:
+    def __init__(
+        self,
+        baseline: CostModelInput,
+        *,
+        risk_indicators: tuple[RiskIndicator, ...] = (),
+    ) -> None:
         self._baseline = baseline
         self.last_inputs: CostModelInput | None = None
+        self._risk_indicators = risk_indicators
 
     @property
     def baseline_cost_input(self) -> CostModelInput:
@@ -50,6 +61,9 @@ class _StubCostEngine:
             cost_per_frame=cost_per_frame,
             currency=inputs.currency,
         )
+
+    def risk_heatmap(self) -> tuple[RiskIndicator, ...]:
+        return self._risk_indicators
 
 
 def _make_settings_summary() -> SettingsSummary:
@@ -336,3 +350,106 @@ def test_cost_insights_handles_missing_data(
     engine.cost_insights.assert_called_once_with()
     assert "No telemetry statistics available." in result.output
     assert "No recommendations generated." in result.output
+
+
+def test_risk_heatmap_renders_top_n_table(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=800,
+        average_frame_time_ms=150.0,
+        gpu_hourly_rate=8.75,
+        gpu_count=10,
+        render_hours=10.0,
+        render_farm_hourly_rate=4.5,
+        storage_gb=8.0,
+        storage_rate_per_gb=0.45,
+        data_egress_gb=2.0,
+        egress_rate_per_gb=0.2,
+        misc_costs=120.0,
+        currency="USD",
+    )
+    indicators = (
+        RiskIndicator(
+            sequence="SQ10",
+            shot_id="SQ10_SH020",
+            risk_score=84.6,
+            render_time_ms=168.0,
+            error_rate=0.028,
+            cache_stability=0.71,
+            drivers=("Render time volatility", "Deadline risk"),
+        ),
+        RiskIndicator(
+            sequence="SQ12",
+            shot_id="SQ12_SH030",
+            risk_score=62.1,
+            render_time_ms=140.0,
+            error_rate=0.012,
+            cache_stability=0.83,
+            drivers=("Error rate high (+20.0% vs target)",),
+        ),
+    )
+    engine = _StubCostEngine(baseline, risk_indicators=indicators)
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["risk", "heatmap", "--top", "1"])
+
+    assert result.exit_code == 0
+    output = result.output
+    assert "Risk heatmap" in output
+    assert "SQ10_SH020" in output
+    assert "SQ12_SH030" not in output
+    assert "Showing top 1 of 2 indicators." in output
+
+
+def test_risk_heatmap_emits_json_payload(
+    mocker: pytest_mock.MockerFixture, tmp_path: Path
+) -> None:
+    baseline = CostModelInput(
+        frame_count=640,
+        average_frame_time_ms=132.0,
+        gpu_hourly_rate=7.5,
+        gpu_count=8,
+        render_hours=8.5,
+        render_farm_hourly_rate=4.0,
+        storage_gb=6.0,
+        storage_rate_per_gb=0.4,
+        data_egress_gb=1.5,
+        egress_rate_per_gb=0.18,
+        misc_costs=85.0,
+        currency="EUR",
+    )
+    indicators = (
+        RiskIndicator(
+            sequence="SQ18",
+            shot_id="SQ18_SH110",
+            risk_score=71.2,
+            render_time_ms=150.0,
+            error_rate=0.022,
+            cache_stability=0.76,
+            drivers=("Deadline risk",),
+        ),
+    )
+    settings_file = tmp_path / "perona.toml"
+    engine = _StubCostEngine(baseline, risk_indicators=indicators)
+    settings_result = SettingsLoadResult(
+        engine=engine, settings_path=settings_file, warnings=()
+    )
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["risk", "heatmap", "--format", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["total_indicators"] == 1
+    indicators_payload = payload["indicators"]
+    assert isinstance(indicators_payload, list)
+    assert indicators_payload[0]["sequence"] == "SQ18"
+    assert indicators_payload[0]["shot_id"] == "SQ18_SH110"
+    assert indicators_payload[0]["risk_score"] == pytest.approx(71.2)
+    assert payload["settings_path"] == str(settings_file)
