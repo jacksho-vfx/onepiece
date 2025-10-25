@@ -129,7 +129,7 @@ team updated without scraping terminal output.
 
 The Trafalgar Typer app exposes dashboard and ingest helpers under `web` and `ingest` groups.
 
-- `python -m apps.trafalgar web dashboard [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>] [--demo-port <port>]` — serve the dashboard ASGI app via uvicorn and optionally mirror it with studio-style demo data on a secondary port.
+- `python -m apps.trafalgar web dashboard [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>] [--demo-port <port>] [--open-browser/--no-open-browser] [--browser-path <alias>]` — serve the dashboard ASGI app via uvicorn, optionally mirror it with studio-style demo data on a secondary port, and launch the default (or specified) browser once the service boots.
 - `python -m apps.trafalgar web ingest [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — launch the ingest API through the web command group.
 - `python -m apps.trafalgar web render [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — expose the render submission API with job listing, inspection, and cancellation endpoints mirroring the CLI payloads.
 - `python -m apps.trafalgar web review [--host <host>] [--port <port>] [--reload/--no-reload] [--log-level <level>]` — start the review API for playlist previews and approvals.

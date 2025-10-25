@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 import os
 import secrets
+import webbrowser
 
 import typer
 
@@ -92,6 +93,20 @@ def dashboard(
             "disables auto-reload."
         ),
     ),
+    open_browser: bool = typer.Option(
+        False,
+        "--open-browser/--no-open-browser",
+        help="Launch the Trafalgar dashboard in the default web browser.",
+        show_default=True,
+    ),
+    browser_path: Optional[str] = typer.Option(
+        None,
+        "--browser-path",
+        help=(
+            "Optional browser path or alias passed to `webbrowser.get()` "
+            "when launching the dashboard URL."
+        ),
+    ),
 ) -> None:
     """Launch the OnePiece web dashboard using uvicorn."""
 
@@ -100,6 +115,7 @@ def dashboard(
             "Demo port must differ from the primary dashboard port."
         )
 
+    dashboard_url = f"http://{host}:{port}"
     demo_process: Process | None = None
     if demo_port is not None:
         typer.echo(
@@ -113,7 +129,34 @@ def dashboard(
         )
         demo_process.start()
 
-    typer.echo(f"Starting OnePiece dashboard on http://{host}:{port}")
+    if open_browser:
+        try:
+            browser_controller = (
+                webbrowser.get(browser_path)
+                if browser_path is not None
+                else webbrowser.get()
+            )
+        except webbrowser.Error as error:
+            typer.echo(
+                "Unable to resolve a browser for the Trafalgar dashboard: "
+                f"{error}",
+                err=True,
+            )
+        else:
+            typer.echo(
+                "Opening Trafalgar dashboard in a web browser at "
+                f"{dashboard_url}"
+            )
+            try:
+                browser_controller.open(dashboard_url, new=2)
+            except webbrowser.Error as error:
+                typer.echo(
+                    "Unable to launch the Trafalgar dashboard browser window: "
+                    f"{error}",
+                    err=True,
+                )
+
+    typer.echo(f"Starting OnePiece dashboard on {dashboard_url}")
     uvicorn = _load_uvicorn()
     try:
         uvicorn.run(
