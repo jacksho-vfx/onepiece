@@ -79,7 +79,9 @@ def compare_datasets(
     s3_versions = _normalise_versions(s3 or [])
 
     shot_list = (
-        list(shots) if shots is not None else collect_shots(shotgrid, filesystem, s3)
+        [shot.lower() for shot in shots if shot]
+        if shots is not None
+        else collect_shots(shotgrid, filesystem, s3)
     )
 
     mismatches: List[Record] = []
