@@ -44,6 +44,17 @@ def test_job_store_reports_zero_retention(tmp_path: Path) -> None:
     assert stats["retention_seconds"] == 0
 
 
+def test_job_store_stats_serialises_naive_datetimes(tmp_path: Path) -> None:
+    store = JobStore(tmp_path / "jobs.json")
+
+    naive = datetime(2024, 1, 2, 3, 4, 5)
+    store.stats.last_save_at = naive
+
+    stats = store.stats.to_dict()
+
+    assert stats["last_save_at"] == naive.replace(tzinfo=timezone.utc).isoformat()
+
+
 def test_job_store_prunes_expired_records(
     tmp_path: Path, job_request: RenderJobRequest
 ) -> None:
