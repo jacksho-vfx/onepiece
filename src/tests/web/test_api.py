@@ -19,7 +19,7 @@ from apps.perona.engine import (
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
 )
-from apps.perona.models import RenderMetric
+from libraries.analytics.perona.models import RenderMetric
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web.dashboard import app, invalidate_engine_cache

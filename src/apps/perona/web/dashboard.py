@@ -36,7 +36,7 @@ from apps.perona.engine import (
     ShotLifecycle,
     get_currency_symbol,
 )
-from apps.perona.models import (
+from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,
     CostInsightResponse,
@@ -50,7 +50,7 @@ from apps.perona.models import (
     SettingsSummary,
     sequences_from_lifecycles,
 )
-from apps.perona.models import Sequence as PeronaSequence
+from libraries.analytics.perona.models import Sequence as PeronaSequence
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 

@@ -15,7 +15,7 @@ from apps.perona.engine import (
 )
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.app import app as perona_app
-from apps.perona.models import BaselineCostInput, SettingsSummary
+from libraries.analytics.perona.models import BaselineCostInput, SettingsSummary
 
 
 runner = CliRunner()

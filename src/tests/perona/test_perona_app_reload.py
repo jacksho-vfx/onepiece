@@ -13,7 +13,7 @@ from apps.perona.app import (
     SETTINGS_RELOAD_TIMEOUT_ENV,
     _post_settings_reload,
 )
-from apps.perona.models import BaselineCostInput, SettingsSummary
+from libraries.analytics.perona.models import BaselineCostInput, SettingsSummary
 
 
 def _make_settings_summary() -> SettingsSummary:
