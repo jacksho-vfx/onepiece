@@ -373,6 +373,10 @@ def _render_command(command: CommandSpec) -> str:
             <span class=\"button-icon\" aria-hidden=\"true\">▶</span>
             <span class=\"button-label\">Run command</span>
           </button>
+          <button type=\"button\" class=\"copy-command\" aria-keyshortcuts=\"Shift+C\" title=\"Copy the full CLI invocation\">
+            <span class=\"button-icon\" aria-hidden=\"true\">📋</span>
+            <span class=\"button-label\">Copy command</span>
+          </button>
           <div class=\"status-cluster\">
             <span class=\"progress-indicator\" aria-hidden=\"true\" hidden></span>
             <span class=\"status\" aria-live=\"polite\"></span>
@@ -919,6 +923,34 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             align-items: center;
             gap: 0.5rem;
           }}
+          .copy-command {{
+            border-radius: 999px;
+            border: 1px solid var(--uta-border);
+            padding: 0.5rem 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: transparent;
+            color: var(--uta-text-subtle);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.15s ease-in-out, border-color 0.15s ease-in-out, background 0.15s ease-in-out;
+          }}
+          .copy-command:hover,
+          .copy-command:focus-visible {{
+            color: var(--uta-text);
+            border-color: var(--uta-border-strong);
+          }}
+          .copy-command.is-copied {{
+            color: var(--uta-success);
+            border-color: rgba(34, 197, 94, 0.65);
+            background: rgba(34, 197, 94, 0.18);
+          }}
+          .copy-command.is-error {{
+            color: var(--uta-error);
+            border-color: rgba(248, 113, 113, 0.65);
+            background: rgba(248, 113, 113, 0.16);
+          }}
           .run-command:hover:not(:disabled) {{
             transform: translateY(-1px);
             box-shadow: 0 10px 20px rgba(37, 99, 235, 0.35);
@@ -977,6 +1009,13 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
           }}
           .status[data-state=\"error\"]::before {{
             content: '⚠';
+            display: inline;
+          }}
+          .status[data-state=\"info\"] {{
+            color: var(--uta-accent);
+          }}
+          .status[data-state=\"info\"]::before {{
+            content: '📋';
             display: inline;
           }}
           .command-output {{
@@ -1539,6 +1578,19 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                 }}
               }}
             }}
+            if (event.key.toLowerCase() === 'c' && event.shiftKey && !(event.ctrlKey || event.metaKey || event.altKey)) {{
+              const activeElement = document.activeElement;
+              const card = activeElement && typeof activeElement.closest === 'function'
+                ? activeElement.closest('.command-card')
+                : null;
+              if (card) {{
+                const button = card.querySelector('.copy-command');
+                if (button) {{
+                  event.preventDefault();
+                  button.click();
+                }}
+              }}
+            }}
           }});
 
           const rootPath = document.body.dataset.rootPath || "";
@@ -1719,6 +1771,124 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             const parameterInputs = Array.from(
               form.querySelectorAll('.command-parameter'),
             );
+            const copyButton = form.querySelector('.copy-command');
+            let copyFeedbackTimer = null;
+            let statusResetTimer = null;
+            const clearStatusTimer = () => {{
+              if (statusResetTimer) {{
+                clearTimeout(statusResetTimer);
+                statusResetTimer = null;
+              }}
+            }};
+            const setTemporaryStatus = (message, state) => {{
+              if (!status) {{
+                return;
+              }}
+              if (status.dataset.state === 'running') {{
+                if (state === 'error' && message) {{
+                  status.title = message;
+                }}
+                return;
+              }}
+              const previous = {{
+                text: status.textContent || '',
+                state: status.dataset.state || '',
+                title: status.getAttribute('title') || '',
+              }};
+              clearStatusTimer();
+              const targetState = state || '';
+              status.textContent = message || '';
+              if (targetState) {{
+                status.dataset.state = targetState;
+              }} else {{
+                status.removeAttribute('data-state');
+              }}
+              if (targetState === 'error' && message) {{
+                status.title = message;
+              }} else {{
+                status.removeAttribute('title');
+              }}
+              statusResetTimer = setTimeout(() => {{
+                const currentText = status.textContent || '';
+                const currentState = status.dataset.state || '';
+                if (currentText === (message || '') && currentState === targetState) {{
+                  if (previous.state) {{
+                    status.dataset.state = previous.state;
+                  }} else {{
+                    status.removeAttribute('data-state');
+                  }}
+                  status.textContent = previous.text;
+                  if (previous.title) {{
+                    status.title = previous.title;
+                  }} else {{
+                    status.removeAttribute('title');
+                  }}
+                }}
+                statusResetTimer = null;
+              }}, 2200);
+            }};
+            const setCopyFeedback = (state, overrideLabel) => {{
+              if (!copyButton) {{
+                return;
+              }}
+              const label = copyButton.querySelector('.button-label');
+              if (!label) {{
+                return;
+              }}
+              const defaultLabel = copyButton.dataset.defaultLabel || label.textContent || 'Copy command';
+              if (!copyButton.dataset.defaultLabel) {{
+                copyButton.dataset.defaultLabel = defaultLabel;
+              }}
+              if (copyFeedbackTimer) {{
+                clearTimeout(copyFeedbackTimer);
+                copyFeedbackTimer = null;
+              }}
+              copyButton.classList.remove('is-copied', 'is-error');
+              if (state === 'success') {{
+                copyButton.classList.add('is-copied');
+                label.textContent = overrideLabel || 'Copied!';
+              }} else if (state === 'error') {{
+                copyButton.classList.add('is-error');
+                label.textContent = overrideLabel || 'Copy failed';
+              }} else {{
+                label.textContent = defaultLabel;
+                return;
+              }}
+              copyFeedbackTimer = setTimeout(() => {{
+                copyButton.classList.remove('is-copied', 'is-error');
+                label.textContent = copyButton.dataset.defaultLabel || 'Copy command';
+                copyFeedbackTimer = null;
+              }}, 2000);
+            }};
+            const copyTextToClipboard = async (value) => {{
+              if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {{
+                await navigator.clipboard.writeText(value);
+                return;
+              }}
+              const bodyElement = typeof document !== 'undefined' ? document.body : null;
+              if (!bodyElement) {{
+                throw new Error('Clipboard copy is not supported');
+              }}
+              const helper = document.createElement('textarea');
+              helper.value = value;
+              helper.setAttribute('readonly', '');
+              helper.style.position = 'fixed';
+              helper.style.opacity = '0';
+              helper.style.pointerEvents = 'none';
+              bodyElement.appendChild(helper);
+              helper.focus();
+              helper.select();
+              let successful = false;
+              try {{
+                successful = typeof document.execCommand === 'function' ? document.execCommand('copy') : false;
+              }} catch (error) {{
+                successful = false;
+              }}
+              bodyElement.removeChild(helper);
+              if (!successful) {{
+                throw new Error('Clipboard copy is not supported');
+              }}
+            }};
             const buildArgumentSegments = () => {{
               const segments = [];
               parameterInputs.forEach((input) => {{
@@ -1794,6 +1964,30 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
               input.addEventListener(eventName, updatePreview);
             }});
             updatePreview();
+            if (copyButton) {{
+              copyButton.addEventListener('click', async () => {{
+                if (!preview) {{
+                  return;
+                }}
+                const commandText = preview.textContent || '';
+                if (!commandText.trim()) {{
+                  setCopyFeedback('error', 'Nothing to copy');
+                  setTemporaryStatus('Nothing to copy', 'error');
+                  return;
+                }}
+                try {{
+                  await copyTextToClipboard(commandText);
+                  setCopyFeedback('success', 'Copied!');
+                  setTemporaryStatus('Command copied', 'info');
+                }} catch (error) {{
+                  const message = error && typeof error.message === 'string'
+                    ? error.message
+                    : 'Unable to copy command';
+                  setCopyFeedback('error', 'Copy failed');
+                  setTemporaryStatus(message, 'error');
+                }}
+              }});
+            }}
             form.addEventListener('submit', async (event) => {{
               event.preventDefault();
               const button = form.querySelector('.run-command');
@@ -1802,12 +1996,14 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
               }}
               const path = commandPath.slice();
               if (!path.length) {{
+                clearStatusTimer();
                 status.textContent = 'Unknown command';
                 status.dataset.state = 'error';
                 return;
               }}
               const argumentSegments = buildArgumentSegments();
               const extraArgsString = argumentSegments.map(quoteArgument).join(' ');
+              clearStatusTimer();
               button.disabled = true;
               card.classList.add('is-busy');
               status.removeAttribute('data-state');
@@ -1866,6 +2062,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                 segments.push(`\n(exit code: ${{data.exit_code}})`);
                 output.textContent = segments.join('\\n');
                 output.hidden = false;
+                clearStatusTimer();
                 if (data.success) {{
                   status.textContent = 'Completed';
                   status.dataset.state = 'success';
@@ -1879,6 +2076,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                 const message = error && typeof error.message === 'string' ? error.message : 'Unexpected error';
                 output.textContent = message;
                 output.hidden = false;
+                clearStatusTimer();
                 status.textContent = 'Request error';
                 status.dataset.state = 'error';
                 status.title = message;
