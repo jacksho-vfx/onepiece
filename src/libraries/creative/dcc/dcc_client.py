@@ -269,7 +269,9 @@ def verify_dcc_dependencies(
     asset_entries = _normalise_required_assets(dcc, required_assets)
     assets_status = _resolve_asset_status(package_root, asset_entries)
 
-    gpu_requirement = required_gpu if required_gpu is not None else DCC_GPU_REQUIREMENTS.get(dcc)
+    gpu_requirement = (
+        required_gpu if required_gpu is not None else DCC_GPU_REQUIREMENTS.get(dcc)
+    )
     detected_gpu: str | None
     if gpu_description is not None:
         detected_gpu = gpu_description
@@ -361,7 +363,9 @@ def _format_dependency_error(report: DCCDependencyReport, package_dir: Path) -> 
         else:  # pragma: no cover - defensive fallback
             requirement = "compatible GPU"
         detected = report.gpu.detected or "not detected"
-        problems.append(f"GPU requirement not met (required {requirement}; detected {detected})")
+        problems.append(
+            f"GPU requirement not met (required {requirement}; detected {detected})"
+        )
 
     if not problems:
         problems.append("unresolved dependency issues")
