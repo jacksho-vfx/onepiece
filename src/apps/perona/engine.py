@@ -248,8 +248,24 @@ class ShotLifecycleStage:
 
     @property
     def duration_hours(self) -> float:
-        end = self.completed_at or datetime.utcnow()
-        return round((end - self.started_at).total_seconds() / 3600, 2)
+        end = self.completed_at
+        if end is None:
+            if self.started_at.tzinfo is not None:
+                end = datetime.now(self.started_at.tzinfo)
+            else:
+                end = datetime.utcnow()
+
+        start = self.started_at
+        if (start.tzinfo is None) != (end.tzinfo is None):
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=end.tzinfo)
+            else:
+                end = end.replace(tzinfo=start.tzinfo)
+
+        duration = (end - start).total_seconds() / 3600
+        if duration < 0:
+            duration = 0.0
+        return round(duration, 2)
 
 
 @dataclass(frozen=True)
