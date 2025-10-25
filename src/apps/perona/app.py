@@ -7,7 +7,7 @@ import socket
 from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, Mapping, NotRequired, TypedDict
+from typing import Any, Literal, Mapping, NotRequired, Sequence, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -25,7 +25,12 @@ from apps.perona.engine import (
     PeronaEngine,
     get_currency_symbol,
 )
-from apps.perona.models import CostEstimate, CostEstimateRequest, SettingsSummary
+from apps.perona.models import (
+    CostEstimate,
+    CostEstimateRequest,
+    RiskIndicator as RiskIndicatorModel,
+    SettingsSummary,
+)
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.version import PERONA_VERSION
 
@@ -51,9 +56,11 @@ settings_app = typer.Typer(
 )
 web_app = typer.Typer(name="web", help="Web interface helpers for Perona.")
 cost_app = typer.Typer(name="cost", help="Cost modelling utilities for Perona.")
+risk_app = typer.Typer(name="risk", help="Risk analytics utilities for Perona.")
 app.add_typer(settings_app)
 app.add_typer(web_app)
 app.add_typer(cost_app)
+app.add_typer(risk_app)
 
 
 @app.command("version")
@@ -402,6 +409,79 @@ def _format_cost_insights(
         lines.extend(f"- {message}" for message in recommendations)
     else:
         lines.append("No recommendations generated.")
+
+    return "\n".join(lines)
+
+
+def _format_risk_heatmap(
+    indicators: Sequence[RiskIndicatorModel],
+    *,
+    settings_path: Path | None,
+    total_count: int,
+) -> str:
+    """Render the risk heatmap highlighting the most critical shots."""
+
+    lines: list[str] = []
+    if settings_path is not None:
+        lines.append(f"Settings file: {settings_path}")
+        lines.append("")
+
+    header = "Risk heatmap"
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    if not indicators:
+        lines.append("No risk indicators available.")
+        return "\n".join(lines)
+
+    sequence_width = max(len("Sequence"), *(len(item.sequence) for item in indicators))
+    shot_width = max(len("Shot"), *(len(item.shot_id) for item in indicators))
+    risk_width = len("Risk score")
+    render_width = len("Render ms")
+    error_width = len("Error rate")
+    cache_width = len("Cache stability")
+
+    for item in indicators:
+        risk_width = max(risk_width, len(_format_value(item.risk_score)))
+        render_width = max(render_width, len(_format_value(item.render_time_ms)))
+        error_width = max(error_width, len(_format_value(item.error_rate)))
+        cache_width = max(cache_width, len(_format_value(item.cache_stability)))
+
+    lines.append(
+        f"{'Sequence':<{sequence_width}}  "
+        f"{'Shot':<{shot_width}}  "
+        f"{'Risk score':>{risk_width}}  "
+        f"{'Render ms':>{render_width}}  "
+        f"{'Error rate':>{error_width}}  "
+        f"{'Cache stability':>{cache_width}}  Drivers"
+    )
+    lines.append(
+        f"{'-' * sequence_width}  "
+        f"{'-' * shot_width}  "
+        f"{'-' * risk_width}  "
+        f"{'-' * render_width}  "
+        f"{'-' * error_width}  "
+        f"{'-' * cache_width}  "
+        "-------"
+    )
+
+    for indicator in indicators:
+        drivers = ", ".join(indicator.drivers) if indicator.drivers else "-"
+        lines.append(
+            f"{indicator.sequence:<{sequence_width}}  "
+            f"{indicator.shot_id:<{shot_width}}  "
+            f"{_format_value(indicator.risk_score):>{risk_width}}  "
+            f"{_format_value(indicator.render_time_ms):>{render_width}}  "
+            f"{_format_value(indicator.error_rate):>{error_width}}  "
+            f"{_format_value(indicator.cache_stability):>{cache_width}}  "
+            f"{drivers}"
+        )
+
+    if len(indicators) < total_count:
+        lines.append("")
+        lines.append(
+            f"Showing top {len(indicators)} of {total_count} indicators."
+        )
 
     return "\n".join(lines)
 
@@ -795,6 +875,69 @@ def cost_insights(
             statistics,
             recommendations,
             settings_path=settings_result.settings_path,
+        )
+    )
+
+
+@risk_app.command("heatmap")
+def risk_heatmap(
+    output_format: OutputFormat = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format for the risk heatmap (table or json).",
+        case_sensitive=False,
+    ),
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file to seed defaults.",
+    ),
+    top: int | None = typer.Option(
+        None,
+        "--top",
+        "-n",
+        help="Limit the number of indicators shown (highest risk first).",
+    ),
+) -> None:
+    """Display the highest risk shots from the Perona telemetry heatmap."""
+
+    validated_settings_path = _validate_settings_path(settings_path)
+    settings_result = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = settings_result.engine
+
+    indicators = tuple(engine.risk_heatmap())
+    total_count = len(indicators)
+    if top is not None:
+        if top <= 0:
+            raise typer.BadParameter("top must be a positive integer.")
+        indicators = indicators[:top]
+
+    fmt = str(output_format).lower()
+    if fmt not in {"table", "json"}:
+        raise typer.BadParameter("format must be either 'table' or 'json'.")
+
+    if fmt == "json":
+        payload: dict[str, object] = {
+            "indicators": [
+                RiskIndicatorModel.from_entity(indicator).model_dump()
+                for indicator in indicators
+            ],
+            "total_indicators": total_count,
+        }
+        if settings_result.settings_path is not None:
+            payload["settings_path"] = str(settings_result.settings_path)
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    indicator_models = tuple(
+        RiskIndicatorModel.from_entity(indicator) for indicator in indicators
+    )
+    typer.echo(
+        _format_risk_heatmap(
+            indicator_models,
+            settings_path=settings_result.settings_path,
+            total_count=total_count,
         )
     )
 
