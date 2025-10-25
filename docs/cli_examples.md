@@ -9,7 +9,7 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 > **Latest merges:** A new `dcc animation` command group debugs Maya scenes, cleans namespaces, and automates playblasts with structured logging. Published packages can be re-imported into Unreal through `dcc import-unreal`, and the publish workflow now enforces safe scene names while surfacing Unreal export validation summaries. Environment health checks treat plugin names case-insensitively and fall back gracefully when PyMEL is unavailable, and Trafalgar's reconcile helpers sit atop a pluggable provider registry with sensible defaults. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/libraries/platform/validations/dcc.py†L1-L194】【F:src/apps/trafalgar/providers/providers.py†L1-L210】
 
 ### Core
-- `python -m apps.onepiece info` — print environment and configuration details for the pipeline client.
+- `python -m apps.onepiece info` — print environment and configuration details for the pipeline client. Append `--format json` to emit a machine-readable report for automation or dashboards.
 
 ### AWS utilities
 - `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run --report-format <json|csv> --report-path <file>]` — validate deliveries, upload to S3, and register ShotGrid Versions. The analytics flags capture dry-run results as JSON or CSV so you can review invalid files and planned uploads before executing a real ingest.
