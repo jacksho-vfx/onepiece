@@ -138,14 +138,12 @@ def dashboard(
             )
         except webbrowser.Error as error:
             typer.echo(
-                "Unable to resolve a browser for the Trafalgar dashboard: "
-                f"{error}",
+                "Unable to resolve a browser for the Trafalgar dashboard: " f"{error}",
                 err=True,
             )
         else:
             typer.echo(
-                "Opening Trafalgar dashboard in a web browser at "
-                f"{dashboard_url}"
+                "Opening Trafalgar dashboard in a web browser at " f"{dashboard_url}"
             )
             try:
                 browser_controller.open(dashboard_url, new=2)

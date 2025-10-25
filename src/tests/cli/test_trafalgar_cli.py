@@ -63,9 +63,7 @@ def test_dashboard_command_can_open_browser(mocker: pytest_mock.MockerFixture) -
 
     assert result.exit_code == 0
     browser_get.assert_called_once_with()
-    browser_controller.open.assert_called_once_with(
-        "http://0.0.0.0:9050", new=2
-    )
+    browser_controller.open.assert_called_once_with("http://0.0.0.0:9050", new=2)
     uvicorn_mock.run.assert_called_once()
 
 
