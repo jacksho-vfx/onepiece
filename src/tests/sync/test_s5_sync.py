@@ -1,129 +1,50 @@
-# """Tests for the lightweight s5cmd wrapper."""
-#
-# from __future__ import annotations
-#
-# from pathlib import Path
-# from typing import Any
-# from unittest.mock import Mock, patch
-#
-# import pytest
-#
-# from libraries.integrations.aws.s5_sync import s5_sync
-#
-#
-# class DummyProcess:
-#     def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
-#         self.returncode = returncode
-#         self.stdout = stdout
-#         self.stderr = stderr
-#
-#     def communicate(self) -> tuple[str, str]:
-#         return self.stdout, self.stderr
-#
-#     def wait(self) -> tuple[str, str]:
-#         return self.stdout, self.stderr
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_raises_for_non_zero_return_code(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(
-#         returncode=2,
-#         stdout="upload file.txt\n",
-#         stderr="failed to connect",
-#     )
-#
-#     with pytest.raises(RuntimeError) as excinfo:
-#         s5_sync(Path("/local/path"), "s3://bucket/context")
-#
-#     error_message = str(excinfo.value)
-#     assert "exit code 2" in error_message
-#     assert "failed to connect" in error_message
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_raises_for_non_zero_without_stderr(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(
-#         returncode=1,
-#         stdout="",
-#         stderr="",
-#     )
-#
-#     with pytest.raises(RuntimeError) as excinfo:
-#         s5_sync(Path("/local/path"), "s3://bucket/context")
-#
-#     assert "No additional error output from s5cmd" in str(excinfo.value)
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_handles_stderr_output(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(
-#         returncode=0,
-#         stdout="upload file.txt\n",
-#         stderr="warning: throttling\n",
-#     )
-#
-#     progress = Mock()
-#
-#     s5_sync(Path("/local/path"), "s3://bucket/context", progress_callback=progress)
-#
-#     progress.assert_called_once_with("upload file.txt")
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_upload_command_order(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(returncode=0, stdout="upload file\n")
-#
-#     s5_sync(
-#         source=Path("/local/path"),
-#         destination="s3://bucket/context",
-#         include=["*.exr"],
-#         exclude=["*.tmp"],
-#     )
-#
-#     expected_cmd = [
-#         "s5cmd",
-#         "sync",
-#         "--include",
-#         "*.exr",
-#         "--exclude",
-#         "*.tmp",
-#         "/local/path/",
-#         "s3://bucket/context/",
-#     ]
-#
-#     assert mock_popen.call_args.args[0] == expected_cmd
-#     assert mock_popen.call_args.kwargs["env"] is None
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_download_command_order(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(returncode=0, stdout="download file\n")
-#
-#     s5_sync(
-#         source="s3://bucket/context",
-#         destination=Path("/local/path"),
-#     )
-#
-#     expected_cmd = [
-#         "s5cmd",
-#         "sync",
-#         "s3://bucket/context/",
-#         "/local/path/",
-#     ]
-#
-#     assert mock_popen.call_args.args[0] == expected_cmd
-#
-#
-# @patch("libraries.integrations.aws.s5_sync.subprocess.Popen")
-# def test_s5_sync_sets_profile_env(mock_popen: Any) -> None:
-#     mock_popen.return_value = DummyProcess(returncode=0, stdout="upload file\n")
-#
-#     s5_sync(
-#         source=Path("/local/path"),
-#         destination="s3://bucket/context",
-#         profile="artist",
-#     )
-#
-#     env = mock_popen.call_args.kwargs["env"]
-#     assert env is not None
-#     assert env["AWS_PROFILE"] == "artist"
+import io
+from pathlib import Path
+from typing import Sequence, Generator
+
+from _pytest.capture import CaptureFixture
+from _pytest.monkeypatch import MonkeyPatch
+
+from libraries.integrations.aws import s5_sync
+
+
+class DummyProcess:
+    """Minimal :class:`subprocess.Popen` substitute for streaming tests."""
+
+    def __init__(
+        self,
+        *,
+        stdout_lines: Sequence[str],
+        stderr_lines: Sequence[str] | None = None,
+        returncode: int = 0,
+    ) -> None:
+        self.returncode = returncode
+        self.stdout = io.StringIO(_join_lines(stdout_lines))
+        stderr = stderr_lines or []
+        self.stderr = io.StringIO(_join_lines(stderr)) if stderr else io.StringIO("")
+
+    def wait(self) -> int:
+        return self.returncode
+
+
+def _join_lines(lines: Sequence[str]) -> str:
+    text = "\n".join(lines)
+    if text:
+        text += "\n"
+    return text
+
+
+def test_s5_sync_counts_download_events(
+    monkeypatch: MonkeyPatch, capsys: Generator[CaptureFixture[str], None, None]
+) -> None:
+    """Downloads must contribute to the progress summary totals."""
+
+    process = DummyProcess(stdout_lines=["download fileA", "download fileB"])
+    monkeypatch.setattr(s5_sync.subprocess, "Popen", lambda *args, **kwargs: process)
+
+    s5_sync.s5_sync("s3://bucket/context", Path("/tmp/output"))
+
+    captured = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "Total files: 2" in captured
+    assert "Downloaded: 2" in captured
+    assert "Uploaded:   0" in captured
