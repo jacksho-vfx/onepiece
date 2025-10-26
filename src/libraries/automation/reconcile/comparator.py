@@ -56,7 +56,10 @@ def _normalise_versions(
         else:
             value = str(version)
             stripped = value.strip()
-            if stripped and (stripped.isdigit() or (stripped[0] in {"v", "V"} and stripped[1:].isdigit())):
+            if stripped and (
+                stripped.isdigit()
+                or (stripped[0] in {"v", "V"} and stripped[1:].isdigit())
+            ):
                 digits = stripped[1:] if stripped[0] in {"v", "V"} else stripped
                 value = f"v{int(digits):03d}"
         index[shot.lower()].append(value.lower())
