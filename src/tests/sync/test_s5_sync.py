@@ -1,6 +1,9 @@
 import io
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Generator
+
+from _pytest.capture import CaptureFixture
+from _pytest.monkeypatch import MonkeyPatch
 
 from libraries.integrations.aws import s5_sync
 
@@ -31,7 +34,9 @@ def _join_lines(lines: Sequence[str]) -> str:
     return text
 
 
-def test_s5_sync_counts_download_events(monkeypatch, capsys) -> None:
+def test_s5_sync_counts_download_events(
+    monkeypatch: MonkeyPatch, capsys: Generator[CaptureFixture[str], None, None]
+) -> None:
     """Downloads must contribute to the progress summary totals."""
 
     process = DummyProcess(stdout_lines=["download fileA", "download fileB"])
@@ -39,7 +44,7 @@ def test_s5_sync_counts_download_events(monkeypatch, capsys) -> None:
 
     s5_sync.s5_sync("s3://bucket/context", Path("/tmp/output"))
 
-    captured = capsys.readouterr().out
+    captured = capsys.readouterr().out  # type: ignore[attr-defined]
     assert "Total files: 2" in captured
     assert "Downloaded: 2" in captured
     assert "Uploaded:   0" in captured
