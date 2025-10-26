@@ -17,3 +17,22 @@ def test_compare_datasets_normalises_shots_filter() -> None:
     )
 
     assert any(item["type"] == "missing_in_fs" for item in mismatches)
+
+
+def test_compare_datasets_normalises_numeric_versions() -> None:
+    shotgrid = [
+        {
+            "shot": "ep201_sc01_0010",
+            "version": "v003",
+        }
+    ]
+    filesystem = [
+        {
+            "shot": "ep201_sc01_0010",
+            "version": "003",
+        }
+    ]
+
+    mismatches = compare_datasets(shotgrid, filesystem)
+
+    assert mismatches == []
