@@ -202,6 +202,34 @@ def test_prepare_ingest_options_requires_project_and_show_code() -> None:
         )
 
 
+def test_prepare_ingest_options_expands_env_checkpoint_dir(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("INGEST_CHECKPOINT_DIR", "~/ingest-checkpoints")
+
+    profile_data = {"project": "Project", "show_code": "SHOW"}
+
+    resolved = _prepare_ingest_options(
+        profile_data,
+        project=None,
+        show_code=None,
+        source=None,
+        vendor_bucket=None,
+        client_bucket=None,
+        max_workers=None,
+        use_asyncio=None,
+        resume=None,
+        checkpoint_dir=None,
+        checkpoint_threshold=None,
+        upload_chunk_size=None,
+    )
+
+    assert resolved.checkpoint_dir == home / "ingest-checkpoints"
+
+
 def test_load_profile_expands_project_root_env_var(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:

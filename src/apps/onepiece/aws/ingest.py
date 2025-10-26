@@ -162,7 +162,7 @@ def _prepare_ingest_options(
     if resolved_checkpoint_dir is None:
         resolved_checkpoint_dir = Path(
             os.getenv("INGEST_CHECKPOINT_DIR", ".ingest-checkpoints")
-        )
+        ).expanduser()
 
     resolved_checkpoint_threshold = (
         checkpoint_threshold
@@ -235,7 +235,7 @@ def _optional_path(value: Any, field: str) -> Path | None:
     if isinstance(value, Path):
         return value
     if isinstance(value, str):
-        return Path(value)
+        return Path(value).expanduser()
     raise OnePieceConfigError(
         f"Configuration value '{field}' must be a filesystem path represented as a string."
     )
