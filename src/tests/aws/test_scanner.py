@@ -1,22 +1,29 @@
 import sys
 from types import SimpleNamespace
+from typing import Any
+
+from _pytest.monkeypatch import MonkeyPatch
 
 from libraries.integrations.aws import scanner
 
 
 class _FailingBoto3:
-    def client(self, *_args, **_kwargs):  # pragma: no cover - defensive only
-        raise AssertionError("boto3 client should not be called when a client is injected")
+    def client(
+        self, *_args: Any, **_kwargs: Any
+    ) -> AssertionError:  # pragma: no cover - defensive only
+        raise AssertionError(
+            "boto3 client should not be called when a client is injected"
+        )
 
 
 class FakePaginator:
-    def __init__(self, expected_bucket, expected_prefix, pages):
+    def __init__(self, expected_bucket: Any, expected_prefix: Any, pages: Any) -> None:
         self.expected_bucket = expected_bucket
         self.expected_prefix = expected_prefix
         self.pages = pages
-        self.calls = []
+        self.calls: list[Any] = []
 
-    def paginate(self, **kwargs):
+    def paginate(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         assert kwargs["Bucket"] == self.expected_bucket
         assert kwargs["Prefix"] == self.expected_prefix
@@ -25,22 +32,24 @@ class FakePaginator:
 
 
 class FakeClient:
-    def __init__(self, paginator):
+    def __init__(self, paginator: Any) -> None:
         self.paginator = paginator
         self.requested_operation = None
 
-    def get_paginator(self, name):
-        self.requested_operation = name
+    def get_paginator(self, name: str) -> Any:
+        self.requested_operation = name  # type: ignore[assignment]
         assert name == "list_objects_v2"
         return self.paginator
 
 
-def _build_page(*keys):
+def _build_page(*keys: Any) -> Any:
     contents = [{"Key": key} for key in keys]
     return {"Contents": contents}
 
 
-def test_scan_s3_context_uses_injected_client_without_boto3(monkeypatch):
+def test_scan_s3_context_uses_injected_client_without_boto3(
+    monkeypatch: MonkeyPatch,
+) -> None:
     failing_module = _FailingBoto3()
     monkeypatch.setitem(sys.modules, "boto3", failing_module)
 
@@ -78,12 +87,12 @@ def test_scan_s3_context_uses_injected_client_without_boto3(monkeypatch):
         },
     ]
     assert client.requested_operation == "list_objects_v2"
-    assert paginator.calls == [
-        {"Bucket": bucket, "Prefix": expected_prefix}
-    ]
+    assert paginator.calls == [{"Bucket": bucket, "Prefix": expected_prefix}]
 
 
-def test_scan_s3_context_uses_boto3_when_client_missing(monkeypatch):
+def test_scan_s3_context_uses_boto3_when_client_missing(
+    monkeypatch: MonkeyPatch,
+) -> None:
     bucket = "env-bucket"
     project = "demo_project"
     context = "context"
@@ -101,7 +110,7 @@ def test_scan_s3_context_uses_boto3_when_client_missing(monkeypatch):
 
     service_calls = []
 
-    def fake_client_factory(service):
+    def fake_client_factory(service: Any) -> Any:
         service_calls.append(service)
         assert service == "s3"
         return fake_client
@@ -109,7 +118,7 @@ def test_scan_s3_context_uses_boto3_when_client_missing(monkeypatch):
     fake_boto3 = SimpleNamespace(client=fake_client_factory)
     calls = {"ensure": 0}
 
-    def fake_ensure_boto3():
+    def fake_ensure_boto3() -> SimpleNamespace:
         calls["ensure"] += 1
         return fake_boto3
 
@@ -121,9 +130,7 @@ def test_scan_s3_context_uses_boto3_when_client_missing(monkeypatch):
     assert calls["ensure"] == 1
     assert service_calls == ["s3"]
     assert fake_client.requested_operation == "list_objects_v2"
-    assert paginator.calls == [
-        {"Bucket": bucket, "Prefix": expected_prefix}
-    ]
+    assert paginator.calls == [{"Bucket": bucket, "Prefix": expected_prefix}]
     assert results == [
         {
             "shot": "ep001_sc01_0001",
