@@ -1,4 +1,12 @@
-# CLI Examples 
+# CLI Examples
+
+> **Documentation refresh (April 2024):** Command groups now include quick links to their most common flags, plus notes on the environment variables that influence behaviour. Use the index below to jump straight to the CLI surface you need.
+
+## At a glance
+
+- [OnePiece CLI](#onepiece-cli-onepiece--python--m-appsonepiece-) — Explore ingest, DCC, render, review, and validation commands.
+- [Trafalgar CLI](#trafalgar-cli-python--m-appstrafalgar-) — Run the dashboard, ingest, and render services from the console.
+- [Uta Control Center](#uta-control-center-onepiece-uta-) — Launch the browser-based command catalog and automation bridge.
 
 ## OnePiece CLI (`onepiece …` / `python -m apps.onepiece …`)
 

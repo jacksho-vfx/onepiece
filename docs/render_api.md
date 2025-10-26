@@ -1,5 +1,13 @@
 # Render API capability schema
 
+> **Documentation refresh (April 2024):** Capability examples now sit alongside registry extension notes, job submission payloads, and retention monitoring tips. Follow the outline below to land on the API contract or lifecycle guidance you need.
+
+## At a glance
+
+- [Extending the adapter registry](#extending-the-adapter-registry) — Register new farms and capability descriptors.
+- [Submitting jobs via HTTP](#submitting-jobs-via-http) — Shape payloads that align with CLI-side validation.
+- [Render job history retention](#render-job-history-retention) — Understand how job snapshots are persisted and pruned.
+
 The Trafalgar render service exposes the `/farms` endpoint so CLI tools and UI
 widgets can discover registered adapters along with the behaviour they support.
 The response now returns structured capability descriptors for each adapter,

@@ -1,5 +1,13 @@
 # Perona dashboard operations
 
+> **Documentation refresh (April 2024):** Operators asked for faster entry points to settings inspection, telemetry analysis, and API references. The outline below gathers those touchpoints so you can reach the right command or endpoint in seconds.
+
+## At a glance
+
+- [CLI usage](#cli-usage) — Inspect settings, reload overrides, and review telemetry insights.
+- [Configuration layers](#configuration-layers) — Understand how TOML files stack across defaults and overrides.
+- [HTTP API reference](#http-api-reference) — Query snapshots, health checks, render feeds, and cost analytics.
+
 [Back to the Perona overview in the README](../README.md#operating-the-perona-dashboard)
 
 The Perona CLI and FastAPI service ship together so teams can launch the web dashboard, inspect configuration, and script against

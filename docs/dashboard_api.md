@@ -1,5 +1,13 @@
 # Trafalgar Dashboard API
 
+> **Documentation refresh (April 2024):** This guide now foregrounds authentication, caching controls, and troubleshooting steps pulled from recent support requests. Use the outline below when you need to verify tokens, tune cache behaviour, or diagnose stale data.
+
+## At a glance
+
+- [Authentication](#authentication) — Configure tokens and headers for every request.
+- [Dashboard caching controls](#dashboard-caching-controls) — Adjust TTLs, project caps, and manual flush behaviour.
+- [Troubleshooting checklist](#troubleshooting-checklist) — Inspect logs and health endpoints when metrics drift.
+
 The Trafalgar dashboard exposes a consolidated metrics endpoint that surfaces
 status information across ingest, render, and review systems. The endpoint is
 protected with bearer token authentication so the aggregated production data can
@@ -335,6 +343,16 @@ providers so cache hits remain deterministic. When updating a manifest outside
 of the dashboard (for example, after a delivery is re-issued), trigger a cache
 flush via `POST /admin/cache` or restart the application to ensure callers see
 the refreshed metadata.
+
+## Troubleshooting checklist
+
+Follow these steps when operators report stale data or authentication failures:
+
+1. **Check health endpoints** — Hit `GET /health` and confirm the `cache` section matches the expected TTL, limits, and project counts.
+2. **Inspect logs** — Review the `apps.trafalgar.web.dashboard` logger output for cache prune warnings, authentication failures, or provider exceptions.
+3. **Validate tokens** — Re-run a request with `curl -H "Authorization: Bearer $TRAFALGAR_DASHBOARD_TOKEN" http://localhost:8000/metrics` to confirm the presented credential still resolves.
+4. **Flush caches** — Call `POST /admin/cache` with `{ "flush": true }` to invalidate stale project or manifest data without restarting the service.
+5. **Review persistence** — Ensure `dashboard-projects.json` and render job snapshots are writable so state survives restarts.
 
 ### On-disk project registry lifecycle
 
