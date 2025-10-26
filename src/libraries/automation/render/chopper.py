@@ -30,6 +30,10 @@ def load_scene(path: Path) -> Scene:
         raise ChopperRenderError(
             f"Scene file '{path}' cannot be read due to permissions"
         ) from exc
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ChopperRenderError(
+            f"Scene file '{path}' could not be decoded as UTF-8"
+        ) from exc
     except OSError as exc:
         raise ChopperRenderError(
             f"Scene file '{path}' could not be read: {exc}"
