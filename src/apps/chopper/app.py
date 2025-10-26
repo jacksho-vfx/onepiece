@@ -9,7 +9,11 @@ from click.core import ParameterSource
 import typer
 
 from apps.chopper.renderer import Scene
-from libraries.automation.render.chopper import ChopperRenderError, load_scene, render_scene
+from libraries.automation.render.chopper import (
+    ChopperRenderError,
+    load_scene,
+    render_scene,
+)
 
 
 app = typer.Typer(help="Render self-contained scene descriptions using Chopper.")

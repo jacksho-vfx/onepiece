@@ -99,7 +99,9 @@ def _write_frames(
     return frame_count
 
 
-def _write_animation(frames: list[Any], destination: Path, export_format: str, fps: int) -> int:
+def _write_animation(
+    frames: list[Any], destination: Path, export_format: str, fps: int
+) -> int:
     """Encode ``frames`` as an animation at ``destination``."""
 
     if fps <= 0:
