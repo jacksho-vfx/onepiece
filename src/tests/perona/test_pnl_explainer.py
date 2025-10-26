@@ -1,5 +1,7 @@
 """Tests for the Perona P&L explainer helpers."""
 
+import pytest
+
 from libraries.analytics.perona import (
     CostDriverDelta,
     summarise_cost_deltas,
@@ -50,3 +52,26 @@ def test_summarise_cost_deltas_and_total() -> None:
     summary = summarise_cost_deltas(baseline_cost, deltas)
     assert summary == ("iterations ↑5% → cost ↑5%", "pricing ↓3% → cost ↓3%")
     assert total_cost_delta(deltas) == 10.0
+
+
+def test_cost_driver_rounding_uses_half_up_strategy() -> None:
+    delta = CostDriverDelta(
+        name="Quality",
+        metric_change_pct=2.5,
+        cost_delta=-2.5,
+    )
+
+    assert delta.metric_change_display(precision=0) == "↑3%"
+    assert delta.cost_change_display(100.0, precision=0) == "↓3%"
+    assert delta.metric_change_display(precision=2) == "↑2.5%"
+
+
+def test_cost_driver_negative_precision_rejected() -> None:
+    delta = CostDriverDelta(
+        name="Quality",
+        metric_change_pct=1.0,
+        cost_delta=1.0,
+    )
+
+    with pytest.raises(ValueError):
+        delta.metric_change_display(precision=-1)
