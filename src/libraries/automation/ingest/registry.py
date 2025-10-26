@@ -3,7 +3,7 @@
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Iterable, List, Mapping, cast
@@ -30,6 +30,24 @@ def _parse_datetime(value: str | None) -> datetime | None:
     except ValueError:
         logger.warning("ingest.registry.invalid_timestamp", value=value)
         return None
+
+
+def _normalise_datetime(value: datetime | None) -> float:
+    """Convert timestamps to a comparable numeric key.
+
+    Naive datetimes are assumed to be in UTC so that they can be compared with
+    timezone-aware values without raising ``TypeError``.
+    """
+
+    if value is None:
+        return float("-inf")
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+
+    return value.timestamp()
 
 
 def _load_media_info(payload: Mapping[str, Any]) -> MediaInfo | None:
@@ -218,7 +236,7 @@ class IngestRunRegistry:
     def load_recent(self, limit: int | None = None) -> list[IngestRunRecord]:
         records = self.load_all()
         records.sort(
-            key=lambda record: record.started_at or datetime.min,
+            key=lambda record: _normalise_datetime(record.started_at),
             reverse=True,
         )
         if limit is not None:

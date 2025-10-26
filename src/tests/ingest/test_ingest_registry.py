@@ -2,21 +2,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
-from apps.trafalgar.web.ingest import (
-    IngestRunProvider,
-    IngestRunService,
-)
+from apps.trafalgar.web import render
 from libraries.automation.ingest.registry import IngestRunRegistry
-
-import fastapi.security
-import fastapi.security.api_key
-import apps.trafalgar.web.security as security
-from fastapi.security.http import HTTPAuthorizationCredentials
-from apps.trafalgar.web import ingest, render
-from apps.trafalgar.web.ingest import app, get_ingest_run_service
 
 
 class CountingRegistry(IngestRunRegistry):  # type: ignore[misc]
@@ -31,6 +22,39 @@ class CountingRegistry(IngestRunRegistry):  # type: ignore[misc]
 
 def _write_registry(path: Path, runs: list[dict[str, object]]) -> None:
     path.write_text(json.dumps(runs), encoding="utf-8")
+
+
+def test_load_recent_handles_mixed_timestamps(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    _write_registry(
+        registry_path,
+        [
+            {
+                "id": "run-aware",
+                "started_at": "2024-02-02T12:00:00+00:00",
+                "report": {},
+            },
+            {
+                "id": "run-naive",
+                "started_at": "2024-02-01T12:00:00",
+                "report": {},
+            },
+            {
+                "id": "run-missing",
+                "report": {},
+            },
+        ],
+    )
+
+    registry = IngestRunRegistry(path=registry_path)
+
+    records = registry.load_recent()
+
+    assert [record.run_id for record in records] == [
+        "run-aware",
+        "run-naive",
+        "run-missing",
+    ]
 
 
 def test_registry_reuses_cached_data_for_missing_runs(tmp_path: Path) -> None:
@@ -80,6 +104,31 @@ def test_ingest_api_caches_repeated_missing_requests(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     """Ensure /runs/{id} caches 404 responses and only reloads registry once."""
+    import fastapi.security
+    import fastapi.security.api_key
+    from fastapi.security.http import HTTPAuthorizationCredentials
+
+    ingest_module = pytest.importorskip(
+        "apps.trafalgar.web.ingest",
+        reason="ingest web app not available",
+        exc_type=ImportError,
+    )
+    render_module = pytest.importorskip(
+        "apps.trafalgar.web.render",
+        reason="render web app not available",
+        exc_type=ImportError,
+    )
+    security = pytest.importorskip(
+        "apps.trafalgar.web.security",
+        reason="web security module not available",
+        exc_type=ImportError,
+    )
+
+    IngestRunProvider = ingest_module.IngestRunProvider
+    IngestRunService = ingest_module.IngestRunService
+    app = ingest_module.app
+    get_ingest_run_service = ingest_module.get_ingest_run_service
+
     monkeypatch.setattr(
         fastapi.security.HTTPBearer,
         "__call__",
@@ -94,7 +143,7 @@ def test_ingest_api_caches_repeated_missing_requests(
     )
 
     all_roles = set()
-    for module in (render, ingest):
+    for module in (render_module, ingest_module):
         for name in dir(module):
             if name.startswith("ROLE_RENDER_") or name.startswith("ROLE_INGEST_"):
                 all_roles.add(getattr(module, name))
