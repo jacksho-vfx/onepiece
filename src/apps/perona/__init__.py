@@ -1,6 +1,6 @@
 """Perona - real-time VFX performance & cost dashboard."""
 
-from .models import (  # noqa: F401
+from libraries.analytics.perona.models import (  # noqa: F401
     CostEstimate,
     CostEstimateRequest,
     OptimizationBacktestRequest,

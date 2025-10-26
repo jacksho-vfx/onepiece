@@ -26,7 +26,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from apps.perona.engine import PeronaEngine
-from apps.perona.models import (
+from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,
     OptimizationBacktestRequest,

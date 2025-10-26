@@ -25,7 +25,7 @@ from apps.perona.engine import (
     PeronaEngine,
     get_currency_symbol,
 )
-from apps.perona.models import (
+from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,
     RiskIndicator as RiskIndicatorModel,
