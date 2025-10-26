@@ -13,7 +13,8 @@ def validate_shots_csv(csv_path: Path) -> List[str]:
 
     Requirements:
       * File exists and is readable.
-      * At least one header starts with 'shot' (case-insensitive).
+      * At least one header starts with 'shot' (case-insensitive, ignoring BOM and
+        surrounding whitespace).
       * Each row in that column is non-empty.
       * Each code matches E##[_-]S##[_-]SH### pattern.
 
@@ -32,7 +33,14 @@ def validate_shots_csv(csv_path: Path) -> List[str]:
         if not reader.fieldnames:
             raise ValueError("CSV has no header row.")
 
-        possible_cols = [c for c in reader.fieldnames if c.lower().startswith("shot")]
+        def _normalize_header(name: str) -> str:
+            return name.lstrip("\ufeff").strip()
+
+        possible_cols = [
+            original
+            for original in reader.fieldnames
+            if _normalize_header(original).lower().startswith("shot")
+        ]
         if not possible_cols:
             raise ValueError("CSV must contain a column whose name starts with 'shot'.")
 
