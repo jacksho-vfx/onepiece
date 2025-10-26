@@ -33,6 +33,10 @@ def _slugify(value: str) -> str:
 
 def _ensure_package_dir(base_dir: Path) -> None:
     if base_dir.exists():
+        if not base_dir.is_dir():
+            raise FileExistsError(
+                f"Destination '{base_dir}' exists but is not a directory"
+            )
         # Avoid mixing existing deliveries with new runs.
         if any(base_dir.iterdir()):
             raise FileExistsError(f"Destination '{base_dir}' already contains files")
