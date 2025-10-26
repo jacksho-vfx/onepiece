@@ -57,7 +57,14 @@ class FilepathHandler(FilepathHandlerProtocol):  # type: ignore[misc]
         """
         Ensure the directory exists and return it.
         """
-        if not path.exists():
-            log.info("creating_directory", path=str(path))
-            path.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if path.is_dir():
+                return path
+            log.error("filepath_handler.not_a_directory", path=str(path))
+            raise NotADirectoryError(
+                f"Expected directory at '{path}' but found a file."
+            )
+
+        log.info("creating_directory", path=str(path))
+        path.mkdir(parents=True, exist_ok=True)
         return path

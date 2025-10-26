@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from libraries.platform.handlers.filepath_handler import FilepathHandler
 
 
@@ -24,3 +26,14 @@ def test_filepath_handler_creates_expected_directories(tmp_path: Path) -> None:
 
     for path in (project, episode, sequence, scene, shot, media):
         assert path.exists()
+
+
+def test_filepath_handler_rejects_existing_files(tmp_path: Path) -> None:
+    handler = FilepathHandler(root=tmp_path)
+
+    project_path = tmp_path / "projects" / "DemoProject"
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    project_path.write_text("not a directory")
+
+    with pytest.raises(NotADirectoryError):
+        handler.get_project_dir("DemoProject")
