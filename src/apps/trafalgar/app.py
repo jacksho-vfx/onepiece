@@ -142,6 +142,7 @@ def dashboard(
                 err=True,
             )
         else:
+
             def _open_dashboard(label: str, url: str) -> None:
                 typer.echo(f"Opening {label} in a web browser at {url}")
                 try:
