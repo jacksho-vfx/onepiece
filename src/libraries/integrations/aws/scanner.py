@@ -34,8 +34,11 @@ def scan_s3_context(
     if not bucket_name:
         raise RuntimeError("S3 bucket not configured. Set ONEPIECE_S3_BUCKET.")
 
-    boto3 = _ensure_boto3()
-    client: Any = s3_client or boto3.client("s3")
+    if s3_client is None:
+        boto3 = _ensure_boto3()
+        client: Any = boto3.client("s3")
+    else:
+        client = s3_client
     prefix = f"{context}/{project_name}/"
 
     paginator = client.get_paginator("list_objects_v2")
