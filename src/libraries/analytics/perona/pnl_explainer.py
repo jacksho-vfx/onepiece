@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, Sequence, Tuple
 
 
@@ -67,16 +68,26 @@ def summarise_cost_deltas(
 def _format_percentage(value: float, *, precision: int) -> str:
     """Format ``value`` (expressed in percentage points) using arrow notation."""
 
+    if precision < 0:
+        msg = "precision must be non-negative"
+        raise ValueError(msg)
+
     if math.isnan(value):
         return "→0%"
     if math.isinf(value):
         arrow = "↑" if value > 0 else "↓"
         return f"{arrow}∞"
+
     arrow = "↑" if value > 0 else "↓" if value < 0 else "→"
-    magnitude = round(abs(value), precision)
-    formatted = f"{magnitude:.{precision}f}" if precision > 0 else f"{int(magnitude)}"
+    magnitude = Decimal(str(abs(value)))
+    quantiser = Decimal("1").scaleb(-precision)
+    rounded = magnitude.quantize(quantiser, rounding=ROUND_HALF_UP)
+
     if precision > 0:
-        formatted = formatted.rstrip("0").rstrip(".")
+        formatted = format(rounded, f".{precision}f").rstrip("0").rstrip(".")
+    else:
+        formatted = format(rounded, ".0f")
+
     if not formatted:
         formatted = "0"
     return f"{arrow}{formatted}%"
