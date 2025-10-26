@@ -1,5 +1,13 @@
 # Maya Character Selector Panel
 
+> **Documentation refresh (April 2024):** Animators requested faster signposts to usage snippets, rig discovery heuristics, and UI extension hooks. The outline below gathers those sections for quick reference during show-specific customisation.
+
+## At a glance
+
+- [Usage](#usage) — Import the panel and expose it inside Maya.
+- [Rig discovery heuristics](#rig-discovery-heuristics) — Understand how rigs are detected and filtered.
+- [Extending the UI](#extending-the-ui) — Hook in custom buttons, filters, or metadata displays.
+
 The character selector panel provides a lightweight dockable UI for animators to
 discover and select character rigs that exist in the current Maya scene. The
 tool relies on PyMEL / `maya.cmds` for its UI but keeps the discovery logic

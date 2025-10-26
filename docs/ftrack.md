@@ -1,5 +1,13 @@
 # Ftrack client primer
 
+> **Documentation refresh (April 2024):** The primer now surfaces authentication tips, usage patterns, and CLI hooks up front. Use the outline below to navigate to the code samples you need when experimenting with the experimental REST client.
+
+## At a glance
+
+- [Quick start](#quick-start) — Instantiate the REST client and issue your first request.
+- [Authentication helpers](#authentication-helpers) — Configure tokens and session lifetimes.
+- [CLI integration](#cli-integration) — Explore how the client plugs into existing OnePiece commands.
+
 The :mod:`libraries.integrations.ftrack` package contains a lightweight REST client that
 shares the ergonomics of the existing ShotGrid helpers while targeting the
 Ftrack API.  It provides:

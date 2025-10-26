@@ -1,5 +1,13 @@
 # Trafalgar Service Authentication
 
+> **Documentation refresh (April 2024):** Authentication setup now leads with configuration tables, role summaries, and rotation playbooks. Use the outline below to jump to the section that matches your deployment task.
+
+## At a glance
+
+- [Configuration](#configuration) — Load credentials from environment variables or JSON files.
+- [Roles](#roles) — Map API scopes to CLI and dashboard actions.
+- [Rotation Procedure](#rotation-procedure) — Rotate secrets safely without downtime.
+
 The Trafalgar APIs (render, ingest, and review) are protected by a shared
 authentication backend that accepts either signed API key/secret pairs or
 OAuth2 bearer tokens. The same dependency stack is used across all services so

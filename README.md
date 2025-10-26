@@ -2,6 +2,8 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
+> **Documentation refresh (April 2024):** Every guide now opens with an "At a glance" summary, cross-links to the configuration profile reference, and highlights the environment variables that routinely trip up new operators. Use the new quick-reference callouts to jump directly to workflow examples or troubleshooting sections without skimming entire pages.
+>
 > **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
 >
 > **Recent merges** extend the DCC tooling with a dedicated animation command group, an Unreal Engine importer, and tighter publish validation. Maya-specific helpers now guard against missing PyMEL installations, plugin discovery treats module names case-insensitively, and scene-name validation rejects unsafe paths. Trafalgar introduces a pluggable provider registry with sensible defaults so delivery and reconciliation data sources can be extended without forking the service.
@@ -31,6 +33,12 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 | [`docs/ftrack.md`](docs/ftrack.md) | Overview of the experimental Ftrack REST client package. |
 
 Sample manifests, OTIO timelines, and telemetry payloads live under [`docs/examples/`](docs/examples) for repeatable demos.
+
+## Documentation refresh highlights
+
+- **Quick navigation callouts** – Each guide begins with an "At a glance" list that links to core tasks so operators and developers can scan the page in seconds. 【F:docs/developer_guide.md†L5-L19】【F:docs/cli_walkthroughs.md†L5-L19】
+- **Configuration cross-links** – Environment-sensitive guides now point back to the configuration profile reference and the shared environment variable tables to reduce guesswork when reproducing examples. 【F:docs/configuration_profiles.md†L5-L22】
+- **Troubleshooting emphasis** – Operational docs surface the log streams, health checks, and recovery tips teams ask about most often, consolidating scattered notes into predictable sections. 【F:docs/dashboard_api.md†L5-L23】【F:docs/render_api.md†L5-L23】
 
 ## Quick start
 

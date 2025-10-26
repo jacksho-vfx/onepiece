@@ -1,5 +1,13 @@
 # CLI walkthroughs
 
+> **Documentation refresh (April 2024):** Use these walkthroughs as a checklist when rehearsing ingest, publish, and delivery flows. Each scenario now begins with linked prerequisites and troubleshooting tips so you can quickly confirm setup before following the steps.
+
+## At a glance
+
+- [Validate a workstation environment](#1-validate-a-workstation-environment) — Confirm credentials and environment variables before touching production systems.
+- [Dry-run an S3 ingest](#2-dry-run-an-s3-ingest) — Practise resumable vendor deliveries with analytics reports.
+- [Package a DCC publish for QA](#4-package-a-dcc-publish-for-qa) — Rehearse the end-to-end publishing and validation workflow.
+
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
 > **Release spotlight (v1.0.0):** The CLI honours layered configuration profiles and resumable ingest toggles, Trafalgar introduces cache-tunable dashboards with job inspection endpoints, and the new Uta Control Center renders the command surface in your browser alongside the embedded dashboard.

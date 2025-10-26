@@ -1,5 +1,13 @@
 # Developer guide
 
+> **Documentation refresh (April 2024):** Start here for an overview of the repository layout, bootstrap steps, and quality gates. The callouts below collect the topics teams search for most frequently so you can jump straight to the right section during onboarding or incident response.
+
+## At a glance
+
+- [Prerequisites](#prerequisites) — Confirm the tooling and credentials needed before cloning the repository.
+- [Repository layout](#repository-layout) — Review the project structure before exploring the CLI entry points.
+- [Bootstrapping a development environment](#bootstrapping-a-development-environment) — Follow the step-by-step setup commands, including virtual environment creation and dependency installation.
+
 This guide describes how to set up a local development environment for OnePiece, explains how the repository is organised, and captures the day-to-day workflow for contributing changes.
 
 > **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.

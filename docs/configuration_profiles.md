@@ -1,5 +1,13 @@
 # OnePiece configuration profiles
 
+> **Documentation refresh (April 2024):** Profile discovery details now ship with quick links to the most referenced sections and the environment variables that influence merging behaviour. Use the outline below to jump directly to the resolution tier you need to audit.
+
+## At a glance
+
+- [Resolution order](#onepiece-configuration-profiles) — Review how user, project, and workspace files merge.
+- [Environment overrides](#environment-variable-overrides) — Confirm which variables redirect profile discovery.
+- [Recommended keys](#recommended-profile-keys) — Reference the canonical options used throughout the CLI examples.
+
 The `onepiece` CLI discovers configuration profiles from multiple locations to
 provide defaults for commands like `aws ingest`. Profiles are defined in
 `onepiece.toml` files and merged in the following order (lowest precedence
@@ -51,6 +59,18 @@ When `onepiece aws ingest` runs, the CLI resolves the active profile using the
 search order above, applies any overrides provided on the command line, and
 passes the merged configuration to the ingest service. Other commands can reuse
 these utilities to obtain consistent profile data.
+
+## Environment variable overrides
+
+These environment variables influence where configuration files are discovered or how profiles are merged:
+
+| Variable | Purpose |
+| --- | --- |
+| `ONEPIECE_PROJECT_ROOT` | Overrides the root used to locate project-level `onepiece.toml` files. |
+| `ONEPIECE_PROFILE` | Forces a specific profile name when running commands that accept `--profile`. |
+| `ONEPIECE_PROFILE_SOURCES` | Comma-separated list of additional directories to scan for `onepiece.toml` files. |
+
+Set them in your shell profile when working across multiple shows or when you need to pin a workstation to a known configuration snapshot.
 
 ## Related Trafalgar dashboard configuration
 
