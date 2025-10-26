@@ -5,9 +5,11 @@ The settings model reads the following environment variables (optionally from a
 
 ``ONEPIECE_SHOTGRID_URL``
     Base URL of the ShotGrid site to target.
-``ONEPIECE_SHOTGRID_SCRIPT``
+``ONEPIECE_SHOTGRID_SCRIPT`` / ``ONEPIECE_SHOTGRID_SCRIPT_NAME`` /
+``SHOTGRID_SCRIPT`` / ``SHOTGRID_SCRIPT_NAME``
     API script identifier used for authentication.
-``ONEPIECE_SHOTGRID_KEY``
+``ONEPIECE_SHOTGRID_KEY`` / ``ONEPIECE_SHOTGRID_API_KEY`` /
+``SHOTGRID_KEY`` / ``SHOTGRID_API_KEY``
     API script secret paired with the script identifier.
 """
 
@@ -23,12 +25,22 @@ class ShotGridSettings(BaseSettings):
     )
     script_name: str = Field(
         validation_alias=AliasChoices(
-            "ONEPIECE_SHOTGRID_SCRIPT", "SHOTGRID_SCRIPT", "script", "script_name"
+            "ONEPIECE_SHOTGRID_SCRIPT",
+            "ONEPIECE_SHOTGRID_SCRIPT_NAME",
+            "SHOTGRID_SCRIPT",
+            "SHOTGRID_SCRIPT_NAME",
+            "script",
+            "script_name",
         )
     )
     api_key: str = Field(
         validation_alias=AliasChoices(
-            "ONEPIECE_SHOTGRID_KEY", "SHOTGRID_KEY", "api_key", "key"
+            "ONEPIECE_SHOTGRID_KEY",
+            "ONEPIECE_SHOTGRID_API_KEY",
+            "SHOTGRID_KEY",
+            "SHOTGRID_API_KEY",
+            "api_key",
+            "key",
         )
     )
 
