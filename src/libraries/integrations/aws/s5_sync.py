@@ -79,7 +79,7 @@ def s5_sync(
         stderr_thread = threading.Thread(target=_capture_stderr, daemon=True)
         stderr_thread.start()
 
-    uploaded = skipped = failed = 0
+    uploaded = downloaded = skipped = failed = 0
 
     if process.stdout is not None:
         for raw_line in process.stdout:
@@ -90,6 +90,8 @@ def s5_sync(
             lowered_line = line.lower()
             if "upload" in lowered_line:
                 uploaded += 1
+            elif "download" in lowered_line:
+                downloaded += 1
             elif "skip" in lowered_line:
                 skipped += 1
             elif "error" in lowered_line:
@@ -102,7 +104,7 @@ def s5_sync(
 
     stderr_output = "".join(stderr_lines)
 
-    total = uploaded + skipped + failed
+    total = uploaded + downloaded + skipped + failed
     log.info(
         "s5cmd_summary",
         total_files=total,
@@ -114,6 +116,7 @@ def s5_sync(
     print("--- S5CMD Sync Summary ---")
     print(f"Total files: {total}")
     print(f"Uploaded:   {uploaded}")
+    print(f"Downloaded: {downloaded}")
     print(f"Skipped:    {skipped}")
     print(f"Failed:     {failed}")
 
