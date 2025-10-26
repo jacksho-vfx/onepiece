@@ -9,6 +9,7 @@ from .analytics import (
     total_cost_per_shot,
 )
 from .base import RenderSubmissionError, SubmissionResult
+from .chopper import ChopperRenderError, load_scene, render_scene
 from .optimization import (
     CostBreakdown,
     CostModelInput,
@@ -33,4 +34,7 @@ __all__ = [
     "OptimizationProjection",
     "estimate_cost",
     "simulate_optimizations",
+    "ChopperRenderError",
+    "load_scene",
+    "render_scene",
 ]
