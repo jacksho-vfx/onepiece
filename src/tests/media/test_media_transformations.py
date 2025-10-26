@@ -5,7 +5,7 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Generator
+from typing import Generator, Any
 
 import pytest
 
@@ -81,7 +81,7 @@ class _FakeProxyStream:
         self.pix_fmt = ""
         self._flushed = False
 
-    def encode(self, frame: _FakeProxyVideoFrame | None = None):
+    def encode(self, frame: _FakeProxyVideoFrame | None = None) -> Any:
         if frame is None:
             if self._flushed:
                 return []
@@ -91,7 +91,7 @@ class _FakeProxyStream:
 
 
 class _FailingProxyStream(_FakeProxyStream):
-    def encode(self, frame: _FakeProxyVideoFrame | None = None):  # type: ignore[override]
+    def encode(self, frame: _FakeProxyVideoFrame | None = None) -> RuntimeError:
         raise RuntimeError("encode error")
 
 
@@ -117,7 +117,7 @@ class _FakeProxyContainer:
 
 
 @pytest.fixture()
-def install_proxy_modules(monkeypatch: pytest.MonkeyPatch):
+def install_proxy_modules(monkeypatch: pytest.MonkeyPatch) -> Any:
     containers: list[_FakeProxyContainer] = []
 
     def _install(*, fail_encode: bool = False) -> list[_FakeProxyContainer]:
@@ -172,7 +172,7 @@ def test_convert_mov_to_exrs_exports_first_frame(
 
 
 def test_create_proxy_from_exrs_creates_missing_directory(
-    tmp_path: Path, install_proxy_modules
+    tmp_path: Path, install_proxy_modules: Any
 ) -> None:
     containers = install_proxy_modules()
 
@@ -198,7 +198,7 @@ def test_create_proxy_from_exrs_creates_missing_directory(
 
 
 def test_create_proxy_from_exrs_closes_container_on_error(
-    tmp_path: Path, install_proxy_modules
+    tmp_path: Path, install_proxy_modules: Any
 ) -> None:
     containers = install_proxy_modules(fail_encode=True)
 
