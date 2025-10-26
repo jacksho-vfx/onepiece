@@ -142,17 +142,21 @@ def dashboard(
                 err=True,
             )
         else:
-            typer.echo(
-                "Opening Trafalgar dashboard in a web browser at " f"{dashboard_url}"
-            )
-            try:
-                browser_controller.open(dashboard_url, new=2)
-            except webbrowser.Error as error:
-                typer.echo(
-                    "Unable to launch the Trafalgar dashboard browser window: "
-                    f"{error}",
-                    err=True,
-                )
+            def _open_dashboard(label: str, url: str) -> None:
+                typer.echo(f"Opening {label} in a web browser at {url}")
+                try:
+                    browser_controller.open(url, new=2)
+                except webbrowser.Error as error:
+                    typer.echo(
+                        f"Unable to launch the {label} browser window: {error}",
+                        err=True,
+                    )
+
+            _open_dashboard("Trafalgar dashboard", dashboard_url)
+
+            if demo_port is not None:
+                demo_url = f"http://{host}:{demo_port}"
+                _open_dashboard("Trafalgar demo dashboard", demo_url)
 
     typer.echo(f"Starting OnePiece dashboard on {dashboard_url}")
     uvicorn = _load_uvicorn()

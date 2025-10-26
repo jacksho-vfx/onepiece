@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest_mock
 from typer.testing import CliRunner
@@ -64,6 +64,44 @@ def test_dashboard_command_can_open_browser(mocker: pytest_mock.MockerFixture) -
     assert result.exit_code == 0
     browser_get.assert_called_once_with()
     browser_controller.open.assert_called_once_with("http://0.0.0.0:9050", new=2)
+    uvicorn_mock.run.assert_called_once()
+
+
+def test_dashboard_command_opens_demo_browser_when_requested(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    uvicorn_mock = SimpleNamespace(run=Mock())
+    mocker.patch("apps.trafalgar.app._load_uvicorn", return_value=uvicorn_mock)
+    browser_controller = SimpleNamespace(open=Mock(return_value=True))
+    mocker.patch("apps.trafalgar.app.webbrowser.get", return_value=browser_controller)
+    process_instance = SimpleNamespace(
+        start=Mock(return_value=None),
+        terminate=Mock(return_value=None),
+        join=Mock(return_value=None),
+    )
+    process_factory = mocker.patch(
+        "apps.trafalgar.app.Process", return_value=process_instance
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        [
+            "web",
+            "dashboard",
+            "--demo-port",
+            "8100",
+            "--open-browser",
+        ],
+    )
+
+    assert result.exit_code == 0
+    process_factory.assert_called_once()
+    browser_controller.open.assert_has_calls(
+        [
+            call("http://127.0.0.1:8000", new=2),
+            call("http://127.0.0.1:8100", new=2),
+        ]
+    )
     uvicorn_mock.run.assert_called_once()
 
 
