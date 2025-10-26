@@ -8,6 +8,7 @@ import pytest
 
 from libraries.integrations.shotgrid.client import ShotgridClient
 from libraries.integrations.shotgrid.playlist_delivery import (
+    _ensure_package_dir,
     package_playlist_for_mediashuttle,
 )
 
@@ -90,3 +91,13 @@ def test_package_playlist_missing(tmp_path: Path, sg_client: ShotgridClient) -> 
             destination=destination,
             recipient="client",
         )
+
+
+def test_ensure_package_dir_raises_for_existing_file(tmp_path: Path) -> None:
+    package_path = tmp_path / "packages"
+    package_path.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(FileExistsError) as exc_info:
+        _ensure_package_dir(package_path)
+
+    assert "exists but is not a directory" in str(exc_info.value)
