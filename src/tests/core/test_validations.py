@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
+from pytest import MonkeyPatch
+
 from typer.testing import CliRunner
 
 from apps.onepiece.validate import app as validate_app
@@ -34,6 +36,37 @@ def test_preflight_report(tmp_path: Path) -> None:
     dir_path = tmp_path / "renders"
     dir_path.mkdir()
     assert filesystem.preflight_report([dir_path]) is True
+
+
+def test_check_paths_expands_environment_variables(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    dir_path = tmp_path / "env"
+    dir_path.mkdir()
+    monkeypatch.setenv("ONEPIECE_RENDER_DIR", str(dir_path))
+
+    results = filesystem.check_paths(["$ONEPIECE_RENDER_DIR"])
+
+    resolved_dir = str(dir_path.resolve())
+    assert resolved_dir in results
+    assert results[resolved_dir]["exists"] is True
+    assert results[resolved_dir]["writable"] is True
+
+
+def test_check_paths_expands_user_directory(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    home_dir = tmp_path / "home"
+    renders_dir = home_dir / "renders"
+    renders_dir.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    results = filesystem.check_paths(["~/renders"])
+
+    resolved_dir = str(renders_dir.resolve())
+    assert resolved_dir in results
+    assert results[resolved_dir]["exists"] is True
+    assert results[resolved_dir]["writable"] is True
 
 
 # ---------- Naming ----------

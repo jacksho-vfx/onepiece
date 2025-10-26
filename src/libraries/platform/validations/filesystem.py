@@ -40,7 +40,13 @@ def check_paths(paths: Iterable[Path | str]) -> dict[str, PathInfo]:
 
     results: dict[str, PathInfo] = {}
     for raw_path in paths:
-        path = Path(raw_path)
+        if isinstance(raw_path, Path):
+            raw_string = os.fspath(raw_path)
+        else:
+            raw_string = str(raw_path)
+
+        expanded = os.path.expanduser(os.path.expandvars(raw_string))
+        path = Path(expanded).resolve(strict=False)
         exists = path.exists()
         writable = (
             os.access(path, os.W_OK) if exists else os.access(path.parent, os.W_OK)
