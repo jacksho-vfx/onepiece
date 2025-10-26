@@ -5,7 +5,7 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Generator
+from typing import Generator, Any
 
 import pytest
 
@@ -61,6 +61,92 @@ def fake_modules(monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[misc]
         sys.modules.pop(module, None)
 
 
+class _FakeProxyVideoFrame:
+    def __init__(self, data: str) -> None:
+        self.data = data
+
+    @classmethod
+    def from_ndarray(cls, array: str, format: str = "rgb24") -> "_FakeProxyVideoFrame":
+        return cls(array)
+
+    def reformat(self, width: int, height: int) -> "_FakeProxyVideoFrame":
+        return self
+
+
+class _FakeProxyStream:
+    def __init__(self, container: "_FakeProxyContainer") -> None:
+        self._container = container
+        self.height = 0
+        self.width = 0
+        self.pix_fmt = ""
+        self._flushed = False
+
+    def encode(self, frame: _FakeProxyVideoFrame | None = None) -> Any:
+        if frame is None:
+            if self._flushed:
+                return []
+            self._flushed = True
+            return ["flush"]
+        return f"packet-{frame.data}"
+
+
+class _FailingProxyStream(_FakeProxyStream):
+    def encode(self, frame: _FakeProxyVideoFrame | None = None) -> RuntimeError:
+        raise RuntimeError("encode error")
+
+
+class _FakeProxyContainer:
+    def __init__(self, path: str, *, fail_encode: bool) -> None:
+        self.path = Path(path)
+        self._fail_encode = fail_encode
+        self.muxed: list[str] = []
+        self.closed = False
+
+    def add_stream(self, codec: str, rate: int) -> _FakeProxyStream:
+        if self._fail_encode:
+            return _FailingProxyStream(self)
+        return _FakeProxyStream(self)
+
+    def mux(self, packet: str) -> None:
+        self.muxed.append(packet)
+
+    def close(self) -> None:
+        self.closed = True
+        if self.muxed:
+            self.path.write_text("\n".join(self.muxed))
+
+
+@pytest.fixture()
+def install_proxy_modules(monkeypatch: pytest.MonkeyPatch) -> Any:
+    containers: list[_FakeProxyContainer] = []
+
+    def _install(*, fail_encode: bool = False) -> list[_FakeProxyContainer]:
+        containers.clear()
+
+        def _open(path: str, mode: str = "r") -> _FakeProxyContainer:
+            container = _FakeProxyContainer(path, fail_encode=fail_encode)
+            containers.append(container)
+            return container
+
+        fake_av = SimpleNamespace(open=_open, VideoFrame=_FakeProxyVideoFrame)
+
+        def _imread(path: str) -> str:
+            return Path(path).read_text()
+
+        fake_iio = SimpleNamespace(imread=_imread)
+
+        monkeypatch.setitem(sys.modules, "av", fake_av)
+        monkeypatch.setitem(sys.modules, "imageio", SimpleNamespace(v3=fake_iio))
+        monkeypatch.setitem(sys.modules, "imageio.v3", fake_iio)
+
+        return containers
+
+    yield _install
+
+    for module in ["av", "imageio", "imageio.v3"]:
+        sys.modules.pop(module, None)
+
+
 def test_convert_mov_to_exrs_exports_first_frame(
     tmp_path: Path, fake_modules: None
 ) -> None:
@@ -83,3 +169,53 @@ def test_convert_mov_to_exrs_exports_first_frame(
     written_paths = sorted(output_dir.glob("*.exr"))
     assert [path.name for path in written_paths] == ["frame.1001.exr", "frame.1002.exr"]
     assert result == output_dir
+
+
+def test_create_proxy_from_exrs_creates_missing_directory(
+    tmp_path: Path, install_proxy_modules: Any
+) -> None:
+    containers = install_proxy_modules()
+
+    exr_dir = tmp_path / "exr"
+    exr_dir.mkdir()
+    for idx in range(2):
+        (exr_dir / f"frame{idx}.exr").write_text(f"data{idx}")
+
+    output_mov = tmp_path / "proxy" / "clip.mov"
+    assert not output_mov.parent.exists()
+
+    sys.modules.pop("libraries.platform.media.transformations", None)
+    transformations = importlib.import_module(
+        "libraries.platform.media.transformations"
+    )
+
+    result = transformations.create_1080p_proxy_from_exrs(exr_dir, output_mov, fps=24)
+
+    assert output_mov.parent.exists()
+    assert output_mov.read_text().splitlines()[0] == "packet-data0"
+    assert containers[0].closed is True
+    assert result == output_mov
+
+
+def test_create_proxy_from_exrs_closes_container_on_error(
+    tmp_path: Path, install_proxy_modules: Any
+) -> None:
+    containers = install_proxy_modules(fail_encode=True)
+
+    exr_dir = tmp_path / "exr"
+    exr_dir.mkdir()
+    (exr_dir / "frame0.exr").write_text("data0")
+
+    output_mov = tmp_path / "proxy" / "clip.mov"
+
+    sys.modules.pop("libraries.platform.media.transformations", None)
+    transformations = importlib.import_module(
+        "libraries.platform.media.transformations"
+    )
+
+    with pytest.raises(RuntimeError):
+        transformations.create_1080p_proxy_from_exrs(exr_dir, output_mov, fps=24)
+
+    assert output_mov.parent.exists()
+    assert not output_mov.exists()
+    assert containers[0].closed is True
