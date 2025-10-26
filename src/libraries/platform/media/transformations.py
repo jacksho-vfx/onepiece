@@ -47,23 +47,27 @@ def create_1080p_proxy_from_exrs(
 
     av = _load_av()
 
+    output_mov.parent.mkdir(parents=True, exist_ok=True)
+
     container = av.open(str(output_mov), mode="w")
-    stream = container.add_stream("h264", rate=fps)
-    stream.height = 1080
-    stream.width = 1920
-    stream.pix_fmt = "yuv420p"
+    try:
+        stream = container.add_stream("h264", rate=fps)
+        stream.height = 1080
+        stream.width = 1920
+        stream.pix_fmt = "yuv420p"
 
-    for frame_path in pattern:
-        img = iio.imread(str(frame_path))
-        frame = av.VideoFrame.from_ndarray(img, format="rgb24")
-        frame = frame.reformat(width=1920, height=1080)
-        packet = stream.encode(frame)
-        if packet:
+        for frame_path in pattern:
+            img = iio.imread(str(frame_path))
+            frame = av.VideoFrame.from_ndarray(img, format="rgb24")
+            frame = frame.reformat(width=1920, height=1080)
+            packet = stream.encode(frame)
+            if packet:
+                container.mux(packet)
+
+        for packet in stream.encode():
             container.mux(packet)
-
-    for packet in stream.encode():
-        container.mux(packet)
-    container.close()
+    finally:
+        container.close()
 
     return output_mov
 
