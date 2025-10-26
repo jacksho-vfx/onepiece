@@ -202,7 +202,7 @@ class _CostInsightsMemo:
 
 class _EngineCacheEntry(NamedTuple):
     engine: PeronaEngine
-    signature: tuple[str | None, str, float | None]
+    signature: tuple[str | None, str, int | None]
     settings_path: Path | None
     warnings: tuple[str, ...]
     insights: _CostInsightsMemo
@@ -228,20 +228,23 @@ def _resolved_settings_path() -> Path | None:
     return None
 
 
-def _settings_signature() -> tuple[str | None, str, float | None]:
+def _settings_signature() -> tuple[str | None, str, int | None]:
     """Return the cache signature for the current settings configuration."""
 
     env_path = os.getenv("PERONA_SETTINGS_PATH")
     resolved_path = _resolved_settings_path()
     signature_path = resolved_path or DEFAULT_SETTINGS_PATH.expanduser()
 
-    mtime: float | None = None
+    mtime_ns: int | None = None
     try:
-        mtime = signature_path.stat().st_mtime
+        stat_result = signature_path.stat()
+        mtime_ns = getattr(stat_result, "st_mtime_ns", None)
+        if mtime_ns is None:
+            mtime_ns = int(stat_result.st_mtime * 1_000_000_000)
     except OSError:
-        mtime = None
+        mtime_ns = None
 
-    return (env_path, str(signature_path), mtime)
+    return (env_path, str(signature_path), mtime_ns)
 
 
 def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:

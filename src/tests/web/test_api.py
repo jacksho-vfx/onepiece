@@ -147,7 +147,7 @@ def test_cost_insights_endpoint_handles_missing_dataset(
     mock_engine = Mock()
     mock_engine.cost_insights.return_value = ((), ())
 
-    signature = ("ENV", "path", 1.23)
+    signature = ("ENV", "path", 123)
     memo = dashboard_module._CostInsightsMemo()
     entry = dashboard_module._EngineCacheEntry(
         engine=mock_engine,
@@ -165,6 +165,45 @@ def test_cost_insights_endpoint_handles_missing_dataset(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "No telemetry statistics available."}
+
+
+def test_settings_signature_uses_high_resolution_timestamps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sub-second settings changes should invalidate the cache signature."""
+
+    class _FakeStat:
+        def __init__(self, mtime_ns: int) -> None:
+            self.st_mtime = 1000.0
+            self.st_mtime_ns = mtime_ns
+
+    class _FakePath:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        def expanduser(self) -> "_FakePath":
+            return self
+
+        def exists(self) -> bool:
+            return True
+
+        def stat(self) -> _FakeStat:
+            self._calls += 1
+            # st_mtime remains the same while the nanosecond value changes.
+            return _FakeStat(1_500_000_000_000 + self._calls)
+
+        def __str__(self) -> str:  # pragma: no cover - convenience for debugging
+            return "/fake/settings.toml"
+
+    fake_path = _FakePath()
+
+    monkeypatch.setenv("PERONA_SETTINGS_PATH", "/fake/settings.toml")
+    monkeypatch.setattr(dashboard_module, "_resolved_settings_path", lambda: fake_path)
+
+    first_signature = dashboard_module._settings_signature()
+    second_signature = dashboard_module._settings_signature()
+
+    assert first_signature != second_signature
 
 
 def test_risk_heatmap_endpoint() -> None:
