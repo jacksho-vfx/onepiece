@@ -6,6 +6,7 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
+from apps.trafalgar.web import render
 from libraries.automation.ingest.registry import IngestRunRegistry
 
 
@@ -108,13 +109,19 @@ def test_ingest_api_caches_repeated_missing_requests(
     from fastapi.security.http import HTTPAuthorizationCredentials
 
     ingest_module = pytest.importorskip(
-        "apps.trafalgar.web.ingest", reason="ingest web app not available", exc_type=ImportError
+        "apps.trafalgar.web.ingest",
+        reason="ingest web app not available",
+        exc_type=ImportError,
     )
     render_module = pytest.importorskip(
-        "apps.trafalgar.web.render", reason="render web app not available", exc_type=ImportError
+        "apps.trafalgar.web.render",
+        reason="render web app not available",
+        exc_type=ImportError,
     )
     security = pytest.importorskip(
-        "apps.trafalgar.web.security", reason="web security module not available", exc_type=ImportError
+        "apps.trafalgar.web.security",
+        reason="web security module not available",
+        exc_type=ImportError,
     )
 
     IngestRunProvider = ingest_module.IngestRunProvider
