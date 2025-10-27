@@ -1,11 +1,202 @@
-from typer.testing import CliRunner
+"""Development CLI helpers for launching demo dashboards."""
 
-from apps.onepiece.app import app
+from __future__ import annotations
 
-runner = CliRunner()
+import os
+import time
+import webbrowser
+from dataclasses import dataclass
+from importlib import import_module
+from multiprocessing import Process
+from typing import Mapping
+
+import typer
+
+from apps.perona.app import DEFAULT_DEMO_PORT as PERONA_DEMO_PORT
+from apps.trafalgar.app import (
+    DEFAULT_PORT as TRAFALGAR_DEFAULT_PORT,
+    DEMO_DASHBOARD_TOKEN,
+)
+from apps.uta.app import DEFAULT_PORT as UTA_DEFAULT_PORT
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_LOG_LEVEL = "info"
+DEFAULT_BROWSER_DELAY = 1.0
+TRAFALGAR_DEMO_PORT = TRAFALGAR_DEFAULT_PORT
+
+app = typer.Typer(
+    name="tester",
+    help=(
+        "Launch bundled dummy dashboards and developer web apps for manual "
+        "testing sessions."
+    ),
+)
 
 
-def test_greet() -> None:
-    result = runner.invoke(app, ["greet", "World"])
-    assert result.exit_code == 0
-    assert "Hello World" in result.output
+@dataclass(frozen=True)
+class DemoTarget:
+    """Metadata describing a demo ASGI application to run under uvicorn."""
+
+    label: str
+    import_path: str
+    port: int
+    path: str = "/"
+    environment: Mapping[str, str] | None = None
+
+    def url(self, host: str) -> str:
+        """Return the full HTTP URL for the target."""
+
+        normalised = self.path if self.path.startswith("/") else f"/{self.path}"
+        return f"http://{host}:{self.port}{normalised}"
+
+
+DEMO_TARGETS: tuple[DemoTarget, ...] = (
+    DemoTarget(
+        label="Perona demo dashboard",
+        import_path="apps.perona.web.dummy_dashboard:app",
+        port=PERONA_DEMO_PORT,
+    ),
+    DemoTarget(
+        label="Trafalgar demo dashboard",
+        import_path="apps.trafalgar.web.demo:app",
+        port=TRAFALGAR_DEMO_PORT,
+        environment={"TRAFALGAR_DASHBOARD_TOKEN": DEMO_DASHBOARD_TOKEN},
+    ),
+    DemoTarget(
+        label="Uta CLI web app",
+        import_path="apps.uta.web:app",
+        port=UTA_DEFAULT_PORT,
+    ),
+)
+
+
+def _ensure_uvicorn() -> None:
+    """Ensure the optional uvicorn dependency is installed."""
+
+    try:
+        import_module("uvicorn")
+    except ImportError:
+        typer.echo(
+            "uvicorn is required to launch the demo dashboards. Install it via "
+            "`pip install onepiece[uvicorn]`.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+
+def _serve_uvicorn(import_path: str, host: str, port: int, log_level: str) -> None:
+    """Invoke ``uvicorn.run`` with the provided application import path."""
+
+    uvicorn = import_module("uvicorn")
+    uvicorn.run(import_path, host=host, port=port, reload=False, log_level=log_level)
+
+
+@app.command("open")
+def open_demos(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Interface to bind demo services to.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        DEFAULT_LOG_LEVEL,
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+    open_browser: bool = typer.Option(
+        True,
+        "--open-browser/--no-browser",
+        help="Open each demo surface in the default web browser.",
+        show_default=True,
+    ),
+    browser_path: str | None = typer.Option(
+        None,
+        "--browser-path",
+        help=(
+            "Optional browser path or alias supplied to ``webbrowser.get`` "
+            "when opening demo URLs."
+        ),
+    ),
+    browser_delay: float = typer.Option(
+        DEFAULT_BROWSER_DELAY,
+        "--browser-delay",
+        min=0.0,
+        help="Seconds to wait before launching browser tabs.",
+        show_default=True,
+    ),
+) -> None:
+    """Launch all dummy dashboards and supporting web apps."""
+
+    _ensure_uvicorn()
+    processes: list[tuple[DemoTarget, Process]] = []
+    original_env: dict[str, tuple[bool, str]] = {}
+
+    try:
+        for target in DEMO_TARGETS:
+            if target.environment:
+                for key, value in target.environment.items():
+                    if key not in original_env:
+                        if key in os.environ:
+                            original_env[key] = (True, os.environ[key])
+                        else:
+                            original_env[key] = (False, "")
+                    os.environ.setdefault(key, value)
+            typer.echo(f"Starting {target.label} on {target.url(host)}")
+            process = Process(
+                target=_serve_uvicorn,
+                args=(target.import_path, host, target.port, log_level),
+                daemon=True,
+            )
+            process.start()
+            processes.append((target, process))
+
+        controller = None
+        if open_browser:
+            try:
+                controller = (
+                    webbrowser.get(browser_path)
+                    if browser_path is not None
+                    else webbrowser.get()
+                )
+            except webbrowser.Error as error:
+                typer.echo(
+                    f"Unable to resolve a web browser controller: {error}",
+                    err=True,
+                )
+        if controller is not None:
+            if browser_delay:
+                time.sleep(browser_delay)
+            for target, _ in processes:
+                url = target.url(host)
+                try:
+                    controller.open(url, new=2)
+                    typer.echo(f"Opened {target.label} in a browser at {url}")
+                except webbrowser.Error as error:
+                    typer.echo(
+                        f"Unable to open {target.label} in a browser: {error}",
+                        err=True,
+                    )
+
+        typer.echo("Press Ctrl+C to stop the demo services.")
+        while any(process.is_alive() for _, process in processes):
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        typer.echo("Stopping demo services…", err=True)
+    finally:
+        for target, process in processes:
+            if process.is_alive():
+                typer.echo(f"Stopping {target.label}")
+                process.terminate()
+            process.join(timeout=5)
+
+        for key, (existed, previous_value) in original_env.items():
+            if existed:
+                os.environ[key] = previous_value
+            else:
+                os.environ.pop(key, None)
+
+
+__all__ = ["app", "open_demos", "DEMO_TARGETS"]

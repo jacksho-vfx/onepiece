@@ -55,6 +55,7 @@ trafalgar = "apps.trafalgar.__main__:main"
 uta = "apps.uta.__main__:main"
 chopper = "apps.chopper.__main__:main"
 perona = "apps.perona.__main__:main"
+tester = "apps.tester.__main__:main"
 
 [project.entry-points."onepiece.providers"]
 dummy_delivery = "apps.trafalgar.providers:DummyDeliveryProvider"
