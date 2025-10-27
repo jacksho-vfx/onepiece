@@ -123,6 +123,24 @@ show_code = "WRK"
     assert context.data["show_code"] == "WRK"
 
 
+def test_load_profile_raises_on_invalid_toml(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+    invalid_config = home / ".config" / "onepiece" / "onepiece.toml"
+    _write(invalid_config, "[profiles\ninvalid")
+
+    with pytest.raises(OnePieceConfigError) as excinfo:
+        load_profile()
+
+    message = str(excinfo.value)
+    assert "not valid TOML" in message
+    assert str(invalid_config) in message
+
+
 def test_prepare_ingest_options_cli_overrides(tmp_path: Path) -> None:
     profile_data = {
         "project": "ConfigProject",

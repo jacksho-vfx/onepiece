@@ -154,8 +154,13 @@ def _normalise_project_root(project_root: Path | None) -> Path | None:
 
 
 def _load_toml(path: Path) -> Dict[str, Any]:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
+    try:
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except tomllib.TOMLDecodeError as exc:
+        raise OnePieceConfigError(
+            f"Configuration file '{path}' is not valid TOML: {exc}"
+        ) from exc
 
 
 def _deep_merge(base: Dict[str, Any], new: Mapping[str, Any]) -> Dict[str, Any]:
