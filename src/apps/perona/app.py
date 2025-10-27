@@ -16,7 +16,7 @@ import typer
 
 from pydantic import ValidationError
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,

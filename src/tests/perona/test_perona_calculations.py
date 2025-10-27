@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     DEFAULT_CURRENCY,
     PeronaEngine,
     RenderMetric,
