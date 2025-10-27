@@ -8,7 +8,7 @@ from dataclasses import asdict, is_dataclass
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol, TypeGuard, cast
+from typing import Any, Iterable, Mapping, Protocol, Sequence, TypeGuard, cast
 
 __all__ = ["write_manifest"]
 
@@ -87,13 +87,11 @@ def _coerce_float(value: Any) -> float | None:
         return None
 
 
-def _build_summary(clips: list[Mapping[str, Any]]) -> dict[str, Any]:
+def _build_summary(clips: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     summary: dict[str, Any] = {"clip_count": len(clips)}
     durations = [
         duration
-        for duration in (
-            _coerce_float(clip.get("duration_seconds")) for clip in clips
-        )
+        for duration in (_coerce_float(clip.get("duration_seconds")) for clip in clips)
         if duration is not None
     ]
     if durations:
