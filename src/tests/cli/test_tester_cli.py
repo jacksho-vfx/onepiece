@@ -44,7 +44,7 @@ def test_open_launches_demo_targets(monkeypatch: MonkeyPatch) -> None:
     opened_urls: list[str] = []
 
     def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
-        process = DummyProcess(*args, **kwargs)
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
         processes.append(process)
         return process
 
@@ -89,7 +89,7 @@ def test_open_exports_demo_environment(monkeypatch: MonkeyPatch) -> None:
 
     def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
         observed_tokens.append(os.environ.get("TRAFALGAR_DASHBOARD_TOKEN"))
-        process = DummyProcess(*args, **kwargs)
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
         processes.append(process)
         return process
 
