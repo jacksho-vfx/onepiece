@@ -105,6 +105,12 @@ def test_stream_render_metrics_limit(engine: PeronaEngine) -> None:
     assert timestamps == sorted(timestamps)
 
 
+def test_stream_render_metrics_zero_limit(engine: PeronaEngine) -> None:
+    """Requesting zero metrics should yield no items."""
+
+    assert list(engine.stream_render_metrics(limit=0)) == []
+
+
 def test_from_settings_loads_default_configuration() -> None:
     result = PeronaEngine.from_settings()
     engine = result.engine
