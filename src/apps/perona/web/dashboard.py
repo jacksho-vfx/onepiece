@@ -490,6 +490,8 @@ def _dashboard_index_html() -> str:
     <script>
         (() => {
             const summaryEndpoint = "/dashboard/summary";
+            const AUTO_REFRESH_INTERVAL_MS = 60000;
+            let autoRefreshTimer;
 
             const elements = {
                 summaryGenerated: document.getElementById("summary-generated"),
@@ -761,6 +763,20 @@ def _dashboard_index_html() -> str:
                 return await response.json();
             };
 
+            const scheduleAutoRefresh = () => {
+                if (!Number.isFinite(AUTO_REFRESH_INTERVAL_MS) || AUTO_REFRESH_INTERVAL_MS <= 0) {
+                    return;
+                }
+                if (autoRefreshTimer) {
+                    window.clearTimeout(autoRefreshTimer);
+                }
+                autoRefreshTimer = window.setTimeout(() => {
+                    refreshSummary().catch((error) => {
+                        console.error(error);
+                    });
+                }, AUTO_REFRESH_INTERVAL_MS);
+            };
+
             const refreshSummary = async () => {
                 if (refreshButton) {
                     refreshButton.disabled = true;
@@ -779,6 +795,7 @@ def _dashboard_index_html() -> str:
                         refreshButton.disabled = false;
                         refreshButton.textContent = "Refresh data";
                     }
+                    scheduleAutoRefresh();
                 }
             };
 
