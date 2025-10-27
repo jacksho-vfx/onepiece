@@ -116,6 +116,7 @@ Key options:
 
 - `--format table|json` &mdash; toggles between human-readable output and machine-friendly JSON.
 - `--settings-path PATH` &mdash; optional, reuses the same override validation as other cost commands before building the engine.
+- `--top N` &mdash; limit the recommendation list to the first `N` entries (between 1 and 10).
 
 #### Walkthroughs
 

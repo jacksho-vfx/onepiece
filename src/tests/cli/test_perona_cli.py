@@ -334,6 +334,53 @@ def test_cost_insights_emits_json_payload(
     assert payload["settings_path"] == str(settings_file)
 
 
+def test_cost_insights_limits_recommendations_with_top_option(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    statistics = (
+        FeatureStatistics(
+            name="frame_time_ms",
+            mean=140.0,
+            stddev=10.0,
+            minimum=120.0,
+            maximum=160.0,
+        ),
+    )
+    recommendations = (
+        "Focus on frame_time_ms stability.",
+        "Review gpu_utilisation variance.",
+    )
+    engine = mocker.Mock()
+    engine.cost_insights.return_value = (statistics, recommendations)
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["cost", "insights", "--top", "2"])
+
+    assert result.exit_code == 0
+    engine.cost_insights.assert_called_once_with(top_n=2)
+    assert "Focus on frame_time_ms stability." in result.output
+
+
+def test_cost_insights_rejects_invalid_top_value(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    engine = mocker.Mock()
+    engine.cost_insights.return_value = ((), ())
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["cost", "insights", "--top", "0"])
+
+    assert result.exit_code == 2
+    assert "between 1 and 10" in result.output
+    engine.cost_insights.assert_not_called()
+
+
 def test_cost_insights_handles_missing_data(
     mocker: pytest_mock.MockerFixture,
 ) -> None:
