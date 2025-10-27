@@ -352,9 +352,7 @@ def test_cost_insights_limits_recommendations_with_top_option(
     )
     engine = mocker.Mock()
     engine.cost_insights.return_value = (statistics, recommendations)
-    settings_result = SettingsLoadResult(
-        engine=engine, settings_path=None, warnings=()
-    )
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
     mocker.patch(
         "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
     )
