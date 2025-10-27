@@ -29,6 +29,7 @@ __all__ = [
     "HoudiniClient",
     "BlenderClient",
     "MaxClient",
+    "VrayClient",
 ]
 
 
@@ -197,3 +198,10 @@ class MaxClient(BaseDCCClient):
 
     def __init__(self) -> None:
         super().__init__(dcc=DCC.MAX)
+
+
+class VrayClient(BaseDCCClient):
+    """Stub client for Chaos V-Ray standalone scenes."""
+
+    def __init__(self) -> None:
+        super().__init__(dcc=DCC.VRAY)

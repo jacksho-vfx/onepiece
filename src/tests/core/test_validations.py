@@ -69,6 +69,20 @@ def test_check_paths_expands_user_directory(
     assert results[resolved_dir]["writable"] is True
 
 
+# ---------- DCC detection ----------
+
+
+def test_validate_dcc_supports_vray() -> None:
+    assert dcc_validations.validate_dcc("vray") is SupportedDCC.VRAY
+
+
+def test_detect_dcc_from_file_supports_vray() -> None:
+    assert (
+        dcc_validations.detect_dcc_from_file("/projects/shot/lighting.vrscene")
+        is SupportedDCC.VRAY
+    )
+
+
 # ---------- Naming ----------
 
 

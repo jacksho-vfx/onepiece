@@ -7,6 +7,7 @@ from libraries.creative.dcc.client import (
     MaxClient,
     MayaClient,
     NukeClient,
+    VrayClient,
 )
 from libraries.creative.dcc.dcc_client import SupportedDCC, open_scene
 from libraries.creative.dcc.enums import DCC
@@ -21,4 +22,5 @@ __all__ = [
     "HoudiniClient",
     "BlenderClient",
     "MaxClient",
+    "VrayClient",
 ]
