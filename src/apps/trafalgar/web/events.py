@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 from collections.abc import AsyncIterator
 from typing import Any
@@ -163,6 +164,10 @@ def _parse_keepalive_value(
     try:
         interval = float(raw_value)
     except (TypeError, ValueError):
+        logger.warning(f"{log_key}.{source}_invalid", value=raw_value, **context)
+        return None
+
+    if not math.isfinite(interval):
         logger.warning(f"{log_key}.{source}_invalid", value=raw_value, **context)
         return None
 
