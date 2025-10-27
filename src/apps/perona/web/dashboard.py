@@ -421,6 +421,32 @@ def _dashboard_index_html() -> str:
             text-transform: uppercase;
         }
 
+        .stream-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        button.stream-toggle {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+            color: inherit;
+            padding: 0.35rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s ease, border 0.2s ease, color 0.2s ease;
+            font-size: 0.74rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        button.stream-toggle:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
         button.refresh:hover {
             background: rgba(56, 189, 248, 0.18);
             border-color: rgba(56, 189, 248, 0.65);
@@ -634,7 +660,17 @@ def _dashboard_index_html() -> str:
                         Live render feed
                         <span class="info-icon" tabindex="0" aria-label="Streaming telemetry of the most recent render events." data-tooltip="Streaming telemetry of the most recent render events."></span>
                     </h2>
-                    <span class="badge" id="metrics-stream-badge">Connecting</span>
+                    <div class="stream-controls">
+                        <button
+                            type="button"
+                            class="stream-toggle"
+                            id="metrics-stream-toggle"
+                            aria-pressed="false"
+                        >
+                            Pause stream
+                        </button>
+                        <span class="badge" id="metrics-stream-badge">Connecting</span>
+                    </div>
                 </div>
                 <table class="table" aria-live="polite">
                     <thead>
@@ -692,6 +728,7 @@ def _dashboard_index_html() -> str:
                 streamBadge: document.getElementById("metrics-stream-badge"),
                 streamStatus: document.getElementById("metrics-stream-status"),
                 streamRows: document.getElementById("metrics-stream-rows"),
+                streamToggle: document.getElementById("metrics-stream-toggle"),
                 versionLabel: document.getElementById("version-label"),
             };
 
@@ -998,28 +1035,82 @@ def _dashboard_index_html() -> str:
             }
 
             const startMetricsStream = () => {
-                const { streamBadge, streamStatus, streamRows } = elements;
+                const { streamBadge, streamStatus, streamRows, streamToggle } = elements;
                 if (!("WebSocket" in window)) {
                     streamBadge.textContent = "Offline";
                     streamStatus.textContent = "WebSockets are not supported in this browser.";
+                    if (streamToggle) {
+                        streamToggle.disabled = true;
+                    }
                     return;
                 }
 
                 const protocol = window.location.protocol === "https:" ? "wss" : "ws";
                 const url = `${protocol}://${window.location.host}/ws/metrics`;
                 let reconnectTimer;
+                let socket;
+                let isPaused = false;
+                let isConnected = false;
+
+                const setStatus = (badgeText, statusText) => {
+                    streamBadge.textContent = badgeText;
+                    streamStatus.textContent = statusText;
+                };
+
+                const updateToggleText = () => {
+                    if (!streamToggle) {
+                        return;
+                    }
+                    streamToggle.textContent = isPaused ? "Resume stream" : "Pause stream";
+                    streamToggle.setAttribute("aria-pressed", isPaused ? "true" : "false");
+                };
+
+                if (streamToggle) {
+                    updateToggleText();
+                    streamToggle.addEventListener("click", () => {
+                        isPaused = !isPaused;
+                        updateToggleText();
+                        if (isPaused) {
+                            const pausedMessage = isConnected
+                                ? "Live stream paused."
+                                : "Live stream paused. Waiting for connection…";
+                            setStatus("Paused", pausedMessage);
+                        } else if (isConnected) {
+                            setStatus("Live", "Streaming live render metrics.");
+                        } else {
+                            setStatus("Connecting", "Attempting to open a WebSocket connection…");
+                        }
+                    });
+                }
 
                 const connect = () => {
-                    const socket = new WebSocket(url);
-                    streamBadge.textContent = "Connecting";
-                    streamStatus.textContent = "Attempting to open a WebSocket connection…";
+                    if (streamToggle) {
+                        streamToggle.disabled = false;
+                    }
+                    socket = new WebSocket(url);
+                    isConnected = false;
+                    if (!isPaused) {
+                        setStatus("Connecting", "Attempting to open a WebSocket connection…");
+                    } else {
+                        setStatus("Paused", "Live stream paused. Waiting for connection…");
+                    }
 
                     socket.addEventListener("open", () => {
-                        streamBadge.textContent = "Live";
-                        streamStatus.textContent = "Streaming live render metrics.";
+                        isConnected = true;
+                        if (streamToggle) {
+                            streamToggle.disabled = false;
+                        }
+                        if (isPaused) {
+                            setStatus("Paused", "Live stream paused.");
+                        } else {
+                            setStatus("Live", "Streaming live render metrics.");
+                        }
                     });
 
                     socket.addEventListener("message", (event) => {
+                        if (isPaused) {
+                            return;
+                        }
                         try {
                             const sample = JSON.parse(event.data ?? "{}");
                             const row = document.createElement("tr");
@@ -1054,14 +1145,20 @@ def _dashboard_index_html() -> str:
                     };
 
                     socket.addEventListener("close", () => {
-                        streamBadge.textContent = "Paused";
-                        streamStatus.textContent = "Live stream disconnected. Reconnecting shortly…";
+                        isConnected = false;
+                        const pausedMessage = isPaused
+                            ? "Live stream paused. Reconnecting will resume updates…"
+                            : "Live stream disconnected. Reconnecting shortly…";
+                        setStatus("Paused", pausedMessage);
                         scheduleReconnect();
                     });
 
                     socket.addEventListener("error", () => {
-                        streamBadge.textContent = "Offline";
-                        streamStatus.textContent = "Unable to connect to the render feed.";
+                        isConnected = false;
+                        setStatus("Offline", "Unable to connect to the render feed.");
+                        if (streamToggle) {
+                            streamToggle.disabled = true;
+                        }
                         socket.close();
                     });
                 };
