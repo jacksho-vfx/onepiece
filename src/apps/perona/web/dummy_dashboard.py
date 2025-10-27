@@ -23,7 +23,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from libraries.analytics.perona.engine import PeronaEngine
 from libraries.analytics.perona.models import (
@@ -70,6 +70,13 @@ def health() -> dict[str, str]:
     """Simple readiness check for the demo server."""
 
     return {"status": "ok", "mode": "demo"}
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def dashboard_ui() -> HTMLResponse:
+    """Serve the static demo dashboard HTML shell."""
+
+    return HTMLResponse(content=live_dashboard._dashboard_index_html())
 
 
 @app.get("/settings", response_model=SettingsSummary)
