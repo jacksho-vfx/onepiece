@@ -79,6 +79,13 @@ def dashboard_ui() -> HTMLResponse:
     return HTMLResponse(content=live_dashboard._dashboard_index_html())
 
 
+@app.get("/dashboard/summary")
+def dashboard_summary() -> dict[str, Any]:
+    """Return the aggregated dashboard summary for the demo engine."""
+
+    return live_dashboard._build_daily_summary(_ENGINE)
+
+
 @app.get("/settings", response_model=SettingsSummary)
 def settings_summary() -> SettingsSummary:
     """Return the static configuration snapshot that seeds the demo."""
