@@ -132,6 +132,18 @@ def test_render_keepalive_interval_state_override(
     assert render._resolve_render_keepalive_interval(request) == 7.5
 
 
+def test_render_keepalive_interval_rejects_non_finite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(render.RENDER_SSE_KEEPALIVE_INTERVAL_ENV, "nan")
+    clear_keepalive_caches()
+    request = SimpleNamespace()
+    assert (
+        render._resolve_render_keepalive_interval(request)
+        == render._DEFAULT_SSE_KEEPALIVE_INTERVAL
+    )
+
+
 def test_ingest_keepalive_interval_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
