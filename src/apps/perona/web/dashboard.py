@@ -24,7 +24,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -122,6 +122,765 @@ app = FastAPI(
 
 
 _metrics_store = RenderMetricStore(_resolve_metrics_store_path())
+
+
+def _dashboard_index_html() -> str:
+    """Return the bundled HTML shell for the interactive dashboard."""
+
+    template = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Perona Dashboard</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 45%), #0f172a;
+        }
+
+        header {
+            padding: 2.5rem 1.5rem 1.5rem;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            letter-spacing: 0.05em;
+        }
+
+        header p {
+            color: #94a3b8;
+            margin: 0.75rem auto 0;
+            max-width: 640px;
+        }
+
+        main {
+            padding: 1rem 1.5rem 3.5rem;
+            max-width: 1120px;
+            margin: 0 auto;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        @media (min-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(12, 1fr);
+            }
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 18px;
+            padding: 1.35rem 1.6rem;
+            box-shadow: 0 22px 55px rgba(15, 23, 42, 0.42);
+            backdrop-filter: blur(18px);
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 1.05rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #38bdf8;
+        }
+
+        .card h3 {
+            margin: 1.25rem 0 0.5rem;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            color: #94a3b8;
+        }
+
+        .span-12 { grid-column: span 12; }
+        .span-8 { grid-column: span 12; }
+        .span-6 { grid-column: span 12; }
+        .span-4 { grid-column: span 12; }
+
+        @media (min-width: 768px) {
+            .span-8 { grid-column: span 8; }
+            .span-6 { grid-column: span 6; }
+            .span-4 { grid-column: span 4; }
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.9rem;
+            margin-top: 1.35rem;
+        }
+
+        .stat {
+            padding: 0.85rem;
+            border-radius: 14px;
+            background: rgba(30, 41, 59, 0.82);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .stat .label {
+            display: block;
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .stat .value {
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .muted {
+            color: #94a3b8;
+            font-size: 0.88rem;
+        }
+
+        .list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .list li {
+            padding: 0.7rem 0;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .list li:last-child {
+            border-bottom: none;
+        }
+
+        .list li .text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .list li strong {
+            font-size: 0.95rem;
+        }
+
+        .badge {
+            background: rgba(56, 189, 248, 0.16);
+            color: #bae6fd;
+            padding: 0.25rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.9rem;
+            font-size: 0.9rem;
+        }
+
+        .table thead {
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .table th,
+        .table td {
+            padding: 0.55rem 0.4rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            text-align: left;
+        }
+
+        .table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        button.refresh {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+            color: inherit;
+            padding: 0.45rem 1.1rem;
+            cursor: pointer;
+            transition: background 0.2s ease, border 0.2s ease, color 0.2s ease;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        button.refresh:hover {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: rgba(56, 189, 248, 0.65);
+            color: #e0f2fe;
+        }
+
+        button.refresh:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 1rem 2.5rem;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .fade-in {
+            animation: fade-in 0.4s ease-in-out both;
+        }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body data-version="__PERONA_VERSION__">
+    <header>
+        <h1>Perona Operational Dashboard</h1>
+        <p>A refreshed, responsive control surface for render telemetry, risk signals, and cost analytics backed by the Perona engine.</p>
+    </header>
+    <main>
+        <div class="grid">
+            <section class="card fade-in span-12">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h2>Overview</h2>
+                        <p class="muted">Data window <span id="summary-generated">—</span></p>
+                    </div>
+                    <button class="refresh" id="refresh-summary" type="button">Refresh data</button>
+                </div>
+                <p class="muted" id="summary-status" style="margin-top: 0.75rem;">Gathering metrics…</p>
+                <div class="stat-grid">
+                    <div class="stat">
+                        <span class="label">Render samples</span>
+                        <span class="value" id="metrics-total">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Average FPS</span>
+                        <span class="value" id="metrics-fps">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Frame time</span>
+                        <span class="value" id="metrics-frame-time">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">GPU utilisation</span>
+                        <span class="value" id="metrics-gpu">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Errors / sample</span>
+                        <span class="value" id="metrics-errors">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Critical risks</span>
+                        <span class="value" id="risk-critical">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Active shots</span>
+                        <span class="value" id="shots-active">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Spend delta</span>
+                        <span class="value" id="costs-delta">—</span>
+                    </div>
+                </div>
+                <p class="muted" style="margin-top: 1.1rem;">
+                    Latest telemetry sample: <span id="metrics-latest">—</span>
+                </p>
+            </section>
+
+            <section class="card fade-in span-6">
+                <h2>Shot progress</h2>
+                <p class="muted">Total <strong id="shots-total">—</strong> • Completed <strong id="shots-completed">—</strong></p>
+                <h3>By stage</h3>
+                <ul class="list" id="shots-by-stage"></ul>
+                <h3>By sequence</h3>
+                <ul class="list" id="shots-by-sequence"></ul>
+            </section>
+
+            <section class="card fade-in span-6">
+                <h2>Active focus shots</h2>
+                <ul class="list" id="active-shots"></ul>
+            </section>
+
+            <section class="card fade-in span-6">
+                <h2>Risk outlook</h2>
+                <p class="muted">Tracked <strong id="risk-count">—</strong> • Avg risk <strong id="risk-average">—</strong> • Range <strong id="risk-range">—</strong></p>
+                <h3>Top signals</h3>
+                <ul class="list" id="risk-top"></ul>
+            </section>
+
+            <section class="card fade-in span-6">
+                <h2>Cost profile</h2>
+                <div class="stat-grid" style="margin-top: 1rem;">
+                    <div class="stat">
+                        <span class="label">Baseline</span>
+                        <span class="value" id="costs-baseline">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Current</span>
+                        <span class="value" id="costs-current">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Delta</span>
+                        <span class="value" id="costs-total-delta">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Cost / frame</span>
+                        <span class="value" id="costs-per-frame">—</span>
+                    </div>
+                </div>
+                <h3>Top contributors</h3>
+                <ul class="list" id="cost-contributors"></ul>
+            </section>
+
+            <section class="card fade-in span-12">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <h2>Live render feed</h2>
+                    <span class="badge" id="metrics-stream-badge">Connecting</span>
+                </div>
+                <table class="table" aria-live="polite">
+                    <thead>
+                        <tr>
+                            <th>Sequence</th>
+                            <th>Shot</th>
+                            <th>FPS</th>
+                            <th>Frame time (ms)</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metrics-stream-rows"></tbody>
+                </table>
+                <p class="muted" id="metrics-stream-status">Attempting to open a WebSocket connection…</p>
+            </section>
+        </div>
+    </main>
+    <footer class="footer">
+        <span id="version-label">Perona v__PERONA_VERSION__</span>
+    </footer>
+    <script>
+        (() => {
+            const summaryEndpoint = "/dashboard/summary";
+
+            const elements = {
+                summaryGenerated: document.getElementById("summary-generated"),
+                summaryStatus: document.getElementById("summary-status"),
+                metricsTotal: document.getElementById("metrics-total"),
+                metricsFps: document.getElementById("metrics-fps"),
+                metricsFrameTime: document.getElementById("metrics-frame-time"),
+                metricsGpu: document.getElementById("metrics-gpu"),
+                metricsErrors: document.getElementById("metrics-errors"),
+                metricsLatest: document.getElementById("metrics-latest"),
+                shotsActive: document.getElementById("shots-active"),
+                shotsTotal: document.getElementById("shots-total"),
+                shotsCompleted: document.getElementById("shots-completed"),
+                costsDelta: document.getElementById("costs-delta"),
+                costsBaseline: document.getElementById("costs-baseline"),
+                costsCurrent: document.getElementById("costs-current"),
+                costsTotalDelta: document.getElementById("costs-total-delta"),
+                costsPerFrame: document.getElementById("costs-per-frame"),
+                riskCritical: document.getElementById("risk-critical"),
+                riskCount: document.getElementById("risk-count"),
+                riskAverage: document.getElementById("risk-average"),
+                riskRange: document.getElementById("risk-range"),
+                shotsByStage: document.getElementById("shots-by-stage"),
+                shotsBySequence: document.getElementById("shots-by-sequence"),
+                activeShots: document.getElementById("active-shots"),
+                riskTop: document.getElementById("risk-top"),
+                costContributors: document.getElementById("cost-contributors"),
+                streamBadge: document.getElementById("metrics-stream-badge"),
+                streamStatus: document.getElementById("metrics-stream-status"),
+                streamRows: document.getElementById("metrics-stream-rows"),
+                versionLabel: document.getElementById("version-label"),
+            };
+
+            const refreshButton = document.getElementById("refresh-summary");
+
+            const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+            });
+            const relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+            const formatNumber = (value, options) => {
+                if (value === null || value === undefined) {
+                    return "—";
+                }
+                return new Intl.NumberFormat(undefined, options ?? { maximumFractionDigits: 0 }).format(value);
+            };
+
+            const formatRatio = (value) => {
+                if (value === null || value === undefined) {
+                    return "—";
+                }
+                return new Intl.NumberFormat(undefined, {
+                    style: "percent",
+                    maximumFractionDigits: 0,
+                }).format(value);
+            };
+
+            const formatPercent = (value) => {
+                if (value === null || value === undefined) {
+                    return "—";
+                }
+                return `${value.toFixed(0)}%`;
+            };
+
+            const formatCurrency = (value, currency, fractionDigits = 2) => {
+                if (value === null || value === undefined) {
+                    return "—";
+                }
+                if (!currency) {
+                    return formatNumber(value, {
+                        minimumFractionDigits: fractionDigits,
+                        maximumFractionDigits: fractionDigits,
+                    });
+                }
+                try {
+                    return new Intl.NumberFormat(undefined, {
+                        style: "currency",
+                        currency,
+                        minimumFractionDigits: fractionDigits,
+                        maximumFractionDigits: fractionDigits,
+                    }).format(value);
+                } catch (error) {
+                    return `${currency} ${value.toFixed(fractionDigits)}`;
+                }
+            };
+
+            const formatFrameTime = (value) => {
+                if (value === null || value === undefined) {
+                    return "—";
+                }
+                return `${value.toFixed(1)} ms`;
+            };
+
+            const formatDateTime = (value) => {
+                if (!value) {
+                    return "—";
+                }
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return value;
+                }
+                return dateTimeFormatter.format(date);
+            };
+
+            const formatRelative = (value) => {
+                if (!value) {
+                    return "";
+                }
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return "";
+                }
+                const diffMs = date.getTime() - Date.now();
+                const absMs = Math.abs(diffMs);
+                if (absMs < 60_000) {
+                    return relativeFormatter.format(Math.round(diffMs / 1_000), "second");
+                }
+                if (absMs < 3_600_000) {
+                    return relativeFormatter.format(Math.round(diffMs / 60_000), "minute");
+                }
+                if (absMs < 86_400_000) {
+                    return relativeFormatter.format(Math.round(diffMs / 3_600_000), "hour");
+                }
+                return relativeFormatter.format(Math.round(diffMs / 86_400_000), "day");
+            };
+
+            const formatTimestamp = (value) => {
+                const absolute = formatDateTime(value);
+                const relative = formatRelative(value);
+                if (!relative) {
+                    return absolute;
+                }
+                return `${absolute} • ${relative}`;
+            };
+
+            const updateList = (listElement, items, emptyMessage, builder) => {
+                if (!listElement) {
+                    return;
+                }
+
+                listElement.innerHTML = "";
+                if (!items || !items.length) {
+                    const li = document.createElement("li");
+                    li.className = "muted";
+                    li.textContent = emptyMessage;
+                    listElement.appendChild(li);
+                    return;
+                }
+
+                for (const item of items) {
+                    const details = builder(item) ?? {};
+                    const li = document.createElement("li");
+                    const text = document.createElement("div");
+                    text.className = "text";
+
+                    if (details.title) {
+                        const title = document.createElement("strong");
+                        title.textContent = details.title;
+                        text.appendChild(title);
+                    }
+
+                    if (details.subtitle) {
+                        const subtitle = document.createElement("span");
+                        subtitle.className = "muted";
+                        subtitle.textContent = details.subtitle;
+                        text.appendChild(subtitle);
+                    }
+
+                    li.appendChild(text);
+
+                    if (details.badge) {
+                        const badge = document.createElement("span");
+                        badge.className = "badge";
+                        badge.textContent = details.badge;
+                        li.appendChild(badge);
+                    } else if (details.value) {
+                        const value = document.createElement("span");
+                        value.textContent = details.value;
+                        li.appendChild(value);
+                    }
+
+                    listElement.appendChild(li);
+                }
+            };
+
+            const applySummary = (summary) => {
+                const metrics = summary.metrics ?? {};
+                const shots = summary.shots ?? {};
+                const risk = summary.risk ?? {};
+                const costs = summary.costs ?? {};
+
+                elements.summaryGenerated.textContent = formatTimestamp(summary.generated_at);
+                elements.summaryStatus.textContent = "Last refreshed moments ago.";
+
+                elements.metricsTotal.textContent = formatNumber(metrics.total_samples);
+                elements.metricsFps.textContent = formatNumber(metrics.average_fps, { maximumFractionDigits: 2 });
+                elements.metricsFrameTime.textContent = formatFrameTime(metrics.average_frame_time_ms);
+                elements.metricsGpu.textContent = formatRatio(metrics.average_gpu_utilisation);
+                elements.metricsErrors.textContent = formatNumber(metrics.average_error_count, { maximumFractionDigits: 2 });
+                elements.metricsLatest.textContent = metrics.latest_sample
+                    ? `${metrics.latest_sample.sequence ?? "—"} ${metrics.latest_sample.shot_id ?? ""} • ${formatDateTime(metrics.latest_sample.timestamp)}`
+                    : "No recent telemetry";
+
+                elements.shotsActive.textContent = formatNumber(shots.active);
+                elements.shotsTotal.textContent = formatNumber(shots.total);
+                elements.shotsCompleted.textContent = formatNumber(shots.completed);
+
+                elements.riskCritical.textContent = formatNumber(risk.critical_count);
+                elements.riskCount.textContent = formatNumber(risk.count);
+                elements.riskAverage.textContent = formatPercent(risk.average_risk ?? null);
+                elements.riskRange.textContent = `${formatPercent(risk.min_risk ?? null)} – ${formatPercent(risk.max_risk ?? null)}`;
+
+                elements.costsDelta.textContent = formatCurrency(costs.delta_total_cost, costs.currency);
+                elements.costsBaseline.textContent = formatCurrency(costs.baseline_total_cost, costs.currency);
+                elements.costsCurrent.textContent = formatCurrency(costs.current_total_cost, costs.currency);
+                elements.costsTotalDelta.textContent = formatCurrency(costs.delta_total_cost, costs.currency);
+                elements.costsPerFrame.textContent = [
+                    formatCurrency(costs.baseline_cost_per_frame, costs.currency, 4),
+                    formatCurrency(costs.current_cost_per_frame, costs.currency, 4),
+                    formatCurrency(costs.delta_cost_per_frame, costs.currency, 4),
+                ].join(" / ");
+
+                updateList(elements.shotsByStage, shots.by_stage, "No stage data yet", (entry) => ({
+                    title: entry.name ?? "Unknown stage",
+                    value: `${formatNumber(entry.shots)} shots`,
+                }));
+
+                updateList(elements.shotsBySequence, shots.by_sequence, "No sequences tracked", (entry) => ({
+                    title: entry.name ?? "Sequence",
+                    value: `${formatNumber(entry.shots)} shots`,
+                }));
+
+                updateList(elements.activeShots, shots.notable_active, "No active focus shots", (shot) => {
+                    const subtitleParts = [];
+                    if (shot.stage_metrics) {
+                        subtitleParts.push(String(shot.stage_metrics));
+                    }
+                    if (shot.stage_started_at) {
+                        subtitleParts.push(`since ${formatDateTime(shot.stage_started_at)}`);
+                    }
+                    return {
+                        title: `${shot.sequence ?? "—"} ${shot.shot_id ?? ""}`.trim(),
+                        subtitle: subtitleParts.join(" • ") || undefined,
+                        badge: shot.current_stage ?? "—",
+                    };
+                });
+
+                updateList(elements.riskTop, risk.top_risks, "No high-risk shots", (item) => ({
+                    title: `${item.sequence ?? "—"} ${item.shot_id ?? ""}`.trim(),
+                    subtitle: item.drivers ?? undefined,
+                    value: formatPercent(item.risk_score ?? null),
+                }));
+
+                updateList(elements.costContributors, costs.top_contributors, "No contributing factors identified", (item) => ({
+                    title: item.factor ?? "Unknown factor",
+                    value: formatCurrency(item.delta_cost, costs.currency),
+                }));
+            };
+
+            const fetchSummary = async () => {
+                const response = await fetch(summaryEndpoint, {
+                    headers: { Accept: "application/json" },
+                    cache: "no-cache",
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to load summary (${response.status})`);
+                }
+                return await response.json();
+            };
+
+            const refreshSummary = async () => {
+                if (refreshButton) {
+                    refreshButton.disabled = true;
+                    refreshButton.textContent = "Refreshing…";
+                }
+                elements.summaryStatus.textContent = "Refreshing data…";
+                try {
+                    const summary = await fetchSummary();
+                    applySummary(summary);
+                    elements.summaryStatus.textContent = "Dashboard synchronised.";
+                } catch (error) {
+                    console.error(error);
+                    elements.summaryStatus.textContent = "Unable to refresh summary data.";
+                } finally {
+                    if (refreshButton) {
+                        refreshButton.disabled = false;
+                        refreshButton.textContent = "Refresh data";
+                    }
+                }
+            };
+
+            if (refreshButton) {
+                refreshButton.addEventListener("click", () => void refreshSummary());
+            }
+
+            if (elements.versionLabel) {
+                const version = document.body.dataset.version;
+                elements.versionLabel.textContent = `Perona v${version}`;
+            }
+
+            const startMetricsStream = () => {
+                const { streamBadge, streamStatus, streamRows } = elements;
+                if (!("WebSocket" in window)) {
+                    streamBadge.textContent = "Offline";
+                    streamStatus.textContent = "WebSockets are not supported in this browser.";
+                    return;
+                }
+
+                const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+                const url = `${protocol}://${window.location.host}/ws/metrics`;
+                let reconnectTimer;
+
+                const connect = () => {
+                    const socket = new WebSocket(url);
+                    streamBadge.textContent = "Connecting";
+                    streamStatus.textContent = "Attempting to open a WebSocket connection…";
+
+                    socket.addEventListener("open", () => {
+                        streamBadge.textContent = "Live";
+                        streamStatus.textContent = "Streaming live render metrics.";
+                    });
+
+                    socket.addEventListener("message", (event) => {
+                        try {
+                            const sample = JSON.parse(event.data ?? "{}");
+                            const row = document.createElement("tr");
+                            row.innerHTML = `
+                                <td>${sample.sequence ?? "—"}</td>
+                                <td>${sample.shot_id ?? "—"}</td>
+                                <td>${formatNumber(sample.fps, { maximumFractionDigits: 1 })}</td>
+                                <td>${formatNumber(sample.frame_time_ms, { maximumFractionDigits: 0 })}</td>
+                                <td>${formatDateTime(sample.timestamp)}</td>
+                            `;
+                            if (streamRows.firstChild) {
+                                streamRows.insertBefore(row, streamRows.firstChild);
+                            } else {
+                                streamRows.appendChild(row);
+                            }
+                            const maxRows = 12;
+                            while (streamRows.children.length > maxRows) {
+                                streamRows.removeChild(streamRows.lastChild);
+                            }
+                        } catch (error) {
+                            console.error("Failed to render metrics sample", error);
+                        }
+                    });
+
+                    const scheduleReconnect = () => {
+                        if (reconnectTimer) {
+                            window.clearTimeout(reconnectTimer);
+                        }
+                        reconnectTimer = window.setTimeout(() => {
+                            connect();
+                        }, 4000);
+                    };
+
+                    socket.addEventListener("close", () => {
+                        streamBadge.textContent = "Paused";
+                        streamStatus.textContent = "Live stream disconnected. Reconnecting shortly…";
+                        scheduleReconnect();
+                    });
+
+                    socket.addEventListener("error", () => {
+                        streamBadge.textContent = "Offline";
+                        streamStatus.textContent = "Unable to connect to the render feed.";
+                        socket.close();
+                    });
+                };
+
+                connect();
+            };
+
+            refreshSummary().catch((error) => {
+                console.error(error);
+            });
+            startMetricsStream();
+        })();
+    </script>
+</body>
+</html>
+"""
+
+    return template.replace("__PERONA_VERSION__", PERONA_VERSION)
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def dashboard_ui() -> HTMLResponse:
+    """Serve the modern Perona dashboard HTML shell."""
+
+    return HTMLResponse(content=_dashboard_index_html())
 
 
 @app.post("/api/metrics", status_code=status.HTTP_202_ACCEPTED)
@@ -862,6 +1621,13 @@ def _build_daily_summary(engine: PeronaEngine) -> dict[str, Any]:
         "risk": risk_section,
         "costs": costs_section,
     }
+
+
+@app.get("/dashboard/summary")
+def dashboard_summary(engine: PeronaEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Return the aggregated data backing the refreshed dashboard UI."""
+
+    return _build_daily_summary(engine)
 
 
 def _flatten_summary_rows(
