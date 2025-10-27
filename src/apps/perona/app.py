@@ -849,13 +849,24 @@ def cost_insights(
         "--settings-path",
         help="Optional path to a Perona settings file to seed defaults.",
     ),
+    top: int | None = typer.Option(
+        None,
+        "--top",
+        "-n",
+        help="Limit the number of optimisation recommendations (1-10).",
+    ),
 ) -> None:
     """Summarise telemetry statistics and cost optimisation recommendations."""
 
     validated_settings_path = _validate_settings_path(settings_path)
     settings_result = PeronaEngine.from_settings(path=validated_settings_path)
     engine = settings_result.engine
-    statistics, recommendations = engine.cost_insights()
+    if top is not None:
+        if top < 1 or top > 10:
+            raise typer.BadParameter("top must be between 1 and 10.")
+        statistics, recommendations = engine.cost_insights(top_n=top)
+    else:
+        statistics, recommendations = engine.cost_insights()
 
     fmt = str(output_format).lower()
     if fmt not in {"table", "json"}:
