@@ -80,7 +80,7 @@ def dashboard_ui() -> HTMLResponse:
 
 
 @app.get("/dashboard/summary")
-def dashboard_summary() -> dict[str, Any]:
+def dashboard_summary() -> Any:
     """Return the aggregated dashboard summary for the demo engine."""
 
     return live_dashboard._build_daily_summary(_ENGINE)
