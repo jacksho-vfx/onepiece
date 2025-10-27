@@ -81,6 +81,17 @@ def test_detect_dcc_from_file_supports_vray() -> None:
         dcc_validations.detect_dcc_from_file("/projects/shot/lighting.vrscene")
         is SupportedDCC.VRAY
     )
+def test_check_paths_handles_missing_parent_directories(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "renders"
+
+    results = filesystem.check_paths([target])
+
+    resolved_target = str(target.resolve())
+    info = results[resolved_target]
+
+    assert info["exists"] is False
+    assert info["writable"] is True
+    assert info["free_space_gb"] > 0
 
 
 # ---------- Naming ----------
