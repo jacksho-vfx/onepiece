@@ -1,5 +1,7 @@
 """Filesystem validation helpers."""
 
+from __future__ import annotations
+
 import os
 import shutil
 from pathlib import Path
@@ -8,16 +10,27 @@ from typing import Iterable, TypedDict
 __all__ = ["check_paths", "preflight_report"]
 
 
+def _nearest_existing_parent(path: Path) -> Path:
+    """Return the closest ancestor of *path* that exists on disk."""
+
+    current = path
+    while not current.exists():
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return current
+
+
 def _free_space_in_gb(path: Path) -> float:
     """Return the available free space in gigabytes for *path*.
 
-    ``shutil.disk_usage`` expects the path to exist; a missing path therefore
-    falls back to its parent directory when available.  If no suitable location
-    exists zero is returned which keeps :func:`check_paths` simple and fully
-    deterministic for tests.
+    ``shutil.disk_usage`` expects the path to exist. When the requested path is
+    missing we fall back to the nearest existing ancestor so callers querying
+    yet-to-be-created directories still receive the correct disk capacity.
     """
 
-    target = path if path.exists() else path.parent
+    target = _nearest_existing_parent(path)
     try:
         return shutil.disk_usage(target).free / 1e9
     except FileNotFoundError:
@@ -48,9 +61,8 @@ def check_paths(paths: Iterable[Path | str]) -> dict[str, PathInfo]:
         expanded = os.path.expanduser(os.path.expandvars(raw_string))
         path = Path(expanded).resolve(strict=False)
         exists = path.exists()
-        writable = (
-            os.access(path, os.W_OK) if exists else os.access(path.parent, os.W_OK)
-        )
+        access_target = path if exists else _nearest_existing_parent(path)
+        writable = os.access(access_target, os.W_OK)
         free_space = _free_space_in_gb(path)
         results[str(path)] = PathInfo(
             exists=exists,
