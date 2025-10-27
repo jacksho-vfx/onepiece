@@ -10,6 +10,13 @@ from apps.perona.web import dummy_dashboard
 client = TestClient(dummy_dashboard.app)
 
 
+def test_demo_dashboard_ui_returns_html_shell() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "<title>Perona Dashboard</title>" in response.text
+
+
 def test_demo_shot_sequences_endpoint_returns_grouped_sequences() -> None:
     response = client.get("/shots/sequences")
     assert response.status_code == 200
