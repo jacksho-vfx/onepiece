@@ -185,6 +185,22 @@ def test_s3_parity_reports_missing_and_unexpected(mock_scan: MagicMock) -> None:
     assert report.is_clean is False
 
 
+@patch("libraries.platform.validations.asset_consistency.scan_s3_context")
+def test_s3_parity_normalises_numeric_versions(mock_scan: MagicMock) -> None:
+    manifest: Dict[str, List[str]] = {"sh010": [1, "002", "v3"]}
+    mock_scan.return_value = [
+        {"shot": "SH010", "version": "v001"},
+        {"shot": "sh010", "version": "V002"},
+        {"shot": "sh010", "version": "v003"},
+    ]
+
+    report = asset_consistency.check_shot_versions_s3(manifest, "Demo", "vendor_in")
+
+    assert report.missing == {}
+    assert report.unexpected == {}
+    assert report.is_clean is True
+
+
 def test_naming_batch_supports_sequence_patterns(tmp_path: Path) -> None:
     csv_path = tmp_path / "names.csv"
     csv_path.write_text(
