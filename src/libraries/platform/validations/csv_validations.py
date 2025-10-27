@@ -45,7 +45,7 @@ def validate_shots_csv(csv_path: Path) -> List[str]:
             raise ValueError("CSV must contain a column whose name starts with 'shot'.")
 
         col = possible_cols[0]
-        pattern = re.compile(r"^E\d+[_-]S\d+[_-]SH\d+$", re.I)
+        pattern = re.compile(r"^E\d{2}[_-]S\d{2}[_-]SH\d{3}$", re.I)
 
         for line_num, row in enumerate(reader, start=2):
             val = (row.get(col) or "").strip()
