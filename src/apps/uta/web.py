@@ -533,6 +533,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
 
     navigation = "".join(nav_items)
     pages_html = "".join(content_sections)
+    backslash = "\\"
     return f"""
     <!DOCTYPE html>
     <html lang=\"en\">
@@ -1714,7 +1715,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             if (typeof segment !== 'string' || segment.length === 0) {{
               return "''";
             }}
-            const hasWhitespaceOrQuotes = /[\s"']/.test(segment);
+            const hasWhitespaceOrQuotes = /[{backslash}s\"']/.test(segment);
             if (!hasWhitespaceOrQuotes && !segment.includes(backslashChar)) {{
               return segment;
             }}
@@ -1767,7 +1768,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
               ? safeParseJson(preview.dataset.commandBase, [])
               : [];
             const commandPathRaw = (card.dataset.commandPath || '').trim();
-            const commandPath = commandPathRaw ? commandPathRaw.split(/\s+/) : [];
+            const commandPath = commandPathRaw ? commandPathRaw.split(/{backslash}s+/) : [];
             const parameterInputs = Array.from(
               form.querySelectorAll('.command-parameter'),
             );
