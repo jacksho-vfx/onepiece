@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -399,6 +400,44 @@ def test_render_preset_crud_flow(
     assert captured["dcc"] == "nuke"
     assert captured["priority"] == 65
     assert captured["chunk_size"] == 3
+
+
+def test_render_preset_save_handles_capability_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    preset_dir = tmp_path / "presets"
+    monkeypatch.setenv("ONEPIECE_RENDER_PRESET_DIR", str(preset_dir))
+
+    def failing_capabilities() -> dict[str, Any]:
+        raise RenderSubmissionError("capabilities offline")
+
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", failing_capabilities
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "preset",
+            "save",
+            "offline_mock",
+            "--farm",
+            "mock",
+            "--dcc",
+            "nuke",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+
+    preset_file = preset_dir / "offline_mock.json"
+    payload = json.loads(preset_file.read_text())
+
+    assert payload["farm"] == "mock"
+    assert payload.get("dcc") == "nuke"
+    assert "priority" not in payload
+    assert "chunk_size" not in payload
 
 
 def test_render_submit_requires_existing_scene(tmp_path: Path) -> None:

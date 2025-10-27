@@ -422,16 +422,29 @@ def save_preset(
     farm = farm.lower()
     resolved_dcc = dcc.lower() if dcc else None
 
-    resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
-        farm=farm,
-        priority=priority,
-        chunk_size=chunk_size,
-    )
+    explicit_priority = priority is not None
+    explicit_chunk = chunk_size is not None
 
-    payload: dict[str, Any] = {
-        "farm": farm,
-        "priority": resolved_priority,
-    }
+    try:
+        resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
+            farm=farm,
+            priority=priority,
+            chunk_size=chunk_size,
+        )
+    except OnePieceExternalServiceError as exc:
+        if explicit_priority or explicit_chunk:
+            raise
+        log.warning(
+            "render.presets.capabilities_unavailable",
+            farm=farm,
+            error=str(exc),
+        )
+        resolved_priority = None
+        resolved_chunk = None
+
+    payload: dict[str, Any] = {"farm": farm}
+    if resolved_priority is not None:
+        payload["priority"] = resolved_priority
     if resolved_chunk is not None:
         payload["chunk_size"] = resolved_chunk
     if resolved_dcc:
