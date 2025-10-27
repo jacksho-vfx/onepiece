@@ -378,6 +378,36 @@ def _dashboard_index_html() -> str:
             border-bottom: none;
         }
 
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .controls label {
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+
+        select.auto-refresh {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+            color: inherit;
+            padding: 0.4rem 2rem 0.4rem 0.8rem;
+            font-size: 0.82rem;
+        }
+
+        select.auto-refresh:focus {
+            outline: none;
+            border-color: rgba(56, 189, 248, 0.65);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+        }
+
         button.refresh {
             background: transparent;
             border: 1px solid rgba(148, 163, 184, 0.35);
@@ -441,7 +471,17 @@ def _dashboard_index_html() -> str:
                         </h2>
                         <p class="muted">Data window <span id="summary-generated">—</span></p>
                     </div>
-                    <button class="refresh" id="refresh-summary" type="button">Refresh data</button>
+                    <div class="controls">
+                        <label for="auto-refresh-interval">Auto refresh</label>
+                        <select class="auto-refresh" id="auto-refresh-interval">
+                            <option value="5000">Every 5 seconds</option>
+                            <option value="30000">Every 30 seconds</option>
+                            <option value="60000" selected>Every 60 seconds</option>
+                            <option value="300000">Every 300 seconds</option>
+                            <option value="0">Auto refresh off</option>
+                        </select>
+                        <button class="refresh" id="refresh-summary" type="button">Refresh data</button>
+                    </div>
                 </div>
                 <p class="muted" id="summary-status" style="margin-top: 0.75rem;">Gathering metrics…</p>
                 <div class="stat-grid">
@@ -621,7 +661,6 @@ def _dashboard_index_html() -> str:
                 "./dashboard/summary",
                 window.location.href,
             ).toString();
-            const AUTO_REFRESH_INTERVAL_MS = 60000;
             let autoRefreshTimer;
 
             const elements = {
@@ -657,6 +696,17 @@ def _dashboard_index_html() -> str:
             };
 
             const refreshButton = document.getElementById("refresh-summary");
+            const autoRefreshSelect = document.getElementById("auto-refresh-interval");
+
+            const parseAutoRefreshValue = (value) => {
+                const parsed = Number.parseInt(value ?? "", 10);
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    return 0;
+                }
+                return parsed;
+            };
+
+            let autoRefreshIntervalMs = parseAutoRefreshValue(autoRefreshSelect?.value ?? "60000");
 
             const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
                 dateStyle: "medium",
@@ -895,17 +945,18 @@ def _dashboard_index_html() -> str:
             };
 
             const scheduleAutoRefresh = () => {
-                if (!Number.isFinite(AUTO_REFRESH_INTERVAL_MS) || AUTO_REFRESH_INTERVAL_MS <= 0) {
-                    return;
-                }
                 if (autoRefreshTimer) {
                     window.clearTimeout(autoRefreshTimer);
+                    autoRefreshTimer = undefined;
+                }
+                if (!Number.isFinite(autoRefreshIntervalMs) || autoRefreshIntervalMs <= 0) {
+                    return;
                 }
                 autoRefreshTimer = window.setTimeout(() => {
                     refreshSummary().catch((error) => {
                         console.error(error);
                     });
-                }, AUTO_REFRESH_INTERVAL_MS);
+                }, autoRefreshIntervalMs);
             };
 
             const refreshSummary = async () => {
@@ -932,6 +983,13 @@ def _dashboard_index_html() -> str:
 
             if (refreshButton) {
                 refreshButton.addEventListener("click", () => void refreshSummary());
+            }
+
+            if (autoRefreshSelect) {
+                autoRefreshSelect.addEventListener("change", () => {
+                    autoRefreshIntervalMs = parseAutoRefreshValue(autoRefreshSelect.value);
+                    scheduleAutoRefresh();
+                });
             }
 
             if (elements.versionLabel) {
