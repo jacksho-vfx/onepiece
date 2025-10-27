@@ -232,11 +232,73 @@ def _dashboard_index_html() -> str:
         }
 
         .stat .label {
-            display: block;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
             font-size: 0.7rem;
             color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.08em;
+        }
+
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.1rem;
+            height: 1.1rem;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.24);
+            color: #e0f2fe;
+            font-size: 0.65rem;
+            font-weight: 600;
+            cursor: help;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .info-icon::before {
+            content: "i";
+        }
+
+        .info-icon::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 0.5rem);
+            left: 50%;
+            transform: translate(-50%, 4px);
+            background: rgba(15, 23, 42, 0.92);
+            color: #f8fafc;
+            padding: 0.45rem 0.6rem;
+            border-radius: 0.6rem;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.55);
+            max-width: 240px;
+            width: max-content;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            font-size: 0.7rem;
+            line-height: 1.4;
+            text-align: left;
+            z-index: 50;
+        }
+
+        .info-icon:hover::after,
+        .info-icon:focus-visible::after {
+            opacity: 1;
+            transform: translate(-50%, -2px);
+        }
+
+        .info-icon:focus-visible {
+            outline: 2px solid rgba(56, 189, 248, 0.7);
+            outline-offset: 2px;
+        }
+
+        .heading-with-icon,
+        .subheading-with-icon {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
         }
 
         .stat .value {
@@ -373,7 +435,10 @@ def _dashboard_index_html() -> str:
             <section class="card fade-in span-12">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
-                        <h2>Overview</h2>
+                        <h2 class="heading-with-icon">
+                            Overview
+                            <span class="info-icon" tabindex="0" aria-label="High-level snapshot of current render health and operations." data-tooltip="High-level snapshot of current render health and operations."></span>
+                        </h2>
                         <p class="muted">Data window <span id="summary-generated">—</span></p>
                     </div>
                     <button class="refresh" id="refresh-summary" type="button">Refresh data</button>
@@ -381,35 +446,59 @@ def _dashboard_index_html() -> str:
                 <p class="muted" id="summary-status" style="margin-top: 0.75rem;">Gathering metrics…</p>
                 <div class="stat-grid">
                     <div class="stat">
-                        <span class="label">Render samples</span>
+                        <span class="label">
+                            Render samples
+                            <span class="info-icon" tabindex="0" aria-label="Number of telemetry samples captured in the current summary window." data-tooltip="Number of telemetry samples captured in the current summary window."></span>
+                        </span>
                         <span class="value" id="metrics-total">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Average FPS</span>
+                        <span class="label">
+                            Average FPS
+                            <span class="info-icon" tabindex="0" aria-label="Average frames rendered per second across monitored nodes." data-tooltip="Average frames rendered per second across monitored nodes."></span>
+                        </span>
                         <span class="value" id="metrics-fps">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Frame time</span>
+                        <span class="label">
+                            Frame time
+                            <span class="info-icon" tabindex="0" aria-label="Average time taken to render a single frame." data-tooltip="Average time taken to render a single frame."></span>
+                        </span>
                         <span class="value" id="metrics-frame-time">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">GPU utilisation</span>
+                        <span class="label">
+                            GPU utilisation
+                            <span class="info-icon" tabindex="0" aria-label="Average proportion of GPU resources currently consumed by rendering." data-tooltip="Average proportion of GPU resources currently consumed by rendering."></span>
+                        </span>
                         <span class="value" id="metrics-gpu">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Errors / sample</span>
+                        <span class="label">
+                            Errors / sample
+                            <span class="info-icon" tabindex="0" aria-label="Average number of errors captured in each telemetry sample." data-tooltip="Average number of errors captured in each telemetry sample."></span>
+                        </span>
                         <span class="value" id="metrics-errors">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Critical risks</span>
+                        <span class="label">
+                            Critical risks
+                            <span class="info-icon" tabindex="0" aria-label="Count of shots currently flagged with critical risk signals." data-tooltip="Count of shots currently flagged with critical risk signals."></span>
+                        </span>
                         <span class="value" id="risk-critical">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Active shots</span>
+                        <span class="label">
+                            Active shots
+                            <span class="info-icon" tabindex="0" aria-label="Number of shots currently in progress across the pipeline." data-tooltip="Number of shots currently in progress across the pipeline."></span>
+                        </span>
                         <span class="value" id="shots-active">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Spend delta</span>
+                        <span class="label">
+                            Spend delta
+                            <span class="info-icon" tabindex="0" aria-label="Difference between baseline and current render spending." data-tooltip="Difference between baseline and current render spending."></span>
+                        </span>
                         <span class="value" id="costs-delta">—</span>
                     </div>
                 </div>
@@ -419,53 +508,92 @@ def _dashboard_index_html() -> str:
             </section>
 
             <section class="card fade-in span-6">
-                <h2>Shot progress</h2>
+                <h2 class="heading-with-icon">
+                    Shot progress
+                    <span class="info-icon" tabindex="0" aria-label="Breakdown of monitored shots across stages and sequences." data-tooltip="Breakdown of monitored shots across stages and sequences."></span>
+                </h2>
                 <p class="muted">Total <strong id="shots-total">—</strong> • Completed <strong id="shots-completed">—</strong></p>
-                <h3>By stage</h3>
+                <h3 class="subheading-with-icon">
+                    By stage
+                    <span class="info-icon" tabindex="0" aria-label="Shot counts grouped by production stage." data-tooltip="Shot counts grouped by production stage."></span>
+                </h3>
                 <ul class="list" id="shots-by-stage"></ul>
-                <h3>By sequence</h3>
+                <h3 class="subheading-with-icon">
+                    By sequence
+                    <span class="info-icon" tabindex="0" aria-label="Shot counts grouped by sequence or episode." data-tooltip="Shot counts grouped by sequence or episode."></span>
+                </h3>
                 <ul class="list" id="shots-by-sequence"></ul>
             </section>
 
             <section class="card fade-in span-6">
-                <h2>Active focus shots</h2>
+                <h2 class="heading-with-icon">
+                    Active focus shots
+                    <span class="info-icon" tabindex="0" aria-label="Shots currently flagged for additional attention or follow-up." data-tooltip="Shots currently flagged for additional attention or follow-up."></span>
+                </h2>
                 <ul class="list" id="active-shots"></ul>
             </section>
 
             <section class="card fade-in span-6">
-                <h2>Risk outlook</h2>
+                <h2 class="heading-with-icon">
+                    Risk outlook
+                    <span class="info-icon" tabindex="0" aria-label="Current distribution of render risk indicators." data-tooltip="Current distribution of render risk indicators."></span>
+                </h2>
                 <p class="muted">Tracked <strong id="risk-count">—</strong> • Avg risk <strong id="risk-average">—</strong> • Range <strong id="risk-range">—</strong></p>
-                <h3>Top signals</h3>
+                <h3 class="subheading-with-icon">
+                    Top signals
+                    <span class="info-icon" tabindex="0" aria-label="Highest severity risk signals requiring action." data-tooltip="Highest severity risk signals requiring action."></span>
+                </h3>
                 <ul class="list" id="risk-top"></ul>
             </section>
 
             <section class="card fade-in span-6">
-                <h2>Cost profile</h2>
+                <h2 class="heading-with-icon">
+                    Cost profile
+                    <span class="info-icon" tabindex="0" aria-label="Snapshot of baseline versus current render spend." data-tooltip="Snapshot of baseline versus current render spend."></span>
+                </h2>
                 <div class="stat-grid" style="margin-top: 1rem;">
                     <div class="stat">
-                        <span class="label">Baseline</span>
+                        <span class="label">
+                            Baseline
+                            <span class="info-icon" tabindex="0" aria-label="Total planned spending for the comparison period." data-tooltip="Total planned spending for the comparison period."></span>
+                        </span>
                         <span class="value" id="costs-baseline">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Current</span>
+                        <span class="label">
+                            Current
+                            <span class="info-icon" tabindex="0" aria-label="Actual cost accumulated for the current period." data-tooltip="Actual cost accumulated for the current period."></span>
+                        </span>
                         <span class="value" id="costs-current">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Delta</span>
+                        <span class="label">
+                            Delta
+                            <span class="info-icon" tabindex="0" aria-label="Difference between baseline and current total spend." data-tooltip="Difference between baseline and current total spend."></span>
+                        </span>
                         <span class="value" id="costs-total-delta">—</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Cost / frame</span>
+                        <span class="label">
+                            Cost / frame
+                            <span class="info-icon" tabindex="0" aria-label="Baseline, current, and delta cost required to render a single frame." data-tooltip="Baseline, current, and delta cost required to render a single frame."></span>
+                        </span>
                         <span class="value" id="costs-per-frame">—</span>
                     </div>
                 </div>
-                <h3>Top contributors</h3>
+                <h3 class="subheading-with-icon">
+                    Top contributors
+                    <span class="info-icon" tabindex="0" aria-label="Factors driving the largest changes in spending." data-tooltip="Factors driving the largest changes in spending."></span>
+                </h3>
                 <ul class="list" id="cost-contributors"></ul>
             </section>
 
             <section class="card fade-in span-12">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
-                    <h2>Live render feed</h2>
+                    <h2 class="heading-with-icon" style="margin: 0;">
+                        Live render feed
+                        <span class="info-icon" tabindex="0" aria-label="Streaming telemetry of the most recent render events." data-tooltip="Streaming telemetry of the most recent render events."></span>
+                    </h2>
                     <span class="badge" id="metrics-stream-badge">Connecting</span>
                 </div>
                 <table class="table" aria-live="polite">
