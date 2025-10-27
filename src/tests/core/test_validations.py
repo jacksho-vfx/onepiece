@@ -1,7 +1,7 @@
 """Tests for the validation helpers and CLI interfaces."""
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 from pytest import MonkeyPatch
@@ -187,7 +187,7 @@ def test_s3_parity_reports_missing_and_unexpected(mock_scan: MagicMock) -> None:
 
 @patch("libraries.platform.validations.asset_consistency.scan_s3_context")
 def test_s3_parity_normalises_numeric_versions(mock_scan: MagicMock) -> None:
-    manifest: Dict[str, List[str]] = {"sh010": [1, "002", "v3"]}
+    manifest: Dict[str, List[Any]] = {"sh010": [1, "002", "v3"]}
     mock_scan.return_value = [
         {"shot": "SH010", "version": "v001"},
         {"shot": "sh010", "version": "V002"},
