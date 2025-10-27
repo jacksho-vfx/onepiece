@@ -29,6 +29,29 @@ client = TestClient(app)
 KNOWN_SEQUENCES = {"SQ12", "SQ18", "SQ05", "SQ09"}
 
 
+def test_dashboard_ui_root_serves_html() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"].lower()
+    assert "<title>Perona Dashboard</title>" in response.text
+
+
+def test_dashboard_summary_endpoint() -> None:
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert {"generated_at", "metrics", "shots", "risk", "costs"}.issubset(payload)
+    metrics = payload["metrics"]
+    assert metrics["total_samples"] >= 0
+    assert "average_fps" in metrics
+    shots = payload["shots"]
+    assert shots["total"] >= 0
+    assert "by_stage" in shots
+
+
 def test_health_endpoint() -> None:
     response = client.get("/health")
     assert response.status_code == 200

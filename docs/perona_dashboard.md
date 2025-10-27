@@ -258,6 +258,22 @@ curl -N "http://127.0.0.1:8065/render-feed/live?limit=50"
 
 Each metric contains sequence, shot identifiers, frame timing, and GPU/cache health indicators.
 
+### Dashboard summary
+
+- `GET /dashboard/summary` &mdash; returns a consolidated snapshot that powers the
+  modernised HTML UI delivered from the service root. The payload combines
+  render averages, shot breakdowns, risk highlights, and spend deltas so a
+  single request can hydrate custom wallboards or notification pipelines.
+
+The `/` route now serves a responsive dashboard that consumes the summary
+endpoint, streams metrics from `/ws/metrics`, and renders risk/cost insights
+without requiring a separate front-end bundle. When building custom tooling you
+can fetch the JSON directly:
+
+```bash
+curl http://127.0.0.1:8065/dashboard/summary | jq
+```
+
 ### Telemetry ingestion and custom metric stores
 
 - `POST /api/metrics` &mdash; accepts a JSON body matching the `RenderMetric` schema and persists each sample as NDJSON on disk.

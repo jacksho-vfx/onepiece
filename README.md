@@ -188,8 +188,13 @@ recent telemetry and surfaces optimisation advice, while
 the same recommendations for API clients. The FastAPI surface mirrors
 [`perona settings`](docs/perona_dashboard.md#inspect-resolved-settings) via
 [`GET /settings`](docs/perona_dashboard.md#settings-snapshot) so automation can
-read the merged configuration without shelling out to the CLI.
-【F:src/apps/perona/app.py†L1-L174】【F:src/apps/perona/web/dashboard.py†L101-L133】
+read the merged configuration without shelling out to the CLI. Browsing to the
+root of the service now renders a modern, responsive control surface that
+streams live telemetry via WebSockets, highlights shot/risk trends, and surfaces
+cost deltas without requiring an external front-end bundle. The HTML view is
+powered by [`GET /dashboard/summary`](docs/perona_dashboard.md#dashboard-summary)
+which consolidates render, shot, and spend analytics into a single payload for
+automation and custom tooling.
 
 The runtime configuration loader emits warnings via the
 `libraries.analytics.perona.engine`

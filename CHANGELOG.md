@@ -19,6 +19,9 @@ All notable changes to the OnePiece pipeline toolkit.
 - Added walkthroughs for Perona's telemetry-driven cost insights, covering the
   `perona cost insights` command, the `/api/cost/insights` endpoint, and how to supply
   custom metric stores for automated recommendations.
+- Refreshed the Perona dashboard landing page with a responsive HTML UI that
+  streams live telemetry, surfaces risk/cost summaries, and exposes a reusable
+  `/dashboard/summary` JSON snapshot for automation.
 
 ---
 
