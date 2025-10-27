@@ -33,7 +33,26 @@ def _normalise_key(value: str) -> str:
 
 
 def _normalise_version(value: str) -> str:
-    return value.strip().lower()
+    """Return a normalised version token prefixed with ``v`` when numeric."""
+
+    token = value.strip().lower()
+    if not token:
+        return ""
+
+    # Accept bare integers (``1``) or partially formatted tokens (``001`` or
+    # ``v1``) and coerce them into the canonical ``v###`` shape used across the
+    # ingest and reconciliation tooling.  ``extract_version`` already emits this
+    # format for filesystem and S3 discoveries so aligning the manifest input
+    # prevents false positives when operators supply shorthand values.
+    if token.startswith("v"):
+        number = token[1:]
+    else:
+        number = token
+
+    if number.isdigit():
+        return f"v{int(number):03d}"
+
+    return token
 
 
 def _build_expected_manifest(
