@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from libraries.platform.validations.csv_validations import validate_shots_csv
 
 
@@ -31,3 +33,16 @@ def test_validate_shots_csv_accepts_padded_header(tmp_path: Path) -> None:
     result = validate_shots_csv(csv_path)
 
     assert result == ["E02-S03-SH010"]
+
+
+def test_validate_shots_csv_rejects_incorrect_digit_counts(tmp_path: Path) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "shots_invalid_digits.csv",
+        "Shot,Other\nE1_S01_SH001,foo\nE01_S1_SH001,bar\nE01_S01_SH01,baz\n",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_shots_csv(csv_path)
+
+    assert "Invalid shot code format" in str(excinfo.value)
