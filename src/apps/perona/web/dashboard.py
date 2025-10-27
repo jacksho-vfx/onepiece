@@ -489,7 +489,10 @@ def _dashboard_index_html() -> str:
     </footer>
     <script>
         (() => {
-            const summaryEndpoint = "/dashboard/summary";
+            const summaryEndpoint = new URL(
+                "./dashboard/summary",
+                window.location.href,
+            ).toString();
             const AUTO_REFRESH_INTERVAL_MS = 60000;
             let autoRefreshTimer;
 
