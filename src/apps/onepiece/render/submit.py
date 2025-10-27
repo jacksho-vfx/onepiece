@@ -33,7 +33,14 @@ app = typer.Typer(name="render", help="Render farm submission commands.")
 presets_app = typer.Typer(name="preset", help="Manage render submission presets.")
 app.add_typer(presets_app, name="preset")
 
-DCC_CHOICES: Final[tuple[str, ...]] = ("maya", "nuke", "houdini", "blender", "max")
+DCC_CHOICES: Final[tuple[str, ...]] = (
+    "maya",
+    "nuke",
+    "houdini",
+    "blender",
+    "max",
+    "vray",
+)
 FARM_CHOICES: Final[tuple[str, ...]] = ("deadline", "tractor", "opencue", "mock")
 
 PRESET_DIR_ENV: Final[str] = "ONEPIECE_RENDER_PRESET_DIR"

@@ -52,6 +52,7 @@ class SupportedDCC(Enum):
     BLENDER = "blender"
     HOUDINI = "houdini"
     MAX = "3dsmax"
+    VRAY = "vray"
 
     @property
     def command(self) -> str:
@@ -59,6 +60,12 @@ class SupportedDCC(Enum):
 
         if self is SupportedDCC.MAYA:
             base_command = "maya"
+            if os.name == "nt":
+                return f"{base_command}.exe"
+            return base_command
+
+        if self is SupportedDCC.VRAY:
+            base_command = "vray"
             if os.name == "nt":
                 return f"{base_command}.exe"
             return base_command
@@ -72,6 +79,7 @@ DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
     SupportedDCC.BLENDER: frozenset({"cycles"}),
     SupportedDCC.HOUDINI: frozenset({"karma"}),
     SupportedDCC.MAX: frozenset({"vray"}),
+    SupportedDCC.VRAY: frozenset({"vray"}),
 }
 
 
@@ -90,6 +98,7 @@ DCC_ASSET_REQUIREMENTS: dict[SupportedDCC, tuple[str, ...]] = {
     SupportedDCC.BLENDER: ("config/startup.blend",),
     SupportedDCC.HOUDINI: ("packages/onepiece.json",),
     SupportedDCC.MAX: ("plugins/onepiece.dlx",),
+    SupportedDCC.VRAY: ("config/vray_settings.json",),
 }
 
 

@@ -33,6 +33,7 @@ _EXTENSION_MAP: dict[str, SupportedDCC] = {
     ".hipnc": SupportedDCC.HOUDINI,
     ".blend": SupportedDCC.BLENDER,
     ".max": SupportedDCC.MAX,
+    ".vrscene": SupportedDCC.VRAY,
 }
 
 
