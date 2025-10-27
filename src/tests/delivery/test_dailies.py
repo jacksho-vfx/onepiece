@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import datetime as _dt
+import json
+from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -176,6 +180,94 @@ def test_write_manifest_creates_parent_directory(tmp_path: Path) -> None:
     assert manifest_path == expected_path
     assert manifest_path.exists()
     assert manifest_path.parent == output.parent
+
+
+def test_write_manifest_serialises_complex_types(tmp_path: Path) -> None:
+    @dataclass
+    class FancyClip:
+        shot: str
+        version: str
+        source_path: Path
+        frame_range: tuple[int, int]
+        user: str
+        duration_seconds: Decimal
+        submitted_at: _dt.datetime
+
+    clip = FancyClip(
+        shot="shot_010",
+        version="shot_010_v002",
+        source_path=tmp_path / "renders" / "shot_010.mov",
+        frame_range=(1001, 1050),
+        user="artist_z",
+        duration_seconds=Decimal("3.5"),
+        submitted_at=_dt.datetime(2024, 1, 2, 12, 30, tzinfo=_dt.timezone.utc),
+    )
+
+    metadata = {
+        "project": "Cool Show",
+        "generated_for": _dt.date(2024, 1, 2),
+    }
+
+    output = tmp_path / "dailies.mov"
+    manifest_path = dailies.write_manifest(
+        output, [clip], codec="h264", metadata=metadata
+    )
+
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert payload["output"] == str(output)
+    assert payload["codec"] == "h264"
+    summary = payload["summary"]
+    assert summary["clip_count"] == 1
+    assert summary["total_duration_seconds"] == pytest.approx(3.5)
+    assert summary["average_duration_seconds"] == pytest.approx(3.5)
+    assert summary["shots"] == ["shot_010"]
+
+    [clip_payload] = payload["clips"]
+    assert clip_payload["source_path"] == str(clip.source_path)
+    assert clip_payload["frame_range"] == [1001, 1050]
+    assert clip_payload["duration_seconds"] == pytest.approx(3.5)
+    assert clip_payload["submitted_at"].startswith("2024-01-02T12:30:00+00:00")
+
+    assert payload["metadata"] == {
+        "project": "Cool Show",
+        "generated_for": "2024-01-02",
+    }
+
+
+def test_write_manifest_summary_handles_missing_durations(tmp_path: Path) -> None:
+    output = tmp_path / "renders" / "dailies.mov"
+
+    clips = [
+        {
+            "shot": "shot_a",
+            "version": "shot_a_v001",
+            "source_path": tmp_path / "shot_a.mov",
+            "frame_range": "1001-1050",
+            "user": "artist_a",
+            "duration_seconds": None,
+        },
+        {
+            "shot": "shot_b",
+            "version": "shot_b_v001",
+            "source_path": "shot_b.mov",
+            "frame_range": "1051-1100",
+            "user": "artist_b",
+            "duration_seconds": Decimal("2.5"),
+        },
+    ]
+
+    manifest_path = dailies.write_manifest(output, clips, codec="prores")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    summary = payload["summary"]
+    assert summary["clip_count"] == 2
+    assert summary["total_duration_seconds"] == pytest.approx(2.5)
+    assert summary["average_duration_seconds"] == pytest.approx(2.5)
+    assert summary["shots"] == ["shot_a", "shot_b"]
+
+    assert payload["clips"][0]["source_path"] == str(tmp_path / "shot_a.mov")
+    assert "duration_seconds" not in payload["clips"][0]
 
 
 def test_dailies_cli_creates_missing_output_directory(
