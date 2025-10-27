@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.version import PERONA_VERSION
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     DEFAULT_SETTINGS_PATH,
     PeronaEngine,
     ShotLifecycle,

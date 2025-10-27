@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     CostModelInput,
     PeronaEngine,
     RenderMetric,

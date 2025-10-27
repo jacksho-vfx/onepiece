@@ -191,7 +191,8 @@ the same recommendations for API clients. The FastAPI surface mirrors
 read the merged configuration without shelling out to the CLI.
 【F:src/apps/perona/app.py†L1-L174】【F:src/apps/perona/web/dashboard.py†L101-L133】
 
-The runtime configuration loader emits warnings via the `apps.perona.engine`
+The runtime configuration loader emits warnings via the
+`libraries.analytics.perona.engine`
 logger whenever a candidate settings file cannot be read or parsed, including
 the offending path and exception. Operators rolling out new releases should
 watch for these messages in the Perona service logs to confirm that overrides

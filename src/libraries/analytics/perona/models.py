@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     CostBreakdown,
     CostModelInput,
     DEFAULT_CURRENCY,
@@ -45,7 +45,7 @@ class RenderMetric(BaseModel):
 
     @classmethod
     def from_entity(cls, metric: EngineRenderMetric) -> "RenderMetric":
-        """Create a serialisable model from :class:`~apps.perona.engine.RenderMetric`."""
+        """Create a serialisable model from :class:`~libraries.analytics.perona.engine.RenderMetric`."""
 
         return cls(
             sequence=metric.sequence,
@@ -77,7 +77,7 @@ class CostEstimate(BaseModel):
 
     @classmethod
     def from_breakdown(cls, breakdown: CostBreakdown) -> "CostEstimate":
-        """Create a serialisable model from :class:`~apps.perona.engine.CostBreakdown`."""
+        """Create a serialisable model from :class:`~libraries.analytics.perona.engine.CostBreakdown`."""
 
         return cls(**breakdown.__dict__)
 

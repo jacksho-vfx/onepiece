@@ -9,7 +9,7 @@ from textwrap import dedent
 import pytest
 from _pytest.logging import LogCaptureFixture
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     CostModelInput,
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,

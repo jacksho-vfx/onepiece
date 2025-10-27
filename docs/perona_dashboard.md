@@ -186,9 +186,9 @@ Perona resolves configuration from layered TOML files:
 
 1. The CLI-provided `--settings-path` (when set).
 2. The `PERONA_SETTINGS_PATH` environment variable (respected by both CLI and API).
-3. The baked-in defaults located at `src/apps/perona/defaults.toml`.
+3. The baked-in defaults located at `src/libraries/analytics/perona/defaults.toml`.
 
-Missing, unreadable, or invalid TOML files trigger warnings via the `apps.perona.engine` logger and fall back to defaults. Keep
+Missing, unreadable, or invalid TOML files trigger warnings via the `libraries.analytics.perona.engine` logger and fall back to defaults. Keep
 overrides under version control to ensure reproducible deployments.
 
 ## HTTP API reference

@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,

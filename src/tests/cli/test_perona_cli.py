@@ -7,7 +7,7 @@ import pytest
 import pytest_mock
 from typer.testing import CliRunner
 
-from apps.perona.engine import (
+from libraries.analytics.perona.engine import (
     CostBreakdown,
     CostModelInput,
     RiskIndicator,
