@@ -176,6 +176,75 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert ("error", "render.submit.failed") in events
 
 
+def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scene_file = tmp_path / "shot01.blend"
+    scene_file.write_text("requires blender")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    captured: dict[str, Any] = {}
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        captured.update(
+            {
+                "scene": scene,
+                "frames": frames,
+                "output": output,
+                "dcc": dcc,
+                "priority": priority,
+                "user": user,
+                "chunk_size": chunk_size,
+            }
+        )
+        return {
+            "job_id": "job-789",
+            "status": "submitted",
+            "farm_type": "mock",
+        }
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS,
+        "mock",
+        lambda: {
+            "default_priority": 42,
+            "priority_min": 0,
+            "priority_max": 100,
+            "chunk_size_enabled": False,
+            "default_chunk_size": 6,
+        },
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "blender",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert "Submitted blender scene" in result.stdout
+    assert captured["priority"] == 42
+    assert captured["chunk_size"] is None
+
+
 def test_render_submit_priority_validation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
