@@ -120,11 +120,12 @@ def _resolve_priority_and_chunk_size(
         )
 
     chunk_enabled = resolved_capabilities.get("chunk_size_enabled", False)
-    resolved_chunk = (
-        chunk_size
-        if chunk_size is not None
-        else resolved_capabilities.get("default_chunk_size")
-    )
+    if chunk_size is not None:
+        resolved_chunk = chunk_size
+    elif chunk_enabled:
+        resolved_chunk = resolved_capabilities.get("default_chunk_size")
+    else:
+        resolved_chunk = None
 
     if resolved_chunk is not None:
         if not chunk_enabled:
