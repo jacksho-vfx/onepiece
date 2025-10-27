@@ -565,6 +565,8 @@ class PeronaEngine:
             and (shot_id is None or sample.shot_id == shot_id)
         ]
         if limit is not None:
+            if limit <= 0:
+                return
             filtered = filtered[-limit:]
         for sample in filtered:
             yield sample
