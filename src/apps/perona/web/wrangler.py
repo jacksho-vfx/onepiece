@@ -61,6 +61,7 @@ _MAX_CONCURRENCY_RATIO = 1.75
 
 _FAILING_RISK_THRESHOLD = 60.0
 _FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
+_CACHE_STABILITY_THRESHOLD = 0.75
 _OWNER_KEYS = ("owner", "artist", "lead", "supervisor", "producer", "coordinator")
 
 _SPIN_DOWN_NOTES_PREFIX = (
@@ -502,6 +503,155 @@ def _run_list_failing_jobs_script() -> WranglerScriptResult:
     )
 
 
+def _extract_cache_metrics(
+    lifecycle: Any | None,
+) -> tuple[str | None, int | None, float | None]:
+    """Return cache-related lifecycle metrics for the supplied shot."""
+
+    if lifecycle is None:
+        return None, None, None
+
+    stage_name: str | None = None
+    resim_count: int | None = None
+    avg_cache_gb: float | None = None
+
+    stages = getattr(lifecycle, "stages", ())
+    for stage in stages:
+        metrics = getattr(stage, "metrics", {})
+        if not isinstance(metrics, Mapping):
+            continue
+
+        raw_stage_name = getattr(stage, "name", None)
+        candidate = False
+        if isinstance(raw_stage_name, str):
+            candidate = raw_stage_name.lower() in {"sim", "simulation", "caches"}
+
+        for key, value in metrics.items():
+            key_lower = str(key).lower()
+            if not candidate and "cache" in key_lower:
+                candidate = True
+            if resim_count is None and "resim" in key_lower:
+                try:
+                    resim_count = int(value)
+                except (TypeError, ValueError):
+                    continue
+            if avg_cache_gb is None and "cache" in key_lower and "gb" in key_lower:
+                try:
+                    avg_cache_gb = float(value)
+                except (TypeError, ValueError):
+                    continue
+
+        if candidate and stage_name is None and isinstance(raw_stage_name, str):
+            stage_name = raw_stage_name
+
+    return stage_name, resim_count, avg_cache_gb
+
+
+def _recommend_cache_rebuild_action(
+    *,
+    cache_stability: float,
+    resim_count: int | None,
+    avg_cache_gb: float | None,
+    owners: Iterable[str],
+) -> str:
+    """Craft a remedial recommendation for unstable caches."""
+
+    suggestions: list[str] = []
+
+    if cache_stability < 0.6:
+        suggestions.append("Prioritise an immediate cache rebuild; stability is critical.")
+    else:
+        suggestions.append("Schedule a cache rebuild to stabilise downstream renders.")
+
+    if resim_count is not None and resim_count > 0:
+        suggestions.append(
+            f"Coordinate with simulation after {resim_count} recent resim cycle(s)."
+        )
+
+    if avg_cache_gb is not None:
+        suggestions.append(f"Provision roughly {avg_cache_gb:.1f}GB per cache pull.")
+
+    owner_list = list(owners)
+    if owner_list:
+        suggestions.append(f"Loop in {owner_list[0]} to confirm handoff timing.")
+
+    if not suggestions:
+        return "Trigger cache rebuild and notify downstream departments."
+
+    return " ".join(suggestions)
+
+
+def _run_rebuild_unstable_caches_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    indicators = list(engine.risk_heatmap())
+    lifecycle_index = _build_lifecycle_index(engine)
+
+    unstable: list[dict[str, Any]] = []
+    for indicator in indicators:
+        if indicator.cache_stability >= _CACHE_STABILITY_THRESHOLD:
+            continue
+
+        key = (indicator.sequence, indicator.shot_id)
+        lifecycle = lifecycle_index.get(key)
+        owners, current_stage = _extract_lifecycle_context(lifecycle)
+        cache_stage, resim_count, avg_cache_gb = _extract_cache_metrics(lifecycle)
+
+        recommendation = _recommend_cache_rebuild_action(
+            cache_stability=indicator.cache_stability,
+            resim_count=resim_count,
+            avg_cache_gb=avg_cache_gb,
+            owners=owners,
+        )
+
+        cache_metrics: dict[str, Any] = {}
+        if resim_count is not None:
+            cache_metrics["resim_count"] = resim_count
+        if avg_cache_gb is not None:
+            cache_metrics["avg_cache_gb"] = round(avg_cache_gb, 2)
+
+        unstable.append(
+            {
+                "sequence": indicator.sequence,
+                "shot": indicator.shot_id,
+                "risk_score": indicator.risk_score,
+                "cache_stability": round(indicator.cache_stability, 3),
+                "cache_stability_percentage": round(indicator.cache_stability * 100, 1),
+                "current_stage": current_stage,
+                "owners": owners,
+                "drivers": list(indicator.drivers),
+                "cache_stage": cache_stage,
+                "cache_metrics": cache_metrics,
+                "recommendation": recommendation,
+            }
+        )
+
+    unstable.sort(key=lambda item: item["cache_stability"])
+
+    if unstable:
+        worst = unstable[0]
+        summary = (
+            f"Rebuild caches for {len(unstable)} shot(s) under "
+            f"{int(_CACHE_STABILITY_THRESHOLD * 100)}% stability — "
+            f"{worst['sequence']} {worst['shot']} sits at {worst['cache_stability_percentage']:.1f}%."
+        )
+    else:
+        summary = "Caches are stable — no rebuilds recommended right now."
+
+    payload = {
+        "summary": summary,
+        "threshold": _CACHE_STABILITY_THRESHOLD,
+        "total": len(unstable),
+        "shots": unstable,
+    }
+
+    return WranglerScriptResult(
+        script_id="rebuild_unstable_caches",
+        status="success",
+        message=summary,
+        payload=payload,
+    )
+
+
 def _build_lifecycle_index(engine: Any) -> dict[tuple[str, str], Any]:
     lifecycles: Iterable[Any]
     lifecycle_index: dict[tuple[str, str], Any] = {}
@@ -693,6 +843,16 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots"),
             ),
             _run_list_failing_jobs_script,
+        )
+    if "rebuild_unstable_caches" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="rebuild_unstable_caches",
+                name="Rebuild unstable caches",
+                description="Target shots with low cache stability and propose remedial actions",
+                tags=("risk", "caches", "simulation"),
+            ),
+            _run_rebuild_unstable_caches_script,
         )
     if "escalate_deadline_shots" not in _scripts:
         register_script(

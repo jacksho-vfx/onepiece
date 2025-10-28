@@ -81,6 +81,16 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
     assert (
+        scripts["rebuild_unstable_caches"]["name"] == "Rebuild unstable caches"
+    )
+    assert "cache stability" in scripts["rebuild_unstable_caches"]["description"].lower()
+    assert scripts["rebuild_unstable_caches"]["tags"] == [
+        "risk",
+        "caches",
+        "simulation",
+    ]
+
+    assert (
         scripts["escalate_deadline_shots"]["name"]
         == "Escalate deadline-sensitive shots"
     )
@@ -246,6 +256,37 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     assert first["drivers"]
     assert any("deadline" in driver.lower() for driver in first["drivers"])
     assert "deadline_horizon" in first
+
+
+def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None:
+    response = client.post("/wrangler/scripts/rebuild_unstable_caches")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["script_id"] == "rebuild_unstable_caches"
+    assert payload["status"] == "success"
+    assert "cache" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+    assert body["total"] >= 1
+
+    shots = body["shots"]
+    assert shots
+
+    first = shots[0]
+    assert first["cache_stability"] < 0.75
+    assert first["recommendation"]
+    assert "rebuild" in first["recommendation"].lower()
+
+    metrics = first["cache_metrics"]
+    assert isinstance(metrics, dict)
+    assert "resim_count" in metrics or "avg_cache_gb" in metrics
+    if "resim_count" in metrics:
+        assert metrics["resim_count"] >= 0
+    if "avg_cache_gb" in metrics:
+        assert metrics["avg_cache_gb"] > 0
 
 
 def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
