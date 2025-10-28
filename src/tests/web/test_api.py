@@ -13,11 +13,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from libraries.analytics.perona.engine import (
+    CostBreakdown,
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
+    OptimizationResult,
 )
 from libraries.analytics.perona.models import RenderMetric
 from apps.perona.version import PERONA_VERSION
@@ -65,6 +67,10 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["boost_gpu_utilisation"]["name"] == "Boost GPU utilisation"
     assert scripts["boost_gpu_utilisation"]["description"]
     assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
+
+    assert scripts["spin_down_idle_workers"]["name"] == "Spin down idle GPU workers"
+    assert "GPU nodes" in scripts["spin_down_idle_workers"]["description"]
+    assert scripts["spin_down_idle_workers"]["tags"] == ["rendering", "capacity", "cost"]
 
     assert scripts["list_failing_jobs"]["name"] == "List failing jobs"
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
@@ -136,6 +142,77 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
+
+def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _DummyBaseline:
+        def __init__(self, gpu_count: int) -> None:
+            self.gpu_count = gpu_count
+
+    class _DummyEngine:
+        def __init__(self) -> None:
+            self.baseline_cost_input = _DummyBaseline(24)
+
+        def run_optimization_backtest(
+            self, scenarios: list[Any]
+        ) -> tuple[CostBreakdown, tuple[OptimizationResult, ...]]:
+            assert scenarios[0].gpu_count == 10
+            baseline = CostBreakdown(
+                frame_count=1000,
+                gpu_hours=240.0,
+                render_hours=240.0,
+                concurrency=self.baseline_cost_input.gpu_count,
+                gpu_cost=960.0,
+                render_farm_cost=320.0,
+                storage_cost=50.0,
+                egress_cost=25.0,
+                misc_cost=10.0,
+                total_cost=1365.0,
+                cost_per_frame=1.365,
+                currency="GBP",
+            )
+            result = OptimizationResult(
+                name="Scale to 10 GPUs",
+                total_cost=965.0,
+                cost_per_frame=0.965,
+                gpu_hours=160.0,
+                render_hours=240.0,
+                savings_vs_baseline=400.0,
+                savings_percent=29.3,
+                notes="Stub backtest",
+            )
+            return baseline, (result,)
+
+    summary = {
+        "total_samples": 42,
+        "averages": {"gpu_utilisation": 0.35},
+        "sequences": [],
+        "latest_sample": None,
+    }
+
+    dummy_engine = _DummyEngine()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
+    monkeypatch.setattr(
+        dashboard_module,
+        "metrics_summary",
+        lambda engine: summary,
+    )
+
+    response = client.post("/wrangler/scripts/spin_down_idle_workers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "spin_down_idle_workers"
+    assert payload["status"] == "success"
+    assert "below" in payload["message"]
+
+    body = payload["payload"]
+    assert body["baseline_worker_count"] == 24
+    assert body["recommended_worker_count"] < body["baseline_worker_count"]
+    assert body["projected_savings"]["amount"] == pytest.approx(400.0)
+    assert any("Projected utilisation" in note for note in body["notes"])
 
 
 def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
