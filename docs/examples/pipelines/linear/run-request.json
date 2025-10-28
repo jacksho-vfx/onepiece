@@ -1,0 +1,15 @@
+{
+  "pipeline": "opr-linear-ingest",
+  "profile": "episodic",
+  "workspace": "/projects/opr/deliveries/EP101",
+  "parameters": {
+    "ingest": {
+      "source": "s3://opr-vendor-drop/EP101",
+      "manifest": "manifests/ep101-delivery.json"
+    },
+    "notify": {
+      "channel_override": "#opr-qc",
+      "include_ingest_summary": true
+    }
+  }
+}

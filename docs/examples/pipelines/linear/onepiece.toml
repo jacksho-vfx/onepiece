@@ -1,0 +1,27 @@
+# Project-level defaults for a linear episodic pipeline.
+# Copy this fragment into <project-root>/onepiece.toml and adjust the
+# profile names to match your studio conventions.
+
+[profiles.episodic]
+project = "One Piece Revival"
+show_code = "OPR"
+vendor_bucket = "s3://opr-vendor-drop"
+client_bucket = "s3://opr-client-mirror"
+profile_notes = "Linear pilot profile optimised for workstation runs."
+
+[profiles.episodic.ingest]
+max_workers = 6
+resume = true
+checkpoint_dir = "${HOME}/.onepiece/checkpoints"
+checkpoint_threshold = 134217728  # 128 MiB
+
+[profiles.episodic.render]
+farm = "deadline"
+priority = 50
+chunk_size = 10
+output_root = "/mnt/farm/opr/dailies"
+
+[profiles.episodic.notify]
+email_recipients = ["dailies@studio.example"]
+slack_channel = "#opr-dailies"
+include_reports = true

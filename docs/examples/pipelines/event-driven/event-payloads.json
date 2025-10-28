@@ -1,0 +1,22 @@
+{
+  "shotgrid.delivery.received": {
+    "event_id": "evt-8b65f2",
+    "project": "OPR",
+    "delivery_id": "DEL-EP102-2024-05-18",
+    "manifest_path": "s3://opr-vendor-drop/DEL-EP102-2024-05-18/manifest.json",
+    "submitted_by": "vendor_fox",
+    "files": [
+      {"path": "plates/ep102/seq010/shot010/v001.mov", "checksum": "sha256:..."},
+      {"path": "plates/ep102/seq010/shot010/v001.otio", "checksum": "sha256:..."}
+    ]
+  },
+  "trafalgar.render.completed": {
+    "event_id": "evt-9c71ba",
+    "job_id": "render-ep102-seq010-shot010-v003",
+    "sequence": "seq010",
+    "shot": "shot010",
+    "version": "v003",
+    "render_time_seconds": 1832,
+    "output_bucket": "s3://opr-renders/seq010/shot010/v003"
+  }
+}

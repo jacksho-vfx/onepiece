@@ -1,0 +1,22 @@
+# Workspace overrides enabling event-driven fan-out for deliveries and renders.
+# Drop this into <workspace>/.onepiece/onepiece.toml to layer on top of project defaults.
+
+[profiles.automation]
+project = "One Piece Revival"
+show_code = "OPR"
+profile_notes = "Automation bus profile consuming ShotGrid and Trafalgar events."
+
+[profiles.automation.ingest]
+resume = true
+max_workers = 12
+use_asyncio = true
+checkpoint_dir = "/var/lib/onepiece/checkpoints"
+
+[profiles.automation.notify]
+slack_channel = "#opr-automation"
+include_reports = false
+
+[profiles.automation.events]
+transport = "eventbridge"
+rule_arn = "arn:aws:events:us-west-2:123456789012:rule/opr-onepiece"
+subscription = "shotgrid.deliveries,trafalgar.renders"
