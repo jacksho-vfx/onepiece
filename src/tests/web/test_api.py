@@ -22,6 +22,7 @@ from libraries.analytics.perona.engine import (
     OptimizationResult,
 )
 from libraries.analytics.perona.models import RenderMetric
+from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web import wrangler as wrangler_module
@@ -63,6 +64,13 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     payload = response.json()
     assert isinstance(payload, list)
     scripts = {item["script_id"]: item for item in payload}
+    assert scripts["analyse_cost_drivers"]["name"] == "Analyse cost drivers"
+    assert "cost inputs" in scripts["analyse_cost_drivers"]["description"].lower()
+    assert scripts["analyse_cost_drivers"]["tags"] == [
+        "cost",
+        "insights",
+        "telemetry",
+    ]
     assert "boost_gpu_utilisation" in scripts
     assert scripts["boost_gpu_utilisation"]["name"] == "Boost GPU utilisation"
     assert scripts["boost_gpu_utilisation"]["description"]
@@ -167,6 +175,87 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
+
+def test_wrangler_analyse_cost_drivers_script_returns_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statistics = (
+        FeatureStatistics(
+            name="frame_time_ms",
+            mean=150.0,
+            stddev=15.0,
+            minimum=120.0,
+            maximum=180.0,
+        ),
+        FeatureStatistics(
+            name="gpu_hours",
+            mean=12.5,
+            stddev=1.2,
+            minimum=8.0,
+            maximum=16.0,
+        ),
+        FeatureStatistics(
+            name="queue_depth",
+            mean=5.0,
+            stddev=0.5,
+            minimum=4.0,
+            maximum=6.5,
+        ),
+    )
+    recommendations = (
+        "Prioritise frame timing optimisations to stabilise renders.",
+        "Tune GPU allocation for long-running shots.",
+    )
+
+    mock_engine = Mock()
+    mock_engine.cost_insights.return_value = (statistics, recommendations)
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: mock_engine)
+
+    response = client.post("/wrangler/scripts/analyse_cost_drivers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "analyse_cost_drivers"
+    assert payload["status"] == "success"
+    assert "frame_time_ms" in payload["message"]
+
+    body = payload["payload"]
+    assert body["headline"] == payload["message"]
+    top_features = body["top_features"]
+    assert [item["feature"] for item in top_features] == [
+        "frame_time_ms",
+        "gpu_hours",
+        "queue_depth",
+    ]
+    assert top_features[0]["delta"] == pytest.approx(60.0, rel=1e-4)
+    assert top_features[1]["delta"] == pytest.approx(8.0, rel=1e-4)
+    assert body["recommended_actions"] == list(recommendations)
+    mock_engine.cost_insights.assert_called_once_with(top_n=5)
+
+
+def test_wrangler_analyse_cost_drivers_script_handles_missing_statistics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recommendations = ("Capture additional telemetry to build cost insights.",)
+
+    mock_engine = Mock()
+    mock_engine.cost_insights.return_value = ((), recommendations)
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: mock_engine)
+
+    response = client.post("/wrangler/scripts/analyse_cost_drivers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "analyse_cost_drivers"
+    assert payload["status"] == "error"
+    assert "unavailable" in payload["message"].lower()
+    body = payload["payload"]
+    assert body["top_features"] == []
+    assert body["recommended_actions"] == list(recommendations)
+    mock_engine.cost_insights.assert_called_once_with(top_n=5)
 
 
 def test_wrangler_spin_down_script_recommends_smaller_worker_pool(

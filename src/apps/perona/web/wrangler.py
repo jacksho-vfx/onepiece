@@ -290,6 +290,70 @@ def _run_boost_gpu_utilisation_script() -> WranglerScriptResult:
     )
 
 
+def _run_analyse_cost_drivers_script() -> WranglerScriptResult:
+    """Summarise the leading cost drivers and proposed remediations."""
+
+    engine = dashboard_module.get_engine()
+    statistics, recommendations = engine.cost_insights(top_n=5)
+
+    recommended_actions = list(recommendations)
+
+    if not statistics:
+        message = (
+            "Cost driver insights are unavailable; ingest telemetry before retrying."
+        )
+        return WranglerScriptResult(
+            script_id="analyse_cost_drivers",
+            status="error",
+            message=message,
+            payload={
+                "headline": message,
+                "top_features": [],
+                "recommended_actions": recommended_actions,
+            },
+        )
+
+    def _feature_delta(entry: Any) -> float:
+        try:
+            return float(entry.maximum) - float(entry.minimum)
+        except Exception:  # pragma: no cover - defensive fallback
+            return 0.0
+
+    sorted_stats = sorted(statistics, key=_feature_delta, reverse=True)
+    top_features: list[dict[str, Any]] = []
+    for entry in sorted_stats[:5]:
+        delta = _feature_delta(entry)
+        top_features.append(
+            {
+                "feature": getattr(entry, "name", None),
+                "mean": round(float(getattr(entry, "mean", 0.0) or 0.0), 3),
+                "stddev": round(float(getattr(entry, "stddev", 0.0) or 0.0), 3),
+                "minimum": round(float(getattr(entry, "minimum", 0.0) or 0.0), 3),
+                "maximum": round(float(getattr(entry, "maximum", 0.0) or 0.0), 3),
+                "delta": round(delta, 3),
+            }
+        )
+
+    leader = top_features[0]
+    headline = (
+        f"{leader['feature']} spans {leader['delta']:.3f} between observed min/max "
+        "cost inputs — address the top drivers to stabilise spend."
+    )
+
+    payload = {
+        "headline": headline,
+        "top_features": top_features,
+        "recommended_actions": recommended_actions,
+    }
+
+    return WranglerScriptResult(
+        script_id="analyse_cost_drivers",
+        status="success",
+        message=headline,
+        payload=payload,
+    )
+
+
 def _resolve_baseline_concurrency(engine: Any) -> int | None:
     baseline = getattr(engine, "baseline_cost_input", None)
     gpu_count = getattr(baseline, "gpu_count", None)
@@ -814,6 +878,16 @@ def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
 
 
 def _register_builtin_scripts() -> None:
+    if "analyse_cost_drivers" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="analyse_cost_drivers",
+                name="Analyse cost drivers",
+                description="Highlight the strongest cost inputs and optimisation levers",
+                tags=("cost", "insights", "telemetry"),
+            ),
+            _run_analyse_cost_drivers_script,
+        )
     if "boost_gpu_utilisation" not in _scripts:
         register_script(
             WranglerScriptMetadata(
