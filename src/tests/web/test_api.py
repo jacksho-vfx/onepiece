@@ -117,6 +117,17 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
         "deadline",
     ]
 
+    assert (
+        scripts["highlight_stage_bottlenecks"]["name"] == "Highlight stage bottlenecks"
+    )
+    assert (
+        "busiest stage" in scripts["highlight_stage_bottlenecks"]["description"].lower()
+    )
+    assert scripts["highlight_stage_bottlenecks"]["tags"] == [
+        "production",
+        "shots",
+    ]
+
     assert scripts["cache.refresh"] == {
         "script_id": "cache.refresh",
         "name": "Refresh cache",
@@ -500,6 +511,38 @@ def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
         assert entry["drivers"]
         assert isinstance(entry["recommended_follow_up"], str)
         assert entry["recommended_follow_up"]
+
+
+def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> None:
+    response = client.post("/wrangler/scripts/highlight_stage_bottlenecks")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["script_id"] == "highlight_stage_bottlenecks"
+    assert payload["status"] == "success"
+    assert payload["message"]
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+
+    stage_counts = body["per_stage_counts"]
+    assert isinstance(stage_counts, list)
+    assert stage_counts, "Expected at least one stage count entry"
+    assert any(entry["shots"] > 0 for entry in stage_counts)
+
+    offenders = body["worst_offenders"]
+    assert isinstance(offenders, list)
+    assert offenders, "Expected at least one active shot entry"
+    first = offenders[0]
+    assert {
+        "sequence",
+        "shot",
+        "current_stage",
+    }.issubset(first)
+
+    assert isinstance(body["next_steps"], list)
+    assert body["next_steps"], "Expected suggested next steps"
 
 
 def test_dashboard_summary_endpoint() -> None:
