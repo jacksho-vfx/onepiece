@@ -13,7 +13,9 @@ from pydantic import BaseModel, Field
 class WranglerScriptMetadata(BaseModel):
     """Describes a Wrangler script surfaced by the dashboard."""
 
-    script_id: str = Field(..., pattern=r"^[A-Za-z0-9._-]+$", description="Stable identifier")
+    script_id: str = Field(
+        ..., pattern=r"^[A-Za-z0-9._-]+$", description="Stable identifier"
+    )
     name: str
     description: str | None = None
     tags: tuple[str, ...] = ()
@@ -28,9 +30,12 @@ class WranglerScriptResult(BaseModel):
     payload: Any | None = None
 
 
-AwaitableResult = Awaitable[WranglerScriptResult | Mapping[str, Any] | None] | WranglerScriptResult | Mapping[
-    str, Any
-] | None
+AwaitableResult = (
+    Awaitable[WranglerScriptResult | Mapping[str, Any] | None]
+    | WranglerScriptResult
+    | Mapping[str, Any]
+    | None
+)
 
 
 @dataclass(slots=True)
@@ -60,9 +65,13 @@ async def _coerce_result(
     message = None
     if isinstance(payload, Mapping) and payload.get("status") in {"error", "success"}:
         status = str(payload.get("status"))
-        message = payload.get("message") if isinstance(payload.get("message"), str) else None
+        message = (
+            payload.get("message") if isinstance(payload.get("message"), str) else None
+        )
 
-    return WranglerScriptResult(script_id=script_id, status=status, message=message, payload=payload)
+    return WranglerScriptResult(
+        script_id=script_id, status=status, message=message, payload=payload
+    )
 
 
 async def execute_script(script_id: str) -> WranglerScriptResult:
@@ -75,14 +84,20 @@ async def execute_script(script_id: str) -> WranglerScriptResult:
         if asyncio.iscoroutine(outcome):
             outcome = await outcome
     except Exception as exc:  # pragma: no cover - defensive, surfaced via API tests
-        return WranglerScriptResult(script_id=script_id, status="error", message=str(exc))
+        return WranglerScriptResult(
+            script_id=script_id, status="error", message=str(exc)
+        )
 
-    return await _coerce_result(script_id, outcome)
+    return await _coerce_result(script_id, outcome)  # type: ignore[arg-type]
 
 
-def register_script(metadata: WranglerScriptMetadata, runner: Callable[[], AwaitableResult]) -> None:
+def register_script(
+    metadata: WranglerScriptMetadata, runner: Callable[[], AwaitableResult]
+) -> None:
     if metadata.script_id in _scripts:
-        raise ValueError(f"Wrangler script '{metadata.script_id}' is already registered")
+        raise ValueError(
+            f"Wrangler script '{metadata.script_id}' is already registered"
+        )
     _scripts[metadata.script_id] = _RegisteredScript(metadata=metadata, runner=runner)
 
 

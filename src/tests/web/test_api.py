@@ -31,7 +31,7 @@ KNOWN_SEQUENCES = {"SQ12", "SQ18", "SQ05", "SQ09"}
 
 
 @pytest.fixture(autouse=True)
-def _reset_wrangler_registry() -> None:
+def _reset_wrangler_registry() -> Any:
     wrangler_module._reset_registry()
     yield
     wrangler_module._reset_registry()
