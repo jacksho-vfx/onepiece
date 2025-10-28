@@ -80,6 +80,14 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
+    assert scripts["escalate_deadline_shots"]["name"] == "Escalate deadline-sensitive shots"
+    assert "deadline" in scripts["escalate_deadline_shots"]["description"].lower()
+    assert scripts["escalate_deadline_shots"]["tags"] == [
+        "risk",
+        "shots",
+        "deadline",
+    ]
+
     assert scripts["cache.refresh"] == {
         "script_id": "cache.refresh",
         "name": "Refresh cache",
@@ -217,6 +225,24 @@ def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
     assert body["recommended_worker_count"] < body["baseline_worker_count"]
     assert body["projected_savings"]["amount"] == pytest.approx(400.0)
     assert any("Projected utilisation" in note for note in body["notes"])
+
+
+def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
+    response = client.post("/wrangler/scripts/escalate_deadline_shots")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "escalate_deadline_shots"
+    assert payload["status"] == "success"
+
+    body = payload["payload"]
+    assert body["total"] >= 1
+    assert body["escalations"]
+
+    first = body["escalations"][0]
+    assert first["drivers"]
+    assert any("deadline" in driver.lower() for driver in first["drivers"])
+    assert "deadline_horizon" in first
 
 
 def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:

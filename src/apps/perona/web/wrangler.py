@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import math
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Awaitable, Callable, Iterable, Mapping, MutableMapping
 
 from pydantic import BaseModel, Field
 
 from apps.perona.web import dashboard as dashboard_module
+from libraries.analytics.perona import engine as engine_module
 from libraries.analytics.perona.engine import OptimizationScenario
 
 
@@ -57,6 +61,7 @@ _MAX_CONCURRENCY_RATIO = 1.75
 
 _FAILING_RISK_THRESHOLD = 60.0
 _FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
+_OWNER_KEYS = ("owner", "artist", "lead", "supervisor", "producer", "coordinator")
 
 _SPIN_DOWN_NOTES_PREFIX = (
     "Spin down idle workers to improve utilisation without starving the queue."
@@ -497,6 +502,152 @@ def _run_list_failing_jobs_script() -> WranglerScriptResult:
     )
 
 
+def _build_lifecycle_index(engine: Any) -> dict[tuple[str, str], Any]:
+    lifecycles: Iterable[Any]
+    lifecycle_index: dict[tuple[str, str], Any] = {}
+
+    lifecycle_provider = getattr(engine, "shot_lifecycle", None)
+    if callable(lifecycle_provider):
+        lifecycles = lifecycle_provider()
+    else:
+        lifecycles = ()
+
+    for lifecycle in lifecycles:
+        key = (getattr(lifecycle, "sequence", None), getattr(lifecycle, "shot_id", None))
+        if None not in key:
+            lifecycle_index[key] = lifecycle
+
+    return lifecycle_index
+
+
+def _extract_lifecycle_context(lifecycle: Any | None) -> tuple[tuple[str, ...], str | None]:
+    if lifecycle is None:
+        return (), None
+
+    owners: list[str] = []
+    stages = getattr(lifecycle, "stages", ())
+    for stage in stages:
+        metrics = getattr(stage, "metrics", {})
+        if not isinstance(metrics, Mapping):
+            continue
+        for key, value in metrics.items():
+            if not isinstance(value, str):
+                continue
+            key_lower = str(key).lower()
+            if any(token in key_lower for token in _OWNER_KEYS) and value not in owners:
+                owners.append(value)
+
+    current_stage = getattr(lifecycle, "current_stage", None)
+    return tuple(owners), current_stage if isinstance(current_stage, str) else None
+
+
+def _deadline_horizon_from_hours(hours: float | None) -> str | None:
+    if hours is None:
+        return None
+    if hours <= 0:
+        return "Past due"
+
+    remaining = math.ceil(hours)
+    if remaining < 24:
+        return f"Due in {remaining}h"
+
+    days, rem_hours = divmod(remaining, 24)
+    if rem_hours:
+        return f"Due in {days}d {rem_hours}h"
+    return f"Due in {days}d"
+
+
+def _infer_deadline_horizon(drivers: Iterable[str]) -> str | None:
+    for driver in drivers:
+        lower = driver.lower()
+        if "deadline missed" in lower:
+            return "Past due"
+        if "deadline pressure" in lower:
+            match = re.search(r"([0-9]+(?:\.[0-9]+)?)h", driver)
+            if match:
+                try:
+                    hours = float(match.group(1))
+                except ValueError:
+                    continue
+                return _deadline_horizon_from_hours(hours)
+    return None
+
+
+def _build_telemetry_index(engine: Any) -> dict[tuple[str, str], Any]:
+    telemetry_index: dict[tuple[str, str], Any] = {}
+    telemetry = getattr(engine, "_telemetry", ())
+    for sample in telemetry:
+        key = (getattr(sample, "sequence", None), getattr(sample, "shot_id", None))
+        if None not in key:
+            telemetry_index[key] = sample
+    return telemetry_index
+
+
+def _resolve_deadline_horizon(
+    telemetry_sample: Any | None, drivers: Iterable[str]
+) -> str | None:
+    deadline: datetime | None = getattr(telemetry_sample, "deadline", None)
+    if isinstance(deadline, datetime):
+        reference: datetime | None = getattr(engine_module, "_RISK_REFERENCE_TIME", None)
+        if isinstance(reference, datetime):
+            hours = (deadline - reference).total_seconds() / 3600.0
+        else:
+            hours = (deadline - datetime.utcnow()).total_seconds() / 3600.0
+        return _deadline_horizon_from_hours(hours)
+
+    return _infer_deadline_horizon(drivers)
+
+
+def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    indicators = list(engine.risk_heatmap())
+    lifecycle_index = _build_lifecycle_index(engine)
+    telemetry_index = _build_telemetry_index(engine)
+
+    escalations: list[dict[str, Any]] = []
+    for indicator in indicators:
+        drivers = [driver for driver in indicator.drivers if "deadline" in driver.lower()]
+        if not drivers:
+            continue
+
+        key = (indicator.sequence, indicator.shot_id)
+        lifecycle = lifecycle_index.get(key)
+        owners, current_stage = _extract_lifecycle_context(lifecycle)
+        telemetry_sample = telemetry_index.get(key)
+        deadline_horizon = _resolve_deadline_horizon(telemetry_sample, drivers)
+
+        escalations.append(
+            {
+                "sequence": indicator.sequence,
+                "shot": indicator.shot_id,
+                "risk_score": indicator.risk_score,
+                "current_stage": current_stage,
+                "deadline_horizon": deadline_horizon,
+                "owners": owners,
+                "drivers": drivers,
+            }
+        )
+
+    escalations.sort(key=lambda item: item["risk_score"], reverse=True)
+
+    if escalations:
+        headline = (
+            f"{len(escalations)} shot(s) breaching deadline risk — "
+            f"{escalations[0]['sequence']} {escalations[0]['shot']} leads the queue."
+        )
+    else:
+        headline = "No shots currently require deadline escalation."
+
+    payload = {"summary": headline, "total": len(escalations), "escalations": escalations}
+
+    return WranglerScriptResult(
+        script_id="escalate_deadline_shots",
+        status="success",
+        message=headline,
+        payload=payload,
+    )
+
+
 def _register_builtin_scripts() -> None:
     if "boost_gpu_utilisation" not in _scripts:
         register_script(
@@ -529,6 +680,18 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots"),
             ),
             _run_list_failing_jobs_script,
+        )
+    if "escalate_deadline_shots" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="escalate_deadline_shots",
+                name="Escalate deadline-sensitive shots",
+                description=(
+                    "Highlight shots with deadline pressure and propose production follow-up"
+                ),
+                tags=("risk", "shots", "deadline"),
+            ),
+            _run_escalate_deadline_shots_script,
         )
 
 
