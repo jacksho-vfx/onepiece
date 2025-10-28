@@ -54,6 +54,9 @@ _UTILISATION_TOLERANCE = 0.05
 _MIN_CONCURRENCY_RATIO = 0.25
 _MAX_CONCURRENCY_RATIO = 1.75
 
+_FAILING_RISK_THRESHOLD = 60.0
+_FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
+
 
 async def _coerce_result(
     script_id: str, result: WranglerScriptResult | Mapping[str, Any] | None
@@ -276,6 +279,74 @@ def _run_boost_gpu_utilisation_script() -> WranglerScriptResult:
     )
 
 
+def _derive_follow_up(drivers: Iterable[str]) -> str:
+    """Suggest the next action based on risk drivers."""
+
+    for driver in drivers:
+        if "Error rate high" in driver:
+            return "Escalate to QA to diagnose and reduce error spikes."
+        if "Deadline missed" in driver:
+            return "Coordinate recovery plan with production to unblock delivery."
+        if "Deadline pressure" in driver:
+            return "Reallocate render capacity to beat the approaching deadline."
+        if "Render time volatility" in driver:
+            return "Profile recent renders to stabilise frame times."
+        if "Cache rebuild risk" in driver:
+            return "Trigger cache rebuild and validate downstream dependencies."
+
+    return "Monitor the shot and re-evaluate after the next render cycle."
+
+
+def _run_list_failing_jobs_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    indicators = list(engine.risk_heatmap())
+
+    target_error_rate = getattr(engine, "target_error_rate", 0.0) or 0.0
+    error_threshold = max(target_error_rate * _FAILING_ERROR_THRESHOLD_MULTIPLIER, 0.01)
+
+    failing: list[dict[str, Any]] = []
+    for indicator in indicators:
+        drivers = list(indicator.drivers)
+        include = (
+            indicator.risk_score >= _FAILING_RISK_THRESHOLD
+            or indicator.error_rate >= error_threshold
+            or any("Error rate high" in driver for driver in drivers)
+        )
+        if not include:
+            continue
+
+        failing.append(
+            {
+                "sequence": indicator.sequence,
+                "shot": indicator.shot_id,
+                "risk_score": indicator.risk_score,
+                "error_rate": indicator.error_rate,
+                "drivers": drivers,
+                "recommended_follow_up": _derive_follow_up(drivers),
+            }
+        )
+
+    failing.sort(key=lambda item: item["risk_score"], reverse=True)
+
+    if failing:
+        top = failing[0]
+        headline = (
+            f"{len(failing)} critical shot(s) flagged — "
+            f"{top['sequence']} {top['shot']} tops the risk board at {top['risk_score']:.1f}."
+        )
+    else:
+        headline = "No shots are currently breaching risk or error thresholds."
+
+    payload = {"headline": headline, "details": failing}
+
+    return WranglerScriptResult(
+        script_id="list_failing_jobs",
+        status="success",
+        message=headline,
+        payload=payload,
+    )
+
+
 def _register_builtin_scripts() -> None:
     if "boost_gpu_utilisation" not in _scripts:
         register_script(
@@ -286,6 +357,16 @@ def _register_builtin_scripts() -> None:
                 tags=("rendering", "utilisation"),
             ),
             _run_boost_gpu_utilisation_script,
+        )
+    if "list_failing_jobs" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="list_failing_jobs",
+                name="List failing jobs",
+                description="Surface critical shots breaching risk thresholds",
+                tags=("risk", "shots"),
+            ),
+            _run_list_failing_jobs_script,
         )
 
 
