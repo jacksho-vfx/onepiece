@@ -11,6 +11,8 @@ import webbrowser
 
 import typer
 
+from apps.trafalgar.pipeline import PipelineDefinition, get_pipeline_orchestrator
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEMO_DASHBOARD_TOKEN = "demo-dashboard-token"
@@ -30,6 +32,81 @@ ingest_app = typer.Typer(
     invoke_without_command=True,
 )
 auth_app = typer.Typer(name="auth", help="Authentication helpers for the dashboard.")
+pipeline_app = typer.Typer(
+    name="pipeline",
+    help="Interact with the Trafalgar pipeline orchestrator.",
+)
+
+
+def _format_pipeline_definition(definition: PipelineDefinition) -> Any:
+    display = definition.display_name or definition.name
+    if display == definition.name:
+        return definition.name
+    return f"{definition.name} ({display})"
+
+
+def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
+    parameters: dict[str, str] = {}
+    if not raw:
+        return parameters
+    for item in raw:
+        if "=" not in item:
+            msg = f"Invalid parameter '{item}'. Expected key=value pairs."
+            raise ValueError(msg)
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError("Parameter keys cannot be empty.")
+        parameters[key] = value.strip()
+    return parameters
+
+
+@pipeline_app.command("list")
+def pipeline_list() -> None:
+    """Display pipelines registered with the orchestrator."""
+
+    orchestrator = get_pipeline_orchestrator()
+    definitions = orchestrator.list_pipelines()
+    if not definitions:
+        typer.echo("No pipelines are currently registered with the orchestrator.")
+        raise typer.Exit(code=0)
+
+    for definition in definitions:
+        typer.echo(_format_pipeline_definition(definition))
+        if definition.description:
+            typer.echo(f"  {definition.description}")
+        if definition.parameters:
+            params = ", ".join(sorted(definition.parameters))
+            typer.echo(f"  Parameters: {params}")
+
+
+@pipeline_app.command("run")
+def pipeline_run(
+    name: str = typer.Argument(..., help="Pipeline identifier."),
+    *,
+    parameters: list[str] | None = typer.Option(
+        None,
+        "--param",
+        "-p",
+        help="Key=value parameters forwarded to the orchestrator.",
+    ),
+) -> None:
+    """Trigger a pipeline run via the orchestrator."""
+
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        parsed = _parse_pipeline_parameters(parameters)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    try:
+        run = orchestrator.trigger_run(name, parameters=parsed)
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    payload = run.serialise()
+    typer.echo(f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']}).")
+    typer.echo(f"Current status: {payload['status']}")
 
 
 def _load_uvicorn() -> Any:
@@ -393,3 +470,4 @@ def auth_generate_token(
 app.add_typer(web_app)
 app.add_typer(ingest_app)
 app.add_typer(auth_app)
+app.add_typer(pipeline_app)

@@ -1,0 +1,106 @@
+"""FastAPI application exposing the pipeline orchestrator."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from typing import Any, AsyncGenerator
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
+
+from apps.trafalgar.pipeline import get_pipeline_orchestrator
+from apps.trafalgar.version import TRAFALGAR_VERSION
+from .security import (
+    AuthenticatedPrincipal,
+    ROLE_PIPELINE_READ,
+    ROLE_PIPELINE_RUN,
+    create_protected_router,
+    require_roles,
+)
+
+
+class PipelineRunSubmission(BaseModel):
+    """Request payload used when triggering a pipeline run."""
+
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+app = FastAPI(title="OnePiece Pipeline API", version=TRAFALGAR_VERSION)
+router = create_protected_router()
+
+
+@router.get("/")
+def root(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> dict[str, str]:
+    """Return a simple payload confirming the service is available."""
+
+    return {"message": "OnePiece Pipeline API is running"}
+
+
+@router.get("/pipelines")
+def list_pipelines(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    payload = [definition.serialise() for definition in orchestrator.list_pipelines()]
+    return JSONResponse(content=payload)
+
+
+@router.post("/pipelines/{pipeline}/runs", status_code=201)
+def trigger_pipeline_run(
+    pipeline: str,
+    submission: PipelineRunSubmission,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_RUN)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        run = orchestrator.trigger_run(pipeline, parameters=submission.parameters)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
+    return JSONResponse(status_code=201, content=run.serialise())
+
+
+@router.get("/runs/{run_id}")
+def get_run(
+    run_id: str,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        payload = orchestrator.serialise_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    return JSONResponse(content=payload)
+
+
+def _encode_event(payload: dict[str, Any]) -> bytes:
+    data = json.dumps(payload).encode("utf-8")
+    return b"data: " + data + b"\n\n"
+
+
+async def _event_stream(events: list[dict[str, Any]]) -> AsyncGenerator[bytes, Any]:
+    for event in events:
+        yield _encode_event(event)
+        await asyncio.sleep(0)
+
+
+@router.get("/runs/{run_id}/events")
+async def stream_run_events(
+    run_id: str,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> StreamingResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        events = orchestrator.serialise_run_events(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    return StreamingResponse(_event_stream(events), media_type="text/event-stream")
+
+
+app.include_router(router)
+
+__all__ = ["app", "router"]

@@ -35,6 +35,8 @@ ROLE_RENDER_SUBMIT = "render:submit"
 ROLE_RENDER_MANAGE = "render:manage"
 ROLE_INGEST_READ = "ingest:read"
 ROLE_REVIEW_READ = "review:read"
+ROLE_PIPELINE_READ = "pipeline:read"
+ROLE_PIPELINE_RUN = "pipeline:run"
 
 
 # Built-in credentials ----------------------------------------------------------------
@@ -50,6 +52,8 @@ _DEFAULT_CREDENTIAL_PAYLOADS: tuple[Mapping[str, Any], ...] = (
             ROLE_RENDER_MANAGE,
             ROLE_INGEST_READ,
             ROLE_REVIEW_READ,
+            ROLE_PIPELINE_READ,
+            ROLE_PIPELINE_RUN,
         },
     },
     {
@@ -398,6 +402,8 @@ __all__ = [
     "ROLE_RENDER_READ",
     "ROLE_RENDER_SUBMIT",
     "ROLE_REVIEW_READ",
+    "ROLE_PIPELINE_READ",
+    "ROLE_PIPELINE_RUN",
     "authenticate_request",
     "create_protected_router",
     "get_credential_store",
