@@ -28,7 +28,9 @@ def list_pipelines() -> None:
 
 
 @app.command("describe")
-def describe_pipeline(name: str = typer.Argument(..., help="Pipeline identifier.")) -> None:
+def describe_pipeline(
+    name: str = typer.Argument(..., help="Pipeline identifier.")
+) -> None:
     """Describe a specific pipeline."""
 
     _orchestrator_placeholder(f"describe {name}")
