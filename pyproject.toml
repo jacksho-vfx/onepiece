@@ -62,6 +62,8 @@ dummy_delivery = "apps.trafalgar.providers:DummyDeliveryProvider"
 s3_delivery = "apps.trafalgar.providers:S3DeliveryProvider"
 default_reconcile = "apps.trafalgar.providers:DefaultReconcileProvider"
 
+[project.entry-points."onepiece.pipeline_steps"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
