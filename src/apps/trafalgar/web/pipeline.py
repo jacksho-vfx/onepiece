@@ -31,7 +31,7 @@ app = FastAPI(title="OnePiece Pipeline API", version=TRAFALGAR_VERSION)
 router = create_protected_router()
 
 
-@router.get("/")  # type: ignore[misc]
+@router.get("/")
 def root(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
 ) -> dict[str, str]:
@@ -40,7 +40,7 @@ def root(
     return {"message": "OnePiece Pipeline API is running"}
 
 
-@router.get("/pipelines")  # type: ignore[misc]
+@router.get("/pipelines")
 def list_pipelines(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
 ) -> JSONResponse:
@@ -49,7 +49,7 @@ def list_pipelines(
     return JSONResponse(content=payload)
 
 
-@router.post("/pipelines/{pipeline}/runs", status_code=201)  # type: ignore[misc]
+@router.post("/pipelines/{pipeline}/runs", status_code=201)
 def trigger_pipeline_run(
     pipeline: str,
     submission: PipelineRunSubmission,
@@ -63,7 +63,7 @@ def trigger_pipeline_run(
     return JSONResponse(status_code=201, content=run.serialise())
 
 
-@router.get("/runs/{run_id}")  # type: ignore[misc]
+@router.get("/runs/{run_id}")
 def get_run(
     run_id: str,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
@@ -87,7 +87,7 @@ async def _event_stream(events: list[dict[str, Any]]) -> AsyncGenerator[bytes, A
         await asyncio.sleep(0)
 
 
-@router.get("/runs/{run_id}/events")  # type: ignore[misc]
+@router.get("/runs/{run_id}/events")
 async def stream_run_events(
     run_id: str,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),

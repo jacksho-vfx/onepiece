@@ -38,7 +38,7 @@ pipeline_app = typer.Typer(
 )
 
 
-def _format_pipeline_definition(definition: PipelineDefinition) -> str:
+def _format_pipeline_definition(definition: PipelineDefinition) -> Any:
     display = definition.display_name or definition.name
     if display == definition.name:
         return definition.name
@@ -105,9 +105,7 @@ def pipeline_run(
         raise typer.BadParameter(str(exc)) from exc
 
     payload = run.serialise()
-    typer.echo(
-        f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']})."
-    )
+    typer.echo(f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']}).")
     typer.echo(f"Current status: {payload['status']}")
 
 
