@@ -55,7 +55,6 @@ _MIN_CONCURRENCY_RATIO = 0.25
 _MAX_CONCURRENCY_RATIO = 1.75
 
 
-
 async def _coerce_result(
     script_id: str, result: WranglerScriptResult | Mapping[str, Any] | None
 ) -> WranglerScriptResult:
@@ -191,7 +190,9 @@ def _build_summary(
     recommended_concurrency: int | None = None
     if baseline_concurrency and target > 0:
         ratio = average_utilisation / target if target else 0.0
-        ratio = _clamp(ratio, lower=_MIN_CONCURRENCY_RATIO, upper=_MAX_CONCURRENCY_RATIO)
+        ratio = _clamp(
+            ratio, lower=_MIN_CONCURRENCY_RATIO, upper=_MAX_CONCURRENCY_RATIO
+        )
         recommended_concurrency = max(1, round(baseline_concurrency * ratio))
 
     focus_sequences = [
@@ -255,7 +256,10 @@ def _run_boost_gpu_utilisation_script() -> WranglerScriptResult:
 
     recommendations = _sequence_recommendations(summary, target=_TARGET_GPU_UTILISATION)
     summary_text, overall_payload = _build_summary(
-        summary, engine=engine, target=_TARGET_GPU_UTILISATION, recommendations=recommendations
+        summary,
+        engine=engine,
+        target=_TARGET_GPU_UTILISATION,
+        recommendations=recommendations,
     )
 
     payload = {
