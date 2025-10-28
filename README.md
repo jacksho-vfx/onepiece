@@ -241,6 +241,8 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
+> Tip: Run `make fixtures-pipelines` to copy the new pipeline manifests and `onepiece.toml` fragments into `.fixtures/pipelines/` for hands-on experiments without touching tracked files.
+
 ## What's new in the 1.0.0 release
 
 ### OnePiece CLI v1.0.0

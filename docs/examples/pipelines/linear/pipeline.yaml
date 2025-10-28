@@ -1,0 +1,32 @@
+# Linear ingest -> conform -> review pipeline definition used by small teams.
+# The orchestrator walks through each step sequentially and stops on failure.
+version: 1
+name: opr-linear-ingest
+summary: Episodic delivery intake with manual review checkpoints.
+
+steps:
+  - id: ingest-delivery
+    name: Stage vendor package into the studio bucket
+    uses: onepiece.aws.ingest
+    with:
+      profile: episodic
+      source: s3://opr-vendor-drop/EP101
+      destination: s3://opr-studio-ingest/EP101
+      manifest: manifests/ep101-delivery.json
+
+  - id: conform-edit
+    name: Normalise timeline against editorial rules
+    uses: onepiece.dcc.conform
+    with:
+      profile: episodic
+      otio: timelines/ep101.otio
+      policy: configs/conform-policies/episodic.toml
+
+  - id: notify-review
+    name: Ping dailies crew once media lands
+    uses: onepiece.notify.slack
+    with:
+      profile: episodic
+      message: "EP101 ingest complete – review boards ready"
+      attachments:
+        - reports/ep101-ingest.json

@@ -1,0 +1,40 @@
+# Event-driven pipeline that reacts to ShotGrid and Trafalgar notifications.
+# Each trigger fans out to the steps listed beneath it. Steps run in parallel
+# for the same event payload so the orchestrator can scale horizontally.
+version: 1
+name: opr-event-fanout
+summary: Automations responding to deliveries and render completions.
+
+triggers:
+  - on: shotgrid.delivery.received
+    filter:
+      project: OPR
+    steps:
+      - id: ingest-delivery
+        uses: onepiece.aws.ingest
+        with:
+          profile: automation
+          source: "s3://opr-vendor-drop/{{ payload.delivery_id }}"
+          destination: "s3://opr-automation/staging/{{ payload.delivery_id }}"
+          manifest: "{{ payload.manifest_path }}"
+      - id: qc-manifest
+        uses: onepiece.validate.reconcile
+        with:
+          profile: automation
+          delivery_id: "{{ payload.delivery_id }}"
+          report_path: "reports/{{ payload.delivery_id }}-reconcile.json"
+
+  - on: trafalgar.render.completed
+    steps:
+      - id: publish-frames
+        uses: onepiece.render.publish
+        with:
+          profile: automation
+          job_id: "{{ payload.job_id }}"
+          publish_root: "/mnt/review/{{ payload.sequence }}/{{ payload.shot }}"
+      - id: notify-dashboards
+        uses: onepiece.notify.webhook
+        with:
+          profile: automation
+          url: "https://dashboards.studio.example/hooks/render"
+          payload: "{{ tojson(payload) }}"

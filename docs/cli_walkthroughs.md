@@ -469,4 +469,32 @@ team updated.
 
 ---
 
+## 13. Bootstrap pipelines with sample manifests
+
+The `docs/examples/pipelines/` folder now ships with two end-to-end walkthroughs:
+
+- [`linear/`](./examples/pipelines/linear/) – Sequenced ingest → conform → review
+  pipeline definitions with matching `onepiece.toml` fragments and JSON run
+  payloads. Start here when you want the orchestrator to block on each step
+  before moving forward.
+- [`event-driven/`](./examples/pipelines/event-driven/) – A fan-out automation
+  that listens for ShotGrid deliveries and Trafalgar render events. The manifest
+  highlights how templated values from each event feed downstream steps and how
+  workspace-level configuration can subscribe to the studio event bus.
+
+Copy whichever profile fragment matches your rollout into the appropriate
+`onepiece.toml` (project root for linear pilots, workspace overrides for the
+event-driven automation) and change the bucket names, render farm adapter, and
+notification targets to match your studio infrastructure. The sample manifests
+reference placeholder paths such as `manifests/ep101-delivery.json` and
+`reports/{{ payload.delivery_id }}-reconcile.json`; replace them with the real
+locations inside your show repository or object store before testing.
+
+When you are ready to exercise the flows in Studio, load the relevant profile
+and point `onepiece pipeline run --manifest <path>` at either example manifest.
+Pair the run with the JSON payloads provided alongside each manifest so your
+staging environment mimics production telemetry end-to-end.
+
+---
+
 Experimenting with these scenarios builds intuition for how the CLI behaves and gives you realistic command lines to adapt for production.

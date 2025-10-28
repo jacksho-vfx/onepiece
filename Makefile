@@ -1,4 +1,4 @@
-.PHONY: setup format lint typecheck test precommit install-precommit check
+.PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines
 
 VENV := .venv/bin
 PYTHON ?= $(VENV)/python
@@ -47,3 +47,8 @@ install-precommit:
 	$(PRE_COMMIT) install --config $(PRE_COMMIT_CONFIG)
 
 check: precommit test
+
+fixtures-pipelines:
+	mkdir -p .fixtures/pipelines
+	cp -R docs/examples/pipelines/. .fixtures/pipelines/
+	@echo "Copied docs/examples/pipelines into .fixtures/pipelines for local experimentation."
