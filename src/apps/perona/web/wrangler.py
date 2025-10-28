@@ -354,6 +354,104 @@ def _run_analyse_cost_drivers_script() -> WranglerScriptResult:
     )
 
 
+def _run_explain_pnl_delta_script() -> WranglerScriptResult:
+    """Summarise how current render spend deviates from the baseline."""
+
+    engine = dashboard_module.get_engine()
+    baseline_input = getattr(engine, "baseline_cost_input", None)
+    if baseline_input is None:
+        message = (
+            "Baseline cost input unavailable; configure Perona settings before "
+            "explaining the P&L delta."
+        )
+        return WranglerScriptResult(
+            script_id="explain_pnl_delta",
+            status="error",
+            message=message,
+            payload=None,
+        )
+
+    breakdown = engine.pnl_explainer()
+    baseline_breakdown = engine.estimate_cost(baseline_input)
+
+    frame_count = max(getattr(baseline_breakdown, "frame_count", 0) or 0, 1)
+    baseline_total = round(float(baseline_breakdown.total_cost), 2)
+    current_total = round(float(breakdown.current_cost), 2)
+    delta_total = round(float(breakdown.delta_cost), 2)
+    currency = getattr(baseline_breakdown, "currency", None)
+
+    baseline_cost_per_frame = round(float(baseline_breakdown.cost_per_frame), 4)
+    current_cost_per_frame = round(current_total / frame_count, 4)
+    delta_cost_per_frame = round(current_cost_per_frame - baseline_cost_per_frame, 4)
+
+    contributions = sorted(
+        getattr(breakdown, "contributions", ()),
+        key=lambda item: abs(getattr(item, "delta_cost", 0.0)),
+        reverse=True,
+    )
+
+    ranked_contributions: list[dict[str, Any]] = []
+    for index, contribution in enumerate(contributions[:3], start=1):
+        ranked_contributions.append(
+            {
+                "rank": index,
+                "factor": getattr(contribution, "factor", None),
+                "delta_cost": round(float(getattr(contribution, "delta_cost", 0.0)), 2),
+                "percentage_points": round(
+                    float(getattr(contribution, "percentage_points", 0.0)), 2
+                ),
+                "narrative": getattr(contribution, "narrative", None),
+            }
+        )
+
+    formatted_delta = f"{delta_total:+.2f}"
+    formatted_leader_delta: str | None = None
+    if currency:
+        formatted_delta = f"{currency} {formatted_delta}"
+
+    if ranked_contributions:
+        leader = ranked_contributions[0]
+        formatted_leader_delta = f"{leader['delta_cost']:+.2f}"
+        if currency:
+            formatted_leader_delta = f"{currency} {formatted_leader_delta}"
+        message = (
+            "Render spend delta "
+            f"{formatted_delta} vs baseline; leading factor: {leader['factor']}"
+        )
+        if formatted_leader_delta is not None:
+            message += f" ({formatted_leader_delta})."
+        else:
+            message += "."
+    else:
+        message = (
+            f"Render spend delta {formatted_delta} vs baseline; "
+            "no contribution data available."
+        )
+
+    payload = {
+        "totals": {
+            "baseline": baseline_total,
+            "current": current_total,
+            "delta": delta_total,
+            "currency": currency,
+        },
+        "per_frame": {
+            "baseline": baseline_cost_per_frame,
+            "current": current_cost_per_frame,
+            "delta": delta_cost_per_frame,
+        },
+        "frame_count": frame_count,
+        "contributions": ranked_contributions,
+    }
+
+    return WranglerScriptResult(
+        script_id="explain_pnl_delta",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
 def _resolve_baseline_concurrency(engine: Any) -> int | None:
     baseline = getattr(engine, "baseline_cost_input", None)
     gpu_count = getattr(baseline, "gpu_count", None)
@@ -887,6 +985,18 @@ def _register_builtin_scripts() -> None:
                 tags=("cost", "insights", "telemetry"),
             ),
             _run_analyse_cost_drivers_script,
+        )
+    if "explain_pnl_delta" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="explain_pnl_delta",
+                name="Explain P&L delta",
+                description=(
+                    "Contrast baseline vs current render spend and rank the delta drivers"
+                ),
+                tags=("finance", "pnl", "insights"),
+            ),
+            _run_explain_pnl_delta_script,
         )
     if "boost_gpu_utilisation" not in _scripts:
         register_script(

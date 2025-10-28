@@ -98,6 +98,14 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
         "simulation",
     ]
 
+    assert scripts["explain_pnl_delta"]["name"] == "Explain P&L delta"
+    assert "render spend" in scripts["explain_pnl_delta"]["description"].lower()
+    assert scripts["explain_pnl_delta"]["tags"] == [
+        "finance",
+        "pnl",
+        "insights",
+    ]
+
     assert (
         scripts["escalate_deadline_shots"]["name"]
         == "Escalate deadline-sensitive shots"
@@ -345,6 +353,90 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     assert first["drivers"]
     assert any("deadline" in driver.lower() for driver in first["drivers"])
     assert "deadline_horizon" in first
+
+
+def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
+    response = client.post("/wrangler/scripts/explain_pnl_delta")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "explain_pnl_delta"
+    assert payload["status"] == "success"
+    assert "delta" in payload["message"].lower()
+
+    body = payload["payload"]
+    totals = body["totals"]
+    assert set(totals) == {"baseline", "current", "delta", "currency"}
+    assert totals["currency"]
+    assert totals["baseline"] == pytest.approx(
+        body["per_frame"]["baseline"] * body["frame_count"], rel=1e-3
+    )
+
+    per_frame = body["per_frame"]
+    assert set(per_frame) == {"baseline", "current", "delta"}
+
+    contributions = body["contributions"]
+    assert isinstance(contributions, list)
+    assert contributions
+    assert len(contributions) <= 3
+    assert contributions[0]["rank"] == 1
+    assert contributions[0]["factor"]
+    assert contributions[0]["narrative"]
+    assert isinstance(contributions[0]["delta_cost"], float)
+    assert isinstance(contributions[0]["percentage_points"], float)
+    assert contributions[0]["factor"] in payload["message"]
+
+
+def test_wrangler_explain_pnl_delta_handles_missing_contributions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline_breakdown = CostBreakdown(
+        frame_count=DEFAULT_BASELINE_COST_INPUT.frame_count,
+        gpu_hours=DEFAULT_BASELINE_COST_INPUT.render_hours
+        * DEFAULT_BASELINE_COST_INPUT.gpu_count,
+        render_hours=DEFAULT_BASELINE_COST_INPUT.render_hours,
+        concurrency=DEFAULT_BASELINE_COST_INPUT.gpu_count,
+        gpu_cost=DEFAULT_PNL_BASELINE_COST * 0.5,
+        render_farm_cost=DEFAULT_PNL_BASELINE_COST * 0.25,
+        storage_cost=DEFAULT_PNL_BASELINE_COST * 0.1,
+        egress_cost=DEFAULT_PNL_BASELINE_COST * 0.05,
+        misc_cost=DEFAULT_PNL_BASELINE_COST * 0.1,
+        total_cost=DEFAULT_PNL_BASELINE_COST,
+        cost_per_frame=DEFAULT_PNL_BASELINE_COST
+        / DEFAULT_BASELINE_COST_INPUT.frame_count,
+        currency=DEFAULT_CURRENCY,
+    )
+
+    pnl_breakdown = Mock()
+    pnl_breakdown.baseline_cost = baseline_breakdown.total_cost
+    pnl_breakdown.current_cost = baseline_breakdown.total_cost + 125.0
+    pnl_breakdown.delta_cost = 125.0
+    pnl_breakdown.contributions = ()
+
+    mock_engine = Mock()
+    mock_engine.baseline_cost_input = DEFAULT_BASELINE_COST_INPUT
+    mock_engine.pnl_explainer.return_value = pnl_breakdown
+    mock_engine.estimate_cost.return_value = baseline_breakdown
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: mock_engine)
+
+    response = client.post("/wrangler/scripts/explain_pnl_delta")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "explain_pnl_delta"
+    assert payload["status"] == "success"
+    assert "no contribution" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["contributions"] == []
+    assert body["totals"]["delta"] == pytest.approx(125.0)
+    assert body["per_frame"]["delta"] == pytest.approx(
+        125.0 / DEFAULT_BASELINE_COST_INPUT.frame_count, rel=1e-3
+    )
+
+    mock_engine.pnl_explainer.assert_called_once_with()
+    mock_engine.estimate_cost.assert_called_once_with(DEFAULT_BASELINE_COST_INPUT)
 
 
 def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None:
