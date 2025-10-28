@@ -80,7 +80,10 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
-    assert scripts["escalate_deadline_shots"]["name"] == "Escalate deadline-sensitive shots"
+    assert (
+        scripts["escalate_deadline_shots"]["name"]
+        == "Escalate deadline-sensitive shots"
+    )
     assert "deadline" in scripts["escalate_deadline_shots"]["description"].lower()
     assert scripts["escalate_deadline_shots"]["tags"] == [
         "risk",

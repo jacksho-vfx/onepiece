@@ -513,14 +513,19 @@ def _build_lifecycle_index(engine: Any) -> dict[tuple[str, str], Any]:
         lifecycles = ()
 
     for lifecycle in lifecycles:
-        key = (getattr(lifecycle, "sequence", None), getattr(lifecycle, "shot_id", None))
+        key = (
+            getattr(lifecycle, "sequence", None),
+            getattr(lifecycle, "shot_id", None),
+        )
         if None not in key:
-            lifecycle_index[key] = lifecycle
+            lifecycle_index[key] = lifecycle  # type: ignore[index]
 
     return lifecycle_index
 
 
-def _extract_lifecycle_context(lifecycle: Any | None) -> tuple[tuple[str, ...], str | None]:
+def _extract_lifecycle_context(
+    lifecycle: Any | None,
+) -> tuple[tuple[str, ...], str | None]:
     if lifecycle is None:
         return (), None
 
@@ -579,7 +584,7 @@ def _build_telemetry_index(engine: Any) -> dict[tuple[str, str], Any]:
     for sample in telemetry:
         key = (getattr(sample, "sequence", None), getattr(sample, "shot_id", None))
         if None not in key:
-            telemetry_index[key] = sample
+            telemetry_index[key] = sample  # type: ignore[index]
     return telemetry_index
 
 
@@ -588,7 +593,9 @@ def _resolve_deadline_horizon(
 ) -> str | None:
     deadline: datetime | None = getattr(telemetry_sample, "deadline", None)
     if isinstance(deadline, datetime):
-        reference: datetime | None = getattr(engine_module, "_RISK_REFERENCE_TIME", None)
+        reference: datetime | None = getattr(
+            engine_module, "_RISK_REFERENCE_TIME", None
+        )
         if isinstance(reference, datetime):
             hours = (deadline - reference).total_seconds() / 3600.0
         else:
@@ -606,7 +613,9 @@ def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
 
     escalations: list[dict[str, Any]] = []
     for indicator in indicators:
-        drivers = [driver for driver in indicator.drivers if "deadline" in driver.lower()]
+        drivers = [
+            driver for driver in indicator.drivers if "deadline" in driver.lower()
+        ]
         if not drivers:
             continue
 
@@ -638,7 +647,11 @@ def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
     else:
         headline = "No shots currently require deadline escalation."
 
-    payload = {"summary": headline, "total": len(escalations), "escalations": escalations}
+    payload = {
+        "summary": headline,
+        "total": len(escalations),
+        "escalations": escalations,
+    }
 
     return WranglerScriptResult(
         script_id="escalate_deadline_shots",
