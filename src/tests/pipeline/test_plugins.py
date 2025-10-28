@@ -32,7 +32,7 @@ class DummyEntryPoints(list[DummyEntryPoint]):
 @pytest.fixture()
 def entry_points(
     monkeypatch: pytest.MonkeyPatch,
-) -> Callable[[DummyEntryPoint, *DummyEntryPoint], None]:
+) -> Callable[[DummyEntryPoint, *DummyEntryPoint], None]:  # type: ignore[valid-type]
     holders: list[DummyEntryPoint] = []
 
     def factory() -> DummyEntryPoints:
@@ -49,7 +49,9 @@ def entry_points(
     return register
 
 
-def test_discovery_merges_builtin_and_plugins(entry_points: Callable[[DummyEntryPoint], None]) -> None:
+def test_discovery_merges_builtin_and_plugins(
+    entry_points: Callable[[DummyEntryPoint], None]
+) -> None:
     builtin_called = False
 
     def builtin_factory(config: dict[str, Any]) -> dict[str, Any]:
@@ -104,7 +106,9 @@ def test_conflicting_entry_point_with_builtin_is_rejected(
         discover_pipeline_step_factories(builtin={"builtin": lambda config: config})
 
 
-def test_non_callable_factory_raises(entry_points: Callable[[DummyEntryPoint], None]) -> None:
+def test_non_callable_factory_raises(
+    entry_points: Callable[[DummyEntryPoint], None]
+) -> None:
     entry_points(
         DummyEntryPoint(
             "broken",

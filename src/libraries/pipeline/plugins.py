@@ -18,7 +18,9 @@ class PipelinePluginError(RuntimeError):
 class MissingPipelineStepRequirementError(PipelinePluginError):
     """Raised when an optional dependency required by a plugin is missing."""
 
-    def __init__(self, *, step_name: str, requirement: str, original: Exception) -> None:
+    def __init__(
+        self, *, step_name: str, requirement: str, original: Exception
+    ) -> None:
         self.step_name = step_name
         self.requirement = requirement
         message = (
@@ -45,17 +47,19 @@ class InvalidPipelineStepFactoryError(PipelinePluginError):
 class PipelineStepFactory(Protocol):
     """Callable converting configuration mappings into :class:`PipelineStep` objects."""
 
-    def __call__(self, config: Mapping[str, Any]) -> PipelineStep:  # pragma: no cover - Protocol definition
+    def __call__(
+        self, config: Mapping[str, Any]
+    ) -> PipelineStep:  # pragma: no cover - Protocol definition
         """Create a :class:`PipelineStep` from ``config``."""
 
 
-def _iter_entry_points(group: str):
+def _iter_entry_points(group: str) -> Any:
     """Return an iterable of entry points for ``group`` supporting both metadata APIs."""
 
     entry_points = metadata.entry_points()
     if hasattr(entry_points, "select"):
         return entry_points.select(group=group)
-    return entry_points.get(group, [])  # type: ignore[return-value]
+    return entry_points.get(group, [])  # type: ignore[attr-defined]
 
 
 def _missing_requirement(exc: Exception) -> str:
@@ -116,7 +120,7 @@ def discover_pipeline_step_factories(
             msg = f"pipeline step '{name}' could not be imported: {exc}"
             raise PipelinePluginError(msg) from exc
 
-        if not isinstance(loaded, Callable):
+        if not isinstance(loaded, Callable):  # type: ignore[arg-type]
             raise InvalidPipelineStepFactoryError(step_name=name, factory=loaded)
 
         registry[name] = loaded
