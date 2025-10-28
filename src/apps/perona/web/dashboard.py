@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.version import PERONA_VERSION
+from apps.perona.web import wrangler
 
 from libraries.analytics.perona.engine import (
     DEFAULT_SETTINGS_PATH,
@@ -150,6 +151,7 @@ def _dashboard_index_html() -> str:
         header {
             padding: 2.5rem 1.5rem 1.5rem;
             text-align: center;
+            position: relative;
         }
 
         header h1 {
@@ -162,6 +164,225 @@ def _dashboard_index_html() -> str:
             color: #94a3b8;
             margin: 0.75rem auto 0;
             max-width: 640px;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+            white-space: nowrap;
+        }
+
+        .wrangler-toggle {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: rgba(56, 189, 248, 0.16);
+            color: #e0f2fe;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 999px;
+            padding: 0.55rem 0.95rem;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            transition: background 0.2s ease, border 0.2s ease, transform 0.2s ease;
+        }
+
+        .wrangler-toggle span[aria-hidden="true"] {
+            font-size: 1.15rem;
+            line-height: 1;
+        }
+
+        .wrangler-toggle:focus-visible {
+            outline: 2px solid rgba(56, 189, 248, 0.7);
+            outline-offset: 3px;
+        }
+
+        .wrangler-toggle:hover {
+            background: rgba(56, 189, 248, 0.3);
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 640px) {
+            .wrangler-toggle {
+                top: 1rem;
+                right: 1rem;
+            }
+        }
+
+        .wrangler-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-end;
+            padding: 1.5rem;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(6px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 120;
+        }
+
+        .wrangler-overlay.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .wrangler-menu {
+            width: min(340px, 92vw);
+            max-height: calc(100vh - 3rem);
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 1.25rem;
+            box-shadow: 0 32px 70px rgba(15, 23, 42, 0.65);
+            padding: 1.35rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            transform: translateX(24px);
+            transition: transform 0.2s ease;
+        }
+
+        .wrangler-overlay.is-open .wrangler-menu {
+            transform: translateX(0);
+        }
+
+        .wrangler-menu-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .wrangler-menu-title {
+            margin: 0;
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #38bdf8;
+        }
+
+        .wrangler-close {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: inherit;
+            border-radius: 999px;
+            padding: 0.3rem 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s ease, border 0.2s ease;
+        }
+
+        .wrangler-close:hover,
+        .wrangler-close:focus-visible {
+            background: rgba(148, 163, 184, 0.2);
+            border-color: rgba(148, 163, 184, 0.45);
+            outline: none;
+        }
+
+        .wrangler-menu-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+
+        .wrangler-menu-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .wrangler-menu-button {
+            width: 100%;
+            text-align: left;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            color: inherit;
+            border-radius: 0.9rem;
+            padding: 0.75rem 0.9rem;
+            cursor: pointer;
+            transition: border 0.2s ease, background 0.2s ease, transform 0.2s ease;
+        }
+
+        .wrangler-menu-button:hover,
+        .wrangler-menu-button:focus-visible {
+            border-color: rgba(56, 189, 248, 0.55);
+            background: rgba(56, 189, 248, 0.18);
+            transform: translateY(-1px);
+            outline: none;
+        }
+
+        .wrangler-menu-button strong {
+            display: block;
+            font-size: 0.95rem;
+        }
+
+        .wrangler-menu-button span {
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 0.35rem;
+        }
+
+        #wrangler-results-card {
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        #wrangler-results-card.running {
+            border-color: rgba(56, 189, 248, 0.5);
+            box-shadow: 0 22px 55px rgba(56, 189, 248, 0.2);
+        }
+
+        #wrangler-results-card.success {
+            border-color: rgba(34, 197, 94, 0.55);
+            box-shadow: 0 22px 55px rgba(34, 197, 94, 0.25);
+        }
+
+        #wrangler-results-card.error {
+            border-color: rgba(248, 113, 113, 0.55);
+            box-shadow: 0 22px 55px rgba(248, 113, 113, 0.25);
+        }
+
+        .wrangler-results-body {
+            margin-top: 0.85rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 0.9rem;
+            padding: 0.9rem;
+            max-height: 260px;
+            overflow: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', Menlo, ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
+        .wrangler-results-body:empty {
+            display: none;
+        }
+
+        .wrangler-results-body pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .wrangler-results-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
         }
 
         main {
@@ -483,11 +704,34 @@ def _dashboard_index_html() -> str:
 </head>
 <body data-version="__PERONA_VERSION__">
     <header>
+        <button class="wrangler-toggle" id="wrangler-menu-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="wrangler-menu">
+            <span aria-hidden="true">☰</span>
+            <span class="sr-only">Open Wrangler scripts menu</span>
+        </button>
         <h1>Perona Operational Dashboard</h1>
         <p>A refreshed, responsive control surface for render telemetry, risk signals, and cost analytics backed by the Perona engine.</p>
     </header>
+    <div class="wrangler-overlay" id="wrangler-menu-overlay" hidden>
+        <div class="wrangler-menu" id="wrangler-menu" role="dialog" aria-modal="true" aria-labelledby="wrangler-menu-title">
+            <div class="wrangler-menu-header">
+                <h2 class="wrangler-menu-title" id="wrangler-menu-title">Wrangler scripts</h2>
+                <button class="wrangler-close" id="wrangler-menu-close" type="button" aria-label="Close Wrangler menu">&times;</button>
+            </div>
+            <div class="wrangler-menu-body">
+                <p class="muted" id="wrangler-menu-status" aria-live="polite">Loading scripts…</p>
+                <ul class="wrangler-menu-list" id="wrangler-menu-list"></ul>
+            </div>
+        </div>
+    </div>
     <main>
         <div class="grid">
+            <section class="card fade-in span-4" id="wrangler-results-card" aria-live="polite">
+                <div class="wrangler-results-header">
+                    <h2 class="heading-with-icon">Wrangler</h2>
+                    <p class="muted" id="wrangler-results-status">Select a script to run from the Wrangler menu.</p>
+                </div>
+                <div class="wrangler-results-body" id="wrangler-results-body"></div>
+            </section>
             <section class="card fade-in span-12">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
@@ -697,6 +941,11 @@ def _dashboard_index_html() -> str:
                 "./dashboard/summary",
                 window.location.href,
             ).toString();
+            const wranglerEndpoints = {
+                list: new URL("./wrangler/scripts", window.location.href).toString(),
+                run: (scriptId) =>
+                    new URL(`./wrangler/scripts/${encodeURIComponent(scriptId)}`, window.location.href).toString(),
+            };
             let autoRefreshTimer;
 
             const elements = {
@@ -730,10 +979,26 @@ def _dashboard_index_html() -> str:
                 streamRows: document.getElementById("metrics-stream-rows"),
                 streamToggle: document.getElementById("metrics-stream-toggle"),
                 versionLabel: document.getElementById("version-label"),
+                wranglerResultsCard: document.getElementById("wrangler-results-card"),
+                wranglerResultsStatus: document.getElementById("wrangler-results-status"),
+                wranglerResultsBody: document.getElementById("wrangler-results-body"),
+            };
+
+            const wranglerElements = {
+                toggle: document.getElementById("wrangler-menu-toggle"),
+                overlay: document.getElementById("wrangler-menu-overlay"),
+                close: document.getElementById("wrangler-menu-close"),
+                list: document.getElementById("wrangler-menu-list"),
+                status: document.getElementById("wrangler-menu-status"),
+                dialog: document.getElementById("wrangler-menu"),
             };
 
             const refreshButton = document.getElementById("refresh-summary");
             const autoRefreshSelect = document.getElementById("auto-refresh-interval");
+
+            const wranglerState = {
+                scripts: new Map(),
+            };
 
             const parseAutoRefreshValue = (value) => {
                 const parsed = Number.parseInt(value ?? "", 10);
@@ -845,6 +1110,216 @@ def _dashboard_index_html() -> str:
                 }
                 return `${absolute} • ${relative}`;
             };
+
+            const setWranglerResultState = (state) => {
+                const card = elements.wranglerResultsCard;
+                if (!card) {
+                    return;
+                }
+                card.classList.remove("running", "success", "error");
+                if (state) {
+                    card.classList.add(state);
+                }
+            };
+
+            const clearWranglerResultsBody = () => {
+                if (elements.wranglerResultsBody) {
+                    elements.wranglerResultsBody.innerHTML = "";
+                }
+            };
+
+            function closeWranglerMenu() {
+                const { overlay, toggle } = wranglerElements;
+                if (!overlay) {
+                    return;
+                }
+                overlay.classList.remove("is-open");
+                window.setTimeout(() => {
+                    if (!overlay.classList.contains("is-open")) {
+                        overlay.hidden = true;
+                    }
+                }, 200);
+                if (toggle) {
+                    toggle.setAttribute("aria-expanded", "false");
+                }
+            }
+
+            async function runWranglerScript(scriptId) {
+                const meta = wranglerState.scripts.get(scriptId);
+                const displayName = meta?.name ?? scriptId;
+                closeWranglerMenu();
+                setWranglerResultState("running");
+                if (elements.wranglerResultsStatus) {
+                    elements.wranglerResultsStatus.textContent = `Running “${displayName}”…`;
+                }
+                clearWranglerResultsBody();
+                try {
+                    const response = await fetch(wranglerEndpoints.run(scriptId), {
+                        method: "POST",
+                        headers: { Accept: "application/json" },
+                    });
+                    const responseText = await response.text();
+                    let payload = null;
+                    if (responseText) {
+                        try {
+                            payload = JSON.parse(responseText);
+                        } catch (error) {
+                            payload = responseText;
+                        }
+                    }
+
+                    if (!response.ok) {
+                        const detail =
+                            payload && typeof payload === "object" && "detail" in payload
+                                ? payload.detail
+                                : typeof payload === "string"
+                                ? payload
+                                : response.statusText || "Failed to execute script.";
+                        throw new Error(String(detail));
+                    }
+
+                    const statusValue =
+                        payload && typeof payload === "object" && "status" in payload
+                            ? String(payload.status)
+                            : "success";
+                    const normalisedStatus = statusValue.toLowerCase() === "success" ? "success" : "error";
+                    setWranglerResultState(normalisedStatus);
+                    if (elements.wranglerResultsStatus) {
+                        elements.wranglerResultsStatus.textContent =
+                            normalisedStatus === "success"
+                                ? `Completed “${displayName}”.`
+                                : `Script “${displayName}” reported an error.`;
+                    }
+                    if (elements.wranglerResultsBody) {
+                        const pre = document.createElement("pre");
+                        if (payload === null) {
+                            pre.textContent = "(no content)";
+                        } else if (typeof payload === "string") {
+                            pre.textContent = payload;
+                        } else {
+                            pre.textContent = JSON.stringify(payload, null, 2);
+                        }
+                        elements.wranglerResultsBody.innerHTML = "";
+                        elements.wranglerResultsBody.appendChild(pre);
+                    }
+                } catch (error) {
+                    setWranglerResultState("error");
+                    if (elements.wranglerResultsStatus) {
+                        elements.wranglerResultsStatus.textContent = `Unable to run “${displayName}”.`;
+                    }
+                    if (elements.wranglerResultsBody) {
+                        const message =
+                            error instanceof Error && error.message
+                                ? error.message
+                                : "Unable to execute script. Please try again.";
+                        elements.wranglerResultsBody.textContent = message;
+                    }
+                }
+            }
+
+            function renderWranglerMenu(scripts) {
+                const { list, status } = wranglerElements;
+                if (!list || !status) {
+                    return;
+                }
+
+                list.innerHTML = "";
+                wranglerState.scripts.clear();
+
+                if (!Array.isArray(scripts) || scripts.length === 0) {
+                    status.textContent = "No Wrangler scripts registered.";
+                    return;
+                }
+
+                status.textContent = "Select a script to run.";
+                const sorted = [...scripts].sort((a, b) => {
+                    const nameA = (a?.name ?? a?.script_id ?? "").toLocaleLowerCase();
+                    const nameB = (b?.name ?? b?.script_id ?? "").toLocaleLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+
+                for (const meta of sorted) {
+                    if (!meta || !meta.script_id) {
+                        continue;
+                    }
+                    wranglerState.scripts.set(meta.script_id, meta);
+                    const item = document.createElement("li");
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "wrangler-menu-button";
+                    button.dataset.scriptId = meta.script_id;
+
+                    const title = document.createElement("strong");
+                    title.textContent = meta.name ?? meta.script_id;
+                    button.appendChild(title);
+
+                    if (meta.description) {
+                        const description = document.createElement("span");
+                        description.textContent = meta.description;
+                        button.appendChild(description);
+                    }
+
+                    button.addEventListener("click", () => {
+                        void runWranglerScript(meta.script_id);
+                    });
+
+                    item.appendChild(button);
+                    list.appendChild(item);
+                }
+
+                const firstButton = list.querySelector("button");
+                if (firstButton instanceof HTMLButtonElement) {
+                    firstButton.focus();
+                }
+            }
+
+            async function fetchWranglerScripts() {
+                const { status, list } = wranglerElements;
+                if (status) {
+                    status.textContent = "Loading scripts…";
+                }
+                if (list) {
+                    list.innerHTML = "";
+                }
+                try {
+                    const response = await fetch(wranglerEndpoints.list, {
+                        headers: { Accept: "application/json" },
+                        cache: "no-cache",
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Failed to load scripts (${response.status})`);
+                    }
+                    const payload = await response.json();
+                    renderWranglerMenu(payload);
+                } catch (error) {
+                    console.error(error);
+                    if (status) {
+                        status.textContent = "Unable to load scripts.";
+                    }
+                }
+            }
+
+            function openWranglerMenu() {
+                const { overlay, toggle, status, list } = wranglerElements;
+                if (!overlay) {
+                    return;
+                }
+                overlay.hidden = false;
+                requestAnimationFrame(() => {
+                    overlay.classList.add("is-open");
+                });
+                if (toggle) {
+                    toggle.setAttribute("aria-expanded", "true");
+                }
+                if (status) {
+                    status.textContent = "Loading scripts…";
+                }
+                if (list) {
+                    list.innerHTML = "";
+                }
+                wranglerState.scripts.clear();
+                void fetchWranglerScripts();
+            }
 
             const updateList = (listElement, items, emptyMessage, builder) => {
                 if (!listElement) {
@@ -1034,6 +1509,39 @@ def _dashboard_index_html() -> str:
                 elements.versionLabel.textContent = `Perona v${version}`;
             }
 
+            if (wranglerElements.toggle && wranglerElements.overlay) {
+                const { toggle, overlay, close } = wranglerElements;
+                toggle.addEventListener("click", () => {
+                    if (overlay.classList.contains("is-open")) {
+                        closeWranglerMenu();
+                    } else {
+                        openWranglerMenu();
+                    }
+                });
+
+                if (close) {
+                    close.addEventListener("click", () => {
+                        closeWranglerMenu();
+                        toggle.focus();
+                    });
+                }
+
+                overlay.addEventListener("click", (event) => {
+                    if (event.target === overlay) {
+                        closeWranglerMenu();
+                    }
+                });
+
+                document.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape" && overlay.classList.contains("is-open")) {
+                        closeWranglerMenu();
+                        toggle.focus();
+                    }
+                });
+            }
+
+            setWranglerResultState();
+
             const startMetricsStream = () => {
                 const { streamBadge, streamStatus, streamRows, streamToggle } = elements;
                 if (!("WebSocket" in window)) {
@@ -1184,6 +1692,35 @@ def dashboard_ui() -> HTMLResponse:
     """Serve the modern Perona dashboard HTML shell."""
 
     return HTMLResponse(content=_dashboard_index_html())
+
+
+@app.get("/wrangler/scripts", response_model=list[wrangler.WranglerScriptMetadata])
+def list_wrangler_scripts() -> list[wrangler.WranglerScriptMetadata]:
+    """Return metadata for all registered Wrangler scripts."""
+
+    scripts = list(wrangler.iter_registered_scripts())
+    scripts.sort(key=lambda meta: (meta.name or meta.script_id).casefold())
+    return scripts
+
+
+@app.post(
+    "/wrangler/scripts/{script_id}",
+    response_model=wrangler.WranglerScriptResult,
+    status_code=status.HTTP_200_OK,
+)
+async def execute_wrangler_script(script_id: str) -> wrangler.WranglerScriptResult:
+    """Execute a registered Wrangler script and return a structured result."""
+
+    try:
+        return await wrangler.execute_script(script_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown Wrangler script."
+        ) from exc
+    except Exception as exc:  # pragma: no cover - defensive catch
+        return wrangler.WranglerScriptResult(
+            script_id=script_id, status="error", message=str(exc)
+        )
 
 
 @app.post("/api/metrics", status_code=status.HTTP_202_ACCEPTED)
