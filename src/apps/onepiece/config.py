@@ -23,6 +23,7 @@ class ProfileContext:
 
     name: str
     data: Mapping[str, Any]
+    pipelines: Mapping[str, Mapping[str, Any]]
     sources: tuple[Path, ...]
 
 
@@ -65,6 +66,8 @@ def load_profile(
             "The 'profiles' table must contain mappings of settings"
         )
 
+    pipelines = _extract_pipelines(merged_config)
+
     selected_profile = _determine_profile_name(merged_config, profile)
 
     profile_data: Mapping[str, Any]
@@ -89,6 +92,7 @@ def load_profile(
     return ProfileContext(
         name=selected_profile,
         data=profile_data,
+        pipelines=pipelines,
         sources=tuple(sources),
     )
 
@@ -190,3 +194,25 @@ def _determine_profile_name(config: Mapping[str, Any], override: str | None) -> 
         return default_profile
 
     return "default"
+
+
+def _extract_pipelines(config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    raw_pipelines = config.get("pipelines", {})
+    if not raw_pipelines:
+        return {}
+
+    if not isinstance(raw_pipelines, Mapping):
+        raise OnePieceConfigError(
+            "The 'pipelines' table must contain mappings of pipeline metadata"
+        )
+
+    extracted: dict[str, dict[str, Any]] = {}
+    for name, details in raw_pipelines.items():
+        if not isinstance(details, Mapping):
+            raise OnePieceConfigError(
+                f"Pipeline '{name}' must be a mapping of configuration values"
+            )
+
+        extracted[str(name)] = dict(details)
+
+    return extracted
