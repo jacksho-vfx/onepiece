@@ -22,6 +22,7 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 
 | Guide | Focus |
 | --- | --- |
+| [`docs/pipeline_overview.md`](docs/pipeline_overview.md) | Canonical starting point for pipeline architects covering deployment topologies, required services, and integration protocols. |
 | [`docs/cli_examples.md`](docs/cli_examples.md) | Command-by-command reference covering ingest, DCC, render, notification, and validation helpers. |
 | [`docs/cli_walkthroughs.md`](docs/cli_walkthroughs.md) | End-to-end task walkthroughs using the bundled example assets. |
 | [`docs/configuration_profiles.md`](docs/configuration_profiles.md) | Layered configuration profile discovery and recommended keys. |
