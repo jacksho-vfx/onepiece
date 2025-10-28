@@ -77,9 +77,7 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
 
     assert scripts["check_telemetry_freshness"]["name"] == "Check telemetry freshness"
-    assert (
-        "telemetry" in scripts["check_telemetry_freshness"]["description"].lower()
-    )
+    assert "telemetry" in scripts["check_telemetry_freshness"]["description"].lower()
     assert scripts["check_telemetry_freshness"]["tags"] == ["telemetry", "health"]
 
     assert scripts["spin_down_idle_workers"]["name"] == "Spin down idle GPU workers"

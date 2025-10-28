@@ -322,9 +322,7 @@ def _run_check_telemetry_freshness_script() -> WranglerScriptResult:
     }
 
     if total_samples <= 0 or not latest_sample:
-        message = (
-            "No telemetry samples available; ingest render metrics before checking freshness."
-        )
+        message = "No telemetry samples available; ingest render metrics before checking freshness."
         return WranglerScriptResult(
             script_id="check_telemetry_freshness",
             status="error",
@@ -342,9 +340,7 @@ def _run_check_telemetry_freshness_script() -> WranglerScriptResult:
     )
 
     if timestamp is None:
-        message = (
-            "Latest telemetry sample is missing a valid timestamp; freshness is unknown."
-        )
+        message = "Latest telemetry sample is missing a valid timestamp; freshness is unknown."
         return WranglerScriptResult(
             script_id="check_telemetry_freshness",
             status="error",
