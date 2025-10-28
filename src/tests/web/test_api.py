@@ -65,9 +65,7 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert isinstance(payload, list)
     scripts = {item["script_id"]: item for item in payload}
     assert scripts["analyse_cost_drivers"]["name"] == "Analyse cost drivers"
-    assert (
-        "cost inputs" in scripts["analyse_cost_drivers"]["description"].lower()
-    )
+    assert "cost inputs" in scripts["analyse_cost_drivers"]["description"].lower()
     assert scripts["analyse_cost_drivers"]["tags"] == [
         "cost",
         "insights",
