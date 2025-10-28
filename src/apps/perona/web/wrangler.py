@@ -1044,7 +1044,9 @@ def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
         if not isinstance(shot_id, str):
             shot_id = str(shot_id) if shot_id is not None else "Unknown"
         if not isinstance(current_stage, str):
-            current_stage = str(current_stage) if current_stage is not None else "Unknown"
+            current_stage = (
+                str(current_stage) if current_stage is not None else "Unknown"
+            )
 
         elapsed_hours: float | None = None
         iso_started_at: str | None = None
@@ -1067,9 +1069,9 @@ def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
         )
 
     parsed_shots.sort(
-        key=lambda item: item["elapsed_hours"]
-        if item["elapsed_hours"] is not None
-        else -1.0,
+        key=lambda item: (
+            item["elapsed_hours"] if item["elapsed_hours"] is not None else -1.0
+        ),
         reverse=True,
     )
 
@@ -1113,14 +1115,14 @@ def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
             offenders_list = ", ".join(
                 f"{item['sequence']} {item['shot']}" for item in worst_offenders[:3]
             )
-            next_steps.append(
-                f"Review blockers for stalled shots: {offenders_list}."
-            )
+            next_steps.append(f"Review blockers for stalled shots: {offenders_list}.")
         next_steps.append(
             "Confirm downstream teams are aware of incoming handoffs once cleared."
         )
     else:
-        next_steps.append("Continue monitoring workloads; no immediate action required.")
+        next_steps.append(
+            "Continue monitoring workloads; no immediate action required."
+        )
 
     payload = {
         "summary": message,
@@ -1128,9 +1130,11 @@ def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
         "worst_offenders": [
             {
                 **item,
-                "elapsed_hours": round(item["elapsed_hours"], 2)
-                if item["elapsed_hours"] is not None
-                else None,
+                "elapsed_hours": (
+                    round(item["elapsed_hours"], 2)
+                    if item["elapsed_hours"] is not None
+                    else None
+                ),
                 "elapsed_readable": _format_duration(item["elapsed_hours"]),
             }
             for item in worst_offenders

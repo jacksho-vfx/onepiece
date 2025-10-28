@@ -118,10 +118,11 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     ]
 
     assert (
-        scripts["highlight_stage_bottlenecks"]["name"]
-        == "Highlight stage bottlenecks"
+        scripts["highlight_stage_bottlenecks"]["name"] == "Highlight stage bottlenecks"
     )
-    assert "busiest stage" in scripts["highlight_stage_bottlenecks"]["description"].lower()
+    assert (
+        "busiest stage" in scripts["highlight_stage_bottlenecks"]["description"].lower()
+    )
     assert scripts["highlight_stage_bottlenecks"]["tags"] == [
         "production",
         "shots",
