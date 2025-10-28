@@ -2,12 +2,13 @@ import typer
 
 from apps.onepiece.aws import app as aws
 from apps.onepiece.dcc import app as dcc
-from apps.onepiece.shotgrid import app as shotgrid
 from apps.onepiece.misc.info import app as info
-from libraries.automation.review import app as review
-from apps.onepiece.render import app as render
 from apps.onepiece.notify import app as notify
+from apps.onepiece.pipeline import app as pipeline
+from apps.onepiece.render import app as render
+from apps.onepiece.shotgrid import app as shotgrid
 from apps.onepiece.validate import app as validate
+from libraries.automation.review import app as review
 
 
 app = typer.Typer(help="OnePiece pipeline command line interface")
@@ -22,3 +23,4 @@ app.add_typer(notify)
 
 app.add_typer(shotgrid)
 app.add_typer(validate)
+app.add_typer(pipeline)
