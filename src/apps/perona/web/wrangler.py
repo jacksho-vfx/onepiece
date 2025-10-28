@@ -7,7 +7,7 @@ import math
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable, Mapping, MutableMapping
 
 from pydantic import BaseModel, Field
@@ -975,6 +975,177 @@ def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
     )
 
 
+def _parse_datetime(value: Any) -> datetime | None:
+    """Return a :class:`datetime` for ``value`` when possible."""
+
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        candidate = value
+        if candidate.endswith("Z"):
+            candidate = candidate[:-1] + "+00:00"
+        try:
+            return datetime.fromisoformat(candidate)
+        except ValueError:
+            return None
+    return None
+
+
+def _format_duration(hours: float | None) -> str | None:
+    if hours is None:
+        return None
+    if hours >= 48:
+        return f"~{hours / 24:.1f} days"
+    if hours >= 1:
+        return f"~{hours:.1f} hours"
+    return "<1 hour"
+
+
+def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    summary = dashboard_module.shots_summary(
+        sequence=None,
+        artist=None,
+        start_date=None,
+        end_date=None,
+        engine=engine,
+    )
+
+    by_stage = summary.get("by_stage") or []
+    stage_counts: list[dict[str, Any]] = []
+    for entry in by_stage:
+        name = entry.get("name")
+        shots = entry.get("shots")
+        if not isinstance(name, str):
+            name = str(name) if name is not None else "Unknown"
+        try:
+            count = int(shots)
+        except (TypeError, ValueError):
+            count = 0
+        stage_counts.append({"name": name, "shots": count})
+
+    stage_counts.sort(key=lambda item: item["shots"], reverse=True)
+
+    busiest_stage = stage_counts[0] if stage_counts else None
+    busiest_stage_name = busiest_stage["name"] if busiest_stage else None
+
+    active_shots_raw = summary.get("active_shots") or []
+    parsed_shots: list[dict[str, Any]] = []
+    now_utc = datetime.now(timezone.utc)
+
+    for shot in active_shots_raw:
+        sequence = shot.get("sequence")
+        shot_id = shot.get("shot_id")
+        current_stage = shot.get("current_stage")
+        stage_started_at = _parse_datetime(shot.get("stage_started_at"))
+
+        if not isinstance(sequence, str):
+            sequence = str(sequence) if sequence is not None else "Unknown"
+        if not isinstance(shot_id, str):
+            shot_id = str(shot_id) if shot_id is not None else "Unknown"
+        if not isinstance(current_stage, str):
+            current_stage = str(current_stage) if current_stage is not None else "Unknown"
+
+        elapsed_hours: float | None = None
+        iso_started_at: str | None = None
+        if stage_started_at is not None:
+            reference_start = stage_started_at
+            if reference_start.tzinfo is None:
+                reference_start = reference_start.replace(tzinfo=timezone.utc)
+            elapsed = now_utc - reference_start.astimezone(timezone.utc)
+            elapsed_hours = max(elapsed.total_seconds(), 0.0) / 3600.0
+            iso_started_at = reference_start.astimezone(timezone.utc).isoformat()
+
+        parsed_shots.append(
+            {
+                "sequence": sequence,
+                "shot": shot_id,
+                "current_stage": current_stage,
+                "stage_started_at": iso_started_at,
+                "elapsed_hours": elapsed_hours,
+            }
+        )
+
+    parsed_shots.sort(
+        key=lambda item: item["elapsed_hours"]
+        if item["elapsed_hours"] is not None
+        else -1.0,
+        reverse=True,
+    )
+
+    if busiest_stage_name:
+        worst_offenders = [
+            item for item in parsed_shots if item["current_stage"] == busiest_stage_name
+        ]
+        if not worst_offenders:
+            worst_offenders = parsed_shots
+    else:
+        worst_offenders = parsed_shots
+
+    worst_offenders = worst_offenders[:5]
+
+    message: str
+    if busiest_stage and busiest_stage["shots"] > 0:
+        top_offender = worst_offenders[0] if worst_offenders else None
+        duration_text = _format_duration(
+            top_offender.get("elapsed_hours") if top_offender else None
+        )
+        if top_offender and duration_text:
+            message = (
+                f"{busiest_stage_name} is the busiest stage with "
+                f"{busiest_stage['shots']} active shot(s); focus on {top_offender['sequence']} "
+                f"{top_offender['shot']} {duration_text} in stage."
+            )
+        else:
+            message = (
+                f"{busiest_stage_name} is the busiest stage with "
+                f"{busiest_stage['shots']} active shot(s)."
+            )
+    else:
+        message = "No active stage bottlenecks detected — all stages are clear."
+
+    next_steps: list[str] = []
+    if busiest_stage and busiest_stage["shots"] > 0:
+        next_steps.append(
+            f"Assign extra capacity to {busiest_stage_name} to relieve the backlog."
+        )
+        if worst_offenders:
+            offenders_list = ", ".join(
+                f"{item['sequence']} {item['shot']}" for item in worst_offenders[:3]
+            )
+            next_steps.append(
+                f"Review blockers for stalled shots: {offenders_list}."
+            )
+        next_steps.append(
+            "Confirm downstream teams are aware of incoming handoffs once cleared."
+        )
+    else:
+        next_steps.append("Continue monitoring workloads; no immediate action required.")
+
+    payload = {
+        "summary": message,
+        "per_stage_counts": stage_counts,
+        "worst_offenders": [
+            {
+                **item,
+                "elapsed_hours": round(item["elapsed_hours"], 2)
+                if item["elapsed_hours"] is not None
+                else None,
+                "elapsed_readable": _format_duration(item["elapsed_hours"]),
+            }
+            for item in worst_offenders
+        ],
+        "next_steps": next_steps,
+    }
+
+    return WranglerScriptResult(
+        script_id="highlight_stage_bottlenecks",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
 def _register_builtin_scripts() -> None:
     if "analyse_cost_drivers" not in _scripts:
         register_script(
@@ -1051,6 +1222,18 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots", "deadline"),
             ),
             _run_escalate_deadline_shots_script,
+        )
+    if "highlight_stage_bottlenecks" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="highlight_stage_bottlenecks",
+                name="Highlight stage bottlenecks",
+                description=(
+                    "Identify the busiest stage and flag the longest-stalled shots"
+                ),
+                tags=("production", "shots"),
+            ),
+            _run_highlight_stage_bottlenecks_script,
         )
 
 
