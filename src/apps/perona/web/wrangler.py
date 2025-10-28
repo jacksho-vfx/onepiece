@@ -559,7 +559,9 @@ def _recommend_cache_rebuild_action(
     suggestions: list[str] = []
 
     if cache_stability < 0.6:
-        suggestions.append("Prioritise an immediate cache rebuild; stability is critical.")
+        suggestions.append(
+            "Prioritise an immediate cache rebuild; stability is critical."
+        )
     else:
         suggestions.append("Schedule a cache rebuild to stabilise downstream renders.")
 

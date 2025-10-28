@@ -80,10 +80,10 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
+    assert scripts["rebuild_unstable_caches"]["name"] == "Rebuild unstable caches"
     assert (
-        scripts["rebuild_unstable_caches"]["name"] == "Rebuild unstable caches"
+        "cache stability" in scripts["rebuild_unstable_caches"]["description"].lower()
     )
-    assert "cache stability" in scripts["rebuild_unstable_caches"]["description"].lower()
     assert scripts["rebuild_unstable_caches"]["tags"] == [
         "risk",
         "caches",
