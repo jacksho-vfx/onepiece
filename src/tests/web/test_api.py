@@ -66,6 +66,10 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["boost_gpu_utilisation"]["description"]
     assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
 
+    assert scripts["list_failing_jobs"]["name"] == "List failing jobs"
+    assert "critical shots" in scripts["list_failing_jobs"]["description"]
+    assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
+
     assert scripts["cache.refresh"] == {
         "script_id": "cache.refresh",
         "name": "Refresh cache",
@@ -132,6 +136,34 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
+
+def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
+    response = client.post("/wrangler/scripts/list_failing_jobs")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["script_id"] == "list_failing_jobs"
+    assert payload["status"] == "success"
+    assert payload["message"]
+
+    body = payload["payload"]
+    assert body["headline"] == payload["message"]
+
+    details = body["details"]
+    assert details, "Expected at least one critical shot to be listed"
+    risk_scores = [item["risk_score"] for item in details]
+    assert risk_scores == sorted(risk_scores, reverse=True)
+
+    for entry in details:
+        assert {"sequence", "shot", "risk_score", "drivers", "recommended_follow_up"}.issubset(
+            entry
+        )
+        assert isinstance(entry["drivers"], list)
+        assert entry["drivers"]
+        assert isinstance(entry["recommended_follow_up"], str)
+        assert entry["recommended_follow_up"]
 
 
 def test_dashboard_summary_endpoint() -> None:
