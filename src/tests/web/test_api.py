@@ -58,14 +58,20 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     response = client.get("/wrangler/scripts")
 
     assert response.status_code == 200
-    assert response.json() == [
-        {
-            "script_id": "cache.refresh",
-            "name": "Refresh cache",
-            "description": "Rebuild cached analytics",
-            "tags": [],
-        }
-    ]
+    payload = response.json()
+    assert isinstance(payload, list)
+    scripts = {item["script_id"]: item for item in payload}
+    assert "boost_gpu_utilisation" in scripts
+    assert scripts["boost_gpu_utilisation"]["name"] == "Boost GPU utilisation"
+    assert scripts["boost_gpu_utilisation"]["description"]
+    assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
+
+    assert scripts["cache.refresh"] == {
+        "script_id": "cache.refresh",
+        "name": "Refresh cache",
+        "description": "Rebuild cached analytics",
+        "tags": [],
+    }
 
 
 def test_wrangler_execute_missing_script_returns_404() -> None:
@@ -101,6 +107,31 @@ def test_wrangler_execute_script_returns_payload() -> None:
     assert payload["status"] == "success"
     assert payload["message"] == "Completed"
     assert payload["payload"] == {"refreshed": 12}
+
+
+def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None:
+    response = client.post("/wrangler/scripts/boost_gpu_utilisation")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "boost_gpu_utilisation"
+    assert payload["status"] == "success"
+    assert payload["message"]
+    assert "GPU utilisation" in payload["message"]
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+    overall = body["overall"]
+    assert overall["average_utilisation"] >= 0
+    assert overall["target_utilisation"] == pytest.approx(0.8)
+    assert overall["status"] in {"below", "on", "above"}
+
+    sequences = body["sequences"]
+    assert sequences
+    for item in sequences:
+        assert item["sequence"]
+        assert isinstance(item["recommendation"], str)
+        assert item["recommendation"]
 
 
 def test_dashboard_summary_endpoint() -> None:
