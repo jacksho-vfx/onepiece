@@ -22,11 +22,19 @@ from libraries.analytics.perona.engine import (
 from libraries.analytics.perona.models import RenderMetric
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web import dashboard as dashboard_module
+from apps.perona.web import wrangler as wrangler_module
 from apps.perona.web.dashboard import app, invalidate_engine_cache
 
 
 client = TestClient(app)
 KNOWN_SEQUENCES = {"SQ12", "SQ18", "SQ05", "SQ09"}
+
+
+@pytest.fixture(autouse=True)
+def _reset_wrangler_registry() -> Any:
+    wrangler_module._reset_registry()
+    yield
+    wrangler_module._reset_registry()
 
 
 def test_dashboard_ui_root_serves_html() -> None:
@@ -35,6 +43,64 @@ def test_dashboard_ui_root_serves_html() -> None:
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"].lower()
     assert "<title>Perona Dashboard</title>" in response.text
+
+
+def test_wrangler_scripts_listing_returns_metadata() -> None:
+    wrangler_module.register_script(
+        wrangler_module.WranglerScriptMetadata(
+            script_id="cache.refresh",
+            name="Refresh cache",
+            description="Rebuild cached analytics",
+        ),
+        lambda: {"status": "success", "message": "ok"},
+    )
+
+    response = client.get("/wrangler/scripts")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "script_id": "cache.refresh",
+            "name": "Refresh cache",
+            "description": "Rebuild cached analytics",
+            "tags": [],
+        }
+    ]
+
+
+def test_wrangler_execute_missing_script_returns_404() -> None:
+    response = client.post("/wrangler/scripts/unknown-task")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Unknown Wrangler script."}
+
+
+def test_wrangler_execute_script_returns_payload() -> None:
+    async def runner() -> wrangler_module.WranglerScriptResult:
+        return wrangler_module.WranglerScriptResult(
+            script_id="reindex",
+            status="success",
+            message="Completed",
+            payload={"refreshed": 12},
+        )
+
+    wrangler_module.register_script(
+        wrangler_module.WranglerScriptMetadata(
+            script_id="reindex",
+            name="Reindex sequences",
+            description="Refreshes downstream search indices",
+        ),
+        runner,
+    )
+
+    response = client.post("/wrangler/scripts/reindex")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "reindex"
+    assert payload["status"] == "success"
+    assert payload["message"] == "Completed"
+    assert payload["payload"] == {"refreshed": 12}
 
 
 def test_dashboard_summary_endpoint() -> None:
