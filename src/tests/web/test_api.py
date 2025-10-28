@@ -157,9 +157,13 @@ def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
     assert risk_scores == sorted(risk_scores, reverse=True)
 
     for entry in details:
-        assert {"sequence", "shot", "risk_score", "drivers", "recommended_follow_up"}.issubset(
-            entry
-        )
+        assert {
+            "sequence",
+            "shot",
+            "risk_score",
+            "drivers",
+            "recommended_follow_up",
+        }.issubset(entry)
         assert isinstance(entry["drivers"], list)
         assert entry["drivers"]
         assert isinstance(entry["recommended_follow_up"], str)
