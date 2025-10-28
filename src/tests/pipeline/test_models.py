@@ -1,0 +1,148 @@
+"""Tests for pipeline dataclasses and helpers."""
+
+from __future__ import annotations
+
+import pytest
+
+from libraries.pipeline import (
+    Pipeline,
+    pipeline_from_config,
+    pipelines_from_config,
+    resolve_provider,
+    with_resolved_providers,
+)
+from libraries.pipeline.models import PipelineStep, TriggerPolicy
+
+
+def test_pipeline_from_config_sequential_defaults() -> None:
+    config = {
+        "name": "daily_publish",
+        "steps": [
+            {
+                "name": "ingest",
+                "provider": "src.tests.pipeline.dummies:uppercase_provider",
+            },
+            {
+                "name": "validate",
+                "provider": "src.tests.pipeline.dummies:uppercase_provider",
+            },
+            {
+                "name": "publish",
+                "provider": "src.tests.pipeline.dummies:uppercase_provider",
+                "trigger": {"depends_on": ["validate"]},
+            },
+        ],
+    }
+
+    pipeline = pipeline_from_config(config)
+
+    assert isinstance(pipeline, Pipeline)
+    assert [step.name for step in pipeline.steps] == [
+        "ingest",
+        "validate",
+        "publish",
+    ]
+
+    first, second, third = pipeline.steps
+    assert first.trigger.is_sequential
+    assert first.trigger.depends_on == ()
+    assert second.trigger.depends_on == ("ingest",)
+    assert third.trigger.depends_on == ("validate",)
+
+    resolved = with_resolved_providers(pipeline)
+    ingest_provider = resolved.get_step("ingest").provider
+    assert callable(ingest_provider)
+    assert ingest_provider("payload") == "PAYLOAD"
+
+
+def test_trigger_policy_event_driven_configuration() -> None:
+    trigger = TriggerPolicy.from_config(
+        {
+            "type": "event",
+            "event": "asset.approved",
+            "filters": {"department": "lighting"},
+        }
+    )
+
+    assert trigger.is_event_driven
+    assert trigger.event == "asset.approved"
+    assert trigger.filters == {"department": "lighting"}
+
+
+def test_pipeline_supports_event_driven_steps() -> None:
+    config = {
+        "name": "event_pipeline",
+        "steps": [
+            {
+                "name": "listen",
+                "provider": "src.tests.pipeline.dummies:Accumulator",
+                "trigger": {
+                    "kind": "event",
+                    "event": "asset.ingested",
+                    "filters": {"product": "comp"},
+                },
+            },
+            {
+                "name": "render",
+                "provider": "src.tests.pipeline.dummies:uppercase_provider",
+            },
+        ],
+    }
+
+    pipeline = pipeline_from_config(config)
+    listen_step, render_step = pipeline.steps
+
+    assert listen_step.trigger.is_event_driven
+    assert listen_step.trigger.event == "asset.ingested"
+    assert listen_step.trigger.depends_on == ()
+    assert render_step.trigger.depends_on == ("listen",)
+
+    resolved = with_resolved_providers(pipeline)
+    listen_provider = resolved.get_step("listen").provider
+    assert callable(listen_provider)
+
+    registry = {"cached": object()}
+    assert resolve_provider("cached", registry=registry) is registry["cached"]
+    assert resolve_provider("math.sqrt")(16) == 4
+
+
+def test_pipelines_from_config_builds_multiple() -> None:
+    configs = (
+        {"name": "a", "steps": [{"name": "one", "provider": "math:sqrt"}]},
+        {"name": "b", "steps": [{"name": "two", "provider": "math:floor"}]},
+    )
+
+    pipelines = pipelines_from_config(configs)
+    assert len(pipelines) == 2
+    assert {pipeline.name for pipeline in pipelines} == {"a", "b"}
+
+
+def test_pipeline_validation_errors() -> None:
+    with pytest.raises(ValueError):
+        Pipeline(name="broken", steps=[])
+
+    with pytest.raises(ValueError):
+        Pipeline(
+            name="dupe",
+            steps=[
+                PipelineStep(name="same", provider="noop"),
+                PipelineStep(name="same", provider="noop"),
+            ],
+        )
+
+    with pytest.raises(ValueError):
+        Pipeline(
+            name="missing_dependency",
+            steps=[
+                PipelineStep(
+                    name="primary",
+                    provider="noop",
+                    trigger=TriggerPolicy(depends_on=("other",)),
+                )
+            ],
+        )
+
+    trigger = TriggerPolicy(kind="event", event="asset.created")
+    step = PipelineStep(name="listen", provider="noop", trigger=trigger)
+    pipeline = Pipeline(name="ok", steps=[step])
+    assert pipeline.get_step("listen") is step
