@@ -89,4 +89,6 @@ def with_resolved_providers(
         replace(step, provider=resolve_provider(step.provider, registry=registry))
         for step in pipeline.steps
     ]
-    return Pipeline(name=pipeline.name, steps=resolved_steps, metadata=pipeline.metadata)
+    return Pipeline(
+        name=pipeline.name, steps=resolved_steps, metadata=pipeline.metadata
+    )

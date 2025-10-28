@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 
-def _normalise_dependencies(dependencies: Sequence[str] | str | None) -> tuple[str, ...]:
+def _normalise_dependencies(
+    dependencies: Sequence[str] | str | None,
+) -> tuple[str, ...]:
     if dependencies is None:
         return ()
     if isinstance(dependencies, str):
