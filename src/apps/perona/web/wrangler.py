@@ -294,9 +294,7 @@ def _resolve_baseline_concurrency(engine: Any) -> int | None:
     return None
 
 
-def _project_utilisation(
-    current: float, *, baseline: int, proposed: int
-) -> float:
+def _project_utilisation(current: float, *, baseline: int, proposed: int) -> float:
     if proposed <= 0 or baseline <= 0:
         return current
     projected = current * (baseline / proposed)
@@ -350,7 +348,9 @@ def _run_spin_down_idle_workers_script() -> WranglerScriptResult:
             recommended_concurrency = baseline_concurrency - 1
 
         projected_utilisation = _project_utilisation(
-            average_utilisation, baseline=baseline_concurrency, proposed=recommended_concurrency
+            average_utilisation,
+            baseline=baseline_concurrency,
+            proposed=recommended_concurrency,
         )
         notes.append(
             f"Projected utilisation after change: {projected_utilisation * 100:.1f}%"
@@ -367,7 +367,9 @@ def _run_spin_down_idle_workers_script() -> WranglerScriptResult:
                 notes=_SPIN_DOWN_NOTES_PREFIX,
             )
             try:
-                baseline_breakdown, results = engine.run_optimization_backtest([scenario])
+                baseline_breakdown, results = engine.run_optimization_backtest(
+                    [scenario]
+                )
             except Exception as exc:  # pragma: no cover - defensive
                 notes.append(f"Cost optimisation backtest failed: {exc}")
             else:
@@ -414,7 +416,7 @@ def _run_spin_down_idle_workers_script() -> WranglerScriptResult:
         "recommended_worker_count": recommended_concurrency,
         "target_band": {"lower": round(band_lower, 3), "upper": round(band_upper, 3)},
         "projected_utilisation": round(projected_utilisation, 3),
-        "projected_savings": projected_savings,
+        "projected_savings": projected_savings,  # type: ignore[dict-item]
         "total_samples": int(summary.get("total_samples", 0) or 0),
         "notes": notes or [_SPIN_DOWN_NOTES_PREFIX],
     }

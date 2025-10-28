@@ -70,7 +70,11 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
 
     assert scripts["spin_down_idle_workers"]["name"] == "Spin down idle GPU workers"
     assert "GPU nodes" in scripts["spin_down_idle_workers"]["description"]
-    assert scripts["spin_down_idle_workers"]["tags"] == ["rendering", "capacity", "cost"]
+    assert scripts["spin_down_idle_workers"]["tags"] == [
+        "rendering",
+        "capacity",
+        "cost",
+    ]
 
     assert scripts["list_failing_jobs"]["name"] == "List failing jobs"
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
@@ -234,9 +238,13 @@ def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
     assert risk_scores == sorted(risk_scores, reverse=True)
 
     for entry in details:
-        assert {"sequence", "shot", "risk_score", "drivers", "recommended_follow_up"}.issubset(
-            entry
-        )
+        assert {
+            "sequence",
+            "shot",
+            "risk_score",
+            "drivers",
+            "recommended_follow_up",
+        }.issubset(entry)
         assert isinstance(entry["drivers"], list)
         assert entry["drivers"]
         assert isinstance(entry["recommended_follow_up"], str)
