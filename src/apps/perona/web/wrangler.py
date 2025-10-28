@@ -64,6 +64,9 @@ _FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
 _CACHE_STABILITY_THRESHOLD = 0.75
 _OWNER_KEYS = ("owner", "artist", "lead", "supervisor", "producer", "coordinator")
 
+_TELEMETRY_HEALTHY_THRESHOLD_MINUTES = 30.0
+_TELEMETRY_STALE_THRESHOLD_MINUTES = 120.0
+
 _SPIN_DOWN_NOTES_PREFIX = (
     "Spin down idle workers to improve utilisation without starving the queue."
 )
@@ -262,6 +265,119 @@ def _build_summary(
     }
 
     return summary_text, overall_payload
+
+
+def _parse_latest_timestamp(sample: Mapping[str, Any] | None) -> datetime | None:
+    if not isinstance(sample, Mapping):
+        return None
+
+    raw_timestamp = sample.get("timestamp")
+    if not isinstance(raw_timestamp, str):
+        return None
+
+    parsed: datetime | None = None
+    try:
+        parsed = datetime.fromisoformat(raw_timestamp)
+    except ValueError:
+        if raw_timestamp.endswith("Z"):
+            try:
+                parsed = datetime.fromisoformat(raw_timestamp[:-1] + "+00:00")
+            except ValueError:
+                parsed = None
+
+    if parsed is None:
+        return None
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return parsed
+
+
+def _classify_freshness(age_minutes: float) -> str:
+    if age_minutes <= _TELEMETRY_HEALTHY_THRESHOLD_MINUTES:
+        return "healthy"
+    if age_minutes <= _TELEMETRY_STALE_THRESHOLD_MINUTES:
+        return "warning"
+    return "stale"
+
+
+def _run_check_telemetry_freshness_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    summary = dashboard_module.metrics_summary(engine=engine)
+
+    total_samples = int(summary.get("total_samples", 0) or 0)
+    latest_sample = summary.get("latest_sample")
+
+    payload: dict[str, Any] = {
+        "latest_sequence": None,
+        "latest_shot": None,
+        "latest_timestamp": None,
+        "age_minutes": None,
+        "status": None,
+        "thresholds": {
+            "healthy_minutes": _TELEMETRY_HEALTHY_THRESHOLD_MINUTES,
+            "stale_minutes": _TELEMETRY_STALE_THRESHOLD_MINUTES,
+        },
+    }
+
+    if total_samples <= 0 or not latest_sample:
+        message = (
+            "No telemetry samples available; ingest render metrics before checking freshness."
+        )
+        return WranglerScriptResult(
+            script_id="check_telemetry_freshness",
+            status="error",
+            message=message,
+            payload=payload,
+        )
+
+    timestamp = _parse_latest_timestamp(latest_sample)
+    payload.update(
+        {
+            "latest_sequence": latest_sample.get("sequence"),
+            "latest_shot": latest_sample.get("shot_id"),
+            "latest_timestamp": latest_sample.get("timestamp"),
+        }
+    )
+
+    if timestamp is None:
+        message = (
+            "Latest telemetry sample is missing a valid timestamp; freshness is unknown."
+        )
+        return WranglerScriptResult(
+            script_id="check_telemetry_freshness",
+            status="error",
+            message=message,
+            payload=payload,
+        )
+
+    now = datetime.utcnow()
+    age_minutes = max(0.0, (now - timestamp).total_seconds() / 60.0)
+    rounded_age = round(age_minutes, 1)
+    status = _classify_freshness(age_minutes)
+
+    payload.update({"age_minutes": rounded_age, "status": status})
+
+    if status == "healthy":
+        message = (
+            f"Telemetry is fresh — latest sample arrived {rounded_age:.1f} minutes ago."
+        )
+    elif status == "warning":
+        message = (
+            f"Telemetry is ageing — latest sample is {rounded_age:.1f} minutes old."
+        )
+    else:
+        message = (
+            f"Telemetry is stale — latest sample is {rounded_age:.1f} minutes old."
+        )
+
+    return WranglerScriptResult(
+        script_id="check_telemetry_freshness",
+        status="success",
+        message=message,
+        payload=payload,
+    )
 
 
 def _run_boost_gpu_utilisation_script() -> WranglerScriptResult:
@@ -1182,6 +1298,16 @@ def _register_builtin_scripts() -> None:
                 tags=("rendering", "utilisation"),
             ),
             _run_boost_gpu_utilisation_script,
+        )
+    if "check_telemetry_freshness" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="check_telemetry_freshness",
+                name="Check telemetry freshness",
+                description="Measure the delay since the last ingest of render telemetry",
+                tags=("telemetry", "health"),
+            ),
+            _run_check_telemetry_freshness_script,
         )
     if "spin_down_idle_workers" not in _scripts:
         register_script(
