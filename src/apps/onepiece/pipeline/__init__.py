@@ -133,25 +133,38 @@ class LocalPipelineClient:
             raise PipelineClientError(str(exc), status_code=404) from exc
 
     def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
-        try:
-            events = self._orchestrator.watch_run_events(run_id)
-        except KeyError as exc:
-            raise PipelineClientError(str(exc), status_code=404) from exc
-
         sentinel = object()
         queue: "Queue[object]" = Queue()
 
-        async def _consume() -> None:
-            try:
-                async for event in events:
-                    queue.put(event.serialise())
-                    if event.status in {"succeeded", "failed"}:
-                        break
-            finally:
-                queue.put(sentinel)
-
         def _runner() -> None:
-            asyncio.run(_consume())
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+
+                try:
+                    events = self._orchestrator.watch_run_events(run_id)
+                except KeyError as exc:
+                    queue.put(PipelineClientError(str(exc), status_code=404))
+                    queue.put(sentinel)
+                    return
+
+                async def _consume() -> None:
+                    try:
+                        async for event in events:
+                            queue.put(event.serialise())
+                            if event.status in {"succeeded", "failed"}:
+                                break
+                    finally:
+                        queue.put(sentinel)
+
+                loop.run_until_complete(_consume())
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception as exc:  # pragma: no cover - defensive guard
+                queue.put(exc)
+                queue.put(sentinel)
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
 
         thread = threading.Thread(target=_runner, daemon=True)
         thread.start()
@@ -161,6 +174,9 @@ class LocalPipelineClient:
             if item is sentinel:
                 thread.join()
                 break
+            if isinstance(item, Exception):
+                thread.join()
+                raise item
             yield item  # type: ignore[misc]
 
 
