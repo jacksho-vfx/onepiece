@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pytest import MonkeyPatch
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from typer.testing import CliRunner
 
@@ -22,13 +22,21 @@ class StubPipelineClient:
     definitions: list[Mapping[str, Any]] | None = None
     definition: Mapping[str, Any] | None = None
     run_payload: Mapping[str, Any] | None = None
+    runs: list[Mapping[str, Any]] | None = None
+    run_metadata: Mapping[str, Any] | None = None
+    run_events: list[Mapping[str, Any]] | None = None
     list_error: PipelineClientError | None = None
     describe_error: PipelineClientError | None = None
     run_error: PipelineClientError | None = None
+    runs_error: PipelineClientError | None = None
+    run_status_error: PipelineClientError | None = None
+    watch_error: PipelineClientError | None = None
 
     closed: bool = False
     requested_name: str | None = None
     run_parameters: Mapping[str, Any] | None = None
+    list_runs_kwargs: Mapping[str, Any] | None = None
+    requested_run_id: str | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -54,6 +62,39 @@ class StubPipelineClient:
             raise AssertionError("run payload was not configured")
         return dict(self.run_payload)
 
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: str | None = None,
+    ) -> list[Mapping[str, Any]]:
+        self.list_runs_kwargs = {
+            "pipeline": pipeline,
+            "status": status,
+            "limit": limit,
+            "since": since,
+        }
+        if self.runs_error:
+            raise self.runs_error
+        return list(self.runs or [])
+
+    def get_run(self, run_id: str) -> Mapping[str, Any]:
+        self.requested_run_id = run_id
+        if self.run_status_error:
+            raise self.run_status_error
+        if self.run_metadata is None:
+            raise AssertionError("run metadata was not configured")
+        return dict(self.run_metadata)
+
+    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+        self.requested_run_id = run_id
+        if self.watch_error:
+            raise self.watch_error
+        for event in self.run_events or []:
+            yield dict(event)
+
     def close(self) -> None:
         self.closed = True
 
@@ -75,6 +116,9 @@ def test_pipeline_command_group_loads() -> None:
     assert "list" in result.output
     assert "describe" in result.output
     assert "run" in result.output
+    assert "runs" in result.output
+    assert "run-status" in result.output
+    assert "watch" in result.output
 
 
 def test_pipeline_list_displays_definitions(monkeypatch: MonkeyPatch) -> None:
@@ -232,4 +276,144 @@ def test_pipeline_run_failure(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 1
     assert "Pipeline request failed: Service unavailable" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_runs_displays_runs(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        runs=[
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+                "created_at": "2024-01-01T10:00:00+00:00",
+                "updated_at": "2024-01-01T10:10:00+00:00",
+                "parameters": {"ingest_profile": "episodic"},
+            }
+        ]
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "runs"])
+
+    assert result.exit_code == 0
+    assert "Run run-1" in result.output
+    assert "Pipeline: orchestration.daily" in result.output
+    assert "Parameters:" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_runs_applies_filters(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(runs=[])
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "runs",
+            "--pipeline",
+            "orchestration.daily",
+            "--status",
+            "running",
+            "--limit",
+            "5",
+            "--since",
+            "2024-01-01T00:00:00+00:00",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert client.list_runs_kwargs == {
+        "pipeline": "orchestration.daily",
+        "status": "running",
+        "limit": 5,
+        "since": "2024-01-01T00:00:00+00:00",
+    }
+    assert client.closed is True
+
+
+def test_pipeline_runs_failure(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("boom", status_code=500)
+    client = StubPipelineClient(runs_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "runs"])
+
+    assert result.exit_code == 1
+    assert "Pipeline request failed: boom" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_run_status_displays_run(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_metadata={
+            "id": "run-1",
+            "pipeline": "orchestration.daily",
+            "status": "running",
+            "created_at": "2024-01-01T10:00:00+00:00",
+            "updated_at": "2024-01-01T10:05:00+00:00",
+            "parameters": {},
+        }
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "run-status", "run-1"])
+
+    assert result.exit_code == 0
+    assert "Run run-1" in result.output
+    assert "Status: running" in result.output
+    assert client.requested_run_id == "run-1"
+    assert client.closed is True
+
+
+def test_pipeline_run_status_missing(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("Run not found", status_code=404)
+    client = StubPipelineClient(run_status_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "run-status", "run-1"])
+
+    assert result.exit_code == 2
+    assert "Run not found" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_watch_streams_events(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_events=[
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "running",
+                "timestamp": "2024-01-01T10:05:00+00:00",
+            },
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+                "timestamp": "2024-01-01T10:10:00+00:00",
+            },
+        ]
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "watch", "run-1"])
+
+    assert result.exit_code == 0
+    assert "running" in result.output
+    assert "succeeded" in result.output
+    assert client.requested_run_id == "run-1"
+    assert client.closed is True
+
+
+def test_pipeline_watch_missing_run(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("Run not found", status_code=404)
+    client = StubPipelineClient(watch_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "watch", "run-1"])
+
+    assert result.exit_code == 2
+    assert "Run not found" in result.output
     assert client.closed is True

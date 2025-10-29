@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
+import asyncio
+import json
+import threading
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Protocol
+from datetime import datetime, timezone
+from queue import Queue
+from typing import Any, Iterable, Iterator, Mapping, Protocol
 
 import httpx
 import typer
@@ -36,6 +41,24 @@ class PipelineClient(Protocol):
     def trigger_run(
         self, name: str, parameters: Mapping[str, Any]
     ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: str | None = None,
+    ) -> list[Mapping[str, Any]]:  # pragma: no cover - Protocol
+        ...
+
+    def get_run(self, run_id: str) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
+    def stream_events(
+        self, run_id: str
+    ) -> Iterable[Mapping[str, Any]]:  # pragma: no cover - Protocol
         ...
 
     def close(self) -> None:  # pragma: no cover - Protocol
@@ -80,6 +103,66 @@ class LocalPipelineClient:
             raise PipelineClientError(str(exc), status_code=404) from exc
         return run.serialise()
 
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: str | None = None,
+    ) -> list[Mapping[str, Any]]:
+        parsed_since: datetime | None = None
+        if since is not None:
+            try:
+                parsed_since = datetime.fromisoformat(since)
+            except ValueError as exc:
+                raise PipelineClientError("Invalid 'since' timestamp.") from exc
+            if parsed_since.tzinfo is None:
+                parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+            else:
+                parsed_since = parsed_since.astimezone(timezone.utc)
+        runs = self._orchestrator.list_runs(
+            pipeline=pipeline, status=status, limit=limit, since=parsed_since
+        )
+        return [run.serialise() for run in runs]
+
+    def get_run(self, run_id: str) -> Any:
+        try:
+            return self._orchestrator.serialise_run(run_id)
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+
+    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+        try:
+            events = self._orchestrator.watch_run_events(run_id)
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+
+        sentinel = object()
+        queue: "Queue[object]" = Queue()
+
+        async def _consume() -> None:
+            try:
+                async for event in events:
+                    queue.put(event.serialise())
+                    if event.status in {"succeeded", "failed"}:
+                        break
+            finally:
+                queue.put(sentinel)
+
+        def _runner() -> None:
+            asyncio.run(_consume())
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+
+        while True:
+            item = queue.get()
+            if item is sentinel:
+                thread.join()
+                break
+            yield item  # type: ignore[misc]
+
 
 class RemotePipelineClient:
     """Client that communicates with the Trafalgar pipeline API."""
@@ -123,6 +206,68 @@ class RemotePipelineClient:
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
         return dict(payload)
+
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: str | None = None,
+    ) -> list[Mapping[str, Any]]:
+        params: dict[str, Any] = {}
+        if pipeline is not None:
+            params["pipeline"] = pipeline
+        if status is not None:
+            params["status"] = status
+        if limit is not None:
+            params["limit"] = limit
+        if since is not None:
+            params["since"] = since
+        response = self._request("GET", "runs", params=params or None)
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        runs: list[Mapping[str, Any]] = []
+        for item in payload:
+            if isinstance(item, Mapping):
+                runs.append(dict(item))
+        return runs
+
+    def get_run(self, run_id: str) -> Mapping[str, Any]:
+        response = self._request("GET", f"runs/{run_id}")
+        payload = response.json()
+        if not isinstance(payload, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return dict(payload)
+
+    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+        def _generator() -> Iterator[Mapping[str, Any]]:
+            try:
+                with self._client.stream("GET", f"runs/{run_id}/events") as response:
+                    if not response.is_success:
+                        detail = _extract_response_detail(response)
+                        raise PipelineClientError(
+                            detail, status_code=response.status_code
+                        )
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        if not line.startswith("data:"):
+                            continue
+                        raw = line[5:].strip()
+                        if not raw:
+                            continue
+                        try:
+                            payload = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(payload, Mapping):
+                            yield dict(payload)
+            except httpx.RequestError as exc:
+                raise PipelineClientError("Unable to reach pipeline API.") from exc
+
+        return _generator()
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
@@ -223,6 +368,37 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
             typer.echo(f"  - {key}: {value}")
     else:
         typer.echo("Parameters: <none>")
+
+
+def _format_pipeline_run(run: Mapping[str, Any]) -> Iterable[str]:
+    run_id = str(run.get("id", ""))
+    pipeline = str(run.get("pipeline", ""))
+    status = str(run.get("status", ""))
+    created = str(run.get("created_at", ""))
+    updated = str(run.get("updated_at", ""))
+
+    yield f"Run {run_id}"
+    yield f"  Pipeline: {pipeline}"
+    yield f"  Status: {status}"
+    yield f"  Created: {created}"
+    yield f"  Updated: {updated}"
+
+    parameters = run.get("parameters")
+    if isinstance(parameters, Mapping) and parameters:
+        yield "  Parameters:"
+        for key in sorted(parameters):
+            value = parameters[key]
+            typer_line = f"    - {key}: {value}"
+            yield typer_line
+    else:
+        yield "  Parameters: <none>"
+
+
+def _format_run_event(event: Mapping[str, Any]) -> str:
+    timestamp = str(event.get("timestamp", ""))
+    status = str(event.get("status", ""))
+    pipeline = str(event.get("pipeline", ""))
+    return f"[{timestamp}] {pipeline} - {status}"
 
 
 def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
@@ -333,6 +509,88 @@ def run_pipeline(
     status = run.get("status", "unknown")
     typer.echo(f"Triggered pipeline '{pipeline_name}' (run id: {run_id}).")
     typer.echo(f"Current status: {status}")
+
+
+@app.command("runs")
+def list_runs(
+    pipeline: str | None = typer.Option(
+        None,
+        "--pipeline",
+        "-p",
+        help="Filter runs for a specific pipeline.",
+    ),
+    status: str | None = typer.Option(
+        None,
+        "--status",
+        help="Filter runs by status.",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        min=1,
+        help="Maximum number of runs to display.",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Return runs created on or after the ISO timestamp.",
+    ),
+) -> None:
+    """List pipeline runs recorded by the orchestrator."""
+
+    with _using_client() as client:
+        try:
+            runs = client.list_runs(
+                pipeline=pipeline, status=status, limit=limit, since=since
+            )
+        except PipelineClientError as exc:
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    if not runs:
+        typer.echo("No pipeline runs were found.")
+        raise typer.Exit(code=0)
+
+    for run in runs:
+        for line in _format_pipeline_run(run):
+            typer.echo(line)
+
+
+@app.command("run-status")
+def run_status(
+    run_id: str = typer.Argument(..., help="Run identifier."),
+) -> None:
+    """Display metadata for a specific pipeline run."""
+
+    with _using_client() as client:
+        try:
+            run = client.get_run(run_id)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    for line in _format_pipeline_run(run):
+        typer.echo(line)
+
+
+@app.command("watch")
+def watch_run(
+    run_id: str = typer.Argument(..., help="Run identifier."),
+) -> None:
+    """Stream live status events for a pipeline run."""
+
+    with _using_client() as client:
+        try:
+            events = client.stream_events(run_id)
+            for event in events:
+                typer.echo(_format_run_event(event))
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
 
 
 __all__ = ["app"]
