@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, AsyncIterator, Mapping, Sequence
 
 from _pytest.monkeypatch import MonkeyPatch
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from apps.uta import web
@@ -173,3 +174,168 @@ def test_invalid_tab_query_defaults_to_first_section() -> None:
     body = response.text
     assert f'class="tab-button active" data-target="page-{default_slug}"' in body
     assert f'id="page-{default_slug}" class="page active"' in body
+
+
+def test_index_includes_pipeline_page() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'data-target="page-pipelines"' in body
+    assert "data-pipeline-page" in body
+    assert 'id="pipeline-card-template"' in body
+
+
+def test_pipeline_refresh_hook_exposed() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "window.triggerPipelineRefresh = () => ensureLoaded(true);" in body
+    assert "requestJson('/api/pipelines')" in body
+
+
+def test_pipeline_endpoints_require_credentials() -> None:
+    response = client.get("/api/pipelines")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
+def test_pipeline_list_uses_client(monkeypatch: MonkeyPatch) -> None:
+    class DummyClient:
+        async def list_pipelines(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "demo",
+                    "display_name": "Demo",
+                    "description": "example",
+                    "parameters": {"foo": "bar"},
+                }
+            ]
+
+        async def trigger_run(
+            self, *args: Any, **kwargs: Any
+        ) -> dict[str, Any]:  # pragma: no cover - unused
+            raise AssertionError("trigger_run should not be called")
+
+        async def get_run(
+            self, *args: Any, **kwargs: Any
+        ) -> dict[str, Any]:  # pragma: no cover - unused
+            raise AssertionError("get_run should not be called")
+
+        async def get_run_events(
+            self, *args: Any, **kwargs: Any
+        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
+            raise AssertionError("get_run_events should not be called")
+
+        async def aclose(self) -> None:
+            return None
+
+    dummy = DummyClient()
+
+    async def fake_dependency(request: Request) -> AsyncIterator[DummyClient]:
+        assert isinstance(request, Request)
+        yield dummy
+
+    monkeypatch.setitem(
+        web.app.dependency_overrides, web.get_pipeline_client, fake_dependency
+    )
+
+    response = client.get(
+        "/api/pipelines",
+        headers={"Authorization": "Bearer demo-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["name"] == "demo"
+
+
+def test_pipeline_run_proxy(monkeypatch: MonkeyPatch) -> None:
+    class RecordingClient:
+        def __init__(self) -> None:
+            self.triggered: dict[str, Any] | None = None
+
+        async def list_pipelines(
+            self,
+        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
+            raise AssertionError("list_pipelines should not be called")
+
+        async def trigger_run(
+            self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
+        ) -> dict[str, Any]:
+            self.triggered = {
+                "pipeline": pipeline,
+                "parameters": dict(parameters or {}),
+            }
+            return {
+                "id": "run-1",
+                "pipeline": pipeline,
+                "status": "queued",
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+                "parameters": dict(parameters or {}),
+            }
+
+        async def get_run(self, run_id: str) -> dict[str, Any]:
+            return {
+                "id": run_id,
+                "pipeline": "demo",
+                "status": "succeeded",
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:05Z",
+                "parameters": {"foo": "bar"},
+            }
+
+        async def get_run_events(self, run_id: str) -> list[dict[str, Any]]:
+            return [
+                {
+                    "id": run_id,
+                    "pipeline": "demo",
+                    "status": "queued",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "parameters": {"foo": "bar"},
+                }
+            ]
+
+        async def aclose(self) -> None:
+            return None
+
+    client_stub = RecordingClient()
+
+    async def fake_dependency(request: Request) -> AsyncIterator[RecordingClient]:
+        assert isinstance(request, Request)
+        yield client_stub
+
+    monkeypatch.setitem(
+        web.app.dependency_overrides, web.get_pipeline_client, fake_dependency
+    )
+
+    run_response = client.post(
+        "/api/pipelines/demo/runs",
+        json={"parameters": {"foo": "baz"}},
+        headers={"Authorization": "Bearer demo-token"},
+    )
+
+    assert run_response.status_code == 201
+    assert client_stub.triggered == {
+        "pipeline": "demo",
+        "parameters": {"foo": "baz"},
+    }
+
+    detail_response = client.get(
+        "/api/pipelines/runs/run-1",
+        headers={"Authorization": "Bearer demo-token"},
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["status"] == "succeeded"
+
+    events_response = client.get(
+        "/api/pipelines/runs/run-1/events",
+        headers={"Authorization": "Bearer demo-token"},
+    )
+    assert events_response.status_code == 200
+    events = events_response.json()
+    assert events[0]["status"] == "queued"

@@ -11,7 +11,12 @@ import typer
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8050
 
-app = typer.Typer(name="uta", help="Browser GUI for the OnePiece toolchain.")
+app = typer.Typer(
+    name="uta",
+    help=(
+        "Browser GUI for the OnePiece toolchain with embedded pipeline orchestration controls."
+    ),
+)
 
 
 def _load_uvicorn() -> Any:
