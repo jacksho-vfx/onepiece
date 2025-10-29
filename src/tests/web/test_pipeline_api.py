@@ -211,4 +211,3 @@ def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None
         "event": "render.completed",
         "filters": {},
     }
-

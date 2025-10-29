@@ -42,13 +42,9 @@ class PipelineDefinition:
 
     def serialise(self) -> Mapping[str, Any]:
         steps = [self._serialise_step(step) for step in self.pipeline.steps]
-        providers = {
-            step["name"]: step["provider"]
-            for step in steps
-        }
+        providers = {step["name"]: step["provider"] for step in steps}
         dependency_graph = {
-            step["name"]: step["trigger"]["depends_on"]
-            for step in steps
+            step["name"]: step["trigger"]["depends_on"] for step in steps
         }
 
         return {
