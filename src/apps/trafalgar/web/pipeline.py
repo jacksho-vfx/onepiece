@@ -7,23 +7,38 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Annotated, AsyncIterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
+    pipeline_definition_from_profile_entry,
 )
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from .security import (
     AuthenticatedPrincipal,
     ROLE_PIPELINE_READ,
     ROLE_PIPELINE_RUN,
+    ROLE_PIPELINE_MANAGE,
     create_protected_router,
     require_roles,
 )
+
+
+class PipelineDefinitionSubmission(BaseModel):
+    """Request payload describing a pipeline definition."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    display_name: str | None = Field(default=None, alias="display_name")
+    description: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    steps: list[dict[str, Any]] = Field(..., min_length=1)
 
 
 class PipelineRunSubmission(BaseModel):
@@ -51,6 +66,60 @@ def root(
     """Return a simple payload confirming the service is available."""
 
     return {"message": "OnePiece Pipeline API is running"}
+
+
+def _definition_from_submission(
+    submission: PipelineDefinitionSubmission,
+) -> "PipelineDefinition":
+    try:
+        return pipeline_definition_from_profile_entry(
+            submission.name,
+            submission.model_dump(exclude={"name"}, by_alias=False),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/pipelines", status_code=201)
+def create_pipeline(
+    submission: PipelineDefinitionSubmission,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_MANAGE)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    definition = _definition_from_submission(submission)
+    try:
+        orchestrator.register(definition)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(status_code=201, content=definition.serialise())
+
+
+@router.put("/pipelines/{pipeline}")
+def update_pipeline(
+    pipeline: str,
+    submission: PipelineDefinitionSubmission,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_MANAGE)),
+) -> JSONResponse:
+    if submission.name != pipeline:
+        raise HTTPException(status_code=400, detail="Pipeline name mismatch")
+
+    orchestrator = get_pipeline_orchestrator()
+    definition = _definition_from_submission(submission)
+    orchestrator.upsert(definition)
+    return JSONResponse(content=definition.serialise())
+
+
+@router.delete("/pipelines/{pipeline}", status_code=204)
+def delete_pipeline(
+    pipeline: str,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_MANAGE)),
+) -> Response:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        orchestrator.deregister(pipeline)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
+    return Response(status_code=204)
 
 
 @router.get("/pipelines")

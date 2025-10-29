@@ -511,22 +511,44 @@ class PipelineOrchestrator:
                 self.register(definition)
 
     def register(self, definition: PipelineDefinition) -> None:
-        if definition.name in self._definitions:
-            msg = f"pipeline '{definition.name}' is already registered"
-            raise ValueError(msg)
-        resolved = self._executor.resolve_pipeline(definition.pipeline)
-        stored = replace(definition, pipeline=resolved)
-        self._definitions[definition.name] = stored
+        stored = self._prepare_definition(definition)
+        with self._lock:
+            if definition.name in self._definitions:
+                msg = f"pipeline '{definition.name}' is already registered"
+                raise ValueError(msg)
+            self._definitions[definition.name] = stored
+
+    def upsert(self, definition: PipelineDefinition) -> bool:
+        stored = self._prepare_definition(definition)
+        with self._lock:
+            created = definition.name not in self._definitions
+            self._definitions[definition.name] = stored
+        return created
+
+    def deregister(self, name: str) -> None:
+        with self._lock:
+            try:
+                del self._definitions[name]
+            except KeyError as exc:
+                msg = f"pipeline '{name}' is not registered"
+                raise KeyError(msg) from exc
 
     def list_pipelines(self) -> list[PipelineDefinition]:
-        return sorted(self._definitions.values(), key=lambda item: item.name)
+        with self._lock:
+            definitions = list(self._definitions.values())
+        return sorted(definitions, key=lambda item: item.name)
 
     def get_pipeline(self, name: str) -> PipelineDefinition:
-        try:
-            return self._definitions[name]
-        except KeyError as exc:  # pragma: no cover - defensive guard
-            msg = f"pipeline '{name}' is not registered"
-            raise KeyError(msg) from exc
+        with self._lock:
+            try:
+                return self._definitions[name]
+            except KeyError as exc:  # pragma: no cover - defensive guard
+                msg = f"pipeline '{name}' is not registered"
+                raise KeyError(msg) from exc
+
+    def _prepare_definition(self, definition: PipelineDefinition) -> PipelineDefinition:
+        resolved = self._executor.resolve_pipeline(definition.pipeline)
+        return replace(definition, pipeline=resolved)
 
     def trigger_run(
         self, pipeline_name: str, *, parameters: Mapping[str, Any] | None = None

@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -146,6 +147,22 @@ def _seed_run(
     )
 
 
+def _pipeline_submission(name: str = "custom_pipeline", **overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "name": name,
+        "display_name": "Custom Pipeline",
+        "description": "Test pipeline",
+        "metadata": {"owner": "pipeline"},
+        "parameters": {"priority": "int"},
+        "steps": [
+            {"name": "prepare", "provider": "tests.pipeline:prepare"},
+            {"name": "publish", "provider": "tests.pipeline:publish"},
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_list_pipelines_returns_registered_definitions(
     client: TestClient, profile_context: ProfileContext
 ) -> None:
@@ -193,6 +210,99 @@ def test_list_pipelines_includes_step_metadata(client: TestClient) -> None:
         "event": "render.completed",
         "filters": {},
     }
+
+
+def test_create_pipeline_registers_definition(client: TestClient) -> None:
+    payload = _pipeline_submission()
+
+    response = client.post("/pipelines", headers=_auth_headers(), json=payload)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == payload["name"]
+    orchestrator = get_pipeline_orchestrator()
+    stored = orchestrator.get_pipeline(payload["name"])
+    assert stored.display_name == payload["display_name"]
+
+    conflict = client.post("/pipelines", headers=_auth_headers(), json=payload)
+    assert conflict.status_code == 409
+
+    client.delete(f"/pipelines/{payload['name']}", headers=_auth_headers())
+
+
+def test_update_pipeline_replaces_definition(client: TestClient) -> None:
+    payload = _pipeline_submission("revision_pipeline")
+    creation = client.post("/pipelines", headers=_auth_headers(), json=payload)
+    assert creation.status_code == 201
+
+    updated = _pipeline_submission(
+        "revision_pipeline",
+        description="Updated",
+        metadata={"owner": "pipeline", "revision": 2},
+        steps=[
+            {"name": "seed", "provider": "tests.pipeline:prepare"},
+            {"name": "publish", "provider": "tests.pipeline:publish"},
+            {
+                "name": "notify",
+                "provider": "tests.pipeline:notify",
+                "trigger": {"depends_on": ["publish"], "kind": "sequential"},
+            },
+        ],
+    )
+
+    response = client.put(
+        "/pipelines/revision_pipeline",
+        headers=_auth_headers(),
+        json=updated,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["description"] == "Updated"
+    assert payload["metadata"]["revision"] == 2
+
+    orchestrator = get_pipeline_orchestrator()
+    stored = orchestrator.get_pipeline("revision_pipeline")
+    assert stored.description == "Updated"
+    assert stored.pipeline.metadata["revision"] == 2
+    assert [step.name for step in stored.pipeline.steps] == [
+        "seed",
+        "publish",
+        "notify",
+    ]
+
+    client.delete("/pipelines/revision_pipeline", headers=_auth_headers())
+
+
+def test_update_pipeline_rejects_name_mismatch(client: TestClient) -> None:
+    payload = _pipeline_submission("mismatch_pipeline")
+    response = client.put(
+        "/pipelines/other_pipeline",
+        headers=_auth_headers(),
+        json=payload,
+    )
+
+    assert response.status_code == 400
+
+
+def test_delete_pipeline_removes_definition(client: TestClient) -> None:
+    payload = _pipeline_submission("temporary_pipeline")
+    creation = client.post("/pipelines", headers=_auth_headers(), json=payload)
+    assert creation.status_code == 201
+
+    response = client.delete(
+        "/pipelines/temporary_pipeline", headers=_auth_headers()
+    )
+
+    assert response.status_code == 204
+    orchestrator = get_pipeline_orchestrator()
+    with pytest.raises(KeyError):
+        orchestrator.get_pipeline("temporary_pipeline")
+
+    missing = client.delete(
+        "/pipelines/temporary_pipeline", headers=_auth_headers()
+    )
+    assert missing.status_code == 404
 
 
 def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
