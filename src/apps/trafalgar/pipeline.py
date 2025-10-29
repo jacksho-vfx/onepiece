@@ -152,10 +152,13 @@ class _RunEventSubscriber:
 class PipelineRunStore:
     """SQLite backed persistence layer for pipeline runs and events."""
 
+    DEFAULT_BUSY_TIMEOUT_SECONDS = 5.0
+
     def __init__(
         self,
         *,
         database: str | Path | None = None,
+        busy_timeout: float | int | None = None,
     ) -> None:
         if database is None:
             database_path = ":memory:"
@@ -172,14 +175,32 @@ class PipelineRunStore:
                 self._path = path
 
         self._lock = Lock()
+        busy_timeout_ms = self._coerce_busy_timeout_ms(busy_timeout)
         self._connection = sqlite3.connect(
             database_path,
             detect_types=sqlite3.PARSE_DECLTYPES,
             check_same_thread=False,
         )
         self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
+        self._busy_timeout_ms = busy_timeout_ms
         self._initialise_schema()
         self._subscribers: dict[str, list[_RunEventSubscriber]] = {}
+
+    @classmethod
+    def _coerce_busy_timeout_ms(cls, value: float | int | None) -> int:
+        if value is None:
+            seconds = cls.DEFAULT_BUSY_TIMEOUT_SECONDS
+        else:
+            try:
+                seconds = float(value)
+            except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+                raise ValueError("busy_timeout must be a number") from exc
+        if seconds < 0:
+            msg = "busy_timeout must be non-negative"
+            raise ValueError(msg)
+        return int(seconds * 1000)
 
     @staticmethod
     def _encode_datetime(value: datetime) -> str:
@@ -560,7 +581,17 @@ class PipelineRunStore:
         if database is None:
             msg = "storage configuration requires a 'database' or 'path' value"
             raise ValueError(msg)
-        return cls(database=database)
+        busy_timeout = config.get("busy_timeout")
+        busy_timeout_ms = config.get("busy_timeout_ms")
+        if busy_timeout is not None and busy_timeout_ms is not None:
+            msg = "provide only one of 'busy_timeout' or 'busy_timeout_ms'"
+            raise ValueError(msg)
+        if busy_timeout_ms is not None:
+            try:
+                busy_timeout = float(busy_timeout_ms) / 1000
+            except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+                raise ValueError("busy_timeout_ms must be numeric") from exc
+        return cls(database=database, busy_timeout=busy_timeout)
 
 
 class PipelineOrchestrator:

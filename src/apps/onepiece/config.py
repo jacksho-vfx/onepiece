@@ -33,7 +33,9 @@ class ProfileContext:
         Optional mapping describing pipeline persistence settings sourced from
         ``[profiles.<name>.pipeline.storage]``.  The section currently accepts
         a ``database`` (or ``path``) key pointing at a SQLite database file
-        used by :class:`apps.trafalgar.pipeline.PipelineRunStore`.
+        used by :class:`apps.trafalgar.pipeline.PipelineRunStore`, plus
+        optional ``busy_timeout`` (seconds) or ``busy_timeout_ms`` keys that
+        control SQLite's busy timeout.
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
