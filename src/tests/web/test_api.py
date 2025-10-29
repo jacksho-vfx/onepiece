@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -20,6 +20,7 @@ from libraries.analytics.perona.engine import (
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,
     OptimizationResult,
+    RenderMetric as EngineRenderMetric,
 )
 from libraries.analytics.perona.models import RenderMetric
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
@@ -109,6 +110,14 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
         "risk",
         "caches",
         "simulation",
+    ]
+
+    assert scripts["flag_render_error_streaks"]["name"] == "Flag render error streaks"
+    assert "consecutive" in scripts["flag_render_error_streaks"]["description"].lower()
+    assert scripts["flag_render_error_streaks"]["tags"] == [
+        "rendering",
+        "errors",
+        "shots",
     ]
 
     assert scripts["explain_pnl_delta"]["name"] == "Explain P&L delta"
@@ -585,6 +594,98 @@ def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
     assert isinstance(variance["sample_count"], int)
     assert variance["average_frame_time_ms"] >= 0
     assert "coefficient_of_variation" in variance
+
+
+def test_wrangler_flag_render_error_streaks_script_ranks_streaks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = datetime(2024, 5, 1, 12, 0, tzinfo=timezone.utc)
+
+    def metric(
+        sequence: str,
+        shot: str,
+        minutes: int,
+        *,
+        errors: int,
+        fps: float = 24.0,
+    ) -> EngineRenderMetric:
+        return EngineRenderMetric(
+            sequence=sequence,
+            shot_id=shot,
+            timestamp=base + timedelta(minutes=minutes),
+            fps=fps,
+            frame_time_ms=42.0,
+            error_count=errors,
+            gpu_utilisation=0.75,
+            cache_health=0.9,
+        )
+
+    streak_samples = [
+        metric("SQ10", "SH100", 0, errors=0),
+        metric("SQ07", "SH050", 5, errors=1),
+        metric("SQ10", "SH100", 1, errors=1),
+        metric("SQ07", "SH050", 6, errors=0),
+        metric("SQ10", "SH100", 2, errors=1),
+        metric("SQ05", "SH010", 4, errors=0),
+        metric("SQ10", "SH100", 3, errors=1),
+        metric("SQ05", "SH010", 6, errors=0),
+        metric("SQ05", "SH010", 7, errors=0),
+    ]
+
+    streak_engine = Mock()
+    streak_engine.stream_render_metrics.return_value = streak_samples
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: streak_engine)
+
+    response = client.post("/wrangler/scripts/flag_render_error_streaks")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "flag_render_error_streaks"
+    assert payload["status"] == "success"
+    assert "Worst streak" in payload["message"]
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+
+    streaks = body["streaks"]
+    assert [entry["longest_error_streak"] for entry in streaks] == [3, 1, 0]
+
+    leader = streaks[0]
+    assert leader["sequence"] == "SQ10"
+    assert leader["shot"] == "SH100"
+    assert leader["longest_error_streak"] == 3
+    assert leader["sample_count"] == 4
+    assert leader["recommendation"].startswith("Escalate to the render wrangler")
+    assert leader["last_timestamp"].endswith("+00:00")
+
+    tail = streaks[-1]
+    assert tail["longest_error_streak"] == 0
+    assert tail["recommendation"].startswith("All clear")
+
+    streak_engine.stream_render_metrics.assert_called_once_with()
+
+    clear_samples = [
+        metric("SQ01", "SH001", 0, errors=0),
+        metric("SQ02", "SH002", 1, errors=0),
+    ]
+
+    clear_engine = Mock()
+    clear_engine.stream_render_metrics.return_value = clear_samples
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: clear_engine)
+
+    response = client.post("/wrangler/scripts/flag_render_error_streaks")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"].startswith("All clear")
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+    assert all(entry["longest_error_streak"] == 0 for entry in body["streaks"])
+
+    clear_engine.stream_render_metrics.assert_called_once_with()
 
 
 def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:

@@ -993,6 +993,110 @@ def _run_flag_render_volatility_script() -> WranglerScriptResult:
     )
 
 
+def _format_timestamp_iso(timestamp: datetime | None) -> str | None:
+    if timestamp is None:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc).isoformat()
+
+
+def _streak_recommendation(streak: int) -> str:
+    if streak >= 5:
+        return "Escalate to QA for deep investigation."
+    if streak >= 3:
+        return "Escalate to the render wrangler for triage."
+    if streak >= 1:
+        return "Retry the shot and monitor for recurring errors."
+    return "All clear — keep the shot in rotation."
+
+
+def _run_flag_render_error_streaks_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    samples = sorted(
+        engine.stream_render_metrics(),
+        key=lambda sample: (sample.sequence, sample.shot_id, sample.timestamp),
+    )
+
+    streaks: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for sample in samples:
+        key = (sample.sequence, sample.shot_id)
+        entry = streaks.setdefault(
+            key,
+            {
+                "sequence": sample.sequence,
+                "shot": sample.shot_id,
+                "sample_count": 0,
+                "current_streak": 0,
+                "longest_streak": 0,
+                "last_timestamp": None,
+            },
+        )
+
+        entry["sample_count"] += 1
+        entry["last_timestamp"] = sample.timestamp
+
+        if sample.error_count > 0:
+            entry["current_streak"] += 1
+            if entry["current_streak"] > entry["longest_streak"]:
+                entry["longest_streak"] = entry["current_streak"]
+        else:
+            entry["current_streak"] = 0
+
+    ranked: list[dict[str, Any]] = []
+    for entry in streaks.values():
+        longest = int(entry["longest_streak"])
+        last_timestamp = _format_timestamp_iso(entry["last_timestamp"])
+        ranked.append(
+            {
+                "sequence": entry["sequence"],
+                "shot": entry["shot"],
+                "longest_error_streak": longest,
+                "sample_count": int(entry["sample_count"]),
+                "last_timestamp": last_timestamp,
+                "recommendation": _streak_recommendation(longest),
+            }
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            item["longest_error_streak"],
+            item["sample_count"],
+            item["last_timestamp"] or "",
+        ),
+        reverse=True,
+    )
+
+    worst = ranked[0] if ranked else None
+
+    if worst and worst["longest_error_streak"] > 0:
+        message = (
+            "Worst streak: "
+            f"{worst['sequence']} {worst['shot']} logged "
+            f"{worst['longest_error_streak']} consecutive error sample(s)"
+        )
+        if worst["last_timestamp"]:
+            message += f" (last seen {worst['last_timestamp']})."
+        else:
+            message += "."
+    else:
+        message = "All clear — no consecutive render errors detected."
+
+    payload = {
+        "summary": message,
+        "streaks": ranked,
+        "worst_streak": worst,
+    }
+
+    return WranglerScriptResult(
+        script_id="flag_render_error_streaks",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
 def _extract_cache_metrics(
     lifecycle: Any | None,
 ) -> tuple[str | None, int | None, float | None]:
@@ -1567,6 +1671,18 @@ def _register_builtin_scripts() -> None:
                 tags=("rendering", "utilisation"),
             ),
             _run_flag_render_volatility_script,
+        )
+    if "flag_render_error_streaks" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="flag_render_error_streaks",
+                name="Flag render error streaks",
+                description=(
+                    "Highlight shots with consecutive render errors and next steps"
+                ),
+                tags=("rendering", "errors", "shots"),
+            ),
+            _run_flag_render_error_streaks_script,
         )
     if "rebuild_unstable_caches" not in _scripts:
         register_script(
