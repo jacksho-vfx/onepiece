@@ -237,9 +237,7 @@ class PipelineExecutor:
             return self._run_awaitable(self._collect_async_iterable(value))
         return value
 
-    async def _collect_async_iterable(
-        self, iterable: AsyncIterable[Any]
-    ) -> list[Any]:
+    async def _collect_async_iterable(self, iterable: AsyncIterable[Any]) -> list[Any]:
         items: list[Any] = []
         async for item in iterable:
             items.append(item)
