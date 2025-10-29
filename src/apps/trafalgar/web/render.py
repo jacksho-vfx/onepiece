@@ -846,7 +846,7 @@ class RenderSubmissionService:
         if capability_data is None and capability_provider is None:
             capability_data = {}
         try:
-            resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
+            resolved_priority, resolved_chunk, _, _ = _resolve_priority_and_chunk_size(
                 farm=request.farm,
                 priority=request.priority,
                 chunk_size=request.chunk_size,

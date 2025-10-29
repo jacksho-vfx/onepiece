@@ -5,16 +5,25 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import re
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, Mapping, cast
 
 import click
 import structlog
 import typer
 
+from apps.onepiece.config import load_profile
+from apps.onepiece.utils.errors import (
+    OnePieceConfigError,
+    OnePieceExternalServiceError,
+    OnePieceIOError,
+    OnePieceRuntimeError,
+    OnePieceValidationError,
+)
 from libraries.automation.render import deadline, mock, opencue, tractor
 from libraries.automation.render.base import (
     AdapterCapabilities,
@@ -22,12 +31,11 @@ from libraries.automation.render.base import (
     RenderSubmissionError,
 )
 from libraries.automation.render.models import CapabilityProvider, RenderAdapter
-
-from apps.onepiece.utils.errors import (
-    OnePieceExternalServiceError,
-    OnePieceIOError,
-    OnePieceRuntimeError,
-    OnePieceValidationError,
+from libraries.automation.render.optimization import (
+    AdapterDefaults,
+    FarmMetrics,
+    SubmissionOptimizationDecision,
+    compute_submission_adjustments,
 )
 
 log = structlog.get_logger(__name__)
@@ -68,6 +76,147 @@ _CAPABILITIES_CACHE_TTL_SECONDS: Final[float] = 60.0
 _CAPABILITIES_CACHE_MAXSIZE: Final[int] = 32
 _CAPABILITIES_CACHE_LOCK = threading.RLock()
 _CAPABILITIES_CACHE: OrderedDict[str, tuple[float, AdapterCapabilities]] = OrderedDict()
+
+_FRAME_SEGMENT_PATTERN = re.compile(
+    r"^\s*(?P<start>-?\d+)(?:\s*-\s*(?P<end>-?\d+))?(?:x(?P<step>\d+))?\s*$"
+)
+
+
+def _optional_int(value: Any, *, label: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise OnePieceValidationError(
+            f"Profile optimisation value '{label}' must be an integer."
+        )
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value.strip())
+        except ValueError as exc:
+            raise OnePieceValidationError(
+                f"Profile optimisation value '{label}' must be an integer."
+            ) from exc
+    raise OnePieceValidationError(
+        f"Profile optimisation value '{label}' must be an integer."
+    )
+
+
+def _optional_float(value: Any, *, label: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise OnePieceValidationError(
+            f"Profile optimisation value '{label}' must be numeric."
+        )
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value.strip())
+        except ValueError as exc:
+            raise OnePieceValidationError(
+                f"Profile optimisation value '{label}' must be numeric."
+            ) from exc
+    raise OnePieceValidationError(
+        f"Profile optimisation value '{label}' must be numeric."
+    )
+
+
+def _parse_frame_count(spec: str) -> int | None:
+    """Best-effort parser for frame range specifications."""
+
+    total = 0
+    segments = [part.strip() for part in spec.split(",") if part.strip()]
+    if not segments:
+        return None
+
+    for segment in segments:
+        match = _FRAME_SEGMENT_PATTERN.match(segment)
+        if not match:
+            return None
+        start = int(match.group("start"))
+        end = match.group("end")
+        end_value = int(end) if end is not None else start
+        step = int(match.group("step") or 1)
+        if step <= 0:
+            return None
+
+        if start <= end_value:
+            span = end_value - start
+        else:
+            span = start - end_value
+        total += span // step + 1
+
+    return total if total > 0 else None
+
+
+def _extract_metrics_from_profile(data: Mapping[str, Any]) -> FarmMetrics:
+    render_block = data.get("render")
+    if not isinstance(render_block, Mapping):
+        return FarmMetrics()
+    optimisation_block = render_block.get("optimization")
+    if not isinstance(optimisation_block, Mapping):
+        return FarmMetrics()
+
+    queue_depth = _optional_int(
+        optimisation_block.get("queue_depth"), label="queue_depth"
+    )
+    average_ms = optimisation_block.get("average_frame_ms")
+    if average_ms is None:
+        average_ms = optimisation_block.get("average_frame_time_ms")
+    average_frame_ms = _optional_float(average_ms, label="average_frame_ms")
+
+    return FarmMetrics(
+        queue_depth=queue_depth,
+        average_frame_time_ms=average_frame_ms,
+    )
+
+
+def _resolve_metrics(
+    *,
+    optimize: bool,
+    profile_name: str | None,
+    queue_depth: int | None,
+    average_frame_ms: float | None,
+) -> tuple[FarmMetrics, tuple[str, ...]]:
+    metrics = FarmMetrics()
+    sources: list[str] = []
+
+    if not optimize:
+        return metrics, tuple(sources)
+
+    try:
+        profile_context = load_profile(profile=profile_name)
+    except OnePieceConfigError as exc:
+        raise OnePieceValidationError(str(exc)) from exc
+
+    profile_metrics = _extract_metrics_from_profile(profile_context.data)
+    if (
+        profile_metrics.queue_depth is not None
+        or profile_metrics.average_frame_time_ms is not None
+    ):
+        metrics = profile_metrics
+        sources.append("profile")
+
+    if queue_depth is not None:
+        metrics = FarmMetrics(
+            queue_depth=queue_depth,
+            average_frame_time_ms=metrics.average_frame_time_ms,
+        )
+        sources.append("cli.queue_depth")
+
+    if average_frame_ms is not None:
+        metrics = FarmMetrics(
+            queue_depth=metrics.queue_depth,
+            average_frame_time_ms=average_frame_ms,
+        )
+        sources.append("cli.average_frame_ms")
+
+    return metrics, tuple(sources)
 
 
 def _get_adapter(farm: str) -> RenderAdapter:
@@ -129,7 +278,15 @@ def _resolve_priority_and_chunk_size(
     chunk_size: int | None,
     capabilities: AdapterCapabilities | None = None,
     capability_provider: CapabilityProvider | None = None,
-) -> tuple[int, int | None, AdapterCapabilities]:
+    frame_count: int | None = None,
+    optimize: bool = True,
+    metrics: FarmMetrics | None = None,
+) -> tuple[
+    int | None,
+    int | None,
+    AdapterCapabilities,
+    SubmissionOptimizationDecision | None,
+]:
     resolved_capabilities: AdapterCapabilities
     if capabilities is not None:
         resolved_capabilities = dict(capabilities)
@@ -149,6 +306,8 @@ def _resolve_priority_and_chunk_size(
     if resolved_priority is None:
         resolved_priority = resolved_capabilities.get("default_priority", 50)
 
+    adapter_default_priority = resolved_capabilities.get("default_priority", 50)
+
     min_priority = resolved_capabilities.get("priority_min")
     max_priority = resolved_capabilities.get("priority_max")
     if min_priority is not None and resolved_priority < min_priority:
@@ -161,27 +320,60 @@ def _resolve_priority_and_chunk_size(
         )
 
     chunk_enabled = resolved_capabilities.get("chunk_size_enabled", False)
+    chunk_min = resolved_capabilities.get("chunk_size_min")
+    chunk_max = resolved_capabilities.get("chunk_size_max")
+    adapter_default_chunk = (
+        resolved_capabilities.get("default_chunk_size") if chunk_enabled else None
+    )
     if chunk_size is not None:
         resolved_chunk = chunk_size
     elif chunk_enabled:
-        resolved_chunk = resolved_capabilities.get("default_chunk_size")
+        resolved_chunk = adapter_default_chunk
     else:
         resolved_chunk = None
+
+    optimisation_summary: SubmissionOptimizationDecision | None = None
+    if (
+        optimize
+        and frame_count is not None
+        and frame_count > 0
+        and (priority is None or (chunk_enabled and chunk_size is None))
+    ):
+        defaults = AdapterDefaults(
+            default_priority=adapter_default_priority,
+            priority_min=min_priority,
+            priority_max=max_priority,
+            default_chunk_size=adapter_default_chunk,
+            chunk_size_min=chunk_min,
+            chunk_size_max=chunk_max,
+            chunk_size_enabled=chunk_enabled and adapter_default_chunk is not None,
+        )
+        try:
+            optimisation_summary = compute_submission_adjustments(
+                frame_count,
+                defaults,
+                metrics=metrics,
+            )
+        except ValueError:
+            optimisation_summary = None
+        else:
+            if priority is None:
+                resolved_priority = optimisation_summary.priority
+            if chunk_size is None and chunk_enabled:
+                resolved_chunk = optimisation_summary.chunk_size
 
     if resolved_chunk is not None:
         if not chunk_enabled:
             raise OnePieceValidationError(
                 "Chunk sizing is not supported by this adapter (--chunk-size)."
             )
-        min_chunk = resolved_capabilities.get("chunk_size_min")
-        max_chunk = resolved_capabilities.get("chunk_size_max")
-        if min_chunk is not None and resolved_chunk < min_chunk:
+        if chunk_min is not None and resolved_chunk < chunk_min:
             raise OnePieceValidationError(
-                f"Chunk size {resolved_chunk} is below the supported minimum of {min_chunk} (--chunk-size)."
+                f"Chunk size {resolved_chunk} is below the supported minimum of {chunk_min} (--chunk-size)."
             )
-        if max_chunk is not None and resolved_chunk > max_chunk:
+        if chunk_max is not None and resolved_chunk > chunk_max:
             raise OnePieceValidationError(
-                f"Chunk size {resolved_chunk} exceeds the supported maximum of {max_chunk} (--chunk-size)."
+                f"Chunk size {resolved_chunk} exceeds the supported maximum of {chunk_max} (--chunk-size)."
             )
     elif chunk_size is not None:
         # Explicitly requested None but the adapter does not support chunking.
@@ -189,7 +381,12 @@ def _resolve_priority_and_chunk_size(
             "Chunk sizing is not supported by this adapter (--chunk-size)."
         )
 
-    return resolved_priority, resolved_chunk, resolved_capabilities
+    return (
+        resolved_priority,
+        resolved_chunk,
+        resolved_capabilities,
+        optimisation_summary,
+    )
 
 
 def _validate_preset_name(name: str) -> str:
@@ -286,6 +483,26 @@ def submit(
         "--refresh-capabilities",
         help="Reload farm capabilities before submitting.",
     ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Configuration profile providing render optimisation defaults.",
+    ),
+    optimize: bool = typer.Option(
+        True,
+        "--optimize/--no-optimize",
+        help="Derive priority and chunk size from heuristics when possible.",
+    ),
+    farm_queue_depth: int | None = typer.Option(
+        None,
+        "--farm-queue-depth",
+        help="Recent farm queue depth used for optimisation heuristics.",
+    ),
+    farm_average_frame_ms: float | None = typer.Option(
+        None,
+        "--farm-average-frame-ms",
+        help="Average frame time in milliseconds used for optimisation heuristics.",
+    ),
 ) -> None:
     """Submit a render job to the configured farm."""
 
@@ -310,11 +527,69 @@ def submit(
             f"Output path '{output}' is not a directory (--output)."
         )
 
-    resolved_priority, resolved_chunk, capabilities = _resolve_priority_and_chunk_size(
+    frame_count = _parse_frame_count(frames)
+    metrics, metric_sources = _resolve_metrics(
+        optimize=optimize,
+        profile_name=profile,
+        queue_depth=farm_queue_depth,
+        average_frame_ms=farm_average_frame_ms,
+    )
+
+    (
+        resolved_priority,
+        resolved_chunk,
+        capabilities,
+        optimisation_summary,
+    ) = _resolve_priority_and_chunk_size(
         farm=farm,
         priority=priority,
         chunk_size=chunk_size,
+        frame_count=frame_count,
+        optimize=optimize,
+        metrics=metrics,
     )
+
+    if optimisation_summary is None and optimize:
+        skip_reasons: list[str] = []
+        if frame_count is None or frame_count <= 0:
+            skip_reasons.append("frame count unavailable")
+        if priority is not None:
+            skip_reasons.append("priority manually specified")
+        if chunk_size is not None:
+            skip_reasons.append("chunk size manually specified")
+        if chunk_size is None and not capabilities.get("chunk_size_enabled", False):
+            skip_reasons.append("chunk sizing unsupported")
+        optimisation_summary = SubmissionOptimizationDecision(
+            priority=resolved_priority,
+            chunk_size=resolved_chunk,
+            reasons=tuple(skip_reasons),
+            applied=False,
+        )
+
+    metrics_source = ", ".join(metric_sources) if metric_sources else "none"
+    if optimisation_summary is not None:
+        log.info(
+            "render.submit.optimized",
+            applied=optimisation_summary.applied,
+            frame_count=frame_count,
+            priority=resolved_priority,
+            recommended_priority=optimisation_summary.priority,
+            chunk_size=resolved_chunk,
+            recommended_chunk_size=optimisation_summary.chunk_size,
+            reasons=optimisation_summary.reasons,
+            metrics_source=metrics_source,
+        )
+        if optimisation_summary.applied:
+            reason_text = (
+                "; ".join(optimisation_summary.reasons) or "heuristics applied"
+            )
+            chunk_display = (
+                str(resolved_chunk) if resolved_chunk is not None else "disabled"
+            )
+            typer.secho(
+                f"Optimised submission ({metrics_source}): priority={resolved_priority}, chunk_size={chunk_display} ({reason_text}).",
+                fg=typer.colors.CYAN,
+            )
 
     log.info(
         "render.submit.start",
@@ -483,10 +758,16 @@ def save_preset(
     explicit_chunk = chunk_size is not None
 
     try:
-        resolved_priority, resolved_chunk, _ = _resolve_priority_and_chunk_size(
+        (
+            resolved_priority,
+            resolved_chunk,
+            _,
+            _,
+        ) = _resolve_priority_and_chunk_size(
             farm=farm,
             priority=priority,
             chunk_size=chunk_size,
+            optimize=False,
         )
     except OnePieceExternalServiceError as exc:
         if explicit_priority or explicit_chunk:

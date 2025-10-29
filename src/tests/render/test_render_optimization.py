@@ -3,10 +3,14 @@ from __future__ import annotations
 import pytest
 
 from libraries.automation.render.optimization import (
+    AdapterDefaults,
     CostBreakdown,
     CostModelInput,
+    FarmMetrics,
     OptimizationProjection,
     OptimizationScenario,
+    SubmissionOptimizationDecision,
+    compute_submission_adjustments,
     estimate_cost,
     simulate_optimizations,
 )
@@ -102,3 +106,45 @@ def test_simulate_optimizations_rejects_invalid_gpu_count() -> None:
             baseline,
             [OptimizationScenario(name="invalid", gpu_count=0)],
         )
+
+
+def test_compute_submission_adjustments_short_frame_range() -> None:
+    defaults = AdapterDefaults(
+        default_priority=50,
+        priority_min=0,
+        priority_max=100,
+        default_chunk_size=6,
+        chunk_size_min=1,
+        chunk_size_max=12,
+        chunk_size_enabled=True,
+    )
+
+    decision = compute_submission_adjustments(12, defaults)
+
+    assert isinstance(decision, SubmissionOptimizationDecision)
+    assert decision.priority == 55
+    assert decision.chunk_size == 2
+    assert "short frame range" in " ".join(decision.reasons)
+    assert decision.applied is True
+
+
+def test_compute_submission_adjustments_long_frame_range_and_metrics() -> None:
+    defaults = AdapterDefaults(
+        default_priority=55,
+        priority_min=10,
+        priority_max=95,
+        default_chunk_size=4,
+        chunk_size_min=1,
+        chunk_size_max=10,
+        chunk_size_enabled=True,
+    )
+    metrics = FarmMetrics(queue_depth=120, average_frame_time_ms=1000.0)
+
+    decision = compute_submission_adjustments(400, defaults, metrics=metrics)
+
+    assert decision.priority >= 60
+    assert decision.chunk_size >= 8
+    joined = " ".join(decision.reasons)
+    assert "very high queue depth" in joined
+    assert "long frame range" in joined
+    assert decision.applied is True
