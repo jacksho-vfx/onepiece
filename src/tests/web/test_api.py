@@ -124,7 +124,8 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
         == "Evaluate optimisation playbook"
     )
     assert (
-        "optimisation" in scripts["evaluate_optimisation_playbook"]["description"].lower()
+        "optimisation"
+        in scripts["evaluate_optimisation_playbook"]["description"].lower()
     )
     assert scripts["evaluate_optimisation_playbook"]["tags"] == [
         "cost",

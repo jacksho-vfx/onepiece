@@ -593,16 +593,11 @@ def _run_evaluate_optimisation_playbook_script() -> WranglerScriptResult:
         baseline_gpu_count = int(baseline_gpu_count)
         if baseline_gpu_count > 0:
             concurrency_target = max(1, math.floor(baseline_gpu_count * 0.8))
-            if (
-                concurrency_target == baseline_gpu_count
-                and baseline_gpu_count > 1
-            ):
+            if concurrency_target == baseline_gpu_count and baseline_gpu_count > 1:
                 concurrency_target = baseline_gpu_count - 1
 
     if concurrency_target is not None:
-        concurrency_label = (
-            "GPU" if concurrency_target == 1 else "GPUs"
-        )
+        concurrency_label = "GPU" if concurrency_target == 1 else "GPUs"
         scenarios.append(
             OptimizationScenario(
                 name=f"Reduce concurrency to {concurrency_target} {concurrency_label}",
