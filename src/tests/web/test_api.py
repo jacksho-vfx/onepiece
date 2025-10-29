@@ -95,7 +95,9 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
-    assert scripts["flag_frame_time_regressions"]["name"] == "Flag frame time regressions"
+    assert (
+        scripts["flag_frame_time_regressions"]["name"] == "Flag frame time regressions"
+    )
     assert "frame time" in scripts["flag_frame_time_regressions"]["description"].lower()
     assert scripts["flag_frame_time_regressions"]["tags"] == [
         "rendering",
@@ -639,7 +641,10 @@ def test_wrangler_flag_frame_time_regressions_reports_sequences(
     assert regression["avg_frame_time_ms"] == pytest.approx(45.0, rel=0, abs=0.001)
     assert regression["delta_percentage"] == pytest.approx(12.5, rel=0, abs=0.1)
     assert regression["utilisation_context"].startswith("High GPU load")
-    assert "GPU" in regression["recommendation"] or "profil" in regression["recommendation"].lower()
+    assert (
+        "GPU" in regression["recommendation"]
+        or "profil" in regression["recommendation"].lower()
+    )
 
 
 def test_wrangler_flag_frame_time_regressions_reports_healthy_message(

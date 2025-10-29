@@ -1035,9 +1035,7 @@ def _regression_mitigation(utilisation: float, delta_ratio: float) -> str:
             "Split heavy renders across more GPUs or reschedule to relieve contention."
         )
     if utilisation_pct <= 45:
-        return (
-            "Inspect simulation and cache performance before re-queuing renders."
-        )
+        return "Inspect simulation and cache performance before re-queuing renders."
     if delta_ratio >= 0.25:
         return "Escalate to profiling to trim shading and lighting hot spots."
     return "Profile recent renders and tighten scene optimisations to recover baseline."
@@ -1060,7 +1058,7 @@ def _run_flag_frame_time_regressions_script() -> WranglerScriptResult:
     if baseline_input is not None:
         candidate = getattr(baseline_input, "average_frame_time_ms", None)
         try:
-            baseline_frame_time = float(candidate)
+            baseline_frame_time = float(candidate)  # type: ignore[arg-type]
         except (TypeError, ValueError):  # pragma: no cover - defensive
             baseline_frame_time = None
 
@@ -1068,7 +1066,9 @@ def _run_flag_frame_time_regressions_script() -> WranglerScriptResult:
 
     payload: dict[str, Any] = {
         "summary": None,
-        "baseline_frame_time_ms": None if baseline_frame_time is None else round(baseline_frame_time, 3),
+        "baseline_frame_time_ms": (
+            None if baseline_frame_time is None else round(baseline_frame_time, 3)
+        ),
         "threshold_percentage": None,
         "total_sequences": len(summary.get("sequences") or []),
         "regression_count": 0,
@@ -1076,9 +1076,7 @@ def _run_flag_frame_time_regressions_script() -> WranglerScriptResult:
     }
 
     if baseline_frame_time is None or baseline_frame_time <= 0:
-        message = (
-            "Baseline frame time unavailable; configure Perona settings before flagging regressions."
-        )
+        message = "Baseline frame time unavailable; configure Perona settings before flagging regressions."
         payload["summary"] = message
         return WranglerScriptResult(
             script_id="flag_frame_time_regressions",
@@ -1126,10 +1124,12 @@ def _run_flag_frame_time_regressions_script() -> WranglerScriptResult:
 
     regressions.sort(key=lambda item: item["delta_percentage"], reverse=True)
 
-    payload.update({
-        "regression_count": len(regressions),
-        "regressions": regressions,
-    })
+    payload.update(
+        {
+            "regression_count": len(regressions),
+            "regressions": regressions,
+        }
+    )
 
     if regressions:
         worst = regressions[0]
