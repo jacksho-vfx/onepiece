@@ -314,7 +314,7 @@ def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
     payload = response.json()
     assert payload["pipeline"] == "render_shots"
     assert payload["parameters"] == {"quality": "high"}
-    assert payload["status"] == "succeeded"
+    assert payload["status"] == "running"
     assert "created_at" in payload
 
 
