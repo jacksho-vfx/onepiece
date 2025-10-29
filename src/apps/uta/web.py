@@ -26,6 +26,8 @@ ParameterSpec = web_cli.ParameterSpec
 CommandSpec = web_cli.CommandSpec
 PageSpec = web_cli.PageSpec
 
+_extract_parameters = web_cli._extract_parameters
+
 PipelineApiClient = web_pipeline.PipelineApiClient
 PipelineApiError = web_pipeline.PipelineApiError
 get_pipeline_client = web_pipeline.get_pipeline_client
