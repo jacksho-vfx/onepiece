@@ -223,7 +223,9 @@ def test_render_submit_reuses_capabilities_within_ttl(
         }
 
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
-    monkeypatch.setitem(submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities
+    )
 
     args = [
         "render",
@@ -285,7 +287,9 @@ def test_render_submit_refresh_capabilities_flag(
         }
 
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
-    monkeypatch.setitem(submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities
+    )
 
     base_args = [
         "render",
