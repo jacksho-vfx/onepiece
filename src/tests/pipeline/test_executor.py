@@ -3,33 +3,38 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 from apps.trafalgar.providers.pipeline_executor import PipelineExecutor
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
-def _capture_events():
+def _capture_events() -> Any:
     events: list[tuple[str, str]] = []
 
-    def emit(status: str, *, step, **_: object) -> None:
+    def emit(status: str, *, step: Any, **_: object) -> None:
         events.append((status, step.name))
 
     return events, emit
 
 
-def test_parallel_sequential_steps_execute_concurrently():
+def test_parallel_sequential_steps_execute_concurrently() -> None:
     barrier = threading.Barrier(2)
     call_order: list[tuple[str, str]] = []
     lock = threading.Lock()
 
-    def make_provider(name: str):
-        def provider(_: dict[str, object]) -> None:
+    def make_provider(name: str) -> Any:
+        def provider(_: dict[str, object]) -> Any:
             with lock:
                 call_order.append(("start", name))
             try:
                 barrier.wait(timeout=5)
-            except threading.BrokenBarrierError as exc:  # pragma: no cover - defensive guard
-                raise AssertionError("sequential steps did not run in parallel") from exc
+            except (
+                threading.BrokenBarrierError
+            ) as exc:  # pragma: no cover - defensive guard
+                raise AssertionError(
+                    "sequential steps did not run in parallel"
+                ) from exc
             with lock:
                 call_order.append(("finish", name))
 
@@ -56,7 +61,7 @@ def test_parallel_sequential_steps_execute_concurrently():
     }
 
 
-def test_dependency_ordering_respected_for_sequential_steps():
+def test_dependency_ordering_respected_for_sequential_steps() -> None:
     finished_first = threading.Event()
 
     def provider_first(_: dict[str, object]) -> None:

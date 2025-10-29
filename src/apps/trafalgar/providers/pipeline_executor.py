@@ -110,7 +110,7 @@ class PipelineExecutor:
                 future = executor.submit(
                     self._execute_sequential_step,
                     step,
-                    parameters=parameters,
+                    parameters=parameters,  # type: ignore[arg-type]
                     emit=emit,
                 )
                 inflight[future] = step
