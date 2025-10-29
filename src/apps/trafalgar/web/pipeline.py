@@ -109,9 +109,7 @@ async def stream_run_events(
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
     filtered = _filter_run_events(events)
-    return StreamingResponse(
-        _event_stream(filtered), media_type="text/event-stream"
-    )
+    return StreamingResponse(_event_stream(filtered), media_type="text/event-stream")
 
 
 def _filter_run_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
