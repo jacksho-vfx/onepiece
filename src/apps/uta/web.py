@@ -9,12 +9,13 @@ import shlex
 from dataclasses import dataclass, field
 from enum import Enum
 from html import escape
-from typing import Sequence, Any
+from typing import Any, AsyncIterator, Mapping, Sequence
 
 from inspect import _empty as INSPECT_EMPTY
 
 import click
-from fastapi import FastAPI, HTTPException, Request
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typer.main import get_command
@@ -207,6 +208,168 @@ COMMAND_LOOKUP: dict[tuple[str, ...], CommandSpec] = {
     for page in CLI_PAGES.values()
     for command in page.commands
 }
+
+
+PIPELINE_API_URL_ENV = "UTA_PIPELINE_API_URL"
+PIPELINE_API_TIMEOUT_ENV = "UTA_PIPELINE_API_TIMEOUT"
+DEFAULT_PIPELINE_API_URL = os.environ.get(
+    PIPELINE_API_URL_ENV, "http://127.0.0.1:8000/pipeline"
+)
+DEFAULT_PIPELINE_API_TIMEOUT = 10.0
+_PIPELINE_AUTH_HEADERS = {
+    "authorization": "Authorization",
+    "x-api-key": "X-API-Key",
+    "x-api-secret": "X-API-Secret",
+}
+
+
+class PipelineApiError(RuntimeError):
+    """Raised when interactions with the Trafalgar pipeline API fail."""
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+class PipelineApiClient:
+    """Minimal HTTP client for the Trafalgar pipeline API."""
+
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        headers: Mapping[str, str],
+        timeout: float = DEFAULT_PIPELINE_API_TIMEOUT,
+    ) -> None:
+        stripped = base_url.rstrip("/") or "/pipeline"
+        self._client = httpx.AsyncClient(
+            base_url=stripped + "/",
+            headers=dict(headers),
+            timeout=timeout,
+        )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def list_pipelines(self) -> list[dict[str, Any]]:
+        response = await self._request("GET", "pipelines")
+        return response.json()
+
+    async def trigger_run(
+        self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"pipelines/{pipeline}/runs",
+            json={"parameters": dict(parameters or {})},
+        )
+        return response.json()
+
+    async def get_run(self, run_id: str) -> dict[str, Any]:
+        response = await self._request("GET", f"runs/{run_id}")
+        return response.json()
+
+    async def get_run_events(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            async with self._client.stream("GET", f"runs/{run_id}/events") as response:
+                await self._raise_for_status(response)
+                events: list[dict[str, Any]] = []
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    if not payload:
+                        continue
+                    try:
+                        events.append(json.loads(payload))
+                    except json.JSONDecodeError:
+                        continue
+                return events
+        except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive
+            raise self._convert_status_error(exc) from exc
+        except httpx.RequestError as exc:
+            raise PipelineApiError(503, "Unable to reach pipeline API") from exc
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        try:
+            response = await self._client.request(method, path, **kwargs)
+        except httpx.RequestError as exc:
+            raise PipelineApiError(503, "Unable to reach pipeline API") from exc
+        await self._raise_for_status(response)
+        return response
+
+    async def _raise_for_status(self, response: httpx.Response) -> None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise self._convert_status_error(exc) from exc
+
+    def _convert_status_error(self, exc: httpx.HTTPStatusError) -> PipelineApiError:
+        status_code = exc.response.status_code
+        detail = self._extract_detail(exc.response)
+        return PipelineApiError(status_code, detail)
+
+    @staticmethod
+    def _extract_detail(response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            text = response.text.strip()
+            return text or f"Pipeline API request failed ({response.status_code})."
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if isinstance(detail, str) and detail:
+            return detail
+        text = response.text.strip()
+        return text or f"Pipeline API request failed ({response.status_code})."
+
+
+def _resolve_pipeline_api_url() -> str:
+    return os.environ.get(PIPELINE_API_URL_ENV, DEFAULT_PIPELINE_API_URL)
+
+
+def _resolve_pipeline_timeout() -> float:
+    raw = os.environ.get(PIPELINE_API_TIMEOUT_ENV, "")
+    if not raw:
+        return DEFAULT_PIPELINE_API_TIMEOUT
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_PIPELINE_API_TIMEOUT
+
+
+def _extract_pipeline_headers(request: Request) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for header, canonical in _PIPELINE_AUTH_HEADERS.items():
+        value = request.headers.get(header)
+        if value:
+            headers[canonical] = value
+    return headers
+
+
+async def get_pipeline_client(request: Request) -> AsyncIterator[PipelineApiClient]:
+    headers = _extract_pipeline_headers(request)
+    if not headers:
+        raise HTTPException(
+            status_code=401,
+            detail="Pipeline credentials are required to call this endpoint.",
+        )
+    client = PipelineApiClient(
+        _resolve_pipeline_api_url(),
+        headers=headers,
+        timeout=_resolve_pipeline_timeout(),
+    )
+    try:
+        yield client
+    finally:
+        await client.aclose()
 
 
 def _slugify(name: str) -> str:
@@ -422,6 +585,48 @@ def _with_root_path(root_path: str, path: str) -> str:
     return f"{root_path}{path}"
 
 
+def _render_pipeline_page(*, is_active: bool) -> str:
+    active_class = "active" if is_active else ""
+    return """
+    <section id=\"page-pipelines\" class=\"page {active_class}\" data-pipeline-page>
+      <div class=\"page-header\">\n        <h2>Pipeline orchestrator</h2>
+        <p class=\"page-help\">Discover Trafalgar pipeline definitions, run orchestrated jobs, and inspect recent events.</p>
+      </div>
+      <div class=\"pipeline-toolbar\">
+        <button type=\"button\" class=\"pipeline-refresh\" data-pipeline-refresh>Refresh pipelines</button>
+        <span class=\"pipeline-status\" data-pipeline-status role=\"status\" aria-live=\"polite\"></span>
+      </div>
+      <p class=\"pipeline-empty\" data-pipeline-empty hidden>No pipelines are currently registered with the orchestrator.</p>
+      <p class=\"pipeline-error\" data-pipeline-error hidden></p>
+      <div class=\"pipeline-grid\" data-pipeline-cards></div>
+      <template id=\"pipeline-card-template\">
+        <article class=\"pipeline-card\" data-pipeline-card>
+          <header class=\"pipeline-card-header\">
+            <h3 data-pipeline-name></h3>
+            <p class=\"pipeline-card-meta\">Pipeline ID: <code data-pipeline-identifier></code></p>
+            <p class=\"pipeline-card-description\" data-pipeline-description></p>
+          </header>
+          <form class=\"pipeline-run-form\" data-pipeline-form autocomplete=\"off\">
+            <div class=\"pipeline-parameters\" data-pipeline-parameters></div>
+            <div class=\"pipeline-actions\">
+              <button type=\"submit\" class=\"pipeline-run-button\" data-pipeline-run>
+                <span class=\"pipeline-run-icon\" aria-hidden=\"true\">▶</span>
+                <span>Run pipeline</span>
+              </button>
+              <button type=\"button\" class=\"pipeline-refresh-run\" data-pipeline-refresh-run hidden>Refresh status</button>
+              <span class=\"pipeline-run-status\" data-pipeline-run-status aria-live=\"polite\"></span>
+            </div>
+          </form>
+          <div class=\"pipeline-events\" data-pipeline-events hidden>
+            <h4>Recent events</h4>
+            <ol class=\"pipeline-event-list\" data-pipeline-event-list></ol>
+          </div>
+        </article>
+      </template>
+    </section>
+    """
+
+
 def _render_dashboard_page(*, is_active: bool, root_path: str) -> str:
     active_class = "active" if is_active else ""
     dashboard_root = _with_root_path(root_path, "/dashboard/")
@@ -502,27 +707,54 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             default_slug = slug
 
     selected_slug = active_slug
+    pipeline_slug = "pipelines"
+    pipeline_active = False
+    dashboard_active = False
+    cli_active_slug: str | None = None
+
     if not page_order:
-        dashboard_active = selected_slug in (None, "dashboard")
-        selected_slug = None
-    elif selected_slug == "dashboard":
-        dashboard_active = True
-    elif selected_slug and selected_slug in slug_lookup:
-        dashboard_active = False
+        cli_active_slug = None
+        if selected_slug == pipeline_slug:
+            pipeline_active = True
+        else:
+            dashboard_active = selected_slug in (None, "dashboard")
+            if not dashboard_active and selected_slug != pipeline_slug:
+                dashboard_active = True
     else:
-        selected_slug = default_slug
-        dashboard_active = False
+        if selected_slug == "dashboard":
+            dashboard_active = True
+        elif selected_slug == pipeline_slug:
+            pipeline_active = True
+        elif selected_slug and selected_slug in slug_lookup:
+            cli_active_slug = selected_slug
+        else:
+            cli_active_slug = default_slug
+
+        if pipeline_active or dashboard_active:
+            cli_active_slug = None
+        elif cli_active_slug is None:
+            cli_active_slug = default_slug
 
     for index, (name, page) in enumerate(page_order):
         page_id = f"page-{_slugify(name)}"
         slug = _slugify(name)
-        is_active = slug == selected_slug if selected_slug else index == 0
+        if cli_active_slug is None:
+            is_active = not (pipeline_active or dashboard_active) and index == 0
+        else:
+            is_active = slug == cli_active_slug
         active_class = "active" if is_active else ""
         default_flag = "true" if index == 0 else "false"
         nav_items.append(
             f'<button type="button" class="tab-button {active_class}" data-target="{page_id}" data-tab="{slug}" data-default-tab="{default_flag}">{escape(name.title())}</button>'
         )
         content_sections.append(_render_page(page, is_active=is_active))
+    pipeline_class = "active" if pipeline_active else ""
+    nav_items.append(
+        f'<button type="button" class="tab-button {pipeline_class}" data-target="page-pipelines" data-tab="{pipeline_slug}" data-default-tab="false">Pipelines</button>'
+    )
+    content_sections.append(
+        _render_pipeline_page(is_active=pipeline_active)
+    )
     dashboard_class = "active" if dashboard_active else ""
     nav_items.append(
         f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">Dashboard</button>'
@@ -1031,6 +1263,213 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             font-size: 0.85rem;
             white-space: pre-wrap;
           }}
+          .pipeline-toolbar {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 1rem;
+          }}
+          .pipeline-refresh {{
+            appearance: none;
+            border: 1px solid var(--uta-accent);
+            background: rgba(37, 99, 235, 0.2);
+            color: var(--uta-text);
+            padding: 0.55rem 1.1rem;
+            border-radius: 999px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+          }}
+          .pipeline-refresh:hover,
+          .pipeline-refresh:focus-visible {{
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+            border-color: var(--uta-border-strong);
+          }}
+          .pipeline-status {{
+            font-size: 0.85rem;
+            color: var(--uta-text-subtle);
+            min-height: 1.2rem;
+          }}
+          .pipeline-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.25rem;
+          }}
+          .pipeline-card {{
+            background: var(--uta-surface);
+            border: 1px solid var(--uta-border);
+            border-radius: 18px;
+            padding: 1.25rem;
+            box-shadow: var(--uta-card-shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+          }}
+          .pipeline-card-header h3 {{
+            margin: 0;
+            font-size: 1.2rem;
+          }}
+          .pipeline-card-description {{
+            margin: 0;
+            color: var(--uta-text-subtle);
+            font-size: 0.95rem;
+          }}
+          .pipeline-card-meta {{
+            margin: 0;
+            color: var(--uta-text-subtle);
+            font-size: 0.8rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+          }}
+          .pipeline-card-meta code {{
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 6px;
+            padding: 0.1rem 0.35rem;
+            color: var(--uta-text);
+            font-size: 0.75rem;
+          }}
+          .pipeline-run-form {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+          }}
+          .pipeline-parameters {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+          }}
+          .pipeline-param-field {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+          }}
+          .pipeline-param-field label {{
+            font-size: 0.8rem;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: var(--uta-text-subtle);
+          }}
+          .pipeline-param-field input {{
+            border-radius: 10px;
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            padding: 0.55rem 0.7rem;
+            background: rgba(9, 14, 28, 0.85);
+            color: var(--uta-text);
+            font-size: 0.95rem;
+          }}
+          .pipeline-param-field input::placeholder {{
+            color: rgba(148, 163, 184, 0.5);
+          }}
+          .pipeline-param-default {{
+            font-size: 0.75rem;
+            color: var(--uta-text-subtle);
+          }}
+          .pipeline-param-empty {{
+            font-style: italic;
+            color: var(--uta-text-subtle);
+            font-size: 0.9rem;
+          }}
+          .pipeline-actions {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+          }}
+          .pipeline-run-button {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.55rem 1.2rem;
+            border-radius: 999px;
+            border: 1px solid rgba(96, 165, 250, 0.55);
+            background: rgba(37, 99, 235, 0.18);
+            color: var(--uta-text);
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          }}
+          .pipeline-run-button:disabled {{
+            opacity: 0.6;
+            cursor: wait;
+            box-shadow: none;
+          }}
+          .pipeline-run-button:hover:not(:disabled),
+          .pipeline-run-button:focus-visible:not(:disabled) {{
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+          }}
+          .pipeline-run-icon {{
+            font-size: 0.9rem;
+          }}
+          .pipeline-refresh-run {{
+            border: 1px solid var(--uta-border);
+            background: transparent;
+            color: var(--uta-text-subtle);
+            padding: 0.45rem 0.9rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, color 0.2s ease;
+          }}
+          .pipeline-refresh-run:hover,
+          .pipeline-refresh-run:focus-visible {{
+            border-color: var(--uta-border-strong);
+            color: var(--uta-text);
+          }}
+          .pipeline-run-status {{
+            font-size: 0.85rem;
+            color: var(--uta-text-subtle);
+            min-height: 1.2rem;
+          }}
+          .pipeline-run-status[data-state=\"running\"] {{
+            color: var(--uta-text-muted);
+          }}
+          .pipeline-run-status[data-state=\"success\"] {{
+            color: var(--uta-success);
+          }}
+          .pipeline-run-status[data-state=\"error\"] {{
+            color: var(--uta-error);
+          }}
+          .pipeline-empty,
+          .pipeline-error {{
+            color: var(--uta-text-subtle);
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed rgba(148, 163, 184, 0.4);
+            border-radius: 14px;
+            padding: 1rem 1.25rem;
+            margin: 0 0 1.25rem;
+          }}
+          .pipeline-error {{
+            color: #fecaca;
+            border-color: rgba(248, 113, 113, 0.6);
+            background: rgba(69, 10, 10, 0.4);
+          }}
+          .pipeline-events {{
+            border-top: 1px solid rgba(148, 163, 184, 0.18);
+            padding-top: 0.75rem;
+          }}
+          .pipeline-events h4 {{
+            margin: 0 0 0.5rem;
+            font-size: 0.95rem;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: var(--uta-text-muted);
+          }}
+          .pipeline-event-list {{
+            margin: 0;
+            padding-left: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            color: var(--uta-text-subtle);
+            font-size: 0.9rem;
+          }}
+          .pipeline-event-list li strong {{
+            color: var(--uta-text);
+          }}
           .empty-page {{
             font-style: italic;
             color: var(--uta-text-subtle);
@@ -1395,6 +1834,9 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             if (targetId === 'page-dashboard' && typeof window.triggerDashboardRefresh === 'function') {{
               window.triggerDashboardRefresh();
             }}
+            if (targetId === 'page-pipelines' && typeof window.triggerPipelineRefresh === 'function') {{
+              window.triggerPipelineRefresh();
+            }}
           }}
 
           const activateTab = (targetId, {{ pushHistory = false, syncHistory = true }} = {{}}) => {{
@@ -1634,6 +2076,9 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
           const requestDashboardRefresh = () => {{
             if (typeof window.triggerDashboardRefresh === 'function') {{
               window.triggerDashboardRefresh();
+            }}
+            if (typeof window.triggerPipelineRefresh === 'function') {{
+              window.triggerPipelineRefresh();
             }}
           }};
           const resolveDashboardHeaders = () => {{
@@ -2091,6 +2536,435 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
             }});
           }});
 
+          (function setupPipelineOrchestrator() {{
+            const pipelinePage = document.querySelector('[data-pipeline-page]');
+            if (!pipelinePage) {{
+              return;
+            }}
+            const cardsContainer = pipelinePage.querySelector('[data-pipeline-cards]');
+            const emptyState = pipelinePage.querySelector('[data-pipeline-empty]');
+            const errorBox = pipelinePage.querySelector('[data-pipeline-error]');
+            const refreshButton = pipelinePage.querySelector('[data-pipeline-refresh]');
+            const statusElement = pipelinePage.querySelector('[data-pipeline-status]');
+            const template = document.getElementById('pipeline-card-template');
+            if (!cardsContainer || !template) {{
+              return;
+            }}
+
+            const NO_CREDENTIALS_CODE = 'no-credentials';
+            let loaded = false;
+            let loading = false;
+
+            const setStatus = (message, state) => {{
+              if (!statusElement) {{
+                return;
+              }}
+              statusElement.textContent = message || '';
+              if (state) {{
+                statusElement.dataset.state = state;
+              }} else {{
+                delete statusElement.dataset.state;
+              }}
+            }};
+
+            const showError = (message) => {{
+              if (!errorBox) {{
+                return;
+              }}
+              if (message) {{
+                errorBox.textContent = message;
+                errorBox.hidden = false;
+              }} else {{
+                errorBox.textContent = '';
+                errorBox.hidden = true;
+              }}
+            }};
+
+            const updateEmptyState = (hasContent) => {{
+              if (!emptyState) {{
+                return;
+              }}
+              emptyState.hidden = hasContent;
+            }};
+
+            const buildHeaders = (needsJson = false) => {{
+              if (typeof resolveDashboardHeaders !== 'function') {{
+                return null;
+              }}
+              const base = resolveDashboardHeaders();
+              if (!base) {{
+                return null;
+              }}
+              const headers = Object.assign({{}}, base);
+              if (needsJson) {{
+                headers['Content-Type'] = 'application/json';
+              }}
+              return headers;
+            }};
+
+            const requestJson = async (path, {{ method = 'GET', body }} = {{}}) => {{
+              const headers = buildHeaders(method !== 'GET' && method !== 'HEAD');
+              if (!headers) {{
+                const error = new Error('Pipeline credentials are required.');
+                error.code = NO_CREDENTIALS_CODE;
+                throw error;
+              }}
+              const options = {{ method, headers, credentials: 'same-origin' }};
+              if (body !== undefined) {{
+                options.body = body;
+              }}
+              const response = await fetch(joinWithRoot(path), options);
+              if ([401, 403].includes(response.status)) {{
+                throw new Error('Authentication failed. Update Trafalgar credentials and retry.');
+              }}
+              if (!response.ok) {{
+                let detail = `Pipeline request failed (${{response.status}})`;
+                try {{
+                  const payload = await response.json();
+                  if (payload && typeof payload.detail === 'string') {{
+                    detail = payload.detail;
+                  }}
+                }} catch (error) {{
+                  // ignore JSON parsing issues
+                }}
+                throw new Error(detail);
+              }}
+              if (response.status === 204) {{
+                return null;
+              }}
+              return response.json();
+            }};
+
+            const formatTimestamp = (value) => {{
+              if (!value) {{
+                return '';
+              }}
+              const date = new Date(value);
+              if (Number.isNaN(date.getTime())) {{
+                return value;
+              }}
+              return date.toLocaleString();
+            }};
+
+            const renderEvents = (card, events) => {{
+              const section = card.querySelector('[data-pipeline-events]');
+              const list = card.querySelector('[data-pipeline-event-list]');
+              if (!section || !list) {{
+                return;
+              }}
+              list.innerHTML = '';
+              const entries = Array.isArray(events) ? events.slice() : [];
+              entries.sort((left, right) => {{
+                const leftTime = new Date(left && left.timestamp).getTime();
+                const rightTime = new Date(right && right.timestamp).getTime();
+                if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {{
+                  return 0;
+                }}
+                if (Number.isNaN(leftTime)) {{
+                  return -1;
+                }}
+                if (Number.isNaN(rightTime)) {{
+                  return 1;
+                }}
+                return leftTime - rightTime;
+              }});
+              entries.forEach((event) => {{
+                const item = document.createElement('li');
+                const status = document.createElement('strong');
+                status.textContent = (event && event.status) || 'unknown';
+                item.appendChild(status);
+                const timestamp = formatTimestamp(event && event.timestamp);
+                if (timestamp) {{
+                  const timeSpan = document.createElement('span');
+                  timeSpan.textContent = ` • ${{timestamp}}`;
+                  item.appendChild(timeSpan);
+                }}
+                list.appendChild(item);
+              }});
+              section.hidden = entries.length === 0;
+            }};
+
+            const setRunStatus = (card, message, state) => {{
+              const status = card.querySelector('[data-pipeline-run-status]');
+              if (!status) {{
+                return;
+              }}
+              status.textContent = message || '';
+              if (state) {{
+                status.dataset.state = state;
+              }} else {{
+                delete status.dataset.state;
+              }}
+            }};
+
+            const refreshRun = async (card, runId) => {{
+              if (!runId) {{
+                return;
+              }}
+              const refreshButton = card.querySelector('[data-pipeline-refresh-run]');
+              if (refreshButton) {{
+                refreshButton.disabled = true;
+              }}
+              setRunStatus(card, 'Refreshing status…', 'running');
+              try {{
+                const encodedId = encodeURIComponent(runId);
+                const [run, events] = await Promise.all([
+                  requestJson(`/api/pipelines/runs/${{encodedId}}`),
+                  requestJson(`/api/pipelines/runs/${{encodedId}}/events`),
+                ]);
+                const statusText = run && typeof run.status === 'string' ? run.status : 'unknown';
+                const normalised = statusText.toLowerCase();
+                const state = normalised.includes('fail') || normalised.includes('error')
+                  ? 'error'
+                  : normalised === 'succeeded'
+                    ? 'success'
+                    : 'running';
+                setRunStatus(card, `Status: ${{statusText}}`, state);
+                renderEvents(card, events);
+                card.dataset.lastRunId = runId;
+                if (refreshButton) {{
+                  refreshButton.hidden = false;
+                }}
+              }} catch (error) {{
+                setRunStatus(card, error && error.message ? error.message : 'Unable to load run status.', 'error');
+                throw error;
+              }} finally {{
+                if (refreshButton) {{
+                  refreshButton.disabled = false;
+                }}
+              }}
+            }};
+
+            const renderParameters = (definition, container) => {{
+              if (!container) {{
+                return [];
+              }}
+              container.innerHTML = '';
+              const parameters = definition && typeof definition.parameters === 'object' && !Array.isArray(definition.parameters)
+                ? definition.parameters
+                : {{}};
+              const names = Object.keys(parameters || {{}})
+                .filter((name) => typeof name === 'string' && name.length > 0)
+                .sort();
+              if (!names.length) {{
+                const placeholder = document.createElement('p');
+                placeholder.className = 'pipeline-param-empty';
+                placeholder.textContent = 'No parameters required.';
+                container.appendChild(placeholder);
+                return [];
+              }}
+              names.forEach((name) => {{
+                const field = document.createElement('div');
+                field.className = 'pipeline-param-field';
+                const label = document.createElement('label');
+                label.setAttribute('for', `${{definition.name}}-${{name}}-input`);
+                label.textContent = name;
+                const input = document.createElement('input');
+                input.id = `${{definition.name}}-${{name}}-input`;
+                input.name = name;
+                input.type = 'text';
+                const defaultValue = parameters[name];
+                let defaultDisplay = '';
+                if (typeof defaultValue === 'string') {{
+                  defaultDisplay = defaultValue;
+                }} else if (defaultValue !== undefined && defaultValue !== null) {{
+                  try {{
+                    defaultDisplay = JSON.stringify(defaultValue);
+                  }} catch (error) {{
+                    defaultDisplay = String(defaultValue);
+                  }}
+                }}
+                if (defaultDisplay) {{
+                  input.placeholder = defaultDisplay;
+                }} else {{
+                  input.placeholder = 'Optional parameter';
+                }}
+                field.appendChild(label);
+                field.appendChild(input);
+                if (defaultDisplay) {{
+                  const hint = document.createElement('span');
+                  hint.className = 'pipeline-param-default';
+                  hint.textContent = `Default: ${{defaultDisplay}}`;
+                  field.appendChild(hint);
+                }}
+                container.appendChild(field);
+              }});
+              return names;
+            }};
+
+            const attachRunHandlers = (card, definition, parameterNames) => {{
+              const form = card.querySelector('[data-pipeline-form]');
+              const refreshButton = card.querySelector('[data-pipeline-refresh-run]');
+              if (!form) {{
+                return;
+              }}
+              form.addEventListener('submit', async (event) => {{
+                event.preventDefault();
+                const runButton = card.querySelector('[data-pipeline-run]');
+                if (runButton) {{
+                  runButton.disabled = true;
+                }}
+                setRunStatus(card, 'Triggering pipeline…', 'running');
+                try {{
+                  const formData = new FormData(form);
+                  const parameters = {{}};
+                  parameterNames.forEach((name) => {{
+                    const value = formData.get(name);
+                    if (typeof value === 'string') {{
+                      const trimmed = value.trim();
+                      if (trimmed) {{
+                        parameters[name] = trimmed;
+                      }}
+                    }}
+                  }});
+                  const payload = {{ parameters }};
+                  const run = await requestJson(`/api/pipelines/${{encodeURIComponent(definition.name)}}/runs`, {{
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                  }});
+                  const runId = run && run.id ? run.id : '';
+                  if (runId) {{
+                    setRunStatus(card, `Triggered run ${{runId}}`, 'info');
+                    await refreshRun(card, runId);
+                  }} else {{
+                    setRunStatus(card, 'Pipeline triggered.', 'success');
+                  }}
+                }} catch (error) {{
+                  if (error && error.code === NO_CREDENTIALS_CODE) {{
+                    setRunStatus(card, 'Add Trafalgar credentials to run pipelines.', 'error');
+                  }} else {{
+                    setRunStatus(card, error && error.message ? error.message : 'Unable to trigger pipeline.', 'error');
+                  }}
+                }} finally {{
+                  const runButton = card.querySelector('[data-pipeline-run]');
+                  if (runButton) {{
+                    runButton.disabled = false;
+                  }}
+                }}
+              }});
+              if (refreshButton) {{
+                refreshButton.addEventListener('click', (event) => {{
+                  event.preventDefault();
+                  const runId = card.dataset.lastRunId || refreshButton.dataset.runId || '';
+                  if (!runId) {{
+                    return;
+                  }}
+                  refreshRun(card, runId).catch((error) => {{
+                    console.error('pipeline.refresh.failed', error);
+                  }});
+                }});
+              }}
+            }};
+
+            const buildCard = (definition) => {{
+              const fragment = template.content.cloneNode(true);
+              const card = fragment.querySelector('[data-pipeline-card]');
+              if (!card) {{
+                return null;
+              }}
+              const nameElement = card.querySelector('[data-pipeline-name]');
+              if (nameElement) {{
+                nameElement.textContent = (definition && definition.display_name) || definition.name || 'Pipeline';
+              }}
+              const identifierElement = card.querySelector('[data-pipeline-identifier]');
+              if (identifierElement) {{
+                identifierElement.textContent = definition && definition.name ? definition.name : '';
+              }}
+              const descriptionElement = card.querySelector('[data-pipeline-description]');
+              const description = definition && typeof definition.description === 'string'
+                ? definition.description.trim()
+                : '';
+              if (descriptionElement) {{
+                if (description) {{
+                  descriptionElement.textContent = description;
+                }} else {{
+                  descriptionElement.remove();
+                }}
+              }}
+              const parametersContainer = card.querySelector('[data-pipeline-parameters]');
+              const parameterNames = renderParameters(definition, parametersContainer);
+              return {{ card, parameterNames }};
+            }};
+
+            const renderPipelines = (pipelines) => {{
+              cardsContainer.innerHTML = '';
+              const definitions = Array.isArray(pipelines) ? pipelines : [];
+              definitions.forEach((definition) => {{
+                const built = buildCard(definition);
+                if (!built) {{
+                  return;
+                }}
+                attachRunHandlers(built.card, definition, built.parameterNames);
+                cardsContainer.appendChild(built.card);
+              }});
+              updateEmptyState(cardsContainer.children.length > 0);
+            }};
+
+            const loadPipelines = async () => {{
+              if (loading) {{
+                return;
+              }}
+              loading = true;
+              setStatus('Loading pipelines…', 'running');
+              showError('');
+              try {{
+                const pipelines = await requestJson('/api/pipelines');
+                renderPipelines(pipelines);
+                const total = Array.isArray(pipelines) ? pipelines.length : 0;
+                setStatus(
+                  total ? `Loaded ${{total}} pipeline${{total === 1 ? '' : 's'}}.` : 'No pipelines registered.',
+                  total ? 'success' : 'info',
+                );
+                loaded = true;
+              }} catch (error) {{
+                loaded = false;
+                if (error && error.code === NO_CREDENTIALS_CODE) {{
+                  setStatus('Add Trafalgar credentials to load pipelines.', 'info');
+                  showError('Authentication is required to load pipelines.');
+                  renderPipelines([]);
+                }} else {{
+                  const message = error && error.message ? error.message : 'Unable to load pipelines.';
+                  setStatus(message, 'error');
+                  showError(message);
+                  renderPipelines([]);
+                }}
+              }} finally {{
+                loading = false;
+              }}
+            }};
+
+            const ensureLoaded = (force = false) => {{
+              if (loading) {{
+                return;
+              }}
+              if (force) {{
+                loaded = false;
+              }}
+              if (!loaded) {{
+                loadPipelines().catch((error) => {{
+                  console.error('pipeline.load.unhandled', error);
+                }});
+              }}
+            }};
+
+            if (refreshButton) {{
+              refreshButton.addEventListener('click', (event) => {{
+                event.preventDefault();
+                ensureLoaded(true);
+              }});
+            }}
+
+            ensureLoaded();
+            window.triggerPipelineRefresh = () => ensureLoaded(true);
+
+            const observer = new MutationObserver(() => {{
+              if (pipelinePage.classList.contains('active')) {{
+                ensureLoaded();
+              }}
+            }});
+            observer.observe(pipelinePage, {{ attributes: true, attributeFilter: ['class'] }});
+          }})();
+
           (function setupDashboardCharts() {{
             const chartCards = Array.from(document.querySelectorAll('#page-dashboard [data-chart-id]'));
             const chartInstances = new Map();
@@ -2478,6 +3352,34 @@ class RunCommandResponse(BaseModel):
     success: bool
 
 
+class PipelineDefinitionPayload(BaseModel):
+    name: str
+    display_name: str | None = Field(None, alias="display_name")
+    description: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineRunPayload(BaseModel):
+    id: str = Field(..., alias="id")
+    pipeline: str
+    status: str
+    created_at: str | None = Field(None, alias="created_at")
+    updated_at: str | None = Field(None, alias="updated_at")
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineEventPayload(BaseModel):
+    id: str
+    pipeline: str
+    status: str
+    timestamp: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class TriggerPipelineRunRequest(BaseModel):
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     scope_root = request.scope.get("root_path", "")
@@ -2529,6 +3431,57 @@ async def run_command(payload: RunCommandRequest) -> RunCommandResponse:
     arguments = [*command_path, *extra_args]
     result = await asyncio.to_thread(_invoke_cli, arguments)
     return result
+
+
+@app.get("/api/pipelines", response_model=list[PipelineDefinitionPayload])
+async def list_pipelines(
+    client: PipelineApiClient = Depends(get_pipeline_client),
+) -> list[dict[str, Any]]:
+    try:
+        return await client.list_pipelines()
+    except PipelineApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.post(
+    "/api/pipelines/{pipeline}/runs",
+    response_model=PipelineRunPayload,
+    status_code=201,
+)
+async def trigger_pipeline_run(
+    pipeline: str,
+    submission: TriggerPipelineRunRequest,
+    client: PipelineApiClient = Depends(get_pipeline_client),
+) -> dict[str, Any]:
+    try:
+        return await client.trigger_run(pipeline, parameters=submission.parameters)
+    except PipelineApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.get("/api/pipelines/runs/{run_id}", response_model=PipelineRunPayload)
+async def get_pipeline_run(
+    run_id: str,
+    client: PipelineApiClient = Depends(get_pipeline_client),
+) -> dict[str, Any]:
+    try:
+        return await client.get_run(run_id)
+    except PipelineApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.get(
+    "/api/pipelines/runs/{run_id}/events",
+    response_model=list[PipelineEventPayload],
+)
+async def get_pipeline_events(
+    run_id: str,
+    client: PipelineApiClient = Depends(get_pipeline_client),
+) -> list[dict[str, Any]]:
+    try:
+        return await client.get_run_events(run_id)
+    except PipelineApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 __all__ = [
