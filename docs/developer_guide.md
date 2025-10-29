@@ -134,7 +134,7 @@ The pipeline blueprint introduced in the latest release aligns the CLI, Trafalga
 
 ### Key APIs and CLI entry points
 
-- `trafalgar pipeline list|run` – Enumerate pipelines, inspect blueprints, and trigger executions programmatically or from schedulers. Combine with repeated `--param key=value` options to seed run parameters. 【F:src/apps/trafalgar/app.py†L1-L120】
+- `onepiece pipeline list|describe|run|runs|run-status|watch` – Enumerate pipelines, inspect blueprints, trigger executions, review historical runs, and stream live status from either the embedded orchestrator or the Trafalgar API depending on environment flags. Use repeated `--param key=value` options to seed run parameters. 【F:src/apps/onepiece/pipeline/__init__.py†L158-L520】
 - `/pipeline/pipelines`, `/pipeline/runs/{id}`, `/pipeline/runs/{id}/events` – FastAPI endpoints used by the Trafalgar CLI and dashboards. They list definitions, return run metadata, and stream server-sent events for live monitoring. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 - `onepiece pipeline steps` entry-point group – Register custom pipeline steps in `pyproject.toml` so bespoke validation or delivery stages can be invoked without patching upstream code. 【F:docs/pipeline_cli.md†L25-L38】
 - Trafalgar REST APIs – Leverage the ingest, render, and delivery endpoints surfaced by the control plane to automate manifests, farm orchestration, and reconciliation callbacks. Pin consumers to the versioned schemas called out in the overview and `docs/render_api.md`.
