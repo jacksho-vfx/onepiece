@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 import sqlite3
 import threading
 import time
@@ -10,7 +11,7 @@ import time
 from apps.trafalgar.pipeline import PipelineRun, PipelineRunEvent, PipelineRunStore
 
 
-def test_run_store_uses_wal_and_busy_timeout(tmp_path) -> None:
+def test_run_store_uses_wal_and_busy_timeout(tmp_path: Path) -> None:
     database = tmp_path / "runs.sqlite3"
     store = PipelineRunStore(database=database)
 
