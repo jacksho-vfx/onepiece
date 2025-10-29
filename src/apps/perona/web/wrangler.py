@@ -413,7 +413,9 @@ def _run_audit_telemetry_coverage_script() -> WranglerScriptResult:
     counts = {"healthy": 0, "warning": 0, "stale": 0, "missing": 0}
 
     if not keys:
-        message = "Telemetry coverage audit unavailable — no telemetry samples recorded."
+        message = (
+            "Telemetry coverage audit unavailable — no telemetry samples recorded."
+        )
         payload = {
             "summary": message,
             "shots": [],
@@ -440,7 +442,9 @@ def _run_audit_telemetry_coverage_script() -> WranglerScriptResult:
         status: str
 
         if sample_count > 0:
-            last_seen = max((getattr(sample, "timestamp", None) for sample in metrics), default=None)
+            last_seen = max(  # type: ignore[type-var]
+                (getattr(sample, "timestamp", None) for sample in metrics), default=None
+            )
             if isinstance(last_seen, datetime):
                 if last_seen.tzinfo is None:
                     last_seen = last_seen.replace(tzinfo=timezone.utc)

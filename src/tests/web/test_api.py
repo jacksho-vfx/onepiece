@@ -81,9 +81,7 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
 
     assert scripts["audit_telemetry_coverage"]["name"] == "Audit telemetry coverage"
-    assert (
-        "telemetry" in scripts["audit_telemetry_coverage"]["description"].lower()
-    )
+    assert "telemetry" in scripts["audit_telemetry_coverage"]["description"].lower()
     assert scripts["audit_telemetry_coverage"]["tags"] == [
         "telemetry",
         "coverage",
@@ -540,10 +538,13 @@ def test_wrangler_audit_telemetry_coverage_classifies_buckets(
     assert body["counts"] == {"healthy": 1, "warning": 1, "stale": 1, "missing": 1}
     assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
 
-    shots = {(
-        entry["sequence"],
-        entry["shot"],
-    ): entry for entry in body["shots"]}
+    shots = {
+        (
+            entry["sequence"],
+            entry["shot"],
+        ): entry
+        for entry in body["shots"]
+    }
 
     healthy = shots[("SQ10", "SH010")]
     warning = shots[("SQ20", "SH020")]
@@ -598,6 +599,7 @@ def test_wrangler_audit_telemetry_coverage_handles_empty_telemetry(
     assert body["counts"] == {"healthy": 0, "warning": 0, "stale": 0, "missing": 0}
     assert body["attention_total"] == 0
     assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
+
 
 def test_wrangler_analyse_cost_drivers_script_returns_summary(
     monkeypatch: pytest.MonkeyPatch,
