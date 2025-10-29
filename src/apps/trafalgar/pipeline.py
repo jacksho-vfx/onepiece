@@ -9,6 +9,9 @@ from typing import Any, Iterable, Iterator, Mapping
 
 import uuid
 
+from apps.onepiece.config import ProfileContext
+from libraries.pipeline.factories import pipeline_from_config
+
 
 @dataclass(slots=True)
 class PipelineDefinition:
@@ -194,6 +197,68 @@ def set_pipeline_orchestrator(orchestrator: PipelineOrchestrator | None) -> None
     _default_orchestrator = orchestrator
 
 
+def pipeline_definition_from_profile_entry(
+    name: str, config: Mapping[str, Any]
+) -> PipelineDefinition:
+    """Return a pipeline definition derived from profile configuration."""
+
+    pipeline_config = dict(config)
+    pipeline_config.setdefault("name", name)
+    pipeline = pipeline_from_config(pipeline_config)
+
+    metadata = pipeline.metadata or {}
+
+    def _coerce_optional_str(value: Any) -> str | None:
+        if value is None:
+            return None
+        return str(value)
+
+    display_name = _coerce_optional_str(
+        config.get("display_name", metadata.get("display_name"))
+    )
+    description = _coerce_optional_str(
+        config.get("description", metadata.get("description"))
+    )
+
+    parameters_raw = config.get("parameters")
+    if parameters_raw is None:
+        parameters: Mapping[str, Any] = {}
+    elif isinstance(parameters_raw, Mapping):
+        parameters = dict(parameters_raw)
+    else:
+        msg = f"pipeline '{name}' parameters must be a mapping"
+        raise TypeError(msg)
+
+    return PipelineDefinition(
+        name=pipeline.name,
+        display_name=display_name,
+        description=description,
+        parameters=parameters,
+    )
+
+
+def pipeline_definitions_from_profile(
+    profile: ProfileContext,
+) -> tuple[PipelineDefinition, ...]:
+    """Build pipeline definitions from a loaded profile context."""
+
+    return tuple(
+        pipeline_definition_from_profile_entry(name, config)
+        for name, config in sorted(profile.pipelines.items())
+    )
+
+
+def configure_orchestrator_from_profile(
+    profile: ProfileContext,
+) -> PipelineOrchestrator:
+    """Initialise the shared orchestrator with definitions from *profile*."""
+
+    definitions = pipeline_definitions_from_profile(profile)
+    orchestrator = PipelineOrchestrator(definitions)
+    set_pipeline_orchestrator(orchestrator)
+    return orchestrator
+
+
 __all__ = [
     "PipelineDefinition",
     "PipelineOrchestrator",
@@ -201,4 +266,7 @@ __all__ = [
     "PipelineRunEvent",
     "get_pipeline_orchestrator",
     "set_pipeline_orchestrator",
+    "pipeline_definition_from_profile_entry",
+    "pipeline_definitions_from_profile",
+    "configure_orchestrator_from_profile",
 ]

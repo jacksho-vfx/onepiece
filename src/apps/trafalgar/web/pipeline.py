@@ -10,7 +10,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from apps.trafalgar.pipeline import get_pipeline_orchestrator
+from apps.onepiece.config import load_profile
+from apps.trafalgar.pipeline import (
+    configure_orchestrator_from_profile,
+    get_pipeline_orchestrator,
+)
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from .security import (
     AuthenticatedPrincipal,
@@ -29,6 +33,12 @@ class PipelineRunSubmission(BaseModel):
 
 app = FastAPI(title="OnePiece Pipeline API", version=TRAFALGAR_VERSION)
 router = create_protected_router()
+
+
+@app.on_event("startup")
+def _register_profile_pipelines() -> None:
+    context = load_profile()
+    configure_orchestrator_from_profile(context)
 
 
 @router.get("/")

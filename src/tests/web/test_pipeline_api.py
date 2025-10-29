@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
-from apps.trafalgar.pipeline import (
-    PipelineDefinition,
-    PipelineOrchestrator,
-    set_pipeline_orchestrator,
-)
+from apps.onepiece.config import ProfileContext, load_profile
+from apps.trafalgar.pipeline import set_pipeline_orchestrator
 from apps.trafalgar.web import pipeline as pipeline_module
 from apps.trafalgar.web import security as security_module
 from apps.trafalgar.web.security import reset_security_state
@@ -25,31 +25,64 @@ def _reset_security_state() -> Iterator[None]:
     reset_security_state()
 
 
-@pytest.fixture(autouse=True)
-def _configure_orchestrator() -> Iterator[PipelineOrchestrator]:
-    orchestrator = PipelineOrchestrator(
-        (
-            PipelineDefinition(
-                name="render_shots",
-                display_name="Render Shots",
-                description="Render queued shots with default settings.",
-                parameters={"quality": "string", "priority": "int"},
-            ),
-            PipelineDefinition(
-                name="publish_assets",
-                display_name="Publish Assets",
-                description="Publish ready assets to downstream systems.",
-            ),
-        )
+def _write_pipeline_config(path: Path) -> None:
+    path.write_text(
+        textwrap.dedent(
+            """
+            [pipelines.render_shots]
+            display_name = "Render Shots"
+            description = "Render queued shots with default settings."
+
+            [[pipelines.render_shots.steps]]
+            name = "prepare"
+            provider = "tests.pipeline:prepare"
+
+            [[pipelines.render_shots.steps]]
+            name = "render"
+            provider = "tests.pipeline:render"
+
+            [pipelines.render_shots.parameters]
+            quality = "string"
+            priority = "int"
+
+            [pipelines.publish_assets]
+            display_name = "Publish Assets"
+            description = "Publish ready assets to downstream systems."
+
+            [[pipelines.publish_assets.steps]]
+            name = "publish"
+            provider = "tests.pipeline:publish"
+            """
+        ).strip()
+        + "\n"
     )
-    set_pipeline_orchestrator(orchestrator)
-    yield orchestrator
-    set_pipeline_orchestrator(None)
 
 
 @pytest.fixture()
-def client() -> TestClient:
-    return TestClient(pipeline_module.app)
+def profile_context(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> Iterator[ProfileContext]:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    config_path = project_root / "onepiece.toml"
+    _write_pipeline_config(config_path)
+
+    monkeypatch.setenv("ONEPIECE_PROJECT_ROOT", str(project_root))
+    monkeypatch.delenv("ONEPIECE_PROFILE", raising=False)
+
+    context = load_profile()
+    yield context
+
+    set_pipeline_orchestrator(None)
+    monkeypatch.delenv("ONEPIECE_PROJECT_ROOT", raising=False)
+
+
+@pytest.fixture()
+def client(profile_context: ProfileContext) -> Iterator[TestClient]:
+    set_pipeline_orchestrator(None)
+    with TestClient(pipeline_module.app) as instance:
+        yield instance
+    set_pipeline_orchestrator(None)
 
 
 def _auth_headers() -> dict[str, str]:
@@ -59,7 +92,9 @@ def _auth_headers() -> dict[str, str]:
     }
 
 
-def test_list_pipelines_returns_registered_definitions(client: TestClient) -> None:
+def test_list_pipelines_returns_registered_definitions(
+    client: TestClient, profile_context: ProfileContext
+) -> None:
     response = client.get("/pipelines", headers=_auth_headers())
 
     assert response.status_code == 200
@@ -70,6 +105,7 @@ def test_list_pipelines_returns_registered_definitions(client: TestClient) -> No
     assert render["display_name"] == "Render Shots"
     assert "Render queued shots" in render["description"]
     assert set(render["parameters"]) == {"quality", "priority"}
+    assert set(names) == set(profile_context.pipelines)
 
 
 def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
