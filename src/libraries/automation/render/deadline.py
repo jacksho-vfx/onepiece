@@ -65,7 +65,7 @@ class DeadlineClient:
             self._session = self.session_factory()
         return self._session
 
-    def submit_job(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    def submit_job(self, payload: Mapping[str, Any]) -> Any:
         """Submit a job payload to Deadline."""
 
         url = f"{self.base_url.rstrip('/')}/api/jobs"
@@ -74,18 +74,30 @@ class DeadlineClient:
             auth = (self.username, self.password)
 
         try:
-            response = self.session.post(url, json=payload, timeout=REQUEST_TIMEOUT, auth=auth)
-        except requests.RequestException as exc:  # pragma: no cover - exercised via DeadlineUnavailableError
+            response = self.session.post(
+                url, json=payload, timeout=REQUEST_TIMEOUT, auth=auth
+            )
+        except (
+            requests.RequestException
+        ) as exc:  # pragma: no cover - exercised via DeadlineUnavailableError
             raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
 
         if response.status_code in {401, 403}:
-            raise DeadlineAuthenticationError(_response_message(response) or "Deadline authentication failed")
+            raise DeadlineAuthenticationError(
+                _response_message(response) or "Deadline authentication failed"
+            )
         if response.status_code in {400, 422}:
-            raise DeadlineValidationError(_response_message(response) or "Deadline rejected the job payload")
+            raise DeadlineValidationError(
+                _response_message(response) or "Deadline rejected the job payload"
+            )
         if response.status_code == 409:
-            raise DeadlineValidationError(_response_message(response) or "Deadline refused to queue the job")
+            raise DeadlineValidationError(
+                _response_message(response) or "Deadline refused to queue the job"
+            )
         if response.status_code >= 500:
-            raise DeadlineUnavailableError(_response_message(response) or "Deadline encountered an error")
+            raise DeadlineUnavailableError(
+                _response_message(response) or "Deadline encountered an error"
+            )
 
         try:
             data = response.json()
@@ -94,7 +106,7 @@ class DeadlineClient:
 
         return data
 
-    def get_limits(self) -> Mapping[str, Any]:
+    def get_limits(self) -> Any:
         """Return adapter limits advertised by Deadline."""
 
         url = f"{self.base_url.rstrip('/')}/api/capabilities"
@@ -104,13 +116,19 @@ class DeadlineClient:
 
         try:
             response = self.session.get(url, timeout=REQUEST_TIMEOUT, auth=auth)
-        except requests.RequestException as exc:  # pragma: no cover - handled by DeadlineUnavailableError
+        except (
+            requests.RequestException
+        ) as exc:  # pragma: no cover - handled by DeadlineUnavailableError
             raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
 
         if response.status_code >= 500:
-            raise DeadlineUnavailableError(_response_message(response) or "Deadline capabilities unavailable")
+            raise DeadlineUnavailableError(
+                _response_message(response) or "Deadline capabilities unavailable"
+            )
         if response.status_code in {401, 403}:
-            raise DeadlineAuthenticationError(_response_message(response) or "Deadline authentication failed")
+            raise DeadlineAuthenticationError(
+                _response_message(response) or "Deadline authentication failed"
+            )
 
         try:
             return response.json()
@@ -182,14 +200,20 @@ def _translate_capabilities(data: Mapping[str, Any]) -> AdapterCapabilities:
     cancellation = data.get("cancellation", {}) if isinstance(data, Mapping) else {}
 
     capabilities: AdapterCapabilities = AdapterCapabilities(
-        default_priority=int(priority.get("default", defaults.get("default_priority", 50))),
+        default_priority=int(
+            priority.get("default", defaults.get("default_priority", 50))
+        ),
         priority_min=int(priority.get("min", defaults.get("priority_min", 0))),
         priority_max=int(priority.get("max", defaults.get("priority_max", 100))),
         chunk_size_enabled=bool(chunk.get("enabled", True)),
         chunk_size_min=int(chunk.get("min", defaults.get("chunk_size_min", 1))),
         chunk_size_max=int(chunk.get("max", defaults.get("chunk_size_max", 50))),
-        default_chunk_size=int(chunk.get("default", defaults.get("default_chunk_size", 10))),
-        cancellation_supported=bool(cancellation.get("supported", defaults.get("cancellation_supported", False))),
+        default_chunk_size=int(
+            chunk.get("default", defaults.get("default_chunk_size", 10))
+        ),
+        cancellation_supported=bool(
+            cancellation.get("supported", defaults.get("cancellation_supported", False))
+        ),
     )
 
     return capabilities
@@ -296,7 +320,11 @@ def get_capabilities() -> AdapterCapabilities:
 
     try:
         limits = client.get_limits()
-    except (DeadlineUnavailableError, DeadlineAuthenticationError, DeadlineResponseError) as exc:
+    except (
+        DeadlineUnavailableError,
+        DeadlineAuthenticationError,
+        DeadlineResponseError,
+    ) as exc:
         log.warning(
             "render.deadline.capabilities_fallback",
             error=str(exc),

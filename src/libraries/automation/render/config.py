@@ -19,7 +19,9 @@ def get_adapter_settings(adapter: str) -> Mapping[str, str]:
     return settings
 
 
-def get_adapter_setting(adapter: str, key: str, default: str | None = None) -> str | None:
+def get_adapter_setting(
+    adapter: str, key: str, default: str | None = None
+) -> str | None:
     """Return a single adapter setting value, falling back to ``default`` when missing."""
 
     settings = get_adapter_settings(adapter)

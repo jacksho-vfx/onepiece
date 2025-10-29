@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from typing import Any
 
 from libraries.automation.render import config as render_config
 from libraries.automation.render import deadline
@@ -13,7 +14,7 @@ from libraries.automation.render.base import (
 
 
 @pytest.fixture(autouse=True)
-def reset_deadline_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def reset_deadline_state(monkeypatch: pytest.MonkeyPatch) -> Any:
     """Ensure tests start with clean caches and environment."""
 
     render_config.get_adapter_settings.cache_clear()
@@ -36,11 +37,11 @@ class FakeDeadlineClient:
         self.limit_requests = 0
         self.base_url = "http://deadline"
 
-    def submit_job(self, payload):
+    def submit_job(self, payload: Any) -> Any:
         self.payloads.append(payload)
         return {"jobId": "abcd1234", "status": "queued", "message": "queued"}
 
-    def get_limits(self):
+    def get_limits(self) -> Any:
         self.limit_requests += 1
         return {
             "priority": {"default": 65, "min": 10, "max": 90},
@@ -49,7 +50,7 @@ class FakeDeadlineClient:
         }
 
 
-def _patch_client(monkeypatch: pytest.MonkeyPatch, client) -> None:
+def _patch_client(monkeypatch: pytest.MonkeyPatch, client: Any) -> None:
     monkeypatch.setattr(deadline, "_get_client", lambda: client)
 
 
@@ -75,15 +76,19 @@ def test_submit_job_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
         "farm_type": "deadline",
         "message": "queued",
     }
-    assert client.payloads[0]["JobInfo"]["Pool"] == "farm-a"
-    assert client.payloads[0]["JobInfo"]["ChunkSize"] == 5
+    assert client.payloads[0]["JobInfo"]["Pool"] == "farm-a"  # type: ignore[index]
+    assert client.payloads[0]["JobInfo"]["ChunkSize"] == 5  # type: ignore[index]
 
 
 def test_submit_job_raises_for_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
     class AuthFailClient:
         base_url = "http://deadline"
 
-        def submit_job(self, payload):  # pragma: no cover - exercised indirectly
+        def submit_job(
+            self, payload: Any
+        ) -> (
+            deadline.DeadlineAuthenticationError
+        ):  # pragma: no cover - exercised indirectly
             raise deadline.DeadlineAuthenticationError("bad credentials")
 
     _patch_client(monkeypatch, AuthFailClient())
@@ -104,7 +109,11 @@ def test_submit_job_raises_for_validation(monkeypatch: pytest.MonkeyPatch) -> No
     class ValidationFailClient:
         base_url = "http://deadline"
 
-        def submit_job(self, payload):  # pragma: no cover - exercised indirectly
+        def submit_job(
+            self, payload: Any
+        ) -> (
+            deadline.DeadlineValidationError
+        ):  # pragma: no cover - exercised indirectly
             raise deadline.DeadlineValidationError("frames invalid")
 
     _patch_client(monkeypatch, ValidationFailClient())
@@ -121,7 +130,9 @@ def test_submit_job_raises_for_validation(monkeypatch: pytest.MonkeyPatch) -> No
         )
 
 
-def test_get_capabilities_queries_deadline_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_capabilities_queries_deadline_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = FakeDeadlineClient()
     _patch_client(monkeypatch, client)
 
@@ -134,11 +145,17 @@ def test_get_capabilities_queries_deadline_once(monkeypatch: pytest.MonkeyPatch)
     assert first["cancellation_supported"] is True
 
 
-def test_get_capabilities_falls_back_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_capabilities_falls_back_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class UnavailableClient:
         base_url = "http://deadline"
 
-        def get_limits(self):  # pragma: no cover - exercised indirectly
+        def get_limits(
+            self,
+        ) -> (
+            deadline.DeadlineUnavailableError
+        ):  # pragma: no cover - exercised indirectly
             raise deadline.DeadlineUnavailableError("offline")
 
     _patch_client(monkeypatch, UnavailableClient())
