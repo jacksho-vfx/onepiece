@@ -6,7 +6,8 @@ import asyncio
 import inspect
 from collections import deque
 from collections.abc import AsyncIterable
-from dataclasses import dataclass, replace
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Deque, Iterable, Mapping, Protocol
 
 from libraries.pipeline.factories import resolve_provider
@@ -20,6 +21,14 @@ class StepTriggerEvent:
 
     name: str
     payload: Mapping[str, Any]
+
+
+@dataclass(slots=True)
+class QueuedEvent:
+    """Internal representation of events waiting to trigger steps."""
+
+    event: StepTriggerEvent
+    delivered_steps: set[str] = field(default_factory=set)
 
 
 @dataclass(slots=True)
@@ -79,19 +88,62 @@ class PipelineExecutor:
 
         parameters = dict(parameters or {})
         completed_steps: set[str] = set()
-        events: Deque[StepTriggerEvent] = deque()
+        events: Deque[QueuedEvent] = deque()
 
-        for step in pipeline.sequential_order():
-            executed_step = ExecutedStep(name=step.name)
-            emit("step_started", step=executed_step)
-            try:
-                result = self._call_provider(step, parameters=parameters)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                emit("step_failed", step=executed_step, error=exc)
-                raise
-            emit("step_succeeded", step=executed_step)
-            completed_steps.add(step.name)
-            events.extend(self._normalise_events(result))
+        sequential_steps = [
+            step for step in pipeline.steps if step.trigger.is_sequential
+        ]
+        dependencies: dict[str, set[str]] = {
+            step.name: set(step.trigger.depends_on) for step in sequential_steps
+        }
+
+        submitted: set[str] = set()
+        inflight: dict[Future[list[StepTriggerEvent]], PipelineStep] = {}
+
+        def schedule_ready_steps() -> None:
+            for step in sequential_steps:
+                if step.name in submitted:
+                    continue
+                if not dependencies[step.name].issubset(completed_steps):
+                    continue
+                submitted.add(step.name)
+                future = executor.submit(
+                    self._execute_sequential_step,
+                    step,
+                    parameters=parameters,  # type: ignore[arg-type]
+                    emit=emit,
+                )
+                inflight[future] = step
+
+        if sequential_steps:
+            max_workers = max(1, min(len(sequential_steps), 32))
+        else:
+            max_workers = 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            schedule_ready_steps()
+
+            while inflight:
+                done, _ = wait(tuple(inflight.keys()), return_when=FIRST_COMPLETED)
+                for future in done:
+                    step = inflight.pop(future)
+                    try:
+                        emitted_events = future.result()
+                    except Exception:
+                        for pending_future in list(inflight):
+                            pending_future.cancel()
+                        raise
+
+                    completed_steps.add(step.name)
+                    self._extend_event_queue(events, emitted_events)
+                    self._process_event_queue(
+                        pipeline,
+                        queue=events,
+                        completed_steps=completed_steps,
+                        parameters=parameters,
+                        emit=emit,
+                    )
+                    schedule_ready_steps()
 
         self._process_event_queue(
             pipeline,
@@ -168,48 +220,89 @@ class PipelineExecutor:
             return events
         return []
 
+    def _extend_event_queue(
+        self, queue: Deque[QueuedEvent], events: Iterable[StepTriggerEvent]
+    ) -> None:
+        for event in events:
+            queue.append(QueuedEvent(event=event))
+
+    def _execute_sequential_step(
+        self,
+        step: PipelineStep,
+        *,
+        parameters: Mapping[str, Any],
+        emit: StepEventEmitter,
+    ) -> list[StepTriggerEvent]:
+        executed_step = ExecutedStep(name=step.name)
+        emit("step_started", step=executed_step)
+        try:
+            result = self._call_provider(step, parameters=parameters)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            emit("step_failed", step=executed_step, error=exc)
+            raise
+        emit("step_succeeded", step=executed_step)
+        return list(self._normalise_events(result))
+
     def _process_event_queue(
         self,
         pipeline: Pipeline,
         *,
-        queue: Deque[StepTriggerEvent],
+        queue: Deque[QueuedEvent],
         completed_steps: set[str],
         parameters: Mapping[str, Any],
         emit: StepEventEmitter,
     ) -> None:
-        processed: set[tuple[str, int]] = set()
-        event_index = 0
-
         while queue:
-            event = queue.popleft()
-            event_index += 1
-            for step in pipeline.steps:
-                if not step.trigger.is_event_driven:
-                    continue
-                if not self._dependencies_satisfied(step.trigger, completed_steps):
-                    continue
-                if not self._event_matches(step.trigger, event):
-                    continue
-                key = (step.name, event_index)
-                if key in processed:
+            retry: Deque[QueuedEvent] = deque()
+            any_delivered = False
+
+            while queue:
+                queued_event = queue.popleft()
+                event = queued_event.event
+                delivered = False
+                should_retry = False
+                matched = False
+                for step in pipeline.steps:
+                    if not step.trigger.is_event_driven:
+                        continue
+                    if not self._event_matches(step.trigger, event):
+                        continue
+                    matched = True
+                    if step.name in queued_event.delivered_steps:
+                        continue
+                    if not self._dependencies_satisfied(step.trigger, completed_steps):
+                        should_retry = True
+                        continue
+
+                    executed_step = ExecutedStep(name=step.name)
+                    emit("step_started", step=executed_step, event=event)
+                    try:
+                        result = self._call_provider(
+                            step,
+                            parameters=parameters,
+                            event=event,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive guard
+                        emit("step_failed", step=executed_step, event=event, error=exc)
+                        raise
+
+                    emit("step_succeeded", step=executed_step, event=event)
+                    queued_event.delivered_steps.add(step.name)
+                    completed_steps.add(step.name)
+                    delivered = True
+                    any_delivered = True
+                    self._extend_event_queue(queue, self._normalise_events(result))
+
+                if should_retry:
+                    retry.append(queued_event)
+                elif not delivered and not matched:
                     continue
 
-                executed_step = ExecutedStep(name=step.name)
-                emit("step_started", step=executed_step, event=event)
-                try:
-                    result = self._call_provider(
-                        step,
-                        parameters=parameters,
-                        event=event,
-                    )
-                except Exception as exc:  # pragma: no cover - defensive guard
-                    emit("step_failed", step=executed_step, event=event, error=exc)
-                    raise
-
-                emit("step_succeeded", step=executed_step, event=event)
-                processed.add(key)
-                completed_steps.add(step.name)
-                queue.extend(self._normalise_events(result))
+            if retry:
+                queue.extend(retry)
+                if any_delivered:
+                    continue
+            break
 
     def _dependencies_satisfied(
         self, trigger: TriggerPolicy, completed_steps: set[str]
