@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 from collections import deque
+from collections.abc import AsyncIterable
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Deque, Iterable, Mapping, Protocol
 
@@ -133,13 +136,16 @@ class PipelineExecutor:
     ) -> Any:
         provider = step.provider
         if event is None:
-            return provider(parameters)
+            result = provider(parameters)
+        else:
+            result = provider(event, parameters)
 
-        return provider(event, parameters)
+        return self._resolve_async_value(result)
 
     def _normalise_events(self, result: Any) -> Iterable[StepTriggerEvent]:
         if result is None:
             return []
+        result = self._resolve_async_value(result)
         if isinstance(result, StepTriggerEvent):
             return [result]
         if isinstance(result, tuple) and len(result) == 2:
@@ -149,8 +155,7 @@ class PipelineExecutor:
             ]
         if isinstance(result, Mapping):
             if "events" in result:
-                items = result["events"]
-                return list(self._normalise_events(items))
+                return list(self._normalise_events(result["events"]))
             if "event" in result or "name" in result:
                 event_name = str(result.get("event") or result.get("name"))
                 payload = self._ensure_mapping(result.get("payload", {}))
@@ -224,3 +229,37 @@ class PipelineExecutor:
         if isinstance(payload, Mapping):
             return dict(payload)
         return {"value": payload}
+
+    def _resolve_async_value(self, value: Any) -> Any:
+        if inspect.isawaitable(value):
+            return self._run_awaitable(value)
+        if isinstance(value, AsyncIterable):
+            return self._run_awaitable(self._collect_async_iterable(value))
+        return value
+
+    async def _collect_async_iterable(
+        self, iterable: AsyncIterable[Any]
+    ) -> list[Any]:
+        items: list[Any] = []
+        async for item in iterable:
+            items.append(item)
+        return items
+
+    def _run_awaitable(self, awaitable: Any) -> Any:
+        """Execute *awaitable* to completion in a dedicated event loop."""
+
+        if asyncio.isfuture(awaitable) and awaitable.done():
+            return awaitable.result()
+
+        loop = asyncio.new_event_loop()
+        try:
+            try:
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(awaitable)
+            finally:
+                try:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                finally:
+                    asyncio.set_event_loop(None)
+        finally:
+            loop.close()
