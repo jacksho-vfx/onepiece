@@ -4,6 +4,8 @@
 >
 > - [Command entry points](#command-entry-points) — Where to interact with the
 >   orchestrator today and how the OnePiece CLI will hook in.
+> - [Pipeline storage](#pipeline-storage) — Configure the SQLite backend that
+>   records pipeline runs and events.
 > - [Loading pipeline definitions](#loading-pipeline-definitions) — Surface
 >   named pipelines alongside configuration profiles.
 > - [Factory utilities](#factory-utilities) — Convert mappings into strongly
@@ -48,6 +50,31 @@ operations. Callers with the `pipeline:read` role can enumerate definitions and
 query run metadata, while `pipeline:run` is required to trigger new runs.
 Streaming `/pipeline/runs/{id}/events` returns a server-sent event feed that is
 ideal for dashboards and chatbots. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
+
+## Pipeline storage
+
+Trafalgar persists run metadata to a SQLite database through
+`PipelineRunStore`. When the store connects to an on-disk database it enables
+Write-Ahead Logging (WAL) mode and applies a five second busy timeout so
+multiple workers can enqueue events without tripping SQLite's
+`OperationalError: database is locked` guard. Both options carry over to new
+connections so parallel API workers or CLI processes can share the same file
+without juggling manual pragmas. 【F:src/apps/trafalgar/pipeline.py†L151-L187】
+
+Profiles expose a `[pipeline.storage]` table so deployments can select a custom
+path and tune the locking window when higher write volume demands it. Supply a
+`busy_timeout` in seconds or `busy_timeout_ms` in milliseconds alongside the
+database location:
+
+```toml
+[profiles.production.pipeline.storage]
+database = "/srv/onepiece/pipelines.sqlite3"
+busy_timeout = 7.5  # seconds (or use busy_timeout_ms = 7500)
+```
+
+The orchestrator validates that only one timeout key is present and falls back
+to the default when no override is supplied. In-memory stores remain available
+for tests or ephemeral runners by omitting the table entirely. 【F:src/apps/trafalgar/pipeline.py†L577-L593】
 
 ## Loading pipeline definitions
 
