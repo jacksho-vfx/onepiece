@@ -30,7 +30,7 @@ class _StubS3Client:
         Bucket: str,
         Key: str,
         ExtraArgs: dict[str, object] | None = None,
-        Callback=None,
+        Callback: None = None,
         Config: object | None = None,
     ) -> None:
         self.calls.append(
