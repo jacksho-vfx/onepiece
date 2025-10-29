@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Iterable, Iterator, Mapping
 
 import uuid
 
 from apps.onepiece.config import ProfileContext
+from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.factories import pipeline_from_config
+from libraries.pipeline.models import Pipeline
 
 
 @dataclass(slots=True)
@@ -18,6 +20,7 @@ class PipelineDefinition:
     """A lightweight description of a runnable pipeline."""
 
     name: str
+    pipeline: Pipeline
     display_name: str | None = None
     description: str | None = None
     parameters: Mapping[str, Any] = field(default_factory=dict)
@@ -26,6 +29,9 @@ class PipelineDefinition:
         if not self.name:
             msg = "pipeline definitions require a name"
             raise ValueError(msg)
+        if not isinstance(self.pipeline, Pipeline):
+            msg = "pipeline definitions require a Pipeline instance"
+            raise TypeError(msg)
         if self.parameters is None:
             object.__setattr__(self, "parameters", {})
         else:
@@ -91,10 +97,16 @@ class PipelineRunEvent:
 class PipelineOrchestrator:
     """In-memory orchestrator used by the Trafalgar tooling layer."""
 
-    def __init__(self, definitions: Iterable[PipelineDefinition] | None = None) -> None:
+    def __init__(
+        self,
+        definitions: Iterable[PipelineDefinition] | None = None,
+        *,
+        executor: pipeline_executor.PipelineExecutor | None = None,
+    ) -> None:
         self._definitions: dict[str, PipelineDefinition] = {}
         self._runs: dict[str, tuple[PipelineRun, list[PipelineRunEvent]]] = {}
         self._lock = Lock()
+        self._executor = executor or pipeline_executor.PipelineExecutor()
         if definitions:
             for definition in definitions:
                 self.register(definition)
@@ -103,7 +115,9 @@ class PipelineOrchestrator:
         if definition.name in self._definitions:
             msg = f"pipeline '{definition.name}' is already registered"
             raise ValueError(msg)
-        self._definitions[definition.name] = definition
+        resolved = self._executor.resolve_pipeline(definition.pipeline)
+        stored = replace(definition, pipeline=resolved)
+        self._definitions[definition.name] = stored
 
     def list_pipelines(self) -> list[PipelineDefinition]:
         return sorted(self._definitions.values(), key=lambda item: item.name)
@@ -120,43 +134,93 @@ class PipelineOrchestrator:
     ) -> PipelineRun:
         parameters = dict(parameters or {})
         definition = self.get_pipeline(pipeline_name)
+        run_id = uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        run = PipelineRun(
+            run_id=run_id,
+            pipeline=definition.name,
+            status="queued",
+            created_at=now,
+            updated_at=now,
+            parameters=parameters,
+        )
         with self._lock:
-            run_id = uuid.uuid4().hex
-            now = datetime.now(timezone.utc)
-            run = PipelineRun(
+            self._runs[run_id] = (run, [
+                PipelineRunEvent(
+                    run_id=run_id,
+                    pipeline=definition.name,
+                    status="queued",
+                    timestamp=run.created_at,
+                    parameters=parameters,
+                )
+            ])
+
+        self._append_event(run_id, "running")
+
+        try:
+            self._executor.execute(
+                definition.pipeline,
+                parameters=parameters,
+                emit=self._build_step_emitter(run_id),
+            )
+        except Exception as exc:
+            self._append_event(
+                run_id,
+                "failed",
+                parameters={"error": str(exc)},
+            )
+        else:
+            self._append_event(run_id, "succeeded")
+
+        return self.get_run(run_id)
+
+    def _build_step_emitter(
+        self, run_id: str
+    ) -> pipeline_executor.StepEventEmitter:
+        def emit(
+            status: str,
+            *,
+            step: pipeline_executor.ExecutedStep,
+            event: pipeline_executor.StepTriggerEvent | None = None,
+            error: Exception | None = None,
+        ) -> None:
+            payload: dict[str, Any] = {"step": step.name}
+            if event is not None:
+                payload["event"] = {
+                    "name": event.name,
+                    "payload": dict(event.payload),
+                }
+            if error is not None:
+                payload["error"] = str(error)
+            self._append_event(run_id, status, parameters=payload)
+
+        return emit
+
+    def _append_event(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> None:
+        with self._lock:
+            timestamp = datetime.now(timezone.utc)
+            parameters = dict(parameters or {})
+            run, events = self._runs[run_id]
+            event = PipelineRunEvent(
                 run_id=run_id,
-                pipeline=definition.name,
-                status="queued",
-                created_at=now,
-                updated_at=now,
+                pipeline=run.pipeline,
+                status=status,
+                timestamp=timestamp,
                 parameters=parameters,
             )
-            events = self._generate_default_events(run)
-            final_event = events[-1]
-            run.status = final_event.status
-            run.updated_at = final_event.timestamp
-            self._runs[run_id] = (run, events)
-            return run
+            events.append(event)
+            run.updated_at = timestamp
+            if status in {"queued", "running", "succeeded", "failed"}:
+                run.status = status
+            elif status == "step_failed":
+                run.status = "failed"
 
-    def _generate_default_events(self, run: PipelineRun) -> list[PipelineRunEvent]:
-        base_timestamp = run.created_at
-        statuses = ("queued", "running", "succeeded")
-        events: list[PipelineRunEvent] = []
-        for index, status in enumerate(statuses):
-            timestamp = base_timestamp
-            if index:
-                # Preserve ordering even if triggered within the same second.
-                timestamp = base_timestamp + timedelta(seconds=index)
-            events.append(
-                PipelineRunEvent(
-                    run_id=run.run_id,
-                    pipeline=run.pipeline,
-                    status=status,
-                    timestamp=timestamp,
-                    parameters=run.parameters,
-                )
-            )
-        return events
 
     def get_run(self, run_id: str) -> PipelineRun:
         try:
@@ -231,6 +295,7 @@ def pipeline_definition_from_profile_entry(
 
     return PipelineDefinition(
         name=pipeline.name,
+        pipeline=pipeline,
         display_name=display_name,
         description=description,
         parameters=parameters,
