@@ -119,12 +119,14 @@ def test_render_submit_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert called["output"] == str(output_dir)
     assert called["frames"] == "1-10"
     assert called["dcc"] == "nuke"
-    assert called["priority"] == 55
+    assert called["priority"] == 65
     assert called["user"] == getpass.getuser()
-    assert called["chunk_size"] == 4
+    assert called["chunk_size"] == 2
+    assert "Optimised submission" in result.stdout
 
     events = {(level, event) for level, event, _ in log_events}
     assert ("info", "render.submit.start") in events
+    assert ("info", "render.submit.optimized") in events
     assert ("info", "render.submit.success") in events
 
 
@@ -382,6 +384,169 @@ def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
     assert "Submitted blender scene" in result.stdout
     assert captured["priority"] == 42
     assert captured["chunk_size"] is None
+
+
+def test_render_submit_manual_overrides_bypass_optimization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scene_file = tmp_path / "shot02.nk"
+    scene_file.write_text("print('manual overrides')\n")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    captured: dict[str, Any] = {}
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        captured.update(
+            {
+                "scene": scene,
+                "frames": frames,
+                "output": output,
+                "dcc": dcc,
+                "priority": priority,
+                "user": user,
+                "chunk_size": chunk_size,
+            }
+        )
+        return {
+            "job_id": "job-321",
+            "status": "queued",
+            "farm_type": "mock",
+        }
+
+    log_events: list[tuple[str, str, dict[str, Any]]] = []
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS,
+        "mock",
+        lambda: {
+            "default_priority": 55,
+            "priority_min": 10,
+            "priority_max": 90,
+            "chunk_size_enabled": True,
+            "default_chunk_size": 4,
+            "chunk_size_min": 1,
+            "chunk_size_max": 10,
+        },
+    )
+    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "Nuke",
+            "--scene",
+            str(scene_file),
+            "--frames",
+            "1-10",
+            "--output",
+            str(output_dir),
+            "--priority",
+            "72",
+            "--chunk-size",
+            "6",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["priority"] == 72
+    assert captured["chunk_size"] == 6
+
+    optimisation_events = [event for event in log_events if event[1] == "render.submit.optimized"]
+    assert optimisation_events, "Expected optimisation summary log"
+    for _, _, payload in optimisation_events:
+        assert payload.get("applied") is False
+
+
+def test_render_submit_no_optimize_uses_adapter_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scene_file = tmp_path / "shot03.nk"
+    scene_file.write_text("print('no optimize')\n")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    captured: dict[str, Any] = {}
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        captured.update(
+            {
+                "scene": scene,
+                "frames": frames,
+                "output": output,
+                "dcc": dcc,
+                "priority": priority,
+                "user": user,
+                "chunk_size": chunk_size,
+            }
+        )
+        return {
+            "job_id": "job-654",
+            "status": "queued",
+            "farm_type": "mock",
+        }
+
+    log_events: list[tuple[str, str, dict[str, Any]]] = []
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS,
+        "mock",
+        lambda: {
+            "default_priority": 55,
+            "priority_min": 10,
+            "priority_max": 90,
+            "chunk_size_enabled": True,
+            "default_chunk_size": 4,
+            "chunk_size_min": 1,
+            "chunk_size_max": 10,
+        },
+    )
+    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "Nuke",
+            "--scene",
+            str(scene_file),
+            "--frames",
+            "1-10",
+            "--output",
+            str(output_dir),
+            "--no-optimize",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["priority"] == 55
+    assert captured["chunk_size"] == 4
+
+    events = {(level, event) for level, event, _ in log_events}
+    assert ("info", "render.submit.optimized") not in events
 
 
 def test_render_submit_priority_validation(
