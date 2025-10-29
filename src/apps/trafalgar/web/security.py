@@ -37,6 +37,7 @@ ROLE_INGEST_READ = "ingest:read"
 ROLE_REVIEW_READ = "review:read"
 ROLE_PIPELINE_READ = "pipeline:read"
 ROLE_PIPELINE_RUN = "pipeline:run"
+ROLE_PIPELINE_MANAGE = "pipeline:manage"
 
 
 # Built-in credentials ----------------------------------------------------------------
@@ -54,6 +55,7 @@ _DEFAULT_CREDENTIAL_PAYLOADS: tuple[Mapping[str, Any], ...] = (
             ROLE_REVIEW_READ,
             ROLE_PIPELINE_READ,
             ROLE_PIPELINE_RUN,
+            ROLE_PIPELINE_MANAGE,
         },
     },
     {
@@ -404,6 +406,7 @@ __all__ = [
     "ROLE_REVIEW_READ",
     "ROLE_PIPELINE_READ",
     "ROLE_PIPELINE_RUN",
+    "ROLE_PIPELINE_MANAGE",
     "authenticate_request",
     "create_protected_router",
     "get_credential_store",

@@ -3,7 +3,7 @@
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import os
 import secrets
@@ -11,11 +11,17 @@ import webbrowser
 
 import typer
 
+try:  # pragma: no cover - Python 3.11+ ships tomllib
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
+    pipeline_definition_from_profile_entry,
 )
 
 DEFAULT_HOST = "127.0.0.1"
@@ -76,6 +82,75 @@ def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
     return parameters
 
 
+def _load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
+    if not path.exists():
+        msg = f"Pipeline manifest '{path}' does not exist."
+        raise typer.BadParameter(msg)
+    suffix = path.suffix.lower()
+    text = path.read_text(encoding="utf-8")
+    if suffix == ".toml":
+        data = tomllib.loads(text)
+    elif suffix in {".yaml", ".yml"}:
+        try:
+            import yaml
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            msg = "PyYAML is required to load YAML pipeline manifests."
+            raise typer.BadParameter(msg) from exc
+        data = yaml.safe_load(text) or {}
+    else:
+        msg = "Pipeline manifests must use TOML or YAML formats."
+        raise typer.BadParameter(msg)
+    if not isinstance(data, Mapping):
+        msg = "Pipeline manifests must contain a mapping at the top level."
+        raise typer.BadParameter(msg)
+    return dict(data)
+
+
+def _extract_pipeline_definition(
+    payload: Mapping[str, Any], *, name: str | None = None
+) -> PipelineDefinition:
+    config_payload: Mapping[str, Any]
+    pipeline_name: str
+
+    pipelines_section = payload.get("pipelines")
+    if isinstance(pipelines_section, Mapping):
+        if name is None:
+            if len(pipelines_section) != 1:
+                msg = "Manifest contains multiple pipelines; provide --name to select one."
+                raise typer.BadParameter(msg)
+            pipeline_name, config_payload = next(iter(pipelines_section.items()))
+        else:
+            try:
+                config_payload = pipelines_section[name]
+            except KeyError as exc:
+                msg = f"Manifest does not include a pipeline named '{name}'."
+                raise typer.BadParameter(msg) from exc
+            pipeline_name = name
+        if not isinstance(config_payload, Mapping):
+            msg = "Pipeline entries must be mappings."
+            raise typer.BadParameter(msg)
+    else:
+        pipeline_name = name or payload.get("name")  # type: ignore[assignment]
+        if not pipeline_name:
+            raise typer.BadParameter("Pipeline manifests must declare a 'name'.")
+        pipeline_name = str(pipeline_name)
+        if name is not None and pipeline_name != name:
+            msg = (
+                "Pipeline manifest name does not match the '--name' option "
+                f"('{pipeline_name}' != '{name}')."
+            )
+            raise typer.BadParameter(msg)
+        config_payload = payload
+
+    try:
+        return pipeline_definition_from_profile_entry(
+            str(pipeline_name),
+            dict(config_payload),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
 @pipeline_app.command("list")
 def pipeline_list() -> None:
     """Display pipelines registered with the orchestrator."""
@@ -122,6 +197,43 @@ def pipeline_run(
     payload = run.serialise()
     typer.echo(f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']}).")
     typer.echo(f"Current status: {payload['status']}")
+
+
+@pipeline_app.command("push")
+def pipeline_push(
+    manifest: Path = typer.Argument(..., help="TOML or YAML pipeline manifest."),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help="Pipeline name when the manifest contains multiple entries.",
+    ),
+) -> None:
+    """Register or update a pipeline definition from a manifest file."""
+
+    manifest_payload = _load_pipeline_manifest(manifest)
+    definition = _extract_pipeline_definition(manifest_payload, name=name)
+
+    orchestrator = get_pipeline_orchestrator()
+    created = orchestrator.upsert(definition)
+    action = "created" if created else "updated"
+    typer.echo(
+        f"Pipeline '{definition.name}' {action} from {manifest.resolve()}.",
+    )
+
+
+@pipeline_app.command("delete")
+def pipeline_delete(
+    name: str = typer.Argument(..., help="Pipeline identifier to deregister."),
+) -> None:
+    """Remove a pipeline definition from the orchestrator."""
+
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        orchestrator.deregister(name)
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Pipeline '{name}' deregistered from the orchestrator.")
 
 
 def _load_uvicorn() -> Any:

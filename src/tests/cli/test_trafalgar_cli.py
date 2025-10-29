@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
 import pytest_mock
 from typer.testing import CliRunner
+
+import textwrap
 
 from apps.trafalgar import app as trafalgar_app
 
@@ -188,3 +191,66 @@ def test_web_review_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -
         reload=False,
         log_level="critical",
     )
+
+
+def test_pipeline_push_upserts_definition(
+    tmp_path: Path, mocker: pytest_mock.MockerFixture
+) -> None:
+    manifest = tmp_path / "pipeline.toml"
+    manifest.write_text(
+        textwrap.dedent(
+            """
+            name = "custom"
+            display_name = "Custom Pipeline"
+            description = "Example pipeline"
+
+            [metadata]
+            owner = "pipeline"
+
+            [[steps]]
+            name = "prepare"
+            provider = "tests.pipeline:prepare"
+
+            [[steps]]
+            name = "publish"
+            provider = "tests.pipeline:publish"
+            """
+        ).strip()
+        + "\n"
+    )
+
+    orchestrator = SimpleNamespace(upsert=Mock(return_value=True))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "push", str(manifest)])
+
+    assert result.exit_code == 0, result.stdout
+    orchestrator.upsert.assert_called_once()
+    definition = orchestrator.upsert.call_args[0][0]
+    assert definition.name == "custom"
+    assert "Pipeline 'custom' created" in result.stdout
+
+
+def test_pipeline_delete_invokes_deregister(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    orchestrator = SimpleNamespace(deregister=Mock(return_value=None))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "delete", "custom"])
+
+    assert result.exit_code == 0
+    orchestrator.deregister.assert_called_once_with("custom")
+    assert "Pipeline 'custom' deregistered" in result.stdout

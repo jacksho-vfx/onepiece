@@ -146,3 +146,67 @@ def test_orchestrator_marks_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     statuses = [event.status for event in events]
     assert statuses[-2:] == ["step_failed", "failed"]
     assert "error" in events[-2].parameters
+
+
+def test_upsert_registers_new_pipeline(orchestrator: PipelineOrchestrator) -> None:
+    pipeline = _build_pipeline()
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        display_name="Demo pipeline",
+        parameters={},
+    )
+
+    created = orchestrator.upsert(definition)
+
+    assert created is True
+    stored = orchestrator.get_pipeline("demo")
+    assert stored.display_name == "Demo pipeline"
+
+
+def test_upsert_replaces_existing_pipeline(orchestrator: PipelineOrchestrator) -> None:
+    initial = PipelineDefinition(name="demo", pipeline=_build_pipeline(), parameters={})
+    orchestrator.register(initial)
+
+    replacement = PipelineDefinition(
+        name="demo",
+        pipeline=Pipeline(
+            name="demo",
+            steps=[
+                PipelineStep(name="seed", provider="tests.pipeline:prepare"),
+                PipelineStep(
+                    name="publish",
+                    provider="tests.pipeline:publish",
+                    trigger=TriggerPolicy(depends_on=("seed",)),
+                ),
+            ],
+            metadata={"revision": 2},
+        ),
+        description="Updated",
+        parameters={"priority": "high"},
+    )
+
+    created = orchestrator.upsert(replacement)
+
+    assert created is False
+    stored = orchestrator.get_pipeline("demo")
+    assert stored.description == "Updated"
+    assert stored.pipeline.metadata["revision"] == 2
+    assert [step.name for step in stored.pipeline.steps] == ["seed", "publish"]
+    assert stored.parameters == {"priority": "high"}
+
+
+def test_deregister_removes_pipeline(orchestrator: PipelineOrchestrator) -> None:
+    pipeline = _build_pipeline()
+    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    orchestrator.register(definition)
+
+    orchestrator.deregister("demo")
+
+    with pytest.raises(KeyError):
+        orchestrator.get_pipeline("demo")
+
+
+def test_deregister_unknown_pipeline_raises(orchestrator: PipelineOrchestrator) -> None:
+    with pytest.raises(KeyError):
+        orchestrator.deregister("missing")
