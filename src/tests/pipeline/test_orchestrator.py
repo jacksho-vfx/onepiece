@@ -393,3 +393,21 @@ def test_orchestrator_supports_async_providers(
         "running",
         "step_started",
     ]
+
+
+def test_shutdown_closes_store(tmp_path: Path) -> None:
+    database_path = tmp_path / "runs.sqlite3"
+    store = PipelineRunStore(database=database_path)
+    orchestrator = PipelineOrchestrator(store=store)
+
+    orchestrator.shutdown()
+    orchestrator.shutdown()
+
+    assert store._closed is True
+    assert store._subscribers == {}
+
+    reopened = PipelineOrchestrator(store=PipelineRunStore(database=database_path))
+    try:
+        assert reopened.list_runs() == []
+    finally:
+        reopened.shutdown()
