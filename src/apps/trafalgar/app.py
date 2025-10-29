@@ -11,7 +11,12 @@ import webbrowser
 
 import typer
 
-from apps.trafalgar.pipeline import PipelineDefinition, get_pipeline_orchestrator
+from apps.onepiece.config import load_profile
+from apps.trafalgar.pipeline import (
+    PipelineDefinition,
+    configure_orchestrator_from_profile,
+    get_pipeline_orchestrator,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -36,6 +41,14 @@ pipeline_app = typer.Typer(
     name="pipeline",
     help="Interact with the Trafalgar pipeline orchestrator.",
 )
+
+
+@pipeline_app.callback()
+def _bootstrap_pipeline_orchestrator(_ctx: typer.Context) -> None:
+    """Load profile configuration before executing pipeline commands."""
+
+    context = load_profile()
+    configure_orchestrator_from_profile(context)
 
 
 def _format_pipeline_definition(definition: PipelineDefinition) -> Any:
