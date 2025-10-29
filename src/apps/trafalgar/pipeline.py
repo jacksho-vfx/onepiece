@@ -20,6 +20,9 @@ from libraries.pipeline.factories import pipeline_from_config
 from libraries.pipeline.models import Pipeline, PipelineStep
 
 
+PROVIDER_REFERENCE_METADATA_KEY = pipeline_executor.PROVIDER_REFERENCE_METADATA_KEY
+
+
 @dataclass(slots=True)
 class PipelineDefinition:
     """A lightweight description of a runnable pipeline."""
@@ -62,11 +65,17 @@ class PipelineDefinition:
 
     def _serialise_step(self, step: PipelineStep) -> Mapping[str, Any]:
         trigger = step.trigger
+        metadata = dict(step.metadata)
+        provider_reference = metadata.pop(PROVIDER_REFERENCE_METADATA_KEY, None)
         return {
             "name": step.name,
-            "provider": self._serialise_provider(step.provider),
+            "provider": (
+                provider_reference
+                if provider_reference is not None
+                else self._serialise_provider(step.provider)
+            ),
             "config": dict(step.config),
-            "metadata": dict(step.metadata),
+            "metadata": metadata,
             "trigger": {
                 "kind": trigger.kind,
                 "depends_on": list(trigger.depends_on),

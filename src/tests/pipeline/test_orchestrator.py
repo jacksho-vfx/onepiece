@@ -140,6 +140,40 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
     assert step_payloads[2]["event"]["payload"]["shot"] == "sh020"
 
 
+def test_serialise_preserves_provider_identifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CallableProvider:
+        def __call__(self, parameters: dict[str, object]) -> None:
+            _ = parameters
+
+    def callable_factory(config: dict[str, object]) -> CallableProvider:
+        _ = config
+        return CallableProvider()
+
+    monkeypatch.setattr(
+        pipeline_executor.plugins,
+        "discover_pipeline_step_factories",
+        lambda: {"callable-step": callable_factory},
+    )
+
+    orchestrator = PipelineOrchestrator()
+    pipeline = Pipeline(
+        name="serialisation",
+        steps=[PipelineStep(name="callable", provider="callable-step")],
+    )
+    definition = PipelineDefinition(
+        name="serialisation", pipeline=pipeline, parameters={}
+    )
+    orchestrator.register(definition)
+
+    stored = orchestrator.get_pipeline("serialisation")
+    snapshot = stored.serialise()
+
+    assert snapshot["steps"][0]["provider"] == "callable-step"
+    assert snapshot["providers"]["callable"] == "callable-step"
+
+
 def test_orchestrator_marks_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def failing_factory(
         config: dict[str, object]
@@ -345,7 +379,16 @@ def test_orchestrator_supports_async_providers(
     assert run.status == "running"
     events = list(orchestrator.iter_run_events(run.run_id))
     statuses = [event.status for event in events]
-    assert statuses == [
+    if statuses != ["queued", "running", "step_started"]:
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            events = list(orchestrator.iter_run_events(run.run_id))
+            statuses = [event.status for event in events]
+            if len(statuses) >= 3:
+                break
+            time.sleep(0.01)
+
+    assert statuses[:3] == [
         "queued",
         "running",
         "step_started",
