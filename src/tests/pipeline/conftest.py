@@ -48,10 +48,16 @@ def pipeline_definition_factory() -> Callable[[str], PipelineDefinition]:
 
 
 @pytest.fixture
-def mock_step_executor() -> Callable[[str], tuple[list[tuple[tuple[Any, ...], dict[str, Any]]], Callable[..., None]]]:
+def mock_step_executor() -> (
+    Callable[
+        [str], tuple[list[tuple[tuple[Any, ...], dict[str, Any]]], Callable[..., None]]
+    ]
+):
     """Return a factory for capturing calls to mock pipeline step executors."""
 
-    def factory(step_name: str) -> tuple[list[tuple[tuple[Any, ...], dict[str, Any]]], Callable[..., None]]:
+    def factory(
+        step_name: str,
+    ) -> tuple[list[tuple[tuple[Any, ...], dict[str, Any]]], Callable[..., None]]:
         calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
         def executor(*args: Any, **kwargs: Any) -> None:

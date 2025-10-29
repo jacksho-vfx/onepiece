@@ -2,7 +2,9 @@
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Orchestrator behaviour tests will arrive with upcoming features")
+pytestmark = pytest.mark.skip(
+    reason="Orchestrator behaviour tests will arrive with upcoming features"
+)
 
 
 def test_placeholder() -> None:

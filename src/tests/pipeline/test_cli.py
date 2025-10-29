@@ -2,7 +2,9 @@
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="CLI coverage will be implemented alongside upcoming features")
+pytestmark = pytest.mark.skip(
+    reason="CLI coverage will be implemented alongside upcoming features"
+)
 
 
 def test_placeholder() -> None:

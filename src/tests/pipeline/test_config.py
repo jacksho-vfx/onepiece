@@ -2,7 +2,9 @@
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Configuration helpers will be tested in upcoming changes")
+pytestmark = pytest.mark.skip(
+    reason="Configuration helpers will be tested in upcoming changes"
+)
 
 
 def test_placeholder() -> None:
