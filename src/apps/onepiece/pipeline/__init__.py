@@ -410,11 +410,54 @@ def _format_pipeline_run(run: Mapping[str, Any]) -> Iterable[str]:
         yield "  Parameters: <none>"
 
 
-def _format_run_event(event: Mapping[str, Any]) -> str:
+def _format_run_event(event: Mapping[str, Any]) -> Iterable[str]:
     timestamp = str(event.get("timestamp", ""))
     status = str(event.get("status", ""))
     pipeline = str(event.get("pipeline", ""))
-    return f"[{timestamp}] {pipeline} - {status}"
+    yield f"[{timestamp}] {pipeline} - {status}"
+
+    parameters = event.get("parameters")
+    if isinstance(parameters, Mapping) and parameters:
+        yield from _format_event_parameters(parameters)
+
+
+def _format_event_parameters(parameters: Mapping[str, Any]) -> Iterable[str]:
+    step_name = _coerce_display_text(parameters.get("step"))
+    if step_name:
+        yield f"  Step: {step_name}"
+
+    event_metadata = parameters.get("event")
+    if isinstance(event_metadata, Mapping) and event_metadata:
+        event_name = _coerce_display_text(event_metadata.get("name"))
+        if event_name:
+            yield f"  Trigger event: {event_name}"
+        payload = event_metadata.get("payload")
+        if payload not in (None, {}):
+            formatted = json.dumps(payload, sort_keys=True)
+            yield f"  Trigger payload: {formatted}"
+
+    error_text = _coerce_display_text(parameters.get("error"))
+    if error_text:
+        yield f"  Error: {error_text}"
+
+    ignored_keys = {"step", "event", "error"}
+    extras = [
+        (str(key), parameters[key])
+        for key in parameters
+        if key not in ignored_keys
+    ]
+    if extras:
+        yield "  Parameters:"
+        for key, value in sorted(extras, key=lambda item: item[0]):
+            yield f"    - {key}: {value}"
+
+
+def _coerce_display_text(value: Any) -> str:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return ""
 
 
 def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
@@ -601,7 +644,8 @@ def watch_run(
         try:
             events = client.stream_events(run_id)
             for event in events:
-                typer.echo(_format_run_event(event))
+                for line in _format_run_event(event):
+                    typer.echo(line)
         except PipelineClientError as exc:
             if exc.status_code == 404:
                 raise typer.BadParameter(exc.message) from exc

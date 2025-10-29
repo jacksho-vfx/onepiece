@@ -401,10 +401,67 @@ def test_pipeline_watch_streams_events(monkeypatch: MonkeyPatch) -> None:
     result = runner.invoke(onepiece_app, ["pipeline", "watch", "run-1"])
 
     assert result.exit_code == 0
-    assert "running" in result.output
-    assert "succeeded" in result.output
+    assert "[2024-01-01T10:05:00+00:00] orchestration.daily - running" in result.output
+    assert "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
     assert client.requested_run_id == "run-1"
     assert client.closed is True
+
+
+def test_pipeline_watch_displays_step_metadata(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_events=[
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "step_running",
+                "timestamp": "2024-01-01T10:05:30+00:00",
+                "parameters": {
+                    "step": "ingest",
+                    "event": {
+                        "name": "asset.uploaded",
+                        "payload": {"asset_id": "asset-123", "retry": False},
+                    },
+                },
+            },
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+                "timestamp": "2024-01-01T10:10:00+00:00",
+            },
+        ]
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "watch", "run-1"])
+
+    assert result.exit_code == 0
+    assert "Step: ingest" in result.output
+    assert "Trigger event: asset.uploaded" in result.output
+    assert (
+        "Trigger payload: {\"asset_id\": \"asset-123\", \"retry\": false}" in result.output
+    )
+
+
+def test_pipeline_watch_surfaces_failure_error(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_events=[
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "failed",
+                "timestamp": "2024-01-01T10:10:00+00:00",
+                "parameters": {"error": "step ingest failed"},
+            }
+        ]
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "watch", "run-1"])
+
+    assert result.exit_code == 0
+    assert "failed" in result.output
+    assert "Error: step ingest failed" in result.output
 
 
 def test_pipeline_watch_missing_run(monkeypatch: MonkeyPatch) -> None:

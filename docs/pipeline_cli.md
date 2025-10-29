@@ -76,6 +76,11 @@ Run 5e2fd4a5...
 $ onepiece pipeline watch 5e2fd4a5...
 [2024-05-12T10:03:11+00:00] orchestration.daily - queued
 [2024-05-12T10:03:12+00:00] orchestration.daily - running
+  Step: ingest
+  Trigger event: asset.uploaded
+  Trigger payload: {"asset_id": "a123", "retry": false}
+[2024-05-12T10:03:18+00:00] orchestration.daily - step_succeeded
+  Step: ingest
 [2024-05-12T10:03:27+00:00] orchestration.daily - succeeded
 ```
 
