@@ -414,21 +414,53 @@ class PipelineRunStore:
             yield self._row_to_run_event(row)
 
     def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[PipelineRunEvent] = asyncio.Queue()
-        subscriber = _RunEventSubscriber(loop=loop, queue=queue)
-
         with self._lock:
             rows = self._load_run_event_rows_locked(run_id)
-            subscribers = self._subscribers.setdefault(run_id, [])
-            subscribers.append(subscriber)
 
         events = [self._row_to_run_event(row) for row in rows]
+        seen_count = len(events)
+
+        subscriber: _RunEventSubscriber | None = None
+        queue: asyncio.Queue[PipelineRunEvent] | None = None
+        registered = False
+        delivered_initial = False
 
         async def iterator() -> AsyncIterator[PipelineRunEvent]:
+            nonlocal subscriber, queue, registered, delivered_initial, seen_count, events
+
+            if not registered:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = asyncio.get_event_loop_policy().new_event_loop()
+
+                queue = asyncio.Queue()
+                subscriber = _RunEventSubscriber(loop=loop, queue=queue)
+
+                with self._lock:
+                    rows_after_subscribe = self._load_run_event_rows_locked(run_id)
+                    subscribers = self._subscribers.setdefault(run_id, [])
+                    subscribers.append(subscriber)
+
+                additional = [
+                    self._row_to_run_event(row)
+                    for row in rows_after_subscribe[seen_count:]
+                ]
+                if additional:
+                    events.extend(additional)
+                    seen_count = len(events)
+
+                registered = True
+
+            assert queue is not None
+            assert subscriber is not None
+
             try:
-                for event in events:
-                    yield event
+                if not delivered_initial:
+                    for event in events:
+                        yield event
+                    delivered_initial = True
+
                 while True:
                     yield await queue.get()
             finally:
