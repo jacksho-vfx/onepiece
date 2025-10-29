@@ -83,9 +83,7 @@ def resolve_pipeline_auth_headers() -> dict[str, str]:
                 headers["Authorization"] = f"Bearer {bearer}"
 
         if key_header not in headers:
-            entry_key = _coerce_text(
-                credential.get("api_key") or credential.get("key")
-            )
+            entry_key = _coerce_text(credential.get("api_key") or credential.get("key"))
             if entry_key:
                 headers[key_header] = entry_key
                 entry_secret = _coerce_text(

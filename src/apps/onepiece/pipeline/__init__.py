@@ -23,10 +23,14 @@ from apps.trafalgar.transport import (
 class PipelineClient(Protocol):
     """Protocol describing the pipeline operations used by the CLI."""
 
-    def list_definitions(self) -> list[Mapping[str, Any]]:  # pragma: no cover - Protocol
+    def list_definitions(
+        self,
+    ) -> list[Mapping[str, Any]]:  # pragma: no cover - Protocol
         ...
 
-    def get_definition(self, name: str) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+    def get_definition(
+        self, name: str
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
         ...
 
     def trigger_run(
@@ -62,14 +66,14 @@ class LocalPipelineClient:
         definitions = self._orchestrator.list_pipelines()
         return [definition.serialise() for definition in definitions]
 
-    def get_definition(self, name: str) -> Mapping[str, Any]:
+    def get_definition(self, name: str) -> Any:
         try:
             definition = self._orchestrator.get_pipeline(name)
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
         return definition.serialise()
 
-    def trigger_run(self, name: str, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
+    def trigger_run(self, name: str, parameters: Mapping[str, Any]) -> Any:
         try:
             run = self._orchestrator.trigger_run(name, parameters=parameters)
         except KeyError as exc:
@@ -105,11 +109,11 @@ class RemotePipelineClient:
         for definition in definitions:
             if str(definition.get("name")) == name:
                 return definition
-        raise PipelineClientError(
-            f"Pipeline '{name}' was not found.", status_code=404
-        )
+        raise PipelineClientError(f"Pipeline '{name}' was not found.", status_code=404)
 
-    def trigger_run(self, name: str, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
+    def trigger_run(
+        self, name: str, parameters: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
         response = self._request(
             "POST",
             f"pipelines/{name}/runs",
@@ -252,7 +256,7 @@ def _using_client() -> AbstractContextManager[PipelineClient]:
         def __enter__(self) -> PipelineClient:
             return self._client
 
-        def __exit__(self, exc_type, exc, tb) -> None:
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
             self._client.close()
             return None
 

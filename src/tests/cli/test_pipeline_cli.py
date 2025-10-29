@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pytest import MonkeyPatch
 from typing import Any, Mapping
 
 from typer.testing import CliRunner
@@ -42,7 +43,9 @@ class StubPipelineClient:
             raise AssertionError("definition payload was not configured")
         return dict(self.definition)
 
-    def trigger_run(self, name: str, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
+    def trigger_run(
+        self, name: str, parameters: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
         self.requested_name = name
         self.run_parameters = dict(parameters)
         if self.run_error:
@@ -55,7 +58,9 @@ class StubPipelineClient:
         self.closed = True
 
 
-def _install_stub(monkeypatch, client: StubPipelineClient) -> StubPipelineClient:
+def _install_stub(
+    monkeypatch: MonkeyPatch, client: StubPipelineClient
+) -> StubPipelineClient:
     from apps.onepiece import pipeline as pipeline_module
 
     monkeypatch.setattr(pipeline_module, "_create_pipeline_client", lambda: client)
@@ -72,7 +77,7 @@ def test_pipeline_command_group_loads() -> None:
     assert "run" in result.output
 
 
-def test_pipeline_list_displays_definitions(monkeypatch) -> None:
+def test_pipeline_list_displays_definitions(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(
         definitions=[
             {
@@ -93,7 +98,7 @@ def test_pipeline_list_displays_definitions(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_list_handles_empty(monkeypatch) -> None:
+def test_pipeline_list_handles_empty(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(definitions=[])
     _install_stub(monkeypatch, client)
 
@@ -104,7 +109,7 @@ def test_pipeline_list_handles_empty(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_list_failure(monkeypatch) -> None:
+def test_pipeline_list_failure(monkeypatch: MonkeyPatch) -> None:
     error = PipelineClientError("boom", status_code=500)
     client = StubPipelineClient(list_error=error)
     _install_stub(monkeypatch, client)
@@ -116,7 +121,7 @@ def test_pipeline_list_failure(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_describe_success(monkeypatch) -> None:
+def test_pipeline_describe_success(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(
         definition={
             "name": "orchestration.daily",
@@ -127,7 +132,9 @@ def test_pipeline_describe_success(monkeypatch) -> None:
     )
     _install_stub(monkeypatch, client)
 
-    result = runner.invoke(onepiece_app, ["pipeline", "describe", "orchestration.daily"])
+    result = runner.invoke(
+        onepiece_app, ["pipeline", "describe", "orchestration.daily"]
+    )
 
     assert result.exit_code == 0
     assert "Name: orchestration.daily" in result.output
@@ -137,7 +144,7 @@ def test_pipeline_describe_success(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_describe_missing(monkeypatch) -> None:
+def test_pipeline_describe_missing(monkeypatch: MonkeyPatch) -> None:
     error = PipelineClientError("Pipeline 'missing' was not found.", status_code=404)
     client = StubPipelineClient(describe_error=error)
     _install_stub(monkeypatch, client)
@@ -149,7 +156,7 @@ def test_pipeline_describe_missing(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_run_success(monkeypatch) -> None:
+def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(
         run_payload={
             "id": "abc123",
@@ -178,8 +185,10 @@ def test_pipeline_run_success(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_run_rejects_invalid_parameters(monkeypatch) -> None:
-    client = StubPipelineClient(run_payload={"id": "abc", "pipeline": "p", "status": "queued"})
+def test_pipeline_run_rejects_invalid_parameters(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_payload={"id": "abc", "pipeline": "p", "status": "queued"}
+    )
     _install_stub(monkeypatch, client)
 
     result = runner.invoke(
@@ -193,7 +202,7 @@ def test_pipeline_run_rejects_invalid_parameters(monkeypatch) -> None:
     assert client.closed is False
 
 
-def test_pipeline_run_missing_pipeline(monkeypatch) -> None:
+def test_pipeline_run_missing_pipeline(monkeypatch: MonkeyPatch) -> None:
     error = PipelineClientError("Pipeline 'missing' was not found.", status_code=404)
     client = StubPipelineClient(run_error=error)
     _install_stub(monkeypatch, client)
@@ -214,7 +223,7 @@ def test_pipeline_run_missing_pipeline(monkeypatch) -> None:
     assert client.closed is True
 
 
-def test_pipeline_run_failure(monkeypatch) -> None:
+def test_pipeline_run_failure(monkeypatch: MonkeyPatch) -> None:
     error = PipelineClientError("Service unavailable", status_code=503)
     client = StubPipelineClient(run_error=error)
     _install_stub(monkeypatch, client)
