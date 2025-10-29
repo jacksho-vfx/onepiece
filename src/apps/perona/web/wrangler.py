@@ -68,6 +68,17 @@ _FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
 _CACHE_STABILITY_THRESHOLD = 0.75
 _OWNER_KEYS = ("owner", "artist", "lead", "supervisor", "producer", "coordinator")
 
+_STAGE_FOLLOW_UP = {
+    "layout": "assign layout owner",
+    "sim": "assign sim lead",
+    "simulation": "assign sim lead",
+    "lighting": "assign lighting artist",
+    "light": "assign lighting artist",
+    "comp": "assign comp lead",
+    "compositing": "assign comp lead",
+    "fx": "assign fx supervisor",
+}
+
 _TELEMETRY_HEALTHY_THRESHOLD_MINUTES = 30.0
 _TELEMETRY_STALE_THRESHOLD_MINUTES = 120.0
 
@@ -1292,6 +1303,71 @@ def _extract_lifecycle_context(
     return tuple(owners), current_stage if isinstance(current_stage, str) else None
 
 
+def _normalise_stage_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _collect_stage_owners(stage: Any) -> tuple[str, ...]:
+    metrics = getattr(stage, "metrics", {})
+    if not isinstance(metrics, Mapping):
+        return ()
+
+    owners: list[str] = []
+    for key, value in metrics.items():
+        if not isinstance(value, str):
+            continue
+        key_lower = str(key).lower()
+        if any(token in key_lower for token in _OWNER_KEYS):
+            owners.append(value)
+    return tuple(owners)
+
+
+def _suggest_stage_follow_up(stage_name: str | None) -> str:
+    if not stage_name:
+        return "assign stage owner"
+
+    key = stage_name.lower()
+    suggestion = _STAGE_FOLLOW_UP.get(key)
+    if suggestion:
+        return suggestion
+    if key.endswith("ing"):
+        return f"assign {key} lead"
+    return f"assign {key} owner"
+
+
+def _identify_current_stage(lifecycle: Any, name_hint: str | None) -> tuple[Any | None, str | None]:
+    stages = getattr(lifecycle, "stages", ())
+    matched_stage: Any | None = None
+    resolved_name = name_hint
+
+    if isinstance(resolved_name, str):
+        for stage in stages:
+            stage_name = getattr(stage, "name", None)
+            if isinstance(stage_name, str) and stage_name.lower() == resolved_name.lower():
+                matched_stage = stage
+                resolved_name = stage_name
+                break
+
+    if matched_stage is None:
+        for stage in stages:
+            completed = getattr(stage, "completed_at", None)
+            if completed is None:
+                matched_stage = stage
+                stage_name = getattr(stage, "name", None)
+                if isinstance(stage_name, str):
+                    resolved_name = stage_name
+                break
+
+    if not isinstance(resolved_name, str):
+        resolved_name = None
+
+    return matched_stage, resolved_name
+
+
 def _deadline_horizon_from_hours(hours: float | None) -> str | None:
     if hours is None:
         return None
@@ -1403,6 +1479,84 @@ def _run_escalate_deadline_shots_script() -> WranglerScriptResult:
         script_id="escalate_deadline_shots",
         status="success",
         message=headline,
+        payload=payload,
+    )
+
+
+def _run_identify_unowned_shots_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    lifecycle_provider = getattr(engine, "shot_lifecycle", None)
+    if callable(lifecycle_provider):
+        lifecycles = lifecycle_provider()
+    else:
+        lifecycles = ()
+
+    missing_assignments: list[tuple[float, dict[str, Any]]] = []
+
+    for lifecycle in lifecycles:
+        _owners, current_stage_name = _extract_lifecycle_context(lifecycle)
+        stage, resolved_stage_name = _identify_current_stage(lifecycle, current_stage_name)
+        if stage is None:
+            continue
+
+        if getattr(stage, "completed_at", None) is not None:
+            continue
+
+        stage_owners = _collect_stage_owners(stage)
+        if stage_owners:
+            continue
+
+        sequence = getattr(lifecycle, "sequence", None)
+        shot_id = getattr(lifecycle, "shot_id", None)
+
+        if not isinstance(sequence, str):
+            sequence = str(sequence) if sequence is not None else "Unknown"
+        if not isinstance(shot_id, str):
+            shot_id = str(shot_id) if shot_id is not None else "Unknown"
+
+        stage_started = _normalise_stage_timestamp(getattr(stage, "started_at", None))
+        stage_started_iso = stage_started.isoformat() if stage_started else None
+        current_stage = resolved_stage_name or current_stage_name or "Unknown"
+        suggestion = _suggest_stage_follow_up(current_stage if isinstance(current_stage, str) else None)
+
+        entry = {
+            "sequence": sequence,
+            "shot": shot_id,
+            "current_stage": current_stage,
+            "stage_started_at": stage_started_iso,
+            "suggested_follow_up": suggestion,
+        }
+
+        sort_key = stage_started.timestamp() if stage_started else float("inf")
+        missing_assignments.append((sort_key, entry))
+
+    missing_assignments.sort(key=lambda item: item[0])
+    unassigned_shots = [entry for _, entry in missing_assignments]
+
+    if unassigned_shots:
+        focus = unassigned_shots[0]
+        stage_fragment = (
+            f" ({focus['current_stage']})"
+            if isinstance(focus.get("current_stage"), str) and focus["current_stage"]
+            else ""
+        )
+        message = (
+            f"{len(unassigned_shots)} active shot(s) missing assignments — focus on "
+            f"{focus['sequence']} {focus['shot']}{stage_fragment}."
+        )
+    else:
+        message = "All active shots have current stage owners."
+
+    payload = {
+        "summary": message,
+        "total_unassigned": len(unassigned_shots),
+        "shots": unassigned_shots,
+    }
+
+    return WranglerScriptResult(
+        script_id="identify_unowned_shots",
+        status="success",
+        message=message,
         payload=payload,
     )
 
@@ -1705,6 +1859,18 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots", "deadline"),
             ),
             _run_escalate_deadline_shots_script,
+        )
+    if "identify_unowned_shots" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="identify_unowned_shots",
+                name="Identify unassigned shots",
+                description=(
+                    "Surface active shots whose current stage lacks an assigned owner"
+                ),
+                tags=("production", "shots", "ownership"),
+            ),
+            _run_identify_unowned_shots_script,
         )
     if "highlight_stage_bottlenecks" not in _scripts:
         register_script(

@@ -21,6 +21,8 @@ from libraries.analytics.perona.engine import (
     DEFAULT_TARGET_ERROR_RATE,
     OptimizationResult,
     RenderMetric as EngineRenderMetric,
+    ShotLifecycle,
+    ShotLifecycleStage,
 )
 from libraries.analytics.perona.models import RenderMetric
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
@@ -865,6 +867,130 @@ def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> No
 
     assert isinstance(body["next_steps"], list)
     assert body["next_steps"], "Expected suggested next steps"
+
+
+def test_wrangler_identify_unowned_shots_flags_missing_assignments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = datetime(2024, 5, 21, 9, 0, tzinfo=timezone.utc)
+
+    lifecycles = (
+        ShotLifecycle(
+            sequence="SQ50",
+            shot_id="SQ50_SH010",
+            stages=(
+                ShotLifecycleStage(
+                    name="layout",
+                    started_at=base - timedelta(days=4),
+                    completed_at=base - timedelta(days=2),
+                    metrics={"owner": "H. Ortiz"},
+                ),
+                ShotLifecycleStage(
+                    name="comp",
+                    started_at=base - timedelta(days=1, hours=6),
+                    completed_at=None,
+                    metrics={"status": "Awaiting lighting plates"},
+                ),
+            ),
+        ),
+        ShotLifecycle(
+            sequence="SQ60",
+            shot_id="SQ60_SH020",
+            stages=(
+                ShotLifecycleStage(
+                    name="sim",
+                    started_at=base - timedelta(days=3),
+                    completed_at=base - timedelta(days=1),
+                    metrics={"owner": "P. Singh"},
+                ),
+                ShotLifecycleStage(
+                    name="lighting",
+                    started_at=base - timedelta(hours=12),
+                    completed_at=None,
+                    metrics={"lead": "B. Taylor"},
+                ),
+            ),
+        ),
+    )
+
+    class _LifecycleEngine:
+        def __init__(self, lifecycles: tuple[ShotLifecycle, ...]) -> None:
+            self._lifecycles = lifecycles
+
+        def shot_lifecycle(self) -> tuple[ShotLifecycle, ...]:
+            return self._lifecycles
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles))
+
+    response = client.post("/wrangler/scripts/identify_unowned_shots")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "identify_unowned_shots"
+    assert payload["status"] == "success"
+    assert "missing assignments" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+    assert body["total_unassigned"] == 1
+
+    shots = body["shots"]
+    assert len(shots) == 1
+    flagged = shots[0]
+    assert flagged["sequence"] == "SQ50"
+    assert flagged["shot"] == "SQ50_SH010"
+    assert flagged["current_stage"].lower() == "comp"
+    assert flagged["stage_started_at"].endswith("+00:00")
+    assert flagged["suggested_follow_up"].lower().startswith("assign comp")
+
+
+def test_wrangler_identify_unowned_shots_handles_fully_assigned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = datetime(2024, 5, 22, 10, 0, tzinfo=timezone.utc)
+
+    lifecycles = (
+        ShotLifecycle(
+            sequence="SQ10",
+            shot_id="SQ10_SH030",
+            stages=(
+                ShotLifecycleStage(
+                    name="layout",
+                    started_at=base - timedelta(days=5),
+                    completed_at=base - timedelta(days=3),
+                    metrics={"owner": "A. Malik"},
+                ),
+                ShotLifecycleStage(
+                    name="comp",
+                    started_at=base - timedelta(days=1),
+                    completed_at=None,
+                    metrics={"supervisor": "C. Bennett"},
+                ),
+            ),
+        ),
+    )
+
+    class _LifecycleEngine:
+        def __init__(self, lifecycles: tuple[ShotLifecycle, ...]) -> None:
+            self._lifecycles = lifecycles
+
+        def shot_lifecycle(self) -> tuple[ShotLifecycle, ...]:
+            return self._lifecycles
+
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles))
+
+    response = client.post("/wrangler/scripts/identify_unowned_shots")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "identify_unowned_shots"
+    assert payload["status"] == "success"
+    assert "all active shots" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["summary"] == payload["message"]
+    assert body["total_unassigned"] == 0
+    assert body["shots"] == []
 
 
 def test_dashboard_summary_endpoint() -> None:
