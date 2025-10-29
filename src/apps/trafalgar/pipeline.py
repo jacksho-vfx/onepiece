@@ -335,6 +335,59 @@ class PipelineRunStore:
             parameters=self._decode_parameters(row["parameters"]),
         )
 
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: datetime | None = None,
+    ) -> list[PipelineRun]:
+        clauses: list[str] = []
+        bindings: list[object] = []
+        if pipeline is not None:
+            clauses.append("pipeline = ?")
+            bindings.append(pipeline)
+        if status is not None:
+            clauses.append("status = ?")
+            bindings.append(status)
+        if since is not None:
+            clauses.append("created_at >= ?")
+            bindings.append(self._encode_datetime(since))
+
+        query = [
+            "SELECT run_id, pipeline, status, created_at, updated_at, parameters",
+            "FROM pipeline_runs",
+        ]
+        if clauses:
+            query.append("WHERE " + " AND ".join(clauses))
+        query.append("ORDER BY created_at DESC, run_id DESC")
+        if limit is not None:
+            query.append("LIMIT ?")
+
+        statement = "\n".join(query)
+        params: tuple[object, ...]
+        if limit is not None:
+            params = (*bindings, limit)
+        else:
+            params = tuple(bindings)
+
+        with self._lock:
+            cursor = self._connection.execute(statement, params)
+            rows = cursor.fetchall()
+
+        return [
+            PipelineRun(
+                run_id=row["run_id"],
+                pipeline=row["pipeline"],
+                status=row["status"],
+                created_at=self._decode_datetime(row["created_at"]),
+                updated_at=self._decode_datetime(row["updated_at"]),
+                parameters=self._decode_parameters(row["parameters"]),
+            )
+            for row in rows
+        ]
+
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         with self._lock:
             cursor = self._connection.execute(
@@ -505,6 +558,18 @@ class PipelineOrchestrator:
             return self._store.get_run(run_id)
         except KeyError as exc:  # pragma: no cover - defensive guard
             raise KeyError(str(exc)) from exc
+
+    def list_runs(
+        self,
+        *,
+        pipeline: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        since: datetime | None = None,
+    ) -> list[PipelineRun]:
+        return self._store.list_runs(
+            pipeline=pipeline, status=status, limit=limit, since=since
+        )
 
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         try:
