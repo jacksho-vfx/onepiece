@@ -147,7 +147,9 @@ def _seed_run(
     )
 
 
-def _pipeline_submission(name: str = "custom_pipeline", **overrides: Any) -> dict[str, Any]:
+def _pipeline_submission(
+    name: str = "custom_pipeline", **overrides: Any
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "name": name,
         "display_name": "Custom Pipeline",
@@ -290,18 +292,14 @@ def test_delete_pipeline_removes_definition(client: TestClient) -> None:
     creation = client.post("/pipelines", headers=_auth_headers(), json=payload)
     assert creation.status_code == 201
 
-    response = client.delete(
-        "/pipelines/temporary_pipeline", headers=_auth_headers()
-    )
+    response = client.delete("/pipelines/temporary_pipeline", headers=_auth_headers())
 
     assert response.status_code == 204
     orchestrator = get_pipeline_orchestrator()
     with pytest.raises(KeyError):
         orchestrator.get_pipeline("temporary_pipeline")
 
-    missing = client.delete(
-        "/pipelines/temporary_pipeline", headers=_auth_headers()
-    )
+    missing = client.delete("/pipelines/temporary_pipeline", headers=_auth_headers())
     assert missing.status_code == 404
 
 

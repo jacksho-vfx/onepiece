@@ -70,7 +70,7 @@ def root(
 
 def _definition_from_submission(
     submission: PipelineDefinitionSubmission,
-) -> "PipelineDefinition":
+) -> Any:
     try:
         return pipeline_definition_from_profile_entry(
             submission.name,

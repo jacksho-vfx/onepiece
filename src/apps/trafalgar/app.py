@@ -92,7 +92,7 @@ def _load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
         data = tomllib.loads(text)
     elif suffix in {".yaml", ".yml"}:
         try:
-            import yaml  # type: ignore[import-not-found]
+            import yaml
         except ImportError as exc:  # pragma: no cover - optional dependency
             msg = "PyYAML is required to load YAML pipeline manifests."
             raise typer.BadParameter(msg) from exc

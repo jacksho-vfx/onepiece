@@ -228,9 +228,7 @@ def test_pipeline_push_upserts_definition(
         return_value=orchestrator,
     )
 
-    result = runner.invoke(
-        trafalgar_app, ["pipeline", "push", str(manifest)]
-    )
+    result = runner.invoke(trafalgar_app, ["pipeline", "push", str(manifest)])
 
     assert result.exit_code == 0, result.stdout
     orchestrator.upsert.assert_called_once()
@@ -251,9 +249,7 @@ def test_pipeline_delete_invokes_deregister(
         return_value=orchestrator,
     )
 
-    result = runner.invoke(
-        trafalgar_app, ["pipeline", "delete", "custom"]
-    )
+    result = runner.invoke(trafalgar_app, ["pipeline", "delete", "custom"])
 
     assert result.exit_code == 0
     orchestrator.deregister.assert_called_once_with("custom")
