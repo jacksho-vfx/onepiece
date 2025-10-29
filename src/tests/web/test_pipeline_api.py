@@ -218,9 +218,7 @@ def test_stream_run_events_returns_status_sequence(client: TestClient) -> None:
     )
     run_id = creation.json()["id"]
 
-    response = client.get(
-        f"/runs/{run_id}/events", headers=_auth_headers()
-    )
+    response = client.get(f"/runs/{run_id}/events", headers=_auth_headers())
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     events = _parse_stream_events(response.text)
@@ -273,9 +271,7 @@ def test_stream_run_events_delivers_live_updates(client: TestClient) -> None:
 
     publisher = threading.Thread(target=_publish)
     publisher.start()
-    response = client.get(
-        f"/runs/{run_id}/events", headers=_auth_headers()
-    )
+    response = client.get(f"/runs/{run_id}/events", headers=_auth_headers())
     publisher.join(timeout=1)
     assert not publisher.is_alive()
 

@@ -447,9 +447,7 @@ class PipelineRunStore:
         event: PipelineRunEvent,
     ) -> None:
         for subscriber in subscribers:
-            subscriber.loop.call_soon_threadsafe(
-                subscriber.queue.put_nowait, event
-            )
+            subscriber.loop.call_soon_threadsafe(subscriber.queue.put_nowait, event)
 
     def _load_run_event_rows_locked(self, run_id: str) -> list[sqlite3.Row]:
         cursor = self._connection.execute(
