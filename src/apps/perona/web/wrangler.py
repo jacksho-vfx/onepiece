@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
+import statistics
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -777,6 +778,72 @@ def _run_list_failing_jobs_script() -> WranglerScriptResult:
     )
 
 
+def _run_flag_render_volatility_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    indicators = list(engine.risk_heatmap())
+    frame_time_index = getattr(engine, "_frame_times_by_shot", {})
+
+    hotspots: list[dict[str, Any]] = []
+    for indicator in indicators:
+        drivers = list(indicator.drivers)
+        if not any("Render time volatility" in driver for driver in drivers):
+            continue
+
+        frames = ()
+        if isinstance(frame_time_index, Mapping):
+            frames = frame_time_index.get(
+                (indicator.sequence, indicator.shot_id),
+                (),
+            )
+
+        sample_count = len(frames)
+        if sample_count:
+            average_ms = statistics.fmean(frames)
+            stddev_ms = statistics.pstdev(frames) if sample_count > 1 else 0.0
+        else:
+            average_ms = float(indicator.render_time_ms or 0.0)
+            stddev_ms = 0.0
+
+        coefficient = (stddev_ms / average_ms) if average_ms else 0.0
+
+        hotspots.append(
+            {
+                "sequence": indicator.sequence,
+                "shot": indicator.shot_id,
+                "risk_score": indicator.risk_score,
+                "render_time_ms": round(indicator.render_time_ms, 3),
+                "variance": {
+                    "sample_count": sample_count,
+                    "average_frame_time_ms": round(average_ms, 3),
+                    "stddev_frame_time_ms": round(stddev_ms, 3),
+                    "coefficient_of_variation": round(coefficient, 4),
+                },
+                "drivers": drivers,
+                "recommended_follow_up": _derive_follow_up(drivers),
+            }
+        )
+
+    hotspots.sort(key=lambda item: item["risk_score"], reverse=True)
+
+    if hotspots:
+        leader = hotspots[0]
+        headline = (
+            f"{len(hotspots)} volatility hotspot(s) — "
+            f"{leader['sequence']} {leader['shot']} leads at risk {leader['risk_score']:.1f}."
+        )
+    else:
+        headline = "Frame times steady — no volatility hotspots detected."
+
+    payload = {"headline": headline, "volatility": hotspots}
+
+    return WranglerScriptResult(
+        script_id="flag_render_volatility",
+        status="success",
+        message=headline,
+        payload=payload,
+    )
+
+
 def _extract_cache_metrics(
     lifecycle: Any | None,
 ) -> tuple[str | None, int | None, float | None]:
@@ -1326,6 +1393,18 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots"),
             ),
             _run_list_failing_jobs_script,
+        )
+    if "flag_render_volatility" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="flag_render_volatility",
+                name="Flag render volatility hotspots",
+                description=(
+                    "Rank volatile shots with frame time swings and suggested follow-up"
+                ),
+                tags=("rendering", "utilisation"),
+            ),
+            _run_flag_render_volatility_script,
         )
     if "rebuild_unstable_caches" not in _scripts:
         register_script(
