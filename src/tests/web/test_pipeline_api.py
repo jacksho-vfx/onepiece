@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import textwrap
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,12 @@ from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
 from apps.onepiece.config import ProfileContext, load_profile
-from apps.trafalgar.pipeline import set_pipeline_orchestrator
+from apps.trafalgar.pipeline import (
+    PipelineRun,
+    PipelineRunEvent,
+    get_pipeline_orchestrator,
+    set_pipeline_orchestrator,
+)
 from apps.trafalgar.web import pipeline as pipeline_module
 from apps.trafalgar.web import security as security_module
 from apps.trafalgar.web.security import reset_security_state
@@ -99,6 +105,34 @@ def _auth_headers() -> dict[str, str]:
         security_module.DEFAULT_API_KEY_HEADER: "suite-key",
         security_module.DEFAULT_API_SECRET_HEADER: "suite-secret",
     }
+
+
+def _seed_run(
+    *,
+    run_id: str,
+    pipeline: str,
+    status: str,
+    created_at: datetime,
+) -> None:
+    orchestrator = get_pipeline_orchestrator()
+    store = orchestrator._store
+    store.create_run(
+        PipelineRun(
+            run_id=run_id,
+            pipeline=pipeline,
+            status=status,
+            created_at=created_at,
+            updated_at=created_at,
+            parameters={},
+        ),
+        PipelineRunEvent(
+            run_id=run_id,
+            pipeline=pipeline,
+            status=status,
+            timestamp=created_at,
+            parameters={},
+        ),
+    )
 
 
 def test_list_pipelines_returns_registered_definitions(
@@ -211,3 +245,54 @@ def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None
         "event": "render.completed",
         "filters": {},
     }
+
+
+def test_list_runs_endpoint_supports_filters(client: TestClient) -> None:
+    base = datetime(2024, 3, 1, 9, tzinfo=timezone.utc)
+    _seed_run(
+        run_id="run-a", pipeline="render_shots", status="succeeded", created_at=base
+    )
+    _seed_run(
+        run_id="run-b",
+        pipeline="render_shots",
+        status="failed",
+        created_at=base + timedelta(hours=1),
+    )
+    _seed_run(
+        run_id="run-c",
+        pipeline="publish_assets",
+        status="succeeded",
+        created_at=base + timedelta(hours=2),
+    )
+
+    response = client.get("/runs", headers=_auth_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["id"] for item in payload] == ["run-c", "run-b", "run-a"]
+
+    response = client.get(
+        "/runs", headers=_auth_headers(), params={"pipeline": "render_shots"}
+    )
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == ["run-b", "run-a"]
+
+    response = client.get("/runs", headers=_auth_headers(), params={"status": "failed"})
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == ["run-b"]
+
+    since_iso = (base + timedelta(hours=1)).isoformat()
+    response = client.get("/runs", headers=_auth_headers(), params={"since": since_iso})
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == ["run-c", "run-b"]
+
+    response = client.get("/runs", headers=_auth_headers(), params={"limit": 1})
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == ["run-c"]
+
+
+def test_list_runs_endpoint_validates_since_parameter(client: TestClient) -> None:
+    response = client.get("/runs", headers=_auth_headers(), params={"since": "invalid"})
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["detail"] == "Invalid 'since' timestamp"

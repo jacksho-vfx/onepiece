@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncGenerator
+from datetime import datetime, timezone
+from typing import Any, Annotated, AsyncGenerator
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -98,6 +99,43 @@ def get_run(
         payload = orchestrator.serialise_run(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
+    return JSONResponse(content=payload)
+
+
+@router.get("/runs")
+def list_runs(
+    pipeline: Annotated[
+        str | None, Query(description="Filter runs for a pipeline")
+    ] = None,
+    status: Annotated[str | None, Query(description="Filter runs by status")] = None,
+    limit: Annotated[
+        int | None, Query(gt=0, description="Maximum number of runs to return")
+    ] = None,
+    since: Annotated[
+        str | None,
+        Query(description="Return runs created on or after the provided ISO timestamp"),
+    ] = None,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+
+    parsed_since: datetime | None = None
+    if since is not None:
+        try:
+            parsed_since = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid 'since' timestamp"
+            ) from exc
+        if parsed_since.tzinfo is None:
+            parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+        else:
+            parsed_since = parsed_since.astimezone(timezone.utc)
+
+    runs = orchestrator.list_runs(
+        pipeline=pipeline, status=status, limit=limit, since=parsed_since
+    )
+    payload = [run.serialise() for run in runs]
     return JSONResponse(content=payload)
 
 
