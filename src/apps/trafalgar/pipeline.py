@@ -145,15 +145,18 @@ class PipelineOrchestrator:
             parameters=parameters,
         )
         with self._lock:
-            self._runs[run_id] = (run, [
-                PipelineRunEvent(
-                    run_id=run_id,
-                    pipeline=definition.name,
-                    status="queued",
-                    timestamp=run.created_at,
-                    parameters=parameters,
-                )
-            ])
+            self._runs[run_id] = (
+                run,
+                [
+                    PipelineRunEvent(
+                        run_id=run_id,
+                        pipeline=definition.name,
+                        status="queued",
+                        timestamp=run.created_at,
+                        parameters=parameters,
+                    )
+                ],
+            )
 
         self._append_event(run_id, "running")
 
@@ -174,9 +177,7 @@ class PipelineOrchestrator:
 
         return self.get_run(run_id)
 
-    def _build_step_emitter(
-        self, run_id: str
-    ) -> pipeline_executor.StepEventEmitter:
+    def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
         def emit(
             status: str,
             *,
@@ -220,7 +221,6 @@ class PipelineOrchestrator:
                 run.status = status
             elif status == "step_failed":
                 run.status = "failed"
-
 
     def get_run(self, run_id: str) -> PipelineRun:
         try:

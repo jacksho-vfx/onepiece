@@ -15,8 +15,12 @@ from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 def orchestrator(monkeypatch: pytest.MonkeyPatch) -> PipelineOrchestrator:
     """Return an orchestrator configured with deterministic step factories."""
 
-    def sequential_factory(config: dict[str, object]) -> Callable[[dict[str, object]], list[tuple[str, dict[str, object]]]]:
-        def provider(parameters: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
+    def sequential_factory(
+        config: dict[str, object]
+    ) -> Callable[[dict[str, object]], list[tuple[str, dict[str, object]]]]:
+        def provider(
+            parameters: dict[str, object]
+        ) -> list[tuple[str, dict[str, object]]]:
             event_payload = {
                 "department": parameters.get("department", "lighting"),
                 "shot": parameters.get("shot", "sh010"),
@@ -25,9 +29,17 @@ def orchestrator(monkeypatch: pytest.MonkeyPatch) -> PipelineOrchestrator:
 
         return provider
 
-    def event_factory(config: dict[str, object]) -> Callable[[pipeline_executor.StepTriggerEvent, dict[str, object]], None]:
-        def provider(event: pipeline_executor.StepTriggerEvent, parameters: dict[str, object]) -> None:
-            _ = (config, event, parameters)  # pragma: no cover - exercise callable signature
+    def event_factory(
+        config: dict[str, object]
+    ) -> Callable[[pipeline_executor.StepTriggerEvent, dict[str, object]], None]:
+        def provider(
+            event: pipeline_executor.StepTriggerEvent, parameters: dict[str, object]
+        ) -> None:
+            _ = (
+                config,
+                event,
+                parameters,
+            )  # pragma: no cover - exercise callable signature
 
         return provider
 
@@ -53,7 +65,12 @@ def _build_pipeline() -> Pipeline:
                 name="listener",
                 provider="event-listener",
                 config={"expects": "asset.ingested"},
-                trigger=TriggerPolicy(kind="event", event="asset.ingested", filters={"department": "lighting"}, depends_on=("seed",)),
+                trigger=TriggerPolicy(
+                    kind="event",
+                    event="asset.ingested",
+                    filters={"department": "lighting"},
+                    depends_on=("seed",),
+                ),
             ),
         ],
     )
@@ -64,7 +81,9 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
     definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
     orchestrator.register(definition)
 
-    run = orchestrator.trigger_run("demo", parameters={"department": "lighting", "shot": "sh020"})
+    run = orchestrator.trigger_run(
+        "demo", parameters={"department": "lighting", "shot": "sh020"}
+    )
     assert run.status == "succeeded"
 
     events = list(orchestrator.iter_run_events(run.run_id))
@@ -79,7 +98,9 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
         "succeeded",
     ]
 
-    step_payloads = [event.parameters for event in events if event.status.startswith("step_")]
+    step_payloads = [
+        event.parameters for event in events if event.status.startswith("step_")
+    ]
     assert step_payloads[0]["step"] == "seed"
     assert step_payloads[1]["step"] == "seed"
     assert step_payloads[2]["step"] == "listener"
@@ -88,7 +109,9 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
 
 
 def test_orchestrator_marks_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    def failing_factory(config: dict[str, object]) -> Callable[[dict[str, object]], None]:
+    def failing_factory(
+        config: dict[str, object]
+    ) -> Callable[[dict[str, object]], None]:
         def provider(parameters: dict[str, object]) -> None:
             raise RuntimeError("boom")
 

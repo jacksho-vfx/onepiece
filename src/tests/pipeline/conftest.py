@@ -41,7 +41,7 @@ def pipeline_definition_factory(
     def factory(name: str = "demo") -> PipelineDefinition:
         return PipelineDefinition(
             name=name,
-            pipeline=pipeline_factory(name=name),
+            pipeline=pipeline_factory,
             display_name=f"Display {name.title()}",
             description=f"Definition for {name}",
             parameters={"sample": "value"},

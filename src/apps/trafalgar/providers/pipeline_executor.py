@@ -59,7 +59,9 @@ class PipelineExecutor:
         resolved_steps: list[PipelineStep] = []
         for step in pipeline.steps:
             resolved_steps.append(self._resolve_step(step))
-        return Pipeline(name=pipeline.name, steps=resolved_steps, metadata=pipeline.metadata)
+        return Pipeline(
+            name=pipeline.name, steps=resolved_steps, metadata=pipeline.metadata
+        )
 
     # Public API ---------------------------------------------------------
 
@@ -142,7 +144,9 @@ class PipelineExecutor:
             return [result]
         if isinstance(result, tuple) and len(result) == 2:
             name, payload = result
-            return [StepTriggerEvent(name=str(name), payload=self._ensure_mapping(payload))]
+            return [
+                StepTriggerEvent(name=str(name), payload=self._ensure_mapping(payload))
+            ]
         if isinstance(result, Mapping):
             if "events" in result:
                 items = result["events"]
