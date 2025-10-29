@@ -270,7 +270,9 @@ def compute_submission_adjustments(
 
     # Chunk size adjustments require chunking support.
     if chunk_size is not None:
-        min_chunk = defaults.chunk_size_min if defaults.chunk_size_min is not None else 1
+        min_chunk = (
+            defaults.chunk_size_min if defaults.chunk_size_min is not None else 1
+        )
         max_chunk = defaults.chunk_size_max
 
         # Clamp to supported range and avoid exceeding the frame span.
@@ -303,7 +305,11 @@ def compute_submission_adjustments(
                 chunk_size = slow_target
                 reasons.append("reduced chunk size for slow renders (>=4000ms)")
 
-        if metrics.queue_depth is not None and metrics.queue_depth >= 80 and frame_count > 20:
+        if (
+            metrics.queue_depth is not None
+            and metrics.queue_depth >= 80
+            and frame_count > 20
+        ):
             busy_target = chunk_size + max(1, chunk_size // 2)
             busy_target = min(busy_target, frame_count)
             if max_chunk is not None:

@@ -162,7 +162,9 @@ def _extract_metrics_from_profile(data: Mapping[str, Any]) -> FarmMetrics:
     if not isinstance(optimisation_block, Mapping):
         return FarmMetrics()
 
-    queue_depth = _optional_int(optimisation_block.get("queue_depth"), label="queue_depth")
+    queue_depth = _optional_int(
+        optimisation_block.get("queue_depth"), label="queue_depth"
+    )
     average_ms = optimisation_block.get("average_frame_ms")
     if average_ms is None:
         average_ms = optimisation_block.get("average_frame_time_ms")
@@ -280,7 +282,7 @@ def _resolve_priority_and_chunk_size(
     optimize: bool = True,
     metrics: FarmMetrics | None = None,
 ) -> tuple[
-    int,
+    int | None,
     int | None,
     AdapterCapabilities,
     SubmissionOptimizationDecision | None,
@@ -379,7 +381,12 @@ def _resolve_priority_and_chunk_size(
             "Chunk sizing is not supported by this adapter (--chunk-size)."
         )
 
-    return resolved_priority, resolved_chunk, resolved_capabilities, optimisation_summary
+    return (
+        resolved_priority,
+        resolved_chunk,
+        resolved_capabilities,
+        optimisation_summary,
+    )
 
 
 def _validate_preset_name(name: str) -> str:
@@ -573,11 +580,11 @@ def submit(
             metrics_source=metrics_source,
         )
         if optimisation_summary.applied:
-            reason_text = "; ".join(optimisation_summary.reasons) or "heuristics applied"
+            reason_text = (
+                "; ".join(optimisation_summary.reasons) or "heuristics applied"
+            )
             chunk_display = (
-                str(resolved_chunk)
-                if resolved_chunk is not None
-                else "disabled"
+                str(resolved_chunk) if resolved_chunk is not None else "disabled"
             )
             typer.secho(
                 f"Optimised submission ({metrics_source}): priority={resolved_priority}, chunk_size={chunk_display} ({reason_text}).",

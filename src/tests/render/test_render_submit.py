@@ -464,7 +464,9 @@ def test_render_submit_manual_overrides_bypass_optimization(
     assert captured["priority"] == 72
     assert captured["chunk_size"] == 6
 
-    optimisation_events = [event for event in log_events if event[1] == "render.submit.optimized"]
+    optimisation_events = [
+        event for event in log_events if event[1] == "render.submit.optimized"
+    ]
     assert optimisation_events, "Expected optimisation summary log"
     for _, _, payload in optimisation_events:
         assert payload.get("applied") is False
