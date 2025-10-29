@@ -196,6 +196,23 @@ class PipelineRunStore:
         self._busy_timeout_ms = busy_timeout_ms
         self._initialise_schema()
         self._subscribers: dict[str, list[_RunEventSubscriber]] = {}
+        self._closed = False
+
+    def close(self) -> None:
+        """Release any database resources held by the store."""
+
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            subscribers = self._subscribers
+            self._subscribers = {}
+            connection = self._connection
+
+        try:
+            connection.close()
+        finally:
+            subscribers.clear()
 
     @classmethod
     def _coerce_busy_timeout_ms(cls, value: float | int | None) -> int:
@@ -742,12 +759,12 @@ class PipelineOrchestrator:
         future.add_done_callback(_cleanup)
 
     def shutdown(self, *, wait: bool = True) -> None:
-        if self._shutdown:
-            return
-        self._shutdown = True
-        self._worker_pool.shutdown(wait=wait)
-        with self._lock:
-            self._pending.clear()
+        if not self._shutdown:
+            self._shutdown = True
+            self._worker_pool.shutdown(wait=wait)
+            with self._lock:
+                self._pending.clear()
+        self._store.close()
 
     def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
         def emit(
@@ -859,7 +876,9 @@ def get_pipeline_orchestrator(
 def set_pipeline_orchestrator(orchestrator: PipelineOrchestrator | None) -> None:
     global _default_orchestrator
     if _default_orchestrator is not None and _default_orchestrator is not orchestrator:
-        _default_orchestrator.shutdown()
+        previous = _default_orchestrator
+        previous.shutdown()
+        previous._store.close()
     _default_orchestrator = orchestrator
 
 
