@@ -126,7 +126,7 @@ class LocalPipelineClient:
         )
         return [run.serialise() for run in runs]
 
-    def get_run(self, run_id: str) -> Mapping[str, Any]:
+    def get_run(self, run_id: str) -> Any:
         try:
             return self._orchestrator.serialise_run(run_id)
         except KeyError as exc:
@@ -247,7 +247,9 @@ class RemotePipelineClient:
                 with self._client.stream("GET", f"runs/{run_id}/events") as response:
                     if not response.is_success:
                         detail = _extract_response_detail(response)
-                        raise PipelineClientError(detail, status_code=response.status_code)
+                        raise PipelineClientError(
+                            detail, status_code=response.status_code
+                        )
                     for line in response.iter_lines():
                         if not line:
                             continue
