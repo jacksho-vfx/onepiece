@@ -59,6 +59,19 @@ def list_pipelines(
     return JSONResponse(content=payload)
 
 
+@router.get("/pipelines/{pipeline}")
+def describe_pipeline(
+    pipeline: str,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        definition = orchestrator.get_pipeline(pipeline)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
+    return JSONResponse(content=definition.serialise())
+
+
 @router.post("/pipelines/{pipeline}/runs", status_code=201)
 def trigger_pipeline_run(
     pipeline: str,

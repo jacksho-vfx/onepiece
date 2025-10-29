@@ -54,4 +54,19 @@ def publish(parameters: Mapping[str, Any]) -> dict[str, Any]:
     return _event_payload("publish.completed", parameters)
 
 
-__all__ = ["prepare", "render", "publish"]
+def notify(event: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """Dummy provider for the ``notify`` pipeline step."""
+
+    event_name = getattr(event, "name", "")
+    payload = getattr(event, "payload", {})
+    return {
+        "event": "notify.completed",
+        "payload": {
+            "source_event": event_name,
+            "source_payload": dict(payload),
+            "parameters": dict(parameters),
+        },
+    }
+
+
+__all__ = ["prepare", "render", "publish", "notify"]
