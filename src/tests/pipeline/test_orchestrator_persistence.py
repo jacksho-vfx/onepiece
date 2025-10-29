@@ -111,13 +111,10 @@ def test_get_pipeline_orchestrator_accepts_storage_config(
 ) -> None:
     set_pipeline_orchestrator(None)
     db_path = tmp_path / "shared.sqlite3"
-    orchestrator = get_pipeline_orchestrator(
-        storage_config={"database": str(db_path)}
-    )
+    orchestrator = get_pipeline_orchestrator(storage_config={"database": str(db_path)})
     try:
         assert orchestrator is get_pipeline_orchestrator()
         with pytest.raises(RuntimeError):
             get_pipeline_orchestrator(storage_config={"database": str(db_path)})
     finally:
         set_pipeline_orchestrator(None)
-

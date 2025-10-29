@@ -180,9 +180,7 @@ class PipelineRunStore:
                 """
             )
 
-    def create_run(
-        self, run: PipelineRun, initial_event: PipelineRunEvent
-    ) -> None:
+    def create_run(self, run: PipelineRun, initial_event: PipelineRunEvent) -> None:
         payload = self._encode_parameters(run.parameters)
         event_payload = self._encode_parameters(initial_event.parameters)
         with self._lock, self._connection:
