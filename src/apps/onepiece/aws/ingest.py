@@ -73,6 +73,7 @@ class _IngestResolvedOptions:
     checkpoint_dir: Path
     checkpoint_threshold: int
     upload_chunk_size: int
+    upload_concurrency: int | None
 
 
 def _prepare_ingest_options(
@@ -89,6 +90,7 @@ def _prepare_ingest_options(
     checkpoint_dir: Path | None,
     checkpoint_threshold: int | None,
     upload_chunk_size: int | None,
+    upload_concurrency: int | None = None,
 ) -> _IngestResolvedOptions:
     ingest_overrides = profile_data.get("ingest", {})
     if ingest_overrides and not isinstance(ingest_overrides, Mapping):
@@ -188,6 +190,14 @@ def _prepare_ingest_options(
             os.getenv("INGEST_UPLOAD_CHUNK_SIZE", str(64 * 1024 * 1024))
         )
 
+    resolved_upload_concurrency = (
+        upload_concurrency
+        if upload_concurrency is not None
+        else _optional_int(
+            ingest_mapping.get("upload_concurrency"), "ingest.upload_concurrency"
+        )
+    )
+
     return _IngestResolvedOptions(
         project=resolved_project,
         show_code=resolved_show_code,
@@ -200,6 +210,7 @@ def _prepare_ingest_options(
         checkpoint_dir=resolved_checkpoint_dir,
         checkpoint_threshold=resolved_checkpoint_threshold,
         upload_chunk_size=resolved_upload_chunk_size,
+        upload_concurrency=resolved_upload_concurrency,
     )
 
 
@@ -403,6 +414,7 @@ def ingest(
         checkpoint_dir=resolved.checkpoint_dir,
         checkpoint_threshold_bytes=resolved.checkpoint_threshold,
         upload_chunk_size=resolved.upload_chunk_size,
+        upload_concurrency=resolved.upload_concurrency,
     )
     status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
 

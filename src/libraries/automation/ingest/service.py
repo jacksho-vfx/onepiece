@@ -41,6 +41,16 @@ from libraries.platform.validations.naming import (
 )
 
 
+DEFAULT_UPLOAD_CHUNK_SIZE = 64 * 1024 * 1024
+"""Default multipart chunk size for uploads (64 MiB)."""
+
+MIN_MULTIPART_CHUNK_SIZE = 5 * 1024 * 1024
+"""Minimum chunk size accepted by S3 for multipart uploads (5 MiB)."""
+
+DEFAULT_UPLOAD_CONCURRENCY = 10
+"""Default concurrency level used by :class:`~boto3.s3.transfer.TransferConfig`."""
+
+
 def _normalise_identifier(value: str) -> str:
     """Return a case-insensitive representation of production identifiers."""
 
@@ -489,7 +499,8 @@ class MediaIngestService:
     resume_enabled: bool = False
     checkpoint_dir: Path | None = None
     checkpoint_threshold_bytes: int = 512 * 1024 * 1024
-    upload_chunk_size: int = 64 * 1024 * 1024
+    upload_chunk_size: int = DEFAULT_UPLOAD_CHUNK_SIZE
+    upload_concurrency: int | None = None
 
     def __post_init__(self) -> None:
         def _env_flag(name: str, default: bool) -> bool:
@@ -534,6 +545,16 @@ class MediaIngestService:
                     default=self.upload_chunk_size,
                 )
 
+        if (env_concurrency := os.getenv("INGEST_UPLOAD_CONCURRENCY")) is not None:
+            try:
+                self.upload_concurrency = int(env_concurrency)
+            except ValueError:
+                log.warning(
+                    "ingest.invalid_upload_concurrency_env",
+                    value=env_concurrency,
+                    default=self.upload_concurrency,
+                )
+
         checkpoint_dir_env = os.getenv("INGEST_CHECKPOINT_DIR")
         if checkpoint_dir_env:
             self.checkpoint_dir = Path(checkpoint_dir_env)
@@ -541,9 +562,23 @@ class MediaIngestService:
             self.checkpoint_dir = Path(".ingest-checkpoints")
 
         if self.upload_chunk_size <= 0:
-            self.upload_chunk_size = 64 * 1024 * 1024
+            self.upload_chunk_size = DEFAULT_UPLOAD_CHUNK_SIZE
         if self.checkpoint_threshold_bytes < 0:
             self.checkpoint_threshold_bytes = 0
+
+        if self.upload_concurrency is not None and self.upload_concurrency <= 0:
+            log.warning(
+                "ingest.invalid_upload_concurrency_value",
+                value=self.upload_concurrency,
+                default=DEFAULT_UPLOAD_CONCURRENCY,
+            )
+            self.upload_concurrency = None
+
+        if isinstance(self.uploader, Boto3Uploader):
+            self.uploader.configure_transfer(
+                upload_chunk_size=self.upload_chunk_size,
+                max_concurrency=self.upload_concurrency,
+            )
 
     def ingest_folder(
         self,
@@ -1054,7 +1089,15 @@ class MediaIngestService:
 class S3ClientProtocol(Protocol):
     """Subset of :mod:`boto3`'s S3 client used for uploads."""
 
-    def upload_file(self, Filename: str, Bucket: str, Key: str) -> None:
+    def upload_file(
+        self,
+        Filename: str,
+        Bucket: str,
+        Key: str,
+        ExtraArgs: Mapping[str, Any] | None = ...,
+        Callback: Callable[[int], None] | None = ...,
+        Config: object | None = ...,
+    ) -> None:
         """Upload a local file to S3."""
 
     def create_multipart_upload(self, Bucket: str, Key: str) -> Mapping[str, Any]:
@@ -1083,10 +1126,27 @@ class S3ClientProtocol(Protocol):
         """Abort a multipart upload."""
 
 
+def _create_transfer_config(**kwargs: object) -> object:
+    try:
+        from boto3.s3.transfer import TransferConfig
+    except ImportError as exc:  # pragma: no cover - exercised in runtime
+        raise RuntimeError(
+            "boto3 is required for S3 uploads. Install it via 'pip install boto3'."
+        ) from exc
+    return TransferConfig(**kwargs)
+
+
 class Boto3Uploader:
     """Concrete uploader that relies on :mod:`boto3` for S3 transfers."""
 
-    def __init__(self, client: S3ClientProtocol | None = None) -> None:
+    def __init__(
+        self,
+        client: S3ClientProtocol | None = None,
+        *,
+        upload_chunk_size: int = DEFAULT_UPLOAD_CHUNK_SIZE,
+        max_concurrency: int | None = None,
+        transfer_config_factory: Callable[..., object] | None = None,
+    ) -> None:
         if client is None:
             try:
                 import boto3
@@ -1097,9 +1157,41 @@ class Boto3Uploader:
             boto3_client = boto3.client("s3")
             client = cast(S3ClientProtocol, boto3_client)
         self._client: S3ClientProtocol = client
+        self._transfer_config_factory = (
+            transfer_config_factory or _create_transfer_config
+        )
+        self._transfer_chunk_size = self._normalise_chunk_size(upload_chunk_size)
+        self._max_concurrency = self._normalise_concurrency(max_concurrency)
+
+    @staticmethod
+    def _normalise_chunk_size(value: int) -> int:
+        return max(value, MIN_MULTIPART_CHUNK_SIZE)
+
+    @staticmethod
+    def _normalise_concurrency(value: int | None) -> int:
+        if value is None:
+            return DEFAULT_UPLOAD_CONCURRENCY
+        return max(1, value)
+
+    def configure_transfer(
+        self,
+        *,
+        upload_chunk_size: int | None = None,
+        max_concurrency: int | None = None,
+    ) -> None:
+        if upload_chunk_size is not None:
+            self._transfer_chunk_size = self._normalise_chunk_size(upload_chunk_size)
+        if max_concurrency is None:
+            self._max_concurrency = DEFAULT_UPLOAD_CONCURRENCY
+        else:
+            self._max_concurrency = self._normalise_concurrency(max_concurrency)
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
-        self._client.upload_file(str(file_path), bucket, key)
+        config = self._transfer_config_factory(
+            multipart_chunksize=self._transfer_chunk_size,
+            max_concurrency=self._max_concurrency,
+        )
+        self._client.upload_file(str(file_path), bucket, key, Config=config)
 
     def upload_resumable(
         self,
@@ -1110,7 +1202,7 @@ class Boto3Uploader:
         chunk_size: int,
         progress_callback: Callable[[UploadCheckpoint], None] | None = None,
     ) -> None:
-        chunk_size = max(chunk_size, 5 * 1024 * 1024)
+        chunk_size = max(chunk_size, MIN_MULTIPART_CHUNK_SIZE)
         upload_id = checkpoint.upload_id
 
         if upload_id is None:
