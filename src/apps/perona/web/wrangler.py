@@ -1339,7 +1339,9 @@ def _suggest_stage_follow_up(stage_name: str | None) -> str:
     return f"assign {key} owner"
 
 
-def _identify_current_stage(lifecycle: Any, name_hint: str | None) -> tuple[Any | None, str | None]:
+def _identify_current_stage(
+    lifecycle: Any, name_hint: str | None
+) -> tuple[Any | None, str | None]:
     stages = getattr(lifecycle, "stages", ())
     matched_stage: Any | None = None
     resolved_name = name_hint
@@ -1347,7 +1349,10 @@ def _identify_current_stage(lifecycle: Any, name_hint: str | None) -> tuple[Any 
     if isinstance(resolved_name, str):
         for stage in stages:
             stage_name = getattr(stage, "name", None)
-            if isinstance(stage_name, str) and stage_name.lower() == resolved_name.lower():
+            if (
+                isinstance(stage_name, str)
+                and stage_name.lower() == resolved_name.lower()
+            ):
                 matched_stage = stage
                 resolved_name = stage_name
                 break
@@ -1495,7 +1500,9 @@ def _run_identify_unowned_shots_script() -> WranglerScriptResult:
 
     for lifecycle in lifecycles:
         _owners, current_stage_name = _extract_lifecycle_context(lifecycle)
-        stage, resolved_stage_name = _identify_current_stage(lifecycle, current_stage_name)
+        stage, resolved_stage_name = _identify_current_stage(
+            lifecycle, current_stage_name
+        )
         if stage is None:
             continue
 
@@ -1517,7 +1524,9 @@ def _run_identify_unowned_shots_script() -> WranglerScriptResult:
         stage_started = _normalise_stage_timestamp(getattr(stage, "started_at", None))
         stage_started_iso = stage_started.isoformat() if stage_started else None
         current_stage = resolved_stage_name or current_stage_name or "Unknown"
-        suggestion = _suggest_stage_follow_up(current_stage if isinstance(current_stage, str) else None)
+        suggestion = _suggest_stage_follow_up(
+            current_stage if isinstance(current_stage, str) else None
+        )
 
         entry = {
             "sequence": sequence,

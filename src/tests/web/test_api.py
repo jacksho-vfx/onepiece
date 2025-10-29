@@ -920,7 +920,9 @@ def test_wrangler_identify_unowned_shots_flags_missing_assignments(
         def shot_lifecycle(self) -> tuple[ShotLifecycle, ...]:
             return self._lifecycles
 
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles))
+    monkeypatch.setattr(
+        dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles)
+    )
 
     response = client.post("/wrangler/scripts/identify_unowned_shots")
 
@@ -977,7 +979,9 @@ def test_wrangler_identify_unowned_shots_handles_fully_assigned(
         def shot_lifecycle(self) -> tuple[ShotLifecycle, ...]:
             return self._lifecycles
 
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles))
+    monkeypatch.setattr(
+        dashboard_module, "get_engine", lambda: _LifecycleEngine(lifecycles)
+    )
 
     response = client.post("/wrangler/scripts/identify_unowned_shots")
 
