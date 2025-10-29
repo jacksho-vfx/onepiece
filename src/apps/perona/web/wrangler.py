@@ -68,6 +68,8 @@ _FAILING_ERROR_THRESHOLD_MULTIPLIER = 1.5
 _CACHE_STABILITY_THRESHOLD = 0.75
 _OWNER_KEYS = ("owner", "artist", "lead", "supervisor", "producer", "coordinator")
 
+_DEFAULT_FRAME_TIME_REGRESSION_THRESHOLD = 0.1
+
 _STAGE_FOLLOW_UP = {
     "layout": "assign layout owner",
     "sim": "assign sim lead",
@@ -1004,6 +1006,154 @@ def _run_flag_render_volatility_script() -> WranglerScriptResult:
     )
 
 
+def _resolve_frame_time_regression_threshold(engine: Any, baseline: Any) -> float:
+    """Return the configured frame time regression threshold as a ratio."""
+
+    candidates = (
+        getattr(engine, "frame_time_regression_threshold", None),
+        getattr(baseline, "frame_time_regression_threshold", None),
+    )
+
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        try:
+            value = float(candidate)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            continue
+        if value > 0:
+            return value
+
+    return _DEFAULT_FRAME_TIME_REGRESSION_THRESHOLD
+
+
+def _regression_mitigation(utilisation: float, delta_ratio: float) -> str:
+    utilisation_pct = utilisation * 100
+
+    if utilisation_pct >= 85:
+        return (
+            "Split heavy renders across more GPUs or reschedule to relieve contention."
+        )
+    if utilisation_pct <= 45:
+        return "Inspect simulation and cache performance before re-queuing renders."
+    if delta_ratio >= 0.25:
+        return "Escalate to profiling to trim shading and lighting hot spots."
+    return "Profile recent renders and tighten scene optimisations to recover baseline."
+
+
+def _utilisation_context(utilisation: float) -> str:
+    utilisation_pct = utilisation * 100
+    if utilisation_pct >= 85:
+        return f"High GPU load (~{utilisation_pct:.1f}%)"
+    if utilisation_pct >= 60:
+        return f"Moderate GPU load (~{utilisation_pct:.1f}%)"
+    return f"Low GPU load (~{utilisation_pct:.1f}%)"
+
+
+def _run_flag_frame_time_regressions_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    baseline_input = getattr(engine, "baseline_cost_input", None)
+
+    baseline_frame_time: float | None = None
+    if baseline_input is not None:
+        candidate = getattr(baseline_input, "average_frame_time_ms", None)
+        try:
+            baseline_frame_time = float(candidate)  # type: ignore[arg-type]
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            baseline_frame_time = None
+
+    summary = dashboard_module.metrics_summary(engine=engine)
+
+    payload: dict[str, Any] = {
+        "summary": None,
+        "baseline_frame_time_ms": (
+            None if baseline_frame_time is None else round(baseline_frame_time, 3)
+        ),
+        "threshold_percentage": None,
+        "total_sequences": len(summary.get("sequences") or []),
+        "regression_count": 0,
+        "regressions": [],
+    }
+
+    if baseline_frame_time is None or baseline_frame_time <= 0:
+        message = "Baseline frame time unavailable; configure Perona settings before flagging regressions."
+        payload["summary"] = message
+        return WranglerScriptResult(
+            script_id="flag_frame_time_regressions",
+            status="error",
+            message=message,
+            payload=payload,
+        )
+
+    threshold_ratio = _resolve_frame_time_regression_threshold(engine, baseline_input)
+    payload["threshold_percentage"] = round(threshold_ratio * 100, 1)
+
+    sequences = summary.get("sequences") or []
+
+    regressions: list[dict[str, Any]] = []
+    for entry in sequences:
+        avg_frame_time = entry.get("avg_frame_time_ms")
+        if avg_frame_time is None:
+            continue
+        try:
+            avg_frame_time = float(avg_frame_time)
+        except (TypeError, ValueError):
+            continue
+
+        delta_ratio = (avg_frame_time - baseline_frame_time) / baseline_frame_time
+        if delta_ratio <= threshold_ratio:
+            continue
+
+        avg_gpu_utilisation = entry.get("avg_gpu_utilisation") or 0.0
+        try:
+            avg_gpu_utilisation = float(avg_gpu_utilisation)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            avg_gpu_utilisation = 0.0
+
+        regression = {
+            "sequence": entry.get("sequence"),
+            "avg_frame_time_ms": round(avg_frame_time, 3),
+            "delta_percentage": round(delta_ratio * 100, 1),
+            "avg_gpu_utilisation": round(avg_gpu_utilisation, 3),
+            "gpu_utilisation_percentage": round(avg_gpu_utilisation * 100, 1),
+            "utilisation_context": _utilisation_context(avg_gpu_utilisation),
+            "recommendation": _regression_mitigation(avg_gpu_utilisation, delta_ratio),
+        }
+
+        regressions.append(regression)
+
+    regressions.sort(key=lambda item: item["delta_percentage"], reverse=True)
+
+    payload.update(
+        {
+            "regression_count": len(regressions),
+            "regressions": regressions,
+        }
+    )
+
+    if regressions:
+        worst = regressions[0]
+        message = (
+            "Frame time regressions detected — "
+            f"{worst.get('sequence')} averaging {worst['avg_frame_time_ms']:.1f}ms "
+            f"({worst['delta_percentage']:+.1f}% vs {baseline_frame_time:.1f}ms baseline)."
+        )
+    else:
+        message = (
+            "Frame times healthy — all sequences within "
+            f"{payload['threshold_percentage']:.1f}% of {baseline_frame_time:.1f}ms baseline."
+        )
+
+    payload["summary"] = message
+
+    return WranglerScriptResult(
+        script_id="flag_frame_time_regressions",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
 def _format_timestamp_iso(timestamp: datetime | None) -> str | None:
     if timestamp is None:
         return None
@@ -1822,6 +1972,18 @@ def _register_builtin_scripts() -> None:
                 tags=("risk", "shots"),
             ),
             _run_list_failing_jobs_script,
+        )
+    if "flag_frame_time_regressions" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="flag_frame_time_regressions",
+                name="Flag frame time regressions",
+                description=(
+                    "Compare sequence frame times against the baseline and surface regressions"
+                ),
+                tags=("rendering", "performance"),
+            ),
+            _run_flag_frame_time_regressions_script,
         )
     if "flag_render_volatility" not in _scripts:
         register_script(

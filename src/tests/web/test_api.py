@@ -96,6 +96,15 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
     assert (
+        scripts["flag_frame_time_regressions"]["name"] == "Flag frame time regressions"
+    )
+    assert "frame time" in scripts["flag_frame_time_regressions"]["description"].lower()
+    assert scripts["flag_frame_time_regressions"]["tags"] == [
+        "rendering",
+        "performance",
+    ]
+
+    assert (
         scripts["flag_render_volatility"]["name"] == "Flag render volatility hotspots"
     )
     assert "volatile" in scripts["flag_render_volatility"]["description"].lower()
@@ -571,6 +580,123 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     assert first["drivers"]
     assert any("deadline" in driver.lower() for driver in first["drivers"])
     assert "deadline_horizon" in first
+
+
+def test_wrangler_flag_frame_time_regressions_reports_sequences(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Baseline:
+        average_frame_time_ms = 40.0
+
+    class _Engine:
+        def __init__(self) -> None:
+            self.baseline_cost_input = _Baseline()
+            self.frame_time_regression_threshold = 0.1
+
+    summary = {
+        "total_samples": 12,
+        "averages": {},
+        "sequences": [
+            {
+                "sequence": "SQ10",
+                "shots": 8,
+                "avg_frame_time_ms": 45.0,
+                "avg_gpu_utilisation": 0.92,
+            },
+            {
+                "sequence": "SQ20",
+                "shots": 5,
+                "avg_frame_time_ms": 42.0,
+                "avg_gpu_utilisation": 0.58,
+            },
+        ],
+        "latest_sample": None,
+    }
+
+    engine = _Engine()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: engine)
+    monkeypatch.setattr(
+        dashboard_module,
+        "metrics_summary",
+        lambda engine: summary,
+    )
+
+    response = client.post("/wrangler/scripts/flag_frame_time_regressions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "flag_frame_time_regressions"
+    assert payload["status"] == "success"
+    assert "regression" in payload["message"].lower()
+    assert "SQ10" in payload["message"]
+
+    body = payload["payload"]
+    assert body["baseline_frame_time_ms"] == pytest.approx(40.0, rel=0, abs=0.001)
+    assert body["threshold_percentage"] == pytest.approx(10.0, rel=0, abs=0.01)
+    assert body["regression_count"] == 1
+    assert len(body["regressions"]) == 1
+
+    regression = body["regressions"][0]
+    assert regression["sequence"] == "SQ10"
+    assert regression["avg_frame_time_ms"] == pytest.approx(45.0, rel=0, abs=0.001)
+    assert regression["delta_percentage"] == pytest.approx(12.5, rel=0, abs=0.1)
+    assert regression["utilisation_context"].startswith("High GPU load")
+    assert (
+        "GPU" in regression["recommendation"]
+        or "profil" in regression["recommendation"].lower()
+    )
+
+
+def test_wrangler_flag_frame_time_regressions_reports_healthy_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Baseline:
+        average_frame_time_ms = 40.0
+
+    class _Engine:
+        def __init__(self) -> None:
+            self.baseline_cost_input = _Baseline()
+
+    summary = {
+        "total_samples": 6,
+        "averages": {},
+        "sequences": [
+            {
+                "sequence": "SQ10",
+                "shots": 4,
+                "avg_frame_time_ms": 43.5,
+                "avg_gpu_utilisation": 0.65,
+            },
+            {
+                "sequence": "SQ12",
+                "shots": 3,
+                "avg_frame_time_ms": 42.0,
+                "avg_gpu_utilisation": 0.47,
+            },
+        ],
+        "latest_sample": None,
+    }
+
+    engine = _Engine()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: engine)
+    monkeypatch.setattr(
+        dashboard_module,
+        "metrics_summary",
+        lambda engine: summary,
+    )
+
+    response = client.post("/wrangler/scripts/flag_frame_time_regressions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "flag_frame_time_regressions"
+    assert payload["status"] == "success"
+    assert "healthy" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["regressions"] == []
+    assert body["regression_count"] == 0
+    assert body["threshold_percentage"] == pytest.approx(10.0, rel=0, abs=0.01)
 
 
 def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
