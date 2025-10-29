@@ -76,6 +76,10 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["boost_gpu_utilisation"]["description"]
     assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
 
+    assert scripts["check_telemetry_freshness"]["name"] == "Check telemetry freshness"
+    assert "telemetry" in scripts["check_telemetry_freshness"]["description"].lower()
+    assert scripts["check_telemetry_freshness"]["tags"] == ["telemetry", "health"]
+
     assert scripts["spin_down_idle_workers"]["name"] == "Spin down idle GPU workers"
     assert "GPU nodes" in scripts["spin_down_idle_workers"]["description"]
     assert scripts["spin_down_idle_workers"]["tags"] == [
@@ -194,6 +198,81 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
+
+def test_wrangler_check_telemetry_freshness_reports_age(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timestamp = (datetime.utcnow() - timedelta(minutes=10)).replace(microsecond=0)
+    summary = {
+        "total_samples": 12,
+        "averages": {},
+        "sequences": [],
+        "latest_sample": {
+            "sequence": "SQ99",
+            "shot_id": "SQ99_SH001",
+            "timestamp": timestamp.isoformat(),
+        },
+    }
+
+    dummy_engine = object()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
+    monkeypatch.setattr(
+        dashboard_module,
+        "metrics_summary",
+        lambda engine: summary,
+    )
+
+    response = client.post("/wrangler/scripts/check_telemetry_freshness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "check_telemetry_freshness"
+    assert payload["status"] == "success"
+    assert "minute" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["latest_sequence"] == "SQ99"
+    assert body["latest_shot"] == "SQ99_SH001"
+    assert body["latest_timestamp"] == timestamp.isoformat()
+    assert body["status"] == "healthy"
+    assert body["age_minutes"] is not None
+    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
+
+
+def test_wrangler_check_telemetry_freshness_handles_missing_samples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    summary = {
+        "total_samples": 0,
+        "averages": {},
+        "sequences": [],
+        "latest_sample": None,
+    }
+
+    dummy_engine = object()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
+    monkeypatch.setattr(
+        dashboard_module,
+        "metrics_summary",
+        lambda engine: summary,
+    )
+
+    response = client.post("/wrangler/scripts/check_telemetry_freshness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "check_telemetry_freshness"
+    assert payload["status"] == "error"
+    assert "telemetry" in payload["message"].lower()
+
+    body = payload["payload"]
+    assert body["latest_sequence"] is None
+    assert body["latest_shot"] is None
+    assert body["latest_timestamp"] is None
+    assert body["age_minutes"] is None
+    assert body["status"] is None
+    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
 
 
 def test_wrangler_analyse_cost_drivers_script_returns_summary(
