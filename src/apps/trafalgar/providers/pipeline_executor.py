@@ -12,6 +12,9 @@ from typing import Any, Callable, Deque, Iterable, Mapping, Protocol
 
 from libraries.pipeline.factories import resolve_provider
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
+
+
+PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
 from libraries.pipeline import plugins
 
 
@@ -158,14 +161,18 @@ class PipelineExecutor:
     def _resolve_step(self, step: PipelineStep) -> PipelineStep:
         provider = step.provider
         produced_step: PipelineStep | None = None
+        provider_reference: str | None = None
 
         if isinstance(provider, str) and provider in self._step_factories:
+            provider_reference = provider
             candidate = self._step_factories[provider](step.config)
             if isinstance(candidate, PipelineStep):
                 produced_step = candidate
                 provider = candidate.provider
             else:
                 provider = candidate
+        elif isinstance(provider, str):
+            provider_reference = provider
 
         resolved = resolve_provider(provider)
         if not callable(resolved):
@@ -175,6 +182,12 @@ class PipelineExecutor:
         base = produced_step or step
         if produced_step is not None and produced_step.name != step.name:
             base = replace(base, name=step.name)
+
+        if provider_reference is not None:
+            metadata = dict(base.metadata)
+            metadata.setdefault(PROVIDER_REFERENCE_METADATA_KEY, provider_reference)
+            base = replace(base, metadata=metadata)
+
         return replace(base, provider=resolved)
 
     # Execution helpers --------------------------------------------------
