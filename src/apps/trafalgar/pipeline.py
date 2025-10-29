@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any, AsyncIterator, Iterable, Iterator, Mapping
 
 import json
 import sqlite3
@@ -138,6 +139,12 @@ class PipelineRunEvent:
         }
 
 
+@dataclass(slots=True)
+class _RunEventSubscriber:
+    loop: asyncio.AbstractEventLoop
+    queue: asyncio.Queue[PipelineRunEvent]
+
+
 class PipelineRunStore:
     """SQLite backed persistence layer for pipeline runs and events."""
 
@@ -168,6 +175,7 @@ class PipelineRunStore:
         )
         self._connection.row_factory = sqlite3.Row
         self._initialise_schema()
+        self._subscribers: dict[str, list[_RunEventSubscriber]] = {}
 
     @staticmethod
     def _encode_datetime(value: datetime) -> str:
@@ -310,6 +318,16 @@ class PipelineRunStore:
                         """,
                         (encoded_timestamp, run_id),
                     )
+            subscribers = tuple(self._subscribers.get(run_id, ()))
+
+        event = PipelineRunEvent(
+            run_id=run_id,
+            pipeline=pipeline,
+            status=status,
+            timestamp=timestamp,
+            parameters=dict(parameters),
+        )
+        self._publish_event(subscribers, event)
 
     def get_run(self, run_id: str) -> PipelineRun:
         with self._lock:
@@ -390,33 +408,77 @@ class PipelineRunStore:
 
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         with self._lock:
-            cursor = self._connection.execute(
-                """
-                SELECT run_id, pipeline, status, timestamp, parameters
-                FROM pipeline_run_events
-                WHERE run_id = ?
-                ORDER BY id ASC
-                """,
-                (run_id,),
-            )
-            rows = cursor.fetchall()
-        if not rows:
-            cursor = self._connection.execute(
-                "SELECT 1 FROM pipeline_runs WHERE run_id = ?",
-                (run_id,),
-            )
-            if cursor.fetchone() is None:
-                msg = f"run '{run_id}' could not be found"
-                raise KeyError(msg)
+            rows = self._load_run_event_rows_locked(run_id)
 
         for row in rows:
-            yield PipelineRunEvent(
-                run_id=row["run_id"],
-                pipeline=row["pipeline"],
-                status=row["status"],
-                timestamp=self._decode_datetime(row["timestamp"]),
-                parameters=self._decode_parameters(row["parameters"]),
-            )
+            yield self._row_to_run_event(row)
+
+    def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[PipelineRunEvent] = asyncio.Queue()
+        subscriber = _RunEventSubscriber(loop=loop, queue=queue)
+
+        with self._lock:
+            rows = self._load_run_event_rows_locked(run_id)
+            subscribers = self._subscribers.setdefault(run_id, [])
+            subscribers.append(subscriber)
+
+        events = [self._row_to_run_event(row) for row in rows]
+
+        async def iterator() -> AsyncIterator[PipelineRunEvent]:
+            try:
+                for event in events:
+                    yield event
+                while True:
+                    yield await queue.get()
+            finally:
+                with self._lock:
+                    targets = self._subscribers.get(run_id)
+                    if targets is not None and subscriber in targets:
+                        targets.remove(subscriber)
+                        if not targets:
+                            self._subscribers.pop(run_id, None)
+
+        return iterator()
+
+    def _publish_event(
+        self,
+        subscribers: tuple[_RunEventSubscriber, ...],
+        event: PipelineRunEvent,
+    ) -> None:
+        for subscriber in subscribers:
+            subscriber.loop.call_soon_threadsafe(subscriber.queue.put_nowait, event)
+
+    def _load_run_event_rows_locked(self, run_id: str) -> list[sqlite3.Row]:
+        cursor = self._connection.execute(
+            """
+            SELECT run_id, pipeline, status, timestamp, parameters
+            FROM pipeline_run_events
+            WHERE run_id = ?
+            ORDER BY id ASC
+            """,
+            (run_id,),
+        )
+        rows = cursor.fetchall()
+        if rows:
+            return rows
+        cursor = self._connection.execute(
+            "SELECT 1 FROM pipeline_runs WHERE run_id = ?",
+            (run_id,),
+        )
+        if cursor.fetchone() is None:
+            msg = f"run '{run_id}' could not be found"
+            raise KeyError(msg)
+        return rows
+
+    def _row_to_run_event(self, row: sqlite3.Row) -> PipelineRunEvent:
+        return PipelineRunEvent(
+            run_id=row["run_id"],
+            pipeline=row["pipeline"],
+            status=row["status"],
+            timestamp=self._decode_datetime(row["timestamp"]),
+            parameters=self._decode_parameters(row["parameters"]),
+        )
 
     @classmethod
     def from_config(cls, config: Mapping[str, Any]) -> PipelineRunStore:
@@ -574,6 +636,12 @@ class PipelineOrchestrator:
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         try:
             return self._store.iter_run_events(run_id)
+        except KeyError as exc:  # pragma: no cover - defensive guard
+            raise KeyError(str(exc)) from exc
+
+    def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
+        try:
+            return self._store.watch_run_events(run_id)
         except KeyError as exc:  # pragma: no cover - defensive guard
             raise KeyError(str(exc)) from exc
 
