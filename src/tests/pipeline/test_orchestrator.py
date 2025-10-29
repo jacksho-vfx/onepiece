@@ -279,7 +279,9 @@ def test_trigger_run_returns_before_completion(monkeypatch: pytest.MonkeyPatch) 
     assert statuses[-2:] == ["step_succeeded", "succeeded"]
 
 
-def test_trigger_run_records_failure_after_return(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_trigger_run_records_failure_after_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     release = threading.Event()
 
     def blocking_factory(
