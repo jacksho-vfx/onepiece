@@ -155,5 +155,3 @@ async def get_pipeline_client(request: Request) -> AsyncIterator[PipelineApiClie
 
 
 __all__ = ["PipelineApiClient", "PipelineApiError", "get_pipeline_client"]
-
-

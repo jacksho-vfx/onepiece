@@ -10,6 +10,7 @@ from typer.main import get_command
 
 from apps.onepiece.app import app as cli_app
 
+
 @dataclass
 class ParameterSpec:
     """Metadata describing a single CLI parameter."""
@@ -201,5 +202,3 @@ __all__ = [
     "CLI_PAGES",
     "COMMAND_LOOKUP",
 ]
-
-

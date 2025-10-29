@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from html import escape
-from typing import Any
 
 from .web_cli import CLI_PAGES, CommandSpec, PageSpec
+
 
 def _slugify(name: str) -> str:
     return "-".join(name.lower().split())
@@ -2968,5 +2968,3 @@ __all__ = [
     "_render_dashboard_page",
     "_render_index",
 ]
-
-
