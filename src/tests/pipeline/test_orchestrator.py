@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
-from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
+from apps.trafalgar.pipeline import (
+    PipelineDefinition,
+    PipelineOrchestrator,
+    PipelineRunStore,
+)
 from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
 @pytest.fixture
-def orchestrator(monkeypatch: pytest.MonkeyPatch) -> PipelineOrchestrator:
+def orchestrator(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> PipelineOrchestrator:
     """Return an orchestrator configured with deterministic step factories."""
 
     def sequential_factory(
@@ -49,7 +56,8 @@ def orchestrator(monkeypatch: pytest.MonkeyPatch) -> PipelineOrchestrator:
         lambda: {"sequential": sequential_factory, "event-listener": event_factory},
     )
 
-    return PipelineOrchestrator()
+    store = PipelineRunStore(database=tmp_path / "runs.sqlite3")
+    return PipelineOrchestrator(store=store)
 
 
 def _build_pipeline() -> Pipeline:
