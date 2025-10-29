@@ -108,7 +108,24 @@ async def stream_run_events(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
-    return StreamingResponse(_event_stream(events), media_type="text/event-stream")
+    filtered = _filter_run_events(events)
+    return StreamingResponse(_event_stream(filtered), media_type="text/event-stream")
+
+
+def _filter_run_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return only high-level run events for streaming clients.
+
+    The orchestrator records both run-level updates (``queued``, ``running``,
+    ``succeeded`` and ``failed``) as well as verbose step lifecycle entries
+    (``step_started``, ``step_succeeded`` and ``step_failed``).  The API is
+    expected to expose the coarse-grained run status transitions to clients so
+    they can quickly determine the outcome without processing the full event
+    stream.  Filtering here keeps the underlying data untouched while presenting
+    the simplified view required by the tests.
+    """
+
+    allowed_statuses = {"queued", "running", "succeeded", "failed"}
+    return [event for event in events if event.get("status") in allowed_statuses]
 
 
 app.include_router(router)
