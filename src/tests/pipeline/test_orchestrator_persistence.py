@@ -163,9 +163,7 @@ def test_configure_orchestrator_from_profile_uses_profile_storage(
     orchestrator = configure_orchestrator_from_profile(
         context, storage_config=context.pipeline_storage
     )
-    run = orchestrator.trigger_run(
-        "render_shots", parameters={"quality": "high"}
-    )
+    run = orchestrator.trigger_run("render_shots", parameters={"quality": "high"})
     statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
 
     set_pipeline_orchestrator(None)
@@ -178,9 +176,7 @@ def test_configure_orchestrator_from_profile_uses_profile_storage(
     persisted_run = restarted.get_run(run.run_id)
     assert persisted_run.status == run.status
     assert persisted_run.pipeline == "render_shots"
-    assert [
-        event.status for event in restarted.iter_run_events(run.run_id)
-    ] == statuses
+    assert [event.status for event in restarted.iter_run_events(run.run_id)] == statuses
 
     set_pipeline_orchestrator(None)
 

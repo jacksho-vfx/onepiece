@@ -616,9 +616,7 @@ def configure_orchestrator_from_profile(
     definitions = pipeline_definitions_from_profile(profile)
     effective_storage = storage_config or profile.pipeline_storage
     store = (
-        PipelineRunStore.from_config(effective_storage)
-        if effective_storage
-        else None
+        PipelineRunStore.from_config(effective_storage) if effective_storage else None
     )
     orchestrator = PipelineOrchestrator(definitions, store=store)
     set_pipeline_orchestrator(orchestrator)

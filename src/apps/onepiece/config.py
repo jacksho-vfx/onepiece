@@ -108,9 +108,7 @@ def load_profile(
     else:
         profile_data = {}
 
-    pipeline_storage = _extract_pipeline_storage(
-        selected_profile, profile_data
-    )
+    pipeline_storage = _extract_pipeline_storage(selected_profile, profile_data)
 
     return ProfileContext(
         name=selected_profile,
