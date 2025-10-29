@@ -92,6 +92,15 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert "critical shots" in scripts["list_failing_jobs"]["description"]
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
+    assert (
+        scripts["flag_render_volatility"]["name"] == "Flag render volatility hotspots"
+    )
+    assert "volatile" in scripts["flag_render_volatility"]["description"].lower()
+    assert scripts["flag_render_volatility"]["tags"] == [
+        "rendering",
+        "utilisation",
+    ]
+
     assert scripts["rebuild_unstable_caches"]["name"] == "Rebuild unstable caches"
     assert (
         "cache stability" in scripts["rebuild_unstable_caches"]["description"].lower()
@@ -443,6 +452,31 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     assert first["drivers"]
     assert any("deadline" in driver.lower() for driver in first["drivers"])
     assert "deadline_horizon" in first
+
+
+def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
+    response = client.post("/wrangler/scripts/flag_render_volatility")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "flag_render_volatility"
+    assert payload["status"] == "success"
+    assert "volatility" in payload["message"].lower()
+
+    body = payload["payload"]
+    hotspots = body["volatility"]
+    assert hotspots
+
+    top = hotspots[0]
+    assert top["drivers"]
+    assert any("Render time volatility" in driver for driver in top["drivers"])
+    assert isinstance(top["recommended_follow_up"], str)
+    assert "profile" in top["recommended_follow_up"].lower()
+
+    variance = top["variance"]
+    assert isinstance(variance["sample_count"], int)
+    assert variance["average_frame_time_ms"] >= 0
+    assert "coefficient_of_variation" in variance
 
 
 def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
