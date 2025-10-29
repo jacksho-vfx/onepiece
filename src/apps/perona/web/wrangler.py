@@ -393,6 +393,124 @@ def _run_check_telemetry_freshness_script() -> WranglerScriptResult:
     )
 
 
+def _run_audit_telemetry_coverage_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    telemetry_index = _build_telemetry_index(engine)
+
+    samples = list(engine.stream_render_metrics())
+    metrics_by_shot: dict[tuple[str, str], list[Any]] = {}
+    for sample in samples:
+        key = (sample.sequence, sample.shot_id)
+        metrics_by_shot.setdefault(key, []).append(sample)
+
+    keys = set(telemetry_index) | set(metrics_by_shot)
+
+    thresholds = {
+        "healthy_minutes": _TELEMETRY_HEALTHY_THRESHOLD_MINUTES,
+        "stale_minutes": _TELEMETRY_STALE_THRESHOLD_MINUTES,
+    }
+
+    counts = {"healthy": 0, "warning": 0, "stale": 0, "missing": 0}
+
+    if not keys:
+        message = "Telemetry coverage audit unavailable — no telemetry samples recorded."
+        payload = {
+            "summary": message,
+            "shots": [],
+            "counts": counts,
+            "thresholds": thresholds,
+            "attention_total": 0,
+        }
+        return WranglerScriptResult(
+            script_id="audit_telemetry_coverage",
+            status="success",
+            message=message,
+            payload=payload,
+        )
+
+    now_utc = datetime.now(timezone.utc)
+
+    def _shot_entry(key: tuple[str, str]) -> dict[str, Any]:
+        sequence, shot = key
+        telemetry_present = key in telemetry_index
+        metrics = metrics_by_shot.get(key, [])
+        sample_count = len(metrics)
+        last_seen: datetime | None = None
+        age_minutes: float | None = None
+        status: str
+
+        if sample_count > 0:
+            last_seen = max((getattr(sample, "timestamp", None) for sample in metrics), default=None)
+            if isinstance(last_seen, datetime):
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+                else:
+                    last_seen = last_seen.astimezone(timezone.utc)
+                age_minutes = max(0.0, (now_utc - last_seen).total_seconds() / 60.0)
+                status = _classify_freshness(age_minutes)
+            else:
+                last_seen = None
+                status = "missing"
+        else:
+            status = "missing"
+
+        counts[status] = counts.get(status, 0) + 1
+
+        entry = {
+            "sequence": sequence,
+            "shot": shot,
+            "samples": sample_count,
+            "last_seen": _format_timestamp_iso(last_seen),
+            "age_minutes": round(age_minutes, 1) if age_minutes is not None else None,
+            "status": status,
+            "telemetry_present": telemetry_present,
+        }
+        return entry
+
+    entries = [_shot_entry(key) for key in keys]
+
+    severity = {"missing": 0, "stale": 1, "warning": 2, "healthy": 3}
+    entries.sort(
+        key=lambda item: (
+            severity.get(item["status"], 4),
+            -(item["age_minutes"] if item["age_minutes"] is not None else float("inf")),
+            item["sequence"],
+            item["shot"],
+        )
+    )
+
+    attention_total = counts["warning"] + counts["stale"] + counts["missing"]
+    if attention_total:
+        breakdown: list[str] = []
+        for bucket in ("missing", "stale", "warning"):
+            if counts[bucket]:
+                label = "warning" if bucket == "warning" else bucket
+                breakdown.append(f"{counts[bucket]} {label}")
+        detail = ", ".join(breakdown)
+        message = f"{attention_total} shot(s) need telemetry attention"
+        if detail:
+            message += f" — {detail}."
+        else:
+            message += "."
+    else:
+        message = "All monitored shots have fresh telemetry coverage."
+
+    payload = {
+        "summary": message,
+        "shots": entries,
+        "counts": counts,
+        "thresholds": thresholds,
+        "attention_total": attention_total,
+    }
+
+    return WranglerScriptResult(
+        script_id="audit_telemetry_coverage",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
 def _run_boost_gpu_utilisation_script() -> WranglerScriptResult:
     engine = dashboard_module.get_engine()
     summary = dashboard_module.metrics_summary(engine=engine)
@@ -1940,6 +2058,18 @@ def _register_builtin_scripts() -> None:
                 tags=("rendering", "utilisation"),
             ),
             _run_boost_gpu_utilisation_script,
+        )
+    if "audit_telemetry_coverage" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="audit_telemetry_coverage",
+                name="Audit telemetry coverage",
+                description=(
+                    "Cross-check telemetry against render metrics to flag stale or missing shots"
+                ),
+                tags=("telemetry", "coverage", "health"),
+            ),
+            _run_audit_telemetry_coverage_script,
         )
     if "check_telemetry_freshness" not in _scripts:
         register_script(
