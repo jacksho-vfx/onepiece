@@ -35,9 +35,7 @@ def test_local_client_stream_events_without_running_loop() -> None:
     client = LocalPipelineClient()
     try:
         run = client.trigger_run("demo", parameters={})
-        statuses = [
-            payload["status"] for payload in client.stream_events(run["id"])
-        ]
+        statuses = [payload["status"] for payload in client.stream_events(run["id"])]
         assert statuses[:2] == ["queued", "running"]
     finally:
         client.close()

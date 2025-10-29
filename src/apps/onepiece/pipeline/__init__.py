@@ -144,9 +144,7 @@ class LocalPipelineClient:
                 try:
                     events = self._orchestrator.watch_run_events(run_id)
                 except KeyError as exc:
-                    queue.put(
-                        PipelineClientError(str(exc), status_code=404)
-                    )
+                    queue.put(PipelineClientError(str(exc), status_code=404))
                     queue.put(sentinel)
                     return
 
