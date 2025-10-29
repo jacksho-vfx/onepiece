@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock
 from typing import Any, Iterable, Iterator, Mapping
 
+import json
+import sqlite3
 import uuid
 
 from apps.onepiece.config import ProfileContext
@@ -94,18 +97,258 @@ class PipelineRunEvent:
         }
 
 
+class PipelineRunStore:
+    """SQLite backed persistence layer for pipeline runs and events."""
+
+    def __init__(
+        self,
+        *,
+        database: str | Path | None = None,
+    ) -> None:
+        if database is None:
+            database_path = ":memory:"
+            self._path: Path | None = None
+        else:
+            database_str = str(database)
+            if database_str == ":memory:":
+                database_path = ":memory:"
+                self._path = None
+            else:
+                path = Path(database)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                database_path = str(path)
+                self._path = path
+
+        self._lock = Lock()
+        self._connection = sqlite3.connect(
+            database_path,
+            detect_types=sqlite3.PARSE_DECLTYPES,
+            check_same_thread=False,
+        )
+        self._connection.row_factory = sqlite3.Row
+        self._initialise_schema()
+
+    @staticmethod
+    def _encode_datetime(value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat()
+
+    @staticmethod
+    def _decode_datetime(value: str) -> datetime:
+        return datetime.fromisoformat(value)
+
+    @staticmethod
+    def _encode_parameters(parameters: Mapping[str, Any]) -> str:
+        def _default(value: Any) -> Any:
+            return str(value)
+
+        return json.dumps(dict(parameters), default=_default)
+
+    @staticmethod
+    def _decode_parameters(payload: str) -> dict[str, Any]:
+        if not payload:
+            return {}
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return {}
+
+    def _initialise_schema(self) -> None:
+        with self._connection:
+            self._connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS pipeline_runs (
+                    run_id TEXT PRIMARY KEY,
+                    pipeline TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    parameters TEXT NOT NULL
+                )
+                """
+            )
+            self._connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS pipeline_run_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    pipeline TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    parameters TEXT NOT NULL,
+                    FOREIGN KEY(run_id) REFERENCES pipeline_runs(run_id)
+                )
+                """
+            )
+
+    def create_run(self, run: PipelineRun, initial_event: PipelineRunEvent) -> None:
+        payload = self._encode_parameters(run.parameters)
+        event_payload = self._encode_parameters(initial_event.parameters)
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO pipeline_runs (
+                    run_id, pipeline, status, created_at, updated_at, parameters
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run.run_id,
+                    run.pipeline,
+                    run.status,
+                    self._encode_datetime(run.created_at),
+                    self._encode_datetime(run.updated_at),
+                    payload,
+                ),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO pipeline_run_events (
+                    run_id, pipeline, status, timestamp, parameters
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    initial_event.run_id,
+                    initial_event.pipeline,
+                    initial_event.status,
+                    self._encode_datetime(initial_event.timestamp),
+                    event_payload,
+                ),
+            )
+
+    def append_event(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        timestamp: datetime,
+        parameters: Mapping[str, Any],
+        run_status: str | None,
+    ) -> None:
+        with self._lock:
+            cursor = self._connection.execute(
+                "SELECT pipeline FROM pipeline_runs WHERE run_id = ?",
+                (run_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                msg = f"run '{run_id}' could not be found"
+                raise KeyError(msg)
+            pipeline = row["pipeline"]
+            encoded_parameters = self._encode_parameters(parameters)
+            encoded_timestamp = self._encode_datetime(timestamp)
+
+            with self._connection:
+                self._connection.execute(
+                    """
+                    INSERT INTO pipeline_run_events (
+                        run_id, pipeline, status, timestamp, parameters
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        pipeline,
+                        status,
+                        encoded_timestamp,
+                        encoded_parameters,
+                    ),
+                )
+                if run_status is not None:
+                    self._connection.execute(
+                        """
+                        UPDATE pipeline_runs
+                        SET status = ?, updated_at = ?
+                        WHERE run_id = ?
+                        """,
+                        (run_status, encoded_timestamp, run_id),
+                    )
+                else:
+                    self._connection.execute(
+                        """
+                        UPDATE pipeline_runs
+                        SET updated_at = ?
+                        WHERE run_id = ?
+                        """,
+                        (encoded_timestamp, run_id),
+                    )
+
+    def get_run(self, run_id: str) -> PipelineRun:
+        with self._lock:
+            cursor = self._connection.execute(
+                """
+                SELECT run_id, pipeline, status, created_at, updated_at, parameters
+                FROM pipeline_runs
+                WHERE run_id = ?
+                """,
+                (run_id,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            msg = f"run '{run_id}' could not be found"
+            raise KeyError(msg)
+
+        return PipelineRun(
+            run_id=row["run_id"],
+            pipeline=row["pipeline"],
+            status=row["status"],
+            created_at=self._decode_datetime(row["created_at"]),
+            updated_at=self._decode_datetime(row["updated_at"]),
+            parameters=self._decode_parameters(row["parameters"]),
+        )
+
+    def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
+        with self._lock:
+            cursor = self._connection.execute(
+                """
+                SELECT run_id, pipeline, status, timestamp, parameters
+                FROM pipeline_run_events
+                WHERE run_id = ?
+                ORDER BY id ASC
+                """,
+                (run_id,),
+            )
+            rows = cursor.fetchall()
+        if not rows:
+            cursor = self._connection.execute(
+                "SELECT 1 FROM pipeline_runs WHERE run_id = ?",
+                (run_id,),
+            )
+            if cursor.fetchone() is None:
+                msg = f"run '{run_id}' could not be found"
+                raise KeyError(msg)
+
+        for row in rows:
+            yield PipelineRunEvent(
+                run_id=row["run_id"],
+                pipeline=row["pipeline"],
+                status=row["status"],
+                timestamp=self._decode_datetime(row["timestamp"]),
+                parameters=self._decode_parameters(row["parameters"]),
+            )
+
+    @classmethod
+    def from_config(cls, config: Mapping[str, Any]) -> PipelineRunStore:
+        database = config.get("database") or config.get("path")
+        if database is None:
+            msg = "storage configuration requires a 'database' or 'path' value"
+            raise ValueError(msg)
+        return cls(database=database)
+
+
 class PipelineOrchestrator:
-    """In-memory orchestrator used by the Trafalgar tooling layer."""
+    """Pipeline orchestrator used by the Trafalgar tooling layer.
+
+    Runs and events are persisted through a configurable :class:`PipelineRunStore`.
+    """
 
     def __init__(
         self,
         definitions: Iterable[PipelineDefinition] | None = None,
         *,
+        store: PipelineRunStore | None = None,
         executor: pipeline_executor.PipelineExecutor | None = None,
     ) -> None:
         self._definitions: dict[str, PipelineDefinition] = {}
-        self._runs: dict[str, tuple[PipelineRun, list[PipelineRunEvent]]] = {}
         self._lock = Lock()
+        self._store = store or PipelineRunStore()
         self._executor = executor or pipeline_executor.PipelineExecutor()
         if definitions:
             for definition in definitions:
@@ -144,19 +387,14 @@ class PipelineOrchestrator:
             updated_at=now,
             parameters=parameters,
         )
-        with self._lock:
-            self._runs[run_id] = (
-                run,
-                [
-                    PipelineRunEvent(
-                        run_id=run_id,
-                        pipeline=definition.name,
-                        status="queued",
-                        timestamp=run.created_at,
-                        parameters=parameters,
-                    )
-                ],
-            )
+        initial_event = PipelineRunEvent(
+            run_id=run_id,
+            pipeline=definition.name,
+            status="queued",
+            timestamp=run.created_at,
+            parameters=parameters,
+        )
+        self._store.create_run(run, initial_event)
 
         self._append_event(run_id, "running")
 
@@ -204,39 +442,34 @@ class PipelineOrchestrator:
         *,
         parameters: Mapping[str, Any] | None = None,
     ) -> None:
-        with self._lock:
-            timestamp = datetime.now(timezone.utc)
-            parameters = dict(parameters or {})
-            run, events = self._runs[run_id]
-            event = PipelineRunEvent(
-                run_id=run_id,
-                pipeline=run.pipeline,
-                status=status,
-                timestamp=timestamp,
-                parameters=parameters,
-            )
-            events.append(event)
-            run.updated_at = timestamp
-            if status in {"queued", "running", "succeeded", "failed"}:
-                run.status = status
-            elif status == "step_failed":
-                run.status = "failed"
+        timestamp = datetime.now(timezone.utc)
+        parameters = dict(parameters or {})
+        run_status: str | None
+        if status in {"queued", "running", "succeeded", "failed"}:
+            run_status = status
+        elif status == "step_failed":
+            run_status = "failed"
+        else:
+            run_status = None
+        self._store.append_event(
+            run_id,
+            status=status,
+            timestamp=timestamp,
+            parameters=parameters,
+            run_status=run_status,
+        )
 
     def get_run(self, run_id: str) -> PipelineRun:
         try:
-            run, _ = self._runs[run_id]
+            return self._store.get_run(run_id)
         except KeyError as exc:  # pragma: no cover - defensive guard
-            msg = f"run '{run_id}' could not be found"
-            raise KeyError(msg) from exc
-        return run
+            raise KeyError(str(exc)) from exc
 
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         try:
-            _, events = self._runs[run_id]
+            return self._store.iter_run_events(run_id)
         except KeyError as exc:  # pragma: no cover - defensive guard
-            msg = f"run '{run_id}' could not be found"
-            raise KeyError(msg) from exc
-        return iter(events.copy())
+            raise KeyError(str(exc)) from exc
 
     def serialise_run(self, run_id: str) -> Mapping[str, Any]:
         run = self.get_run(run_id)
@@ -249,10 +482,25 @@ class PipelineOrchestrator:
 _default_orchestrator: PipelineOrchestrator | None = None
 
 
-def get_pipeline_orchestrator() -> PipelineOrchestrator:
+def get_pipeline_orchestrator(
+    *,
+    storage: PipelineRunStore | None = None,
+    storage_config: Mapping[str, Any] | None = None,
+) -> PipelineOrchestrator:
     global _default_orchestrator
     if _default_orchestrator is None:
-        _default_orchestrator = PipelineOrchestrator()
+        if storage is not None and storage_config is not None:
+            msg = "provide either a storage instance or configuration, not both"
+            raise ValueError(msg)
+        if storage is None and storage_config is not None:
+            storage = PipelineRunStore.from_config(storage_config)
+        _default_orchestrator = PipelineOrchestrator(store=storage)
+    elif storage is not None or storage_config is not None:
+        msg = (
+            "pipeline orchestrator is already configured; "
+            "reset it with set_pipeline_orchestrator(None) before supplying storage"
+        )
+        raise RuntimeError(msg)
     return _default_orchestrator
 
 
@@ -329,6 +577,7 @@ __all__ = [
     "PipelineOrchestrator",
     "PipelineRun",
     "PipelineRunEvent",
+    "PipelineRunStore",
     "get_pipeline_orchestrator",
     "set_pipeline_orchestrator",
     "pipeline_definition_from_profile_entry",
