@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, Annotated, AsyncGenerator
+from typing import Any, Annotated, AsyncGenerator, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -144,10 +144,19 @@ def _encode_event(payload: dict[str, Any]) -> bytes:
     return b"data: " + data + b"\n\n"
 
 
-async def _event_stream(events: list[dict[str, Any]]) -> AsyncGenerator[bytes, Any]:
-    for event in events:
-        yield _encode_event(event)
-        await asyncio.sleep(0)
+_TERMINAL_STATUSES = {"succeeded", "failed"}
+
+
+async def _live_event_stream(
+    events: AsyncIterator[Any],
+) -> AsyncIterator[bytes]:
+    async for event in events:
+        payload = event.serialise()
+        if _should_stream_event(payload):
+            yield _encode_event(payload)
+            if payload.get("status") in _TERMINAL_STATUSES:
+                return
+            await asyncio.sleep(0)
 
 
 @router.get("/runs/{run_id}/events")
@@ -157,16 +166,18 @@ async def stream_run_events(
 ) -> StreamingResponse:
     orchestrator = get_pipeline_orchestrator()
     try:
-        events = orchestrator.serialise_run_events(run_id)
+        live_events = orchestrator.watch_run_events(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
-    filtered = _filter_run_events(events)
-    return StreamingResponse(_event_stream(filtered), media_type="text/event-stream")
+    return StreamingResponse(
+        _live_event_stream(live_events),
+        media_type="text/event-stream",
+    )
 
 
-def _filter_run_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return only high-level run events for streaming clients.
+def _should_stream_event(event: dict[str, Any]) -> bool:
+    """Return whether the event should be sent to streaming clients.
 
     The orchestrator records both run-level updates (``queued``, ``running``,
     ``succeeded`` and ``failed``) as well as verbose step lifecycle entries
@@ -178,7 +189,7 @@ def _filter_run_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
 
     allowed_statuses = {"queued", "running", "succeeded", "failed"}
-    return [event for event in events if event.get("status") in allowed_statuses]
+    return event.get("status") in allowed_statuses
 
 
 app.include_router(router)

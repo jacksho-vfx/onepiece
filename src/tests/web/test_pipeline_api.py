@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import textwrap
+import threading
+import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -107,6 +109,15 @@ def _auth_headers() -> dict[str, str]:
     }
 
 
+def _parse_stream_events(payload: str) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for line in payload.splitlines():
+        if not line or not line.startswith("data: "):
+            continue
+        events.append(json.loads(line.split("data: ", 1)[1]))
+    return events
+
+
 def _seed_run(
     *,
     run_id: str,
@@ -207,23 +218,70 @@ def test_stream_run_events_returns_status_sequence(client: TestClient) -> None:
     )
     run_id = creation.json()["id"]
 
-    with client.stream(
-        "GET", f"/runs/{run_id}/events", headers=_auth_headers()
-    ) as response:
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/event-stream")
-        events: list[dict[str, object]] = []
-        for line in response.iter_lines():
-            if not line or not line.startswith("data: "):
-                continue
-            payload = json.loads(line.split("data: ", 1)[1])
-            events.append(payload)
-            if len(events) == 3:
-                break
+    response = client.get(
+        f"/runs/{run_id}/events", headers=_auth_headers()
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_stream_events(response.text)
 
     statuses = [event["status"] for event in events]
     assert statuses == ["queued", "running", "succeeded"]
     assert all(event["id"] == run_id for event in events)
+
+
+def test_stream_run_events_delivers_live_updates(client: TestClient) -> None:
+    orchestrator = get_pipeline_orchestrator()
+    store = orchestrator._store
+    run_id = "live-run"
+    base = datetime.now(timezone.utc)
+    store.create_run(
+        PipelineRun(
+            run_id=run_id,
+            pipeline="render_shots",
+            status="queued",
+            created_at=base,
+            updated_at=base,
+            parameters={},
+        ),
+        PipelineRunEvent(
+            run_id=run_id,
+            pipeline="render_shots",
+            status="queued",
+            timestamp=base,
+            parameters={},
+        ),
+    )
+
+    def _publish() -> None:
+        time.sleep(0.05)
+        store.append_event(
+            run_id,
+            status="running",
+            timestamp=base + timedelta(seconds=1),
+            parameters={},
+            run_status="running",
+        )
+        time.sleep(0.05)
+        store.append_event(
+            run_id,
+            status="succeeded",
+            timestamp=base + timedelta(seconds=2),
+            parameters={},
+            run_status="succeeded",
+        )
+
+    publisher = threading.Thread(target=_publish)
+    publisher.start()
+    response = client.get(
+        f"/runs/{run_id}/events", headers=_auth_headers()
+    )
+    publisher.join(timeout=1)
+    assert not publisher.is_alive()
+
+    events = _parse_stream_events(response.text)
+    statuses = [event["status"] for event in events if event["id"] == run_id]
+    assert statuses == ["queued", "running", "succeeded"]
 
 
 def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None:
