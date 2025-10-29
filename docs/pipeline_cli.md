@@ -22,34 +22,62 @@ pipelines today and wire them into the orchestrator as the service hardens.
 
 ## Command entry points
 
-The `onepiece pipeline` command group ships as a placeholder so automation can
-stabilise around the command surface before the orchestrator client lands.
-Every command currently prints actionable guidance reminding you to connect the
-action to the orchestrator once the API is available. 【F:src/apps/onepiece/pipeline/__init__.py†L1-L53】
+The `onepiece pipeline` group is the primary interface for the orchestrator.
+Each command reaches the in-process orchestrator by default and automatically
+switches to the Trafalgar HTTP API whenever `ONEPIECE_PIPELINE_FORCE_REMOTE`
+is set or a pipeline API URL environment variable is present. Use
+`ONEPIECE_PIPELINE_FORCE_LOCAL` to pin the CLI to the embedded orchestrator even
+when remote settings exist. 【F:src/apps/onepiece/pipeline/__init__.py†L56-L158】【F:src/apps/onepiece/pipeline/__init__.py†L256-L314】
 
-Until the OnePiece CLI integrates directly with the orchestrator, use the
-Trafalgar CLI to list definitions and trigger runs:
+Commands share a common parameter parser so repeated `--param key=value`
+options become a dictionary that is forwarded to the orchestrator. Missing `=`
+delimiters or blank keys raise a Typer validation error before the request is
+sent. 【F:src/apps/onepiece/pipeline/__init__.py†L208-L244】【F:src/apps/onepiece/pipeline/__init__.py†L340-L410】
+
+- `onepiece pipeline list` prints every registered definition, including human
+  friendly names and the parameter keys exposed by each pipeline.
+- `onepiece pipeline describe <name>` expands the metadata for a specific
+  definition, echoing descriptions and parameter defaults.
+- `onepiece pipeline run <name> --param key=value` triggers a run and returns
+  the assigned identifier plus the orchestrator-reported status.
+- `onepiece pipeline runs` filters historical runs with `--pipeline`,
+  `--status`, `--since` (ISO timestamp), and `--limit` arguments.
+- `onepiece pipeline run-status <run-id>` shows detailed metadata for a single
+  run, mirroring the list output.
+- `onepiece pipeline watch <run-id>` tails live status events until the run
+  settles. Remote transports stream the Trafalgar `/runs/{id}/events` endpoint,
+  while local transports proxy the in-memory async iterator. 【F:src/apps/onepiece/pipeline/__init__.py†L316-L520】【F:src/apps/onepiece/pipeline/__init__.py†L158-L205】
 
 ```console
-$ trafalgar pipeline list
+$ onepiece pipeline list
 orchestration.daily (Daily orchestration pipeline)
   Parameters: ingest_profile, notify_channel
 
-$ trafalgar pipeline run orchestration.daily --param ingest_profile=episodic
+$ onepiece pipeline describe orchestration.daily
+Name: orchestration.daily
+Display name: Daily orchestration pipeline
+Description: Mirrors ingest payloads and posts delivery updates.
+Parameters:
+  - ingest_profile: episodic
+  - notify_channel: #dailies
+
+$ onepiece pipeline run orchestration.daily --param ingest_profile=episodic \
+    --param notify_channel="#dailies"
 Triggered pipeline 'orchestration.daily' (run id: 5e2fd4a5...).
-Current status: succeeded
+Current status: running
+
+$ onepiece pipeline run-status 5e2fd4a5...
+Run 5e2fd4a5...
+  Pipeline: orchestration.daily
+  Status: succeeded
+  Created: 2024-05-12T10:03:11+00:00
+  Updated: 2024-05-12T10:03:27+00:00
+
+$ onepiece pipeline watch 5e2fd4a5...
+[2024-05-12T10:03:11+00:00] orchestration.daily - queued
+[2024-05-12T10:03:12+00:00] orchestration.daily - running
+[2024-05-12T10:03:27+00:00] orchestration.daily - succeeded
 ```
-
-The Trafalgar helper pulls definitions from the shared orchestrator instance
-and accepts repeated `--param key=value` flags that are parsed into a mapping
-before the run is triggered. Invalid parameter syntax produces a
-Typer-friendly error so CI pipelines can fail fast. 【F:src/apps/trafalgar/app.py†L1-L120】
-
-On the web side, the `/pipeline` FastAPI application mirrors the same
-operations. Callers with the `pipeline:read` role can enumerate definitions and
-query run metadata, while `pipeline:run` is required to trigger new runs.
-Streaming `/pipeline/runs/{id}/events` returns a server-sent event feed that is
-ideal for dashboards and chatbots. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 
 ## Pipeline storage
 

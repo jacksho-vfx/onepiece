@@ -511,11 +511,12 @@ To exercise the orchestrator locally:
    orchestrator.register(definition)
    ```
 
-2. Use `trafalgar pipeline list` to confirm the definition is visible, then
-   trigger a run with `trafalgar pipeline run opr-linear-ingest --param profile=episodic`.
-   The CLI echoes the generated run identifier so you can call
-   `/pipeline/runs/<id>` or stream `/pipeline/runs/<id>/events` for live
-   feedback.
+2. Use `onepiece pipeline list` to confirm the definition is visible. Trigger a
+   run with `onepiece pipeline run opr-linear-ingest --param profile=episodic`
+   and note the echoed run identifier. Call `onepiece pipeline run-status
+   <id>` to review metadata or `onepiece pipeline watch <id>` to tail events.
+   Set `ONEPIECE_PIPELINE_FORCE_REMOTE=1` when you want the CLI to reach the
+   Trafalgar API instead of the embedded orchestrator.
 
 3. Pair the run with the JSON payloads provided alongside each manifest so your
    staging environment mimics production telemetry end-to-end. Swap in the real
