@@ -285,14 +285,12 @@ def test_trigger_run_records_failure_after_return(
 ) -> None:
     release = threading.Event()
 
-    def blocking_factory(
-        config: dict[str, object]
-    ) -> Callable[[dict[str, object]], None]:
+    def blocking_factory(config: dict[str, object]) -> None:
         def provider(parameters: dict[str, object]) -> None:
             release.wait(timeout=1)
             raise RuntimeError("boom")
-            
-            
+
+
 def test_orchestrator_supports_async_providers(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
