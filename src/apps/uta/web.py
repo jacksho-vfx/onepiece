@@ -22,6 +22,11 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app as cli_app
+from apps.trafalgar.transport import (
+    DEFAULT_PIPELINE_API_TIMEOUT,
+    resolve_pipeline_api_timeout,
+    resolve_pipeline_api_url,
+)
 from apps.trafalgar.web.dashboard import app as dashboard_app
 from apps.trafalgar.web.render import app as render_app
 
@@ -210,12 +215,6 @@ COMMAND_LOOKUP: dict[tuple[str, ...], CommandSpec] = {
 }
 
 
-PIPELINE_API_URL_ENV = "UTA_PIPELINE_API_URL"
-PIPELINE_API_TIMEOUT_ENV = "UTA_PIPELINE_API_TIMEOUT"
-DEFAULT_PIPELINE_API_URL = os.environ.get(
-    PIPELINE_API_URL_ENV, "http://127.0.0.1:8000/pipeline"
-)
-DEFAULT_PIPELINE_API_TIMEOUT = 10.0
 _PIPELINE_AUTH_HEADERS = {
     "authorization": "Authorization",
     "x-api-key": "X-API-Key",
@@ -331,20 +330,6 @@ class PipelineApiClient:
         return text or f"Pipeline API request failed ({response.status_code})."
 
 
-def _resolve_pipeline_api_url() -> str:
-    return os.environ.get(PIPELINE_API_URL_ENV, DEFAULT_PIPELINE_API_URL)
-
-
-def _resolve_pipeline_timeout() -> float:
-    raw = os.environ.get(PIPELINE_API_TIMEOUT_ENV, "")
-    if not raw:
-        return DEFAULT_PIPELINE_API_TIMEOUT
-    try:
-        return float(raw)
-    except ValueError:
-        return DEFAULT_PIPELINE_API_TIMEOUT
-
-
 def _extract_pipeline_headers(request: Request) -> dict[str, str]:
     headers: dict[str, str] = {}
     for header, canonical in _PIPELINE_AUTH_HEADERS.items():
@@ -362,9 +347,9 @@ async def get_pipeline_client(request: Request) -> AsyncIterator[PipelineApiClie
             detail="Pipeline credentials are required to call this endpoint.",
         )
     client = PipelineApiClient(
-        _resolve_pipeline_api_url(),
+        resolve_pipeline_api_url(),
         headers=headers,
-        timeout=_resolve_pipeline_timeout(),
+        timeout=resolve_pipeline_api_timeout(),
     )
     try:
         yield client
