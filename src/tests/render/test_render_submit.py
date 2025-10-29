@@ -6,7 +6,7 @@ import getpass
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 from typer.testing import CliRunner
@@ -21,6 +21,13 @@ from apps.onepiece.utils.errors import (
 )
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _reset_capability_cache() -> Generator[None, None, None]:
+    submit_module._refresh_capabilities_cache()
+    yield
+    submit_module._refresh_capabilities_cache()
 
 
 def _capture_logger(
@@ -175,6 +182,137 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     events = {(level, event) for level, event, _ in log_events}
     assert ("info", "render.submit.start") in events
     assert ("error", "render.submit.failed") in events
+
+
+def test_render_submit_reuses_capabilities_within_ttl(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scene_file = tmp_path / "shot01.nk"
+    scene_file.write_text("print('render')\n")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        return {
+            "job_id": "job-456",
+            "status": "queued",
+            "farm_type": "mock",
+        }
+
+    capability_calls = 0
+
+    def fake_capabilities() -> dict[str, Any]:
+        nonlocal capability_calls
+        capability_calls += 1
+        return {
+            "default_priority": 50,
+            "priority_min": 10,
+            "priority_max": 90,
+            "chunk_size_enabled": True,
+            "default_chunk_size": 5,
+            "chunk_size_min": 1,
+            "chunk_size_max": 10,
+        }
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities
+    )
+
+    args = [
+        "render",
+        "submit",
+        "--dcc",
+        "Nuke",
+        "--scene",
+        str(scene_file),
+        "--frames",
+        "1-10",
+        "--output",
+        str(output_dir),
+        "--farm",
+        "mock",
+    ]
+
+    first = runner.invoke(app, args)
+    assert first.exit_code == 0, first.stdout
+
+    second = runner.invoke(app, args)
+    assert second.exit_code == 0, second.stdout
+
+    assert capability_calls == 1
+
+
+def test_render_submit_refresh_capabilities_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scene_file = tmp_path / "shot01.nk"
+    scene_file.write_text("print('render')\n")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        return {
+            "job_id": "job-789",
+            "status": "queued",
+            "farm_type": "mock",
+        }
+
+    capability_calls = 0
+
+    def fake_capabilities() -> dict[str, Any]:
+        nonlocal capability_calls
+        capability_calls += 1
+        return {
+            "default_priority": 45,
+            "priority_min": 5,
+            "priority_max": 95,
+            "chunk_size_enabled": False,
+        }
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", fake_capabilities
+    )
+
+    base_args = [
+        "render",
+        "submit",
+        "--dcc",
+        "Nuke",
+        "--scene",
+        str(scene_file),
+        "--frames",
+        "1-10",
+        "--output",
+        str(output_dir),
+        "--farm",
+        "mock",
+    ]
+
+    first = runner.invoke(app, base_args)
+    assert first.exit_code == 0, first.stdout
+
+    refreshed = runner.invoke(app, base_args + ["--refresh-capabilities"])
+    assert refreshed.exit_code == 0, refreshed.stdout
+
+    assert capability_calls == 2
 
 
 def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(

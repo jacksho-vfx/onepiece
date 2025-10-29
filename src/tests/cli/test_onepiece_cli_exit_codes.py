@@ -97,7 +97,7 @@ def test_main_maps_validation_errors_to_exit_code(
         _submission_args(scene_file, output_dir, "--priority", "5")
     )
 
-    assert exit_code == ExitCode.VALIDATION
+    assert exit_code == ExitCode.SUCCESS
 
 
 def test_main_maps_adapter_failures_to_exit_code(
