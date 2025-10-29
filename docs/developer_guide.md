@@ -116,6 +116,35 @@ onepiece/
 - `DeliveryService` keeps a small LRU cache of delivery manifests keyed by `id`/`delivery_id`. When wiring a new provider, return a stable identifier so cache hits remain deterministic and consider increasing the `manifest_cache_size` argument when instantiating the service if the provider exposes a long delivery history.
 - Cached manifests are cloned on read/write, so modifying the structures returned by `DeliveryService.list_deliveries` will not affect other requests. If you need to invalidate the cache (for example, after retrofitting a manifest on disk), call the `/admin/cache` flush endpoint or recreate the service instance within the FastAPI dependency overrides.
 
+## Pipeline integration
+
+The pipeline blueprint introduced in the latest release aligns the CLI, Trafalgar services, and Uta Control Center into a modular control plane that you can deploy incrementally. Start with the [pipeline overview](pipeline_overview.md) to compare reference architectures, required services, and integration patterns before wiring the components into your studio stack. Pair it with the [pipeline CLI guide](pipeline_cli.md) for command-level details and extension hooks.
+
+### Required services at a glance
+
+- **Control plane services** – Trafalgar (FastAPI) brokers ingest, render, and delivery APIs, while Uta renders dashboards and mirrors CLI command trees for remote execution. Back both with PostgreSQL or SQLite for state plus Redis (or EventBridge/Kafka) when you need real-time fan-out. 【F:docs/pipeline_overview.md†L22-L64】
+- **Core integrations** – ShotGrid (REST + event streams) remains the primary production-tracking source of truth, object storage (S3/GCS/SMB) holds media packages, and render adapters (Deadline/Qube!/Tractor) surface farm telemetry. Provide scoped credentials to each surface and reuse existing SSO proxies where available. 【F:docs/pipeline_overview.md†L66-L108】
+- **Telemetry and messaging** – Standardise on the message bus (Redis Streams, Kafka, SNS/SQS) highlighted in the overview so CLI hooks and Trafalgar webhooks can publish ingest/render events to your observability stack. 【F:docs/pipeline_overview.md†L110-L139】
+
+### Wiring into legacy scheduling and asset-management systems
+
+- **Scheduling adapters** – Use the CLI's render commands (`onepiece render submit`, `onepiece render status`) alongside Trafalgar's render REST endpoints to bridge existing farm controllers. Script lightweight shims that translate legacy job payloads into the JSON contracts documented in the render guide, then feed responses back into your schedulers. 【F:docs/pipeline_overview.md†L88-L103】【F:docs/pipeline_cli.md†L1-L24】
+- **Asset-management hooks** – Map your asset/shot taxonomies into the configuration profiles referenced by the pipeline blueprint. The CLI validates OTIO timelines and ingest manifests against these profiles, while Trafalgar's provider registry exposes reconciliation webhooks that can push updates into legacy asset databases without forking the service. 【F:docs/pipeline_overview.md†L80-L89】【F:docs/pipeline_cli.md†L25-L38】
+- **Event mirrors** – When your legacy stack already emits scheduling or asset events, subscribe Trafalgar to those channels or relay them through its webhook endpoints so dashboards and control surfaces stay in sync. Conversely, forward OnePiece events into the legacy bus to keep historical audit trails unified. 【F:docs/pipeline_overview.md†L110-L139】
+
+### Key APIs and CLI entry points
+
+- `onepiece pipeline list|describe|run` – Enumerate pipelines, inspect blueprints, and trigger executions programmatically or from schedulers. Combine with `--format json` to drive automation. 【F:docs/pipeline_cli.md†L1-L24】
+- `onepiece pipeline steps` entry-point group – Register custom pipeline steps in `pyproject.toml` so bespoke validation or delivery stages can be invoked without patching upstream code. 【F:docs/pipeline_cli.md†L25-L38】
+- Trafalgar REST APIs – Leverage the ingest, render, and delivery endpoints surfaced by the control plane to automate manifests, farm orchestration, and reconciliation callbacks. Pin consumers to the versioned schemas called out in the overview and `docs/render_api.md`.
+- Uta control widgets – Embed the Uta dashboards exposed in the overview into your orchestration stack for remote trigger and monitoring capabilities.
+
+### Versioning and upgrade expectations
+
+- OnePiece adheres to semantic versioning; pipeline schema changes land in minor releases with backwards-compatible defaults, while breaking API changes are reserved for major bumps. Watch the `CHANGELOG.md` for migration notes before upgrading orchestration runners. 【F:docs/developer_guide.md†L148-L197】
+- Trafalgar's REST endpoints and CLI JSON outputs include explicit `schema_version` fields—keep consumers tolerant to at least one previous minor version so rolling upgrades across services remain seamless.
+- When extending pipeline steps via entry points, version your custom packages independently and document compatible OnePiece ranges to help downstream teams coordinate upgrades. 【F:docs/pipeline_cli.md†L25-L38】
+
 ## Releasing changes
 
 1. Bump the version in `pyproject.toml` following semantic versioning.
