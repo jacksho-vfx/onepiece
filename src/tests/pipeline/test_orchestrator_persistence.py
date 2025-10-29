@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+import time
 
 import textwrap
 import pytest
@@ -12,6 +13,7 @@ from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     PipelineOrchestrator,
+    PipelineRun,
     PipelineRunStore,
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
@@ -19,6 +21,23 @@ from apps.trafalgar.pipeline import (
 )
 from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
+
+
+def _wait_for_completion(
+    orchestrator: PipelineOrchestrator,
+    run_id: str,
+    *,
+    timeout: float = 5.0,
+) -> PipelineRun:
+    deadline = time.monotonic() + timeout
+    while True:
+        run = orchestrator.get_run(run_id)
+        if run.status in {"succeeded", "failed"}:
+            return run
+        if time.monotonic() >= deadline:
+            msg = f"timed out waiting for run '{run_id}' to complete"
+            raise AssertionError(msg)
+        time.sleep(0.01)
 
 
 def _register_test_factories(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,6 +112,7 @@ def test_pipeline_history_survives_restart(
     run = orchestrator.trigger_run(
         "demo", parameters={"department": "lighting", "shot": "sh020"}
     )
+    run = _wait_for_completion(orchestrator, run.run_id)
     statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
 
     new_store = PipelineRunStore(database=store_path)
@@ -219,6 +239,7 @@ def test_configure_orchestrator_from_profile_uses_profile_storage(
         context, storage_config=context.pipeline_storage
     )
     run = orchestrator.trigger_run("render_shots", parameters={"quality": "high"})
+    run = _wait_for_completion(orchestrator, run.run_id)
     statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
 
     set_pipeline_orchestrator(None)

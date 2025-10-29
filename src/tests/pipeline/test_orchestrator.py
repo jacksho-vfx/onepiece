@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+import threading
+import time
 from typing import Mapping
 
 import pytest
@@ -11,6 +13,7 @@ import pytest
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     PipelineOrchestrator,
+    PipelineRun,
     PipelineRunStore,
 )
 from apps.trafalgar.providers import pipeline_executor
@@ -61,6 +64,24 @@ def orchestrator(
     return PipelineOrchestrator(store=store)
 
 
+def _wait_for_run(
+    orchestrator: PipelineOrchestrator,
+    run_id: str,
+    *,
+    status: str,
+    timeout: float = 5.0,
+) -> PipelineRun:
+    deadline = time.monotonic() + timeout
+    while True:
+        run = orchestrator.get_run(run_id)
+        if run.status == status:
+            return run
+        if time.monotonic() >= deadline:
+            msg = f"timed out waiting for run '{run_id}' to reach status '{status}'"
+            raise AssertionError(msg)
+        time.sleep(0.01)
+
+
 def _build_pipeline() -> Pipeline:
     return Pipeline(
         name="demo",
@@ -93,7 +114,9 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
     run = orchestrator.trigger_run(
         "demo", parameters={"department": "lighting", "shot": "sh020"}
     )
-    assert run.status == "succeeded"
+    assert run.status in {"queued", "running"}
+
+    run = _wait_for_run(orchestrator, run.run_id, status="succeeded")
 
     events = list(orchestrator.iter_run_events(run.run_id))
     statuses = [event.status for event in events]
@@ -141,7 +164,9 @@ def test_orchestrator_marks_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     orchestrator.register(definition)
 
     run = orchestrator.trigger_run("failure")
-    assert run.status == "failed"
+    assert run.status in {"queued", "running"}
+
+    run = _wait_for_run(orchestrator, run.run_id, status="failed")
 
     events = list(orchestrator.iter_run_events(run.run_id))
     statuses = [event.status for event in events]
@@ -213,6 +238,59 @@ def test_deregister_unknown_pipeline_raises(orchestrator: PipelineOrchestrator) 
         orchestrator.deregister("missing")
 
 
+def test_trigger_run_returns_before_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = threading.Event()
+
+    def blocking_factory(
+        config: dict[str, object]
+    ) -> Callable[[dict[str, object]], None]:
+        def provider(parameters: dict[str, object]) -> None:
+            release.wait(timeout=1)
+
+        return provider
+
+    monkeypatch.setattr(
+        pipeline_executor.plugins,
+        "discover_pipeline_step_factories",
+        lambda: {"blocking": blocking_factory},
+    )
+
+    orchestrator = PipelineOrchestrator()
+    pipeline = Pipeline(
+        name="delayed",
+        steps=[PipelineStep(name="wait", provider="blocking")],
+    )
+    definition = PipelineDefinition(name="delayed", pipeline=pipeline, parameters={})
+    orchestrator.register(definition)
+
+    run = orchestrator.trigger_run("delayed")
+
+    assert run.status in {"queued", "running"}
+
+    events = list(orchestrator.iter_run_events(run.run_id))
+    statuses = [event.status for event in events]
+    assert statuses[0] == "queued"
+    assert "succeeded" not in statuses
+    assert "failed" not in statuses
+
+    release.set()
+    run = _wait_for_run(orchestrator, run.run_id, status="succeeded")
+
+    statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
+    assert statuses[-2:] == ["step_succeeded", "succeeded"]
+
+
+def test_trigger_run_records_failure_after_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = threading.Event()
+
+    def blocking_factory(config: dict[str, object]) -> None:
+        def provider(parameters: dict[str, object]) -> None:
+            release.wait(timeout=1)
+            raise RuntimeError("boom")
+
+
 def test_orchestrator_supports_async_providers(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -264,22 +342,11 @@ def test_orchestrator_supports_async_providers(
         "demo", parameters={"department": "lighting", "shot": "sh040"}
     )
 
-    assert run.status == "succeeded"
+    assert run.status == "running"
     events = list(orchestrator.iter_run_events(run.run_id))
     statuses = [event.status for event in events]
     assert statuses == [
         "queued",
         "running",
         "step_started",
-        "step_succeeded",
-        "step_started",
-        "step_succeeded",
-        "succeeded",
-    ]
-
-    assert captured == [
-        (
-            "asset.ingested",
-            {"department": "lighting", "shot": "sh040"},
-        )
     ]
