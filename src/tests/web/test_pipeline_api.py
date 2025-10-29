@@ -115,7 +115,7 @@ def _seed_run(
     created_at: datetime,
 ) -> None:
     orchestrator = get_pipeline_orchestrator()
-    store = orchestrator._store  # type: ignore[attr-defined]
+    store = orchestrator._store
     store.create_run(
         PipelineRun(
             run_id=run_id,
@@ -249,7 +249,9 @@ def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None
 
 def test_list_runs_endpoint_supports_filters(client: TestClient) -> None:
     base = datetime(2024, 3, 1, 9, tzinfo=timezone.utc)
-    _seed_run(run_id="run-a", pipeline="render_shots", status="succeeded", created_at=base)
+    _seed_run(
+        run_id="run-a", pipeline="render_shots", status="succeeded", created_at=base
+    )
     _seed_run(
         run_id="run-b",
         pipeline="render_shots",

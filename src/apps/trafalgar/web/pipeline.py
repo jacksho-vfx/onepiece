@@ -104,10 +104,13 @@ def get_run(
 
 @router.get("/runs")
 def list_runs(
-    pipeline: Annotated[str | None, Query(description="Filter runs for a pipeline")] = None,
+    pipeline: Annotated[
+        str | None, Query(description="Filter runs for a pipeline")
+    ] = None,
     status: Annotated[str | None, Query(description="Filter runs by status")] = None,
-    limit: Annotated[int | None, Query(gt=0, description="Maximum number of runs to return")]
-    = None,
+    limit: Annotated[
+        int | None, Query(gt=0, description="Maximum number of runs to return")
+    ] = None,
     since: Annotated[
         str | None,
         Query(description="Return runs created on or after the provided ISO timestamp"),
@@ -121,7 +124,9 @@ def list_runs(
         try:
             parsed_since = datetime.fromisoformat(since)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid 'since' timestamp") from exc
+            raise HTTPException(
+                status_code=400, detail="Invalid 'since' timestamp"
+            ) from exc
         if parsed_since.tzinfo is None:
             parsed_since = parsed_since.replace(tzinfo=timezone.utc)
         else:
