@@ -113,9 +113,7 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     ]
 
     assert scripts["flag_render_error_streaks"]["name"] == "Flag render error streaks"
-    assert (
-        "consecutive" in scripts["flag_render_error_streaks"]["description"].lower()
-    )
+    assert "consecutive" in scripts["flag_render_error_streaks"]["description"].lower()
     assert scripts["flag_render_error_streaks"]["tags"] == [
         "rendering",
         "errors",
