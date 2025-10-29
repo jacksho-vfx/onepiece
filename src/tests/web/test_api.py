@@ -120,6 +120,20 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     ]
 
     assert (
+        scripts["evaluate_optimisation_playbook"]["name"]
+        == "Evaluate optimisation playbook"
+    )
+    assert (
+        "optimisation"
+        in scripts["evaluate_optimisation_playbook"]["description"].lower()
+    )
+    assert scripts["evaluate_optimisation_playbook"]["tags"] == [
+        "cost",
+        "optimisation",
+        "playbook",
+    ]
+
+    assert (
         scripts["escalate_deadline_shots"]["name"]
         == "Escalate deadline-sensitive shots"
     )
@@ -207,6 +221,100 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
+
+def test_wrangler_evaluate_optimisation_playbook_returns_ranked_scenarios(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline_breakdown = CostBreakdown(
+        frame_count=DEFAULT_BASELINE_COST_INPUT.frame_count,
+        gpu_hours=1280.0,
+        render_hours=640.0,
+        concurrency=DEFAULT_BASELINE_COST_INPUT.gpu_count,
+        gpu_cost=7200.0,
+        render_farm_cost=4200.0,
+        storage_cost=410.0,
+        egress_cost=190.0,
+        misc_cost=220.0,
+        total_cost=12220.0,
+        cost_per_frame=4.55,
+        currency=DEFAULT_BASELINE_COST_INPUT.currency,
+    )
+
+    captured: dict[str, Any] = {}
+
+    class DummyEngine:
+        baseline_cost_input = DEFAULT_BASELINE_COST_INPUT
+
+        def run_optimization_backtest(
+            self, scenarios: Any
+        ) -> tuple[CostBreakdown, tuple[OptimizationResult, ...]]:
+            captured["scenarios"] = scenarios
+            return (
+                baseline_breakdown,
+                (
+                    OptimizationResult(
+                        name=scenarios[0].name,
+                        total_cost=11270.0,
+                        cost_per_frame=4.19,
+                        gpu_hours=1180.0,
+                        render_hours=620.0,
+                        savings_vs_baseline=950.0,
+                        savings_percent=7.77,
+                        notes="Reduced concurrency",
+                    ),
+                    OptimizationResult(
+                        name=scenarios[1].name,
+                        total_cost=10487.0,
+                        cost_per_frame=3.90,
+                        gpu_hours=1200.0,
+                        render_hours=610.0,
+                        savings_vs_baseline=1733.0,
+                        savings_percent=14.18,
+                        notes="Cheaper GPU rate",
+                    ),
+                    OptimizationResult(
+                        name=scenarios[2].name,
+                        total_cost=11540.0,
+                        cost_per_frame=4.29,
+                        gpu_hours=1140.0,
+                        render_hours=600.0,
+                        savings_vs_baseline=680.0,
+                        savings_percent=5.56,
+                        notes="Dialled back sampling",
+                    ),
+                ),
+            )
+
+    dummy_engine = DummyEngine()
+    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
+
+    response = client.post("/wrangler/scripts/evaluate_optimisation_playbook")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["script_id"] == "evaluate_optimisation_playbook"
+    assert payload["status"] == "success"
+
+    body = payload["payload"]
+    baseline = body["baseline"]
+    assert baseline["total_cost"] == pytest.approx(12220.0, rel=0, abs=0.01)
+    assert baseline["render_hours"] == pytest.approx(640.0, rel=0, abs=0.01)
+    assert baseline["gpu_hours"] == pytest.approx(1280.0, rel=0, abs=0.01)
+
+    scenarios = body["scenarios"]
+    assert len(scenarios) == 3
+    amounts = [item["savings"]["amount"] for item in scenarios]
+    assert amounts == sorted(amounts, reverse=True)
+
+    names_from_payload = {item["name"] for item in scenarios}
+    names_from_scenarios = {scenario.name for scenario in captured["scenarios"]}
+    assert names_from_payload == names_from_scenarios
+
+    leader = scenarios[0]
+    formatted_amount = f"{leader['savings']['amount']:,.2f}"
+    assert leader["name"] in payload["message"]
+    assert formatted_amount in payload["message"]
 
 
 def test_wrangler_check_telemetry_freshness_reports_age(

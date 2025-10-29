@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field
 
 from apps.perona.web import dashboard as dashboard_module
 from libraries.analytics.perona import engine as engine_module
-from libraries.analytics.perona.engine import OptimizationScenario
+from libraries.analytics.perona.engine import (
+    OptimizationScenario,
+    get_currency_symbol,
+)
 
 
 class WranglerScriptMetadata(BaseModel):
@@ -559,6 +562,152 @@ def _run_explain_pnl_delta_script() -> WranglerScriptResult:
 
     return WranglerScriptResult(
         script_id="explain_pnl_delta",
+        status="success",
+        message=message,
+        payload=payload,
+    )
+
+
+def _run_evaluate_optimisation_playbook_script() -> WranglerScriptResult:
+    """Run a small optimisation playbook and surface the best savings."""
+
+    engine = dashboard_module.get_engine()
+    baseline_input = getattr(engine, "baseline_cost_input", None)
+    if baseline_input is None:
+        message = (
+            "Baseline configuration unavailable; configure Perona cost inputs before "
+            "evaluating the optimisation playbook."
+        )
+        return WranglerScriptResult(
+            script_id="evaluate_optimisation_playbook",
+            status="error",
+            message=message,
+            payload=None,
+        )
+
+    scenarios: list[OptimizationScenario] = []
+
+    baseline_gpu_count = getattr(baseline_input, "gpu_count", None)
+    concurrency_target: int | None = None
+    if isinstance(baseline_gpu_count, (int, float)):
+        baseline_gpu_count = int(baseline_gpu_count)
+        if baseline_gpu_count > 0:
+            concurrency_target = max(1, math.floor(baseline_gpu_count * 0.8))
+            if concurrency_target == baseline_gpu_count and baseline_gpu_count > 1:
+                concurrency_target = baseline_gpu_count - 1
+
+    if concurrency_target is not None:
+        concurrency_label = "GPU" if concurrency_target == 1 else "GPUs"
+        scenarios.append(
+            OptimizationScenario(
+                name=f"Reduce concurrency to {concurrency_target} {concurrency_label}",
+                gpu_count=concurrency_target,
+                notes="Scale back GPU workers to lift utilisation without starving jobs.",
+            )
+        )
+    else:
+        scenarios.append(
+            OptimizationScenario(
+                name="Reduce concurrency by 20%",
+                gpu_count=1,
+                notes="Fallback concurrency reduction when baseline is unavailable.",
+            )
+        )
+
+    baseline_gpu_rate = getattr(baseline_input, "gpu_hourly_rate", None)
+    if isinstance(baseline_gpu_rate, (int, float)) and baseline_gpu_rate > 0:
+        discounted_rate = round(float(baseline_gpu_rate) * 0.85, 2)
+    else:
+        discounted_rate = None
+    scenarios.append(
+        OptimizationScenario(
+            name="Negotiate 15% cheaper GPU rate",
+            gpu_hourly_rate=discounted_rate,
+            notes="Model a vendor discount on hourly GPU pricing.",
+        )
+    )
+
+    scenarios.append(
+        OptimizationScenario(
+            name="Dial back sampling by 10%",
+            frame_time_scale=0.9,
+            sampling_scale=0.9,
+            notes="Lower sampling and quality dials to shorten render times.",
+        )
+    )
+
+    try:
+        baseline_breakdown, results = engine.run_optimization_backtest(scenarios)
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        message = f"Optimisation backtest failed: {exc}"
+        return WranglerScriptResult(
+            script_id="evaluate_optimisation_playbook",
+            status="error",
+            message=message,
+            payload=None,
+        )
+
+    sorted_results = sorted(
+        results, key=lambda item: item.savings_vs_baseline, reverse=True
+    )
+
+    baseline_payload = {
+        "frame_count": baseline_breakdown.frame_count,
+        "total_cost": round(baseline_breakdown.total_cost, 2),
+        "cost_per_frame": round(baseline_breakdown.cost_per_frame, 4),
+        "render_hours": round(baseline_breakdown.render_hours, 2),
+        "gpu_hours": round(baseline_breakdown.gpu_hours, 2),
+        "concurrency": baseline_breakdown.concurrency,
+        "currency": baseline_breakdown.currency,
+    }
+
+    scenarios_payload: list[dict[str, Any]] = []
+    for result in sorted_results:
+        scenarios_payload.append(
+            {
+                "name": result.name,
+                "total_cost": round(result.total_cost, 2),
+                "render_hours": round(result.render_hours, 2),
+                "gpu_hours": round(result.gpu_hours, 2),
+                "savings": {
+                    "amount": round(result.savings_vs_baseline, 2),
+                    "percent": round(result.savings_percent, 2),
+                },
+                "notes": result.notes,
+            }
+        )
+
+    currency_symbol = get_currency_symbol(baseline_breakdown.currency)
+
+    if scenarios_payload:
+        leader = scenarios_payload[0]
+        amount = leader["savings"]["amount"]
+        percent = leader["savings"]["percent"]
+        percent_text = f"{percent:+.2f}%"
+        if amount > 0:
+            message = (
+                "Top optimisation win: "
+                f"{leader['name']} could save {currency_symbol}{amount:,.2f} "
+                f"({percent_text})."
+            )
+        else:
+            message = (
+                "Optimisation playbook evaluated; no savings projected. "
+                f"Best option {leader['name']} changes spend by "
+                f"{currency_symbol}{abs(amount):,.2f} ({percent_text})."
+            )
+    else:
+        message = (
+            "Optimisation playbook evaluated; unable to compute scenario outcomes."
+        )
+
+    payload = {
+        "baseline": baseline_payload,
+        "scenarios": scenarios_payload,
+    }
+
+    return WranglerScriptResult(
+        script_id="evaluate_optimisation_playbook",
         status="success",
         message=message,
         payload=payload,
@@ -1351,6 +1500,19 @@ def _register_builtin_scripts() -> None:
                 tags=("finance", "pnl", "insights"),
             ),
             _run_explain_pnl_delta_script,
+        )
+    if "evaluate_optimisation_playbook" not in _scripts:
+        register_script(
+            WranglerScriptMetadata(
+                script_id="evaluate_optimisation_playbook",
+                name="Evaluate optimisation playbook",
+                description=(
+                    "Compare baseline costs with standard optimisation levers "
+                    "to highlight the strongest projected savings"
+                ),
+                tags=("cost", "optimisation", "playbook"),
+            ),
+            _run_evaluate_optimisation_playbook_script,
         )
     if "boost_gpu_utilisation" not in _scripts:
         register_script(
