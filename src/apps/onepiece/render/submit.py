@@ -5,6 +5,9 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import threading
+import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -61,6 +64,11 @@ FARM_CAPABILITY_PROVIDERS: Final[dict[str, CapabilityProvider]] = {
     "mock": mock.get_capabilities,
 }
 
+_CAPABILITIES_CACHE_TTL_SECONDS: Final[float] = 60.0
+_CAPABILITIES_CACHE_MAXSIZE: Final[int] = 32
+_CAPABILITIES_CACHE_LOCK = threading.RLock()
+_CAPABILITIES_CACHE: OrderedDict[str, tuple[float, AdapterCapabilities]] = OrderedDict()
+
 
 def _get_adapter(farm: str) -> RenderAdapter:
     adapter = FARM_ADAPTERS.get(farm)
@@ -69,16 +77,49 @@ def _get_adapter(farm: str) -> RenderAdapter:
     return adapter
 
 
-def _get_adapter_capabilities(farm: str) -> AdapterCapabilities:
+def _refresh_capabilities_cache(*, farm: str | None = None) -> None:
+    """Clear cached capability information for one or all farms."""
+
+    with _CAPABILITIES_CACHE_LOCK:
+        if farm is None:
+            _CAPABILITIES_CACHE.clear()
+        else:
+            _CAPABILITIES_CACHE.pop(farm, None)
+
+
+def _fetch_adapter_capabilities(farm: str) -> AdapterCapabilities:
     provider = FARM_CAPABILITY_PROVIDERS.get(farm)
     if provider is None:
         raise OnePieceValidationError(f"Unknown render farm '{farm}'.")
     try:
-        return provider()
+        raw_capabilities = provider() or {}
     except RenderSubmissionError as exc:
         raise OnePieceExternalServiceError(
             f"Failed to query capabilities from '{farm}' adapter: {exc}"
         ) from exc
+    return dict(raw_capabilities)
+
+
+def _get_adapter_capabilities(farm: str) -> AdapterCapabilities:
+    now = time.monotonic()
+    with _CAPABILITIES_CACHE_LOCK:
+        cached = _CAPABILITIES_CACHE.get(farm)
+        if cached is not None:
+            expires_at, capabilities = cached
+            if expires_at > now:
+                _CAPABILITIES_CACHE.move_to_end(farm)
+                return dict(capabilities)
+
+    capabilities = _fetch_adapter_capabilities(farm)
+    expiry = time.monotonic() + _CAPABILITIES_CACHE_TTL_SECONDS
+
+    with _CAPABILITIES_CACHE_LOCK:
+        _CAPABILITIES_CACHE[farm] = (expiry, dict(capabilities))
+        _CAPABILITIES_CACHE.move_to_end(farm)
+        while len(_CAPABILITIES_CACHE) > _CAPABILITIES_CACHE_MAXSIZE:
+            _CAPABILITIES_CACHE.popitem(last=False)
+
+    return dict(capabilities)
 
 
 def _resolve_priority_and_chunk_size(
@@ -240,12 +281,20 @@ def submit(
         "--user",
         help="Submitting user (defaults to the current system user).",
     ),
+    refresh_capabilities: bool = typer.Option(
+        False,
+        "--refresh-capabilities",
+        help="Reload farm capabilities before submitting.",
+    ),
 ) -> None:
     """Submit a render job to the configured farm."""
 
     resolved_user = user or getpass.getuser()
     farm = farm.lower()
     dcc = dcc.lower()
+
+    if refresh_capabilities:
+        _refresh_capabilities_cache(farm=farm)
 
     if not scene.exists():
         raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
@@ -416,11 +465,19 @@ def save_preset(
         help="Override the adapter chunk size default for this preset.",
     ),
     user: str | None = typer.Option(None, "--user", help="Default submitting user."),
+    refresh_capabilities: bool = typer.Option(
+        False,
+        "--refresh-capabilities",
+        help="Reload farm capabilities before validating the preset.",
+    ),
 ) -> None:
     """Persist a render submission preset to disk."""
 
     farm = farm.lower()
     resolved_dcc = dcc.lower() if dcc else None
+
+    if refresh_capabilities:
+        _refresh_capabilities_cache(farm=farm)
 
     explicit_priority = priority is not None
     explicit_chunk = chunk_size is not None
@@ -494,6 +551,11 @@ def use_preset(
     user: str | None = typer.Option(
         None, "--user", help="Override the submitting user."
     ),
+    refresh_capabilities: bool = typer.Option(
+        False,
+        "--refresh-capabilities",
+        help="Reload farm capabilities before executing the preset.",
+    ),
 ) -> None:
     """Execute a preset, optionally overriding fields before submission."""
 
@@ -545,4 +607,5 @@ def use_preset(
         priority=merged.get("priority"),
         chunk_size=merged.get("chunk_size"),
         user=merged.get("user"),
+        refresh_capabilities=refresh_capabilities,
     )
