@@ -29,6 +29,7 @@ def _seed_runs(store: PipelineRunStore) -> list[PipelineRun]:
             created_at=created,
             updated_at=created,
             parameters={},
+            definition_snapshot={"name": pipeline, "steps": []},
         )
         store.create_run(
             run,

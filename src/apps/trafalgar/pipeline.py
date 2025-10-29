@@ -101,9 +101,11 @@ class PipelineRun:
     created_at: datetime
     updated_at: datetime
     parameters: Mapping[str, Any] = field(default_factory=dict)
+    definition_snapshot: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         object.__setattr__(self, "parameters", dict(self.parameters))
+        object.__setattr__(self, "definition_snapshot", dict(self.definition_snapshot))
 
     def serialise(self) -> Mapping[str, Any]:
         return {
@@ -113,6 +115,7 @@ class PipelineRun:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "parameters": dict(self.parameters),
+            "definition_snapshot": dict(self.definition_snapshot),
         }
 
 
@@ -201,6 +204,19 @@ class PipelineRunStore:
             return data
         return {}
 
+    @staticmethod
+    def _encode_definition_snapshot(snapshot: Mapping[str, Any]) -> str:
+        return json.dumps(dict(snapshot))
+
+    @staticmethod
+    def _decode_definition_snapshot(payload: str | None) -> dict[str, Any]:
+        if not payload:
+            return {}
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return {}
+
     def _initialise_schema(self) -> None:
         with self._connection:
             self._connection.execute(
@@ -211,7 +227,8 @@ class PipelineRunStore:
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    parameters TEXT NOT NULL
+                    parameters TEXT NOT NULL,
+                    definition_snapshot TEXT NOT NULL
                 )
                 """
             )
@@ -229,15 +246,28 @@ class PipelineRunStore:
                 """
             )
 
+        self._ensure_pipeline_runs_columns()
+
+    def _ensure_pipeline_runs_columns(self) -> None:
+        cursor = self._connection.execute("PRAGMA table_info(pipeline_runs)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "definition_snapshot" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN definition_snapshot TEXT NOT NULL DEFAULT '{}'"
+                )
+
     def create_run(self, run: PipelineRun, initial_event: PipelineRunEvent) -> None:
         payload = self._encode_parameters(run.parameters)
+        definition_payload = self._encode_definition_snapshot(run.definition_snapshot)
         event_payload = self._encode_parameters(initial_event.parameters)
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO pipeline_runs (
-                    run_id, pipeline, status, created_at, updated_at, parameters
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    run_id, pipeline, status, created_at, updated_at, parameters,
+                    definition_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
@@ -246,6 +276,7 @@ class PipelineRunStore:
                     self._encode_datetime(run.created_at),
                     self._encode_datetime(run.updated_at),
                     payload,
+                    definition_payload,
                 ),
             )
             self._connection.execute(
@@ -333,7 +364,8 @@ class PipelineRunStore:
         with self._lock:
             cursor = self._connection.execute(
                 """
-                SELECT run_id, pipeline, status, created_at, updated_at, parameters
+                SELECT run_id, pipeline, status, created_at, updated_at,
+                       parameters, definition_snapshot
                 FROM pipeline_runs
                 WHERE run_id = ?
                 """,
@@ -351,6 +383,9 @@ class PipelineRunStore:
             created_at=self._decode_datetime(row["created_at"]),
             updated_at=self._decode_datetime(row["updated_at"]),
             parameters=self._decode_parameters(row["parameters"]),
+            definition_snapshot=self._decode_definition_snapshot(
+                row["definition_snapshot"]
+            ),
         )
 
     def list_runs(
@@ -374,7 +409,10 @@ class PipelineRunStore:
             bindings.append(self._encode_datetime(since))
 
         query = [
-            "SELECT run_id, pipeline, status, created_at, updated_at, parameters",
+            (
+                "SELECT run_id, pipeline, status, created_at, updated_at, "
+                "parameters, definition_snapshot"
+            ),
             "FROM pipeline_runs",
         ]
         if clauses:
@@ -402,6 +440,9 @@ class PipelineRunStore:
                 created_at=self._decode_datetime(row["created_at"]),
                 updated_at=self._decode_datetime(row["updated_at"]),
                 parameters=self._decode_parameters(row["parameters"]),
+                definition_snapshot=self._decode_definition_snapshot(
+                    row["definition_snapshot"]
+                ),
             )
             for row in rows
         ]
@@ -587,6 +628,7 @@ class PipelineOrchestrator:
     ) -> PipelineRun:
         parameters = dict(parameters or {})
         definition = self.get_pipeline(pipeline_name)
+        definition_snapshot = definition.serialise()
         run_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
         run = PipelineRun(
@@ -596,6 +638,7 @@ class PipelineOrchestrator:
             created_at=now,
             updated_at=now,
             parameters=parameters,
+            definition_snapshot=definition_snapshot,
         )
         initial_event = PipelineRunEvent(
             run_id=run_id,

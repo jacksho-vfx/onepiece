@@ -109,6 +109,61 @@ def test_pipeline_history_survives_restart(
     assert [payload["status"] for payload in stream_payload] == statuses
 
 
+def test_run_definition_snapshot_survives_mutations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _register_test_factories(monkeypatch)
+    store = PipelineRunStore()
+    orchestrator = PipelineOrchestrator(store=store)
+
+    initial_pipeline = _build_pipeline()
+    orchestrator.register(
+        PipelineDefinition(name="demo", pipeline=initial_pipeline, parameters={})
+    )
+
+    run = orchestrator.trigger_run("demo")
+    serialised = orchestrator.serialise_run(run.run_id)
+    snapshot = serialised["definition_snapshot"]
+    assert [step["name"] for step in snapshot["steps"]] == [
+        "seed",
+        "listener",
+    ]
+
+    mutated_pipeline = Pipeline(
+        name="demo",
+        steps=[
+            PipelineStep(name="seed", provider="sequential"),
+            PipelineStep(
+                name="validate",
+                provider="event-listener",
+                trigger=TriggerPolicy(depends_on=("seed",)),
+            ),
+            PipelineStep(
+                name="publish",
+                provider="event-listener",
+                trigger=TriggerPolicy(depends_on=("validate",)),
+            ),
+        ],
+        metadata={"revision": 2},
+    )
+    orchestrator.upsert(
+        PipelineDefinition(name="demo", pipeline=mutated_pipeline, parameters={})
+    )
+
+    mutated_definition = orchestrator.get_pipeline("demo")
+    assert [step.name for step in mutated_definition.pipeline.steps] == [
+        "seed",
+        "validate",
+        "publish",
+    ]
+
+    persisted_snapshot = orchestrator.serialise_run(run.run_id)["definition_snapshot"]
+    assert [step["name"] for step in persisted_snapshot["steps"]] == [
+        "seed",
+        "listener",
+    ]
+
+
 def test_configure_orchestrator_from_profile_uses_profile_storage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

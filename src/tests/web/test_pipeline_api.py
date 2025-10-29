@@ -136,6 +136,7 @@ def _seed_run(
             created_at=created_at,
             updated_at=created_at,
             parameters={},
+            definition_snapshot={"name": pipeline, "steps": []},
         ),
         PipelineRunEvent(
             run_id=run_id,
@@ -349,6 +350,7 @@ def test_stream_run_events_delivers_live_updates(client: TestClient) -> None:
             created_at=base,
             updated_at=base,
             parameters={},
+            definition_snapshot={"name": "render_shots", "steps": []},
         ),
         PipelineRunEvent(
             run_id=run_id,
