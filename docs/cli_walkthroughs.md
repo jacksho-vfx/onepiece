@@ -490,10 +490,37 @@ reference placeholder paths such as `manifests/ep101-delivery.json` and
 `reports/{{ payload.delivery_id }}-reconcile.json`; replace them with the real
 locations inside your show repository or object store before testing.
 
-When you are ready to exercise the flows in Studio, load the relevant profile
-and point `onepiece pipeline run --manifest <path>` at either example manifest.
-Pair the run with the JSON payloads provided alongside each manifest so your
-staging environment mimics production telemetry end-to-end.
+To exercise the orchestrator locally:
+
+1. Load the relevant profile so the pipeline metadata is exposed alongside the
+   configuration settings:
+
+   ```python
+   from apps.onepiece import config as config_module
+   from apps.trafalgar import pipeline as pipeline_module
+
+   context = config_module.load_profile(profile="episodic")
+   orchestrator = pipeline_module.get_pipeline_orchestrator()
+
+   definition = pipeline_module.PipelineDefinition(
+       name="opr-linear-ingest",
+       display_name="Linear ingest pilot",
+       description=context.pipelines["opr-linear-ingest"].get("summary"),
+       parameters={"profile": "episodic"},
+   )
+   orchestrator.register(definition)
+   ```
+
+2. Use `trafalgar pipeline list` to confirm the definition is visible, then
+   trigger a run with `trafalgar pipeline run opr-linear-ingest --param profile=episodic`.
+   The CLI echoes the generated run identifier so you can call
+   `/pipeline/runs/<id>` or stream `/pipeline/runs/<id>/events` for live
+   feedback.
+
+3. Pair the run with the JSON payloads provided alongside each manifest so your
+   staging environment mimics production telemetry end-to-end. Swap in the real
+   S3 buckets, OTIO timelines, or notification targets before handing the
+   pipeline to artists.
 
 ---
 

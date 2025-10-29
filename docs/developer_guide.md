@@ -12,7 +12,7 @@ This guide describes how to set up a local development environment for OnePiece,
 
 > **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.
 >
-> **Latest merges:** Animation commands joined the CLI to debug Maya scenes, clean namespaces, and fire playblasts; the Unreal importer rebuilds published packages directly inside the editor; and publish safety checks now guard scene names while reporting Unreal validation summaries. Trafalgar's provider registry exposes delivery/reconciliation integrations through entry points, and the Maya modules handle missing PyMEL gracefully so unit tests run without DCC installations. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/apps/onepiece/dcc/unreal_import.py†L1-L78】【F:src/apps/onepiece/dcc/publish.py†L39-L119】【F:src/apps/trafalgar/providers/providers.py†L1-L210】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
+> **Latest merges:** Pipeline configuration now surfaces named definitions alongside profile data, the in-memory orchestrator gained a CLI and FastAPI surface for listing and triggering pipelines, and pipeline step factories can be extended through entry points. Perona's Wrangler automation added deadline escalations, cache rebuild recommendations, telemetry freshness checks, and render volatility spotlights so production leads can respond quickly. 【F:src/apps/onepiece/config.py†L1-L120】【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler.py†L1334-L1426】
 
 ## Prerequisites
 
@@ -118,23 +118,24 @@ onepiece/
 
 ## Pipeline integration
 
-The pipeline blueprint introduced in the latest release aligns the CLI, Trafalgar services, and Uta Control Center into a modular control plane that you can deploy incrementally. Start with the [pipeline overview](pipeline_overview.md) to compare reference architectures, required services, and integration patterns before wiring the components into your studio stack. Pair it with the [pipeline CLI guide](pipeline_cli.md) for command-level details and extension hooks.
+The pipeline blueprint introduced in the latest release aligns the CLI, Trafalgar services, and Uta Control Center into a modular control plane that you can deploy incrementally. Start with the [pipeline overview](pipeline_overview.md) to compare reference architectures, required services, and integration patterns before wiring the components into your studio stack. Pair it with the [pipeline CLI guide](pipeline_cli.md) for command-level details, configuration loading tips, and plugin extension hooks.
 
 ### Required services at a glance
 
-- **Control plane services** – Trafalgar (FastAPI) brokers ingest, render, and delivery APIs, while Uta renders dashboards and mirrors CLI command trees for remote execution. Back both with PostgreSQL or SQLite for state plus Redis (or EventBridge/Kafka) when you need real-time fan-out. 【F:docs/pipeline_overview.md†L22-L64】
+- **Control plane services** – Trafalgar (FastAPI) brokers ingest, render, delivery, and pipeline APIs, while Uta renders dashboards and mirrors CLI command trees for remote execution. Back both with PostgreSQL or SQLite for state plus Redis (or EventBridge/Kafka) when you need real-time fan-out. 【F:docs/pipeline_overview.md†L22-L64】【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 - **Core integrations** – ShotGrid (REST + event streams) remains the primary production-tracking source of truth, object storage (S3/GCS/SMB) holds media packages, and render adapters (Deadline/Qube!/Tractor) surface farm telemetry. Provide scoped credentials to each surface and reuse existing SSO proxies where available. 【F:docs/pipeline_overview.md†L66-L108】
 - **Telemetry and messaging** – Standardise on the message bus (Redis Streams, Kafka, SNS/SQS) highlighted in the overview so CLI hooks and Trafalgar webhooks can publish ingest/render events to your observability stack. 【F:docs/pipeline_overview.md†L110-L139】
 
 ### Wiring into legacy scheduling and asset-management systems
 
-- **Scheduling adapters** – Use the CLI's render commands (`onepiece render submit`, `onepiece render status`) alongside Trafalgar's render REST endpoints to bridge existing farm controllers. Script lightweight shims that translate legacy job payloads into the JSON contracts documented in the render guide, then feed responses back into your schedulers. 【F:docs/pipeline_overview.md†L88-L103】【F:docs/pipeline_cli.md†L1-L24】
+- **Scheduling adapters** – Use the CLI's render commands (`onepiece render submit`, `onepiece render status`) alongside Trafalgar's render REST endpoints to bridge existing farm controllers. Script lightweight shims that translate legacy job payloads into the JSON contracts documented in the render guide, then feed responses back into your schedulers. When orchestrating multi-step flows, register them with the pipeline orchestrator so dashboards and automation can track runs centrally. 【F:docs/pipeline_overview.md†L88-L103】【F:docs/pipeline_cli.md†L1-L40】【F:src/apps/trafalgar/pipeline.py†L1-L194】
 - **Asset-management hooks** – Map your asset/shot taxonomies into the configuration profiles referenced by the pipeline blueprint. The CLI validates OTIO timelines and ingest manifests against these profiles, while Trafalgar's provider registry exposes reconciliation webhooks that can push updates into legacy asset databases without forking the service. 【F:docs/pipeline_overview.md†L80-L89】【F:docs/pipeline_cli.md†L25-L38】
 - **Event mirrors** – When your legacy stack already emits scheduling or asset events, subscribe Trafalgar to those channels or relay them through its webhook endpoints so dashboards and control surfaces stay in sync. Conversely, forward OnePiece events into the legacy bus to keep historical audit trails unified. 【F:docs/pipeline_overview.md†L110-L139】
 
 ### Key APIs and CLI entry points
 
-- `onepiece pipeline list|describe|run` – Enumerate pipelines, inspect blueprints, and trigger executions programmatically or from schedulers. Combine with `--format json` to drive automation. 【F:docs/pipeline_cli.md†L1-L24】
+- `trafalgar pipeline list|run` – Enumerate pipelines, inspect blueprints, and trigger executions programmatically or from schedulers. Combine with repeated `--param key=value` options to seed run parameters. 【F:src/apps/trafalgar/app.py†L1-L120】
+- `/pipeline/pipelines`, `/pipeline/runs/{id}`, `/pipeline/runs/{id}/events` – FastAPI endpoints used by the Trafalgar CLI and dashboards. They list definitions, return run metadata, and stream server-sent events for live monitoring. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 - `onepiece pipeline steps` entry-point group – Register custom pipeline steps in `pyproject.toml` so bespoke validation or delivery stages can be invoked without patching upstream code. 【F:docs/pipeline_cli.md†L25-L38】
 - Trafalgar REST APIs – Leverage the ingest, render, and delivery endpoints surfaced by the control plane to automate manifests, farm orchestration, and reconciliation callbacks. Pin consumers to the versioned schemas called out in the overview and `docs/render_api.md`.
 - Uta control widgets – Embed the Uta dashboards exposed in the overview into your orchestration stack for remote trigger and monitoring capabilities.

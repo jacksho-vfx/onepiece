@@ -63,6 +63,8 @@ Role strings gate access to logical operations:
 * `render:manage` — cancel render jobs.
 * `ingest:read` — read ingest history, subscribe to ingest events, ingest health.
 * `review:read` — list and inspect review playlists.
+* `pipeline:read` — enumerate pipeline definitions, query pipeline runs, and stream run events from the `/pipeline` API. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
+* `pipeline:run` — trigger pipeline executions through the API or the `trafalgar pipeline run` CLI helper. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】【F:src/apps/trafalgar/app.py†L1-L120】
 
 The dependency helpers enforce these roles per route. Credentials can declare
 multiple roles when a client needs to access more than one workflow.

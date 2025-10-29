@@ -2,19 +2,21 @@
 
 OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
 
-> **Documentation refresh (April 2024):** Every guide now opens with an "At a glance" summary, cross-links to the configuration profile reference, and highlights the environment variables that routinely trip up new operators. Use the new quick-reference callouts to jump directly to workflow examples or troubleshooting sections without skimming entire pages.
+> **Documentation refresh (April 2024):** Every guide now opens with an "At a glance" summary, cross-links to the configuration profile reference, and highlights the environment variables that routinely trip up new operators. Use the new quick-reference callouts to jump directly to workflow examples or troubleshooting sections without skimming entire pages. Recent commits layered in pipeline orchestration coverage, Trafalgar API endpoints, and Wrangler runbooks so those callouts now point at the expanded surface area too.
 >
 > **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
 >
-> **Recent merges** extend the DCC tooling with a dedicated animation command group, an Unreal Engine importer, and tighter publish validation. Maya-specific helpers now guard against missing PyMEL installations, plugin discovery treats module names case-insensitively, and scene-name validation rejects unsafe paths. Trafalgar introduces a pluggable provider registry with sensible defaults so delivery and reconciliation data sources can be extended without forking the service.
+> **Recent merges** introduced an in-memory pipeline orchestrator with CLI and FastAPI front doors, configuration loaders that surface named pipelines alongside profile data, and a plugin discovery layer for third-party pipeline steps. Wrangler operators gained cost-driver explainers, deadline escalations, cache stability checks, telemetry freshness reporting, and render volatility spotlights so the Perona dashboard can triage production risk in minutes. 【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/apps/onepiece/config.py†L1-L120】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler.py†L1334-L1426】
 
 ## Toolkit components
 
 - **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, and validation helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
 - **Trafalgar services** – FastAPI applications and CLI commands for the production dashboard, ingest run history, and render API. The `trafalgar` entry point launches these servers and includes utilities for generating demo dashboards and authentication tokens. 【F:src/apps/trafalgar/app.py†L1-L120】
 - **Perona dashboard** – a dedicated CLI and FastAPI service for render cost analytics and configuration inspection. Use the `perona` console script to operate the service or query settings. 【F:src/apps/perona/app.py†L1-L160】
+- **Wrangler automation** – targeted remediation scripts exposed through the Perona dashboard and API. Operators can surface failing shots, escalating deadlines, cache instability, telemetry gaps, and render volatility without leaving the browser. 【F:src/apps/perona/web/wrangler.py†L1334-L1426】
 - **Chopper utility** – a lightweight CLI for exercising the render pipeline without DCC dependencies. The `chopper` entry point renders deterministic sample scenes for QA and demonstrations. 【F:src/apps/chopper/app.py†L1-L120】
 - **Uta Control Center** – a FastAPI surface that mirrors the OnePiece command tree in a browser, embedding the Trafalgar dashboard for supervisors. Launch it via `python -m apps.uta` or by importing `apps.uta.app`. 【F:src/apps/uta/app.py†L1-L140】
+- **Pipeline orchestrator** – a Trafalgar-hosted control plane that lists registered pipelines, triggers runs, and streams run events. Reach it from the `trafalgar pipeline` CLI or the `/pipeline` FastAPI application. 【F:src/apps/trafalgar/app.py†L1-L120】【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 
 ## Documentation map
 
@@ -26,12 +28,13 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 | [`docs/cli_examples.md`](docs/cli_examples.md) | Command-by-command reference covering ingest, DCC, render, notification, and validation helpers. |
 | [`docs/cli_walkthroughs.md`](docs/cli_walkthroughs.md) | End-to-end task walkthroughs using the bundled example assets. |
 | [`docs/configuration_profiles.md`](docs/configuration_profiles.md) | Layered configuration profile discovery and recommended keys. |
-| [`docs/developer_guide.md`](docs/developer_guide.md) | Development environment setup, contribution workflow, and QA tips. |
+| [`docs/developer_guide.md`](docs/developer_guide.md) | Development environment setup, contribution workflow, QA tips, and pipeline integration pointers. |
 | [`docs/dashboard_api.md`](docs/dashboard_api.md) & [`docs/trafalgar-authentication.md`](docs/trafalgar-authentication.md) | Trafalgar dashboard API contracts and authentication flows. |
 | [`docs/render_api.md`](docs/render_api.md) | Render API capabilities and adapter registration guidance. |
 | [`docs/perona_dashboard.md`](docs/perona_dashboard.md) | Operating the Perona CLI, configuration layering, and API usage. |
 | [`docs/maya_character_selector.md`](docs/maya_character_selector.md) | Maya utility panel for discovering and selecting rigs. |
 | [`docs/ftrack.md`](docs/ftrack.md) | Overview of the experimental Ftrack REST client package. |
+| [`docs/pipeline_cli.md`](docs/pipeline_cli.md) | Pipeline orchestrator CLI, configuration schema, and plugin extension hooks. |
 
 Sample manifests, OTIO timelines, and telemetry payloads live under [`docs/examples/`](docs/examples) for repeatable demos.
 
@@ -158,6 +161,12 @@ onepiece dcc animation playblast \
 ```
 
 The animation command group relies on pure-Python helpers and lazy Maya imports, so the CLI exits cleanly when PyMEL is unavailable instead of crashing mid-command. Detailed structured logging accompanies every run to feed dashboards and alerting. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
+
+### Orchestrate pipelines and surface Wrangler insights
+
+- `trafalgar pipeline list|run` &mdash; Inspect the pipelines registered with the orchestrator and trigger runs directly from the CLI. Pair runs with key/value parameters to drive templated steps. 【F:src/apps/trafalgar/app.py†L1-L120】
+- `/pipeline/pipelines`, `/pipeline/runs/{id}`, and `/pipeline/runs/{id}/events` &mdash; FastAPI endpoints that back the CLI and dashboards. They expose pipeline definitions, run metadata, and server-sent event streams suitable for live monitoring. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
+- Perona Wrangler scripts — Launch targeted analyses such as cost-driver attribution, cache stability rebuilds, deadline escalations, telemetry freshness checks, and render volatility spotlights. Each script ships with structured payloads for dashboards and automation. 【F:src/apps/perona/web/wrangler.py†L1334-L1426】
 
 #### Import a published package into Unreal Engine
 

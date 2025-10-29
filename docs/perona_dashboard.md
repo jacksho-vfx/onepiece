@@ -159,6 +159,33 @@ Available options:
 When a valid settings file is supplied the CLI exports `PERONA_SETTINGS_PATH` into the environment so the FastAPI app reads the
 same overrides on boot.
 
+### Wrangler automation playbook
+
+The Perona dashboard now bundles a catalogue of Wrangler scripts that surface
+targeted remediation guidance straight from render and production telemetry.
+Each script can be launched from the dashboard UI or through the Wrangler HTTP
+endpoints and returns structured JSON payloads with headlines, ranked results,
+and recommended follow-up actions. 【F:src/apps/perona/web/wrangler.py†L1334-L1426】
+
+| Script | What it highlights | Typical follow-up |
+| --- | --- | --- |
+| `analyse_cost_drivers` | The strongest contributors to render spend and the optimisation levers with the steepest slope. | Coordinate with rendering to reduce the top-ranked drivers (for example high frame times). |
+| `explain_pnl_delta` | Differences between baseline and current spend with per-driver deltas. | Share the ranked drivers with production finance to contextualise overruns. |
+| `boost_gpu_utilisation` | Shots or farms with utilisation below the configured target band. | Reassign work or tune farm policies to lift GPU occupancy. |
+| `check_telemetry_freshness` | The delay since the last telemetry ingest. | Investigate stalled collectors before dashboards drift out of date. |
+| `spin_down_idle_workers` | Idle GPU nodes that can be released without hurting throughput. | Scale down render workers during troughs to trim spend. |
+| `list_failing_jobs` | Shots breaching risk or error thresholds with ranked drivers. | Escalate to QA or production using the recommended follow-up message. |
+| `flag_render_volatility` | Shots with unstable frame times plus variance statistics. | Profile the renders to stabilise frame times before deadlines slip. |
+| `rebuild_unstable_caches` | Cache stability scores, resim counts, and size hints for risky shots. | Trigger cache rebuilds and notify downstream departments about expected GB usage. |
+| `escalate_deadline_shots` | Shots under deadline pressure with owner context. | Loop in show leadership to reallocate resources. |
+| `highlight_stage_bottlenecks` | The busiest pipeline stage and the shots stalled there longest. | Unblock the highlighted stage or redistribute work-in-progress. |
+
+Wrangler responses expose `headline` strings for dashboards, sorted result
+arrays, and `recommended_follow_up` text for each entry so operators can copy
+the next steps into tickets or chatops tooling. When no issues are found the
+payloads default to a success headline (for example “Frame times steady”) to
+confirm monitoring remains healthy. 【F:src/apps/perona/web/wrangler.py†L757-L914】【F:src/apps/perona/web/wrangler.py†L1334-L1426】
+
 ### Launch the dummy demo dashboard
 
 For documentation, QA, or onboarding sessions you can boot a deterministic
