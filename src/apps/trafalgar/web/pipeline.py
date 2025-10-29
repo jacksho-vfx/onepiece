@@ -38,7 +38,9 @@ router = create_protected_router()
 @app.on_event("startup")
 def _register_profile_pipelines() -> None:
     context = load_profile()
-    configure_orchestrator_from_profile(context)
+    configure_orchestrator_from_profile(
+        context, storage_config=context.pipeline_storage
+    )
 
 
 @router.get("/")

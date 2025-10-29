@@ -5,12 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import textwrap
 import pytest
 
+from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     PipelineOrchestrator,
     PipelineRunStore,
+    configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
     set_pipeline_orchestrator,
 )
@@ -104,6 +107,78 @@ def test_pipeline_history_survives_restart(
 
     stream_payload = restarted.serialise_run_events(run.run_id)
     assert [payload["status"] for payload in stream_payload] == statuses
+
+
+def test_configure_orchestrator_from_profile_uses_profile_storage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    set_pipeline_orchestrator(None)
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    database = tmp_path / "runs.sqlite3"
+    config_path = project_root / "onepiece.toml"
+    config_path.write_text(
+        textwrap.dedent(
+            f"""
+            default_profile = "default"
+
+            [profiles.default.pipeline.storage]
+            database = "{database}"
+
+            [pipelines.render_shots]
+            display_name = "Render Shots"
+            description = "Render queued shots with default settings."
+
+            [[pipelines.render_shots.steps]]
+            name = "prepare"
+            provider = "tests.pipeline:prepare"
+
+            [[pipelines.render_shots.steps]]
+            name = "render"
+            provider = "tests.pipeline:render"
+
+            [[pipelines.render_shots.steps]]
+            name = "notify"
+            provider = "tests.pipeline:notify"
+
+            [pipelines.render_shots.steps.trigger]
+            kind = "event"
+            event = "render.completed"
+            depends_on = ["render"]
+
+            [pipelines.render_shots.parameters]
+            quality = "string"
+            priority = "int"
+            """
+        ).strip()
+        + "\n"
+    )
+
+    monkeypatch.delenv("ONEPIECE_PROFILE", raising=False)
+
+    context = load_profile(project_root=project_root)
+    assert context.pipeline_storage == {"database": str(database)}
+
+    orchestrator = configure_orchestrator_from_profile(
+        context, storage_config=context.pipeline_storage
+    )
+    run = orchestrator.trigger_run("render_shots", parameters={"quality": "high"})
+    statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
+
+    set_pipeline_orchestrator(None)
+
+    restarted_context = load_profile(project_root=project_root)
+    restarted = configure_orchestrator_from_profile(
+        restarted_context, storage_config=restarted_context.pipeline_storage
+    )
+
+    persisted_run = restarted.get_run(run.run_id)
+    assert persisted_run.status == run.status
+    assert persisted_run.pipeline == "render_shots"
+    assert [event.status for event in restarted.iter_run_events(run.run_id)] == statuses
+
+    set_pipeline_orchestrator(None)
 
 
 def test_get_pipeline_orchestrator_accepts_storage_config(
