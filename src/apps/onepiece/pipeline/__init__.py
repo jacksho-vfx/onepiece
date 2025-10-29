@@ -442,9 +442,7 @@ def _format_event_parameters(parameters: Mapping[str, Any]) -> Iterable[str]:
 
     ignored_keys = {"step", "event", "error"}
     extras = [
-        (str(key), parameters[key])
-        for key in parameters
-        if key not in ignored_keys
+        (str(key), parameters[key]) for key in parameters if key not in ignored_keys
     ]
     if extras:
         yield "  Parameters:"

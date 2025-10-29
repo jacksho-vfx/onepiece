@@ -402,7 +402,9 @@ def test_pipeline_watch_streams_events(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 0
     assert "[2024-01-01T10:05:00+00:00] orchestration.daily - running" in result.output
-    assert "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
+    assert (
+        "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
+    )
     assert client.requested_run_id == "run-1"
     assert client.closed is True
 
@@ -438,9 +440,7 @@ def test_pipeline_watch_displays_step_metadata(monkeypatch: MonkeyPatch) -> None
     assert result.exit_code == 0
     assert "Step: ingest" in result.output
     assert "Trigger event: asset.uploaded" in result.output
-    assert (
-        "Trigger payload: {\"asset_id\": \"asset-123\", \"retry\": false}" in result.output
-    )
+    assert 'Trigger payload: {"asset_id": "asset-123", "retry": false}' in result.output
 
 
 def test_pipeline_watch_surfaces_failure_error(monkeypatch: MonkeyPatch) -> None:
