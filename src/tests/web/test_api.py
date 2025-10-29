@@ -93,8 +93,7 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
     assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
 
     assert (
-        scripts["flag_render_volatility"]["name"]
-        == "Flag render volatility hotspots"
+        scripts["flag_render_volatility"]["name"] == "Flag render volatility hotspots"
     )
     assert "volatile" in scripts["flag_render_volatility"]["description"].lower()
     assert scripts["flag_render_volatility"]["tags"] == [
