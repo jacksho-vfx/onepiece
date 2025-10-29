@@ -604,11 +604,23 @@ def pipeline_definitions_from_profile(
 
 def configure_orchestrator_from_profile(
     profile: ProfileContext,
+    *,
+    storage_config: Mapping[str, Any] | None = None,
 ) -> PipelineOrchestrator:
-    """Initialise the shared orchestrator with definitions from *profile*."""
+    """Initialise the shared orchestrator with definitions from *profile*.
+
+    When a storage configuration mapping is supplied the orchestrator persists
+    pipeline run history using :class:`PipelineRunStore`.
+    """
 
     definitions = pipeline_definitions_from_profile(profile)
-    orchestrator = PipelineOrchestrator(definitions)
+    effective_storage = storage_config or profile.pipeline_storage
+    store = (
+        PipelineRunStore.from_config(effective_storage)
+        if effective_storage
+        else None
+    )
+    orchestrator = PipelineOrchestrator(definitions, store=store)
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
 

@@ -19,11 +19,30 @@ CONFIG_FILENAME = "onepiece.toml"
 
 @dataclass(frozen=True)
 class ProfileContext:
-    """Container describing a resolved configuration profile."""
+    """Container describing a resolved configuration profile.
+
+    Attributes
+    ----------
+    name:
+        Selected profile name.
+    data:
+        Deep-merged configuration payload associated with ``name``.
+    pipelines:
+        Mapping of pipeline identifiers to their configuration blocks.
+    pipeline_storage:
+        Optional mapping describing pipeline persistence settings sourced from
+        ``[profiles.<name>.pipeline.storage]``.  The section currently accepts
+        a ``database`` (or ``path``) key pointing at a SQLite database file
+        used by :class:`apps.trafalgar.pipeline.PipelineRunStore`.
+    sources:
+        Ordered tuple of configuration files that contributed to the final
+        profile.
+    """
 
     name: str
     data: Mapping[str, Any]
     pipelines: Mapping[str, Mapping[str, Any]]
+    pipeline_storage: Mapping[str, Any]
     sources: tuple[Path, ...]
 
 
@@ -89,10 +108,15 @@ def load_profile(
     else:
         profile_data = {}
 
+    pipeline_storage = _extract_pipeline_storage(
+        selected_profile, profile_data
+    )
+
     return ProfileContext(
         name=selected_profile,
         data=profile_data,
         pipelines=pipelines,
+        pipeline_storage=pipeline_storage,
         sources=tuple(sources),
     )
 
@@ -216,3 +240,25 @@ def _extract_pipelines(config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
         extracted[str(name)] = dict(details)
 
     return extracted
+
+
+def _extract_pipeline_storage(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    pipeline_config = profile_data.get("pipeline")
+    if pipeline_config is None:
+        return {}
+    if not isinstance(pipeline_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline section must be a mapping"
+        )
+
+    storage_config = pipeline_config.get("storage")
+    if storage_config is None:
+        return {}
+    if not isinstance(storage_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.storage section must be a mapping"
+        )
+
+    return dict(storage_config)

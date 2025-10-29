@@ -48,7 +48,9 @@ def _bootstrap_pipeline_orchestrator(_ctx: typer.Context) -> None:
     """Load profile configuration before executing pipeline commands."""
 
     context = load_profile()
-    configure_orchestrator_from_profile(context)
+    configure_orchestrator_from_profile(
+        context, storage_config=context.pipeline_storage
+    )
 
 
 def _format_pipeline_definition(definition: PipelineDefinition) -> Any:

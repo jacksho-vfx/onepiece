@@ -15,6 +15,26 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content)
 
 
+def test_load_profile_exposes_pipeline_storage(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    database = workspace / "runs.sqlite3"
+    _write(
+        workspace / "onepiece.toml",
+        f"""
+default_profile = "default"
+
+[profiles.default.pipeline.storage]
+database = "{database}"
+""".strip()
+        + "\n",
+    )
+
+    context = load_profile(workspace=workspace)
+
+    assert context.pipeline_storage == {"database": str(database)}
+
+
 def test_load_profile_merges_precedence(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
