@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 import threading
 import time
+from typing import Mapping
 
 import pytest
 
@@ -290,29 +291,75 @@ def test_trigger_run_records_failure_after_return(
         def provider(parameters: dict[str, object]) -> None:
             release.wait(timeout=1)
             raise RuntimeError("boom")
+            
+            
+def test_orchestrator_supports_async_providers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import asyncio
+
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    def sequential_factory(
+        config: dict[str, object]
+    ) -> Callable[[dict[str, object]], object]:
+        async def provider(parameters: dict[str, object]) -> Mapping[str, object]:
+            payload = {
+                "department": parameters.get("department", "effects"),
+                "shot": parameters.get("shot", "sh030"),
+            }
+
+            async def emit_events() -> AsyncIterator[tuple[str, Mapping[str, object]]]:
+                yield ("asset.ingested", payload)
+
+            return {"events": emit_events()}
+
+        return provider
+
+    def event_factory(
+        config: dict[str, object]
+    ) -> Callable[[pipeline_executor.StepTriggerEvent, dict[str, object]], object]:
+        async def provider(
+            event: pipeline_executor.StepTriggerEvent,
+            parameters: dict[str, object],
+        ) -> None:
+            await asyncio.sleep(0)
+            captured.append((event.name, dict(event.payload)))
 
         return provider
 
     monkeypatch.setattr(
         pipeline_executor.plugins,
         "discover_pipeline_step_factories",
-        lambda: {"blocking": blocking_factory},
+        lambda: {"sequential": sequential_factory, "event-listener": event_factory},
     )
 
-    orchestrator = PipelineOrchestrator()
-    pipeline = Pipeline(
-        name="delayed",
-        steps=[PipelineStep(name="wait", provider="blocking")],
-    )
-    definition = PipelineDefinition(name="delayed", pipeline=pipeline, parameters={})
+    store = PipelineRunStore(database=tmp_path / "async.sqlite3")
+    orchestrator = PipelineOrchestrator(store=store)
+    pipeline = _build_pipeline()
+    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
     orchestrator.register(definition)
 
-    run = orchestrator.trigger_run("delayed")
+    run = orchestrator.trigger_run(
+        "demo", parameters={"department": "lighting", "shot": "sh040"}
+    )
 
-    assert run.status in {"queued", "running"}
+    assert run.status == "succeeded"
+    events = list(orchestrator.iter_run_events(run.run_id))
+    statuses = [event.status for event in events]
+    assert statuses == [
+        "queued",
+        "running",
+        "step_started",
+        "step_succeeded",
+        "step_started",
+        "step_succeeded",
+        "succeeded",
+    ]
 
-    release.set()
-    run = _wait_for_run(orchestrator, run.run_id, status="failed")
-
-    statuses = [event.status for event in orchestrator.iter_run_events(run.run_id)]
-    assert statuses[-2:] == ["step_failed", "failed"]
+    assert captured == [
+        (
+            "asset.ingested",
+            {"department": "lighting", "shot": "sh040"},
+        )
+    ]
