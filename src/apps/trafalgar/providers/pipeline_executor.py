@@ -12,10 +12,9 @@ from typing import Any, Callable, Deque, Iterable, Mapping, Protocol
 
 from libraries.pipeline.factories import resolve_provider
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
-
+from libraries.pipeline import plugins
 
 PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
-from libraries.pipeline import plugins
 
 
 @dataclass(slots=True)

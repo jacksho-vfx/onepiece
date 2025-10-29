@@ -162,7 +162,9 @@ def test_serialise_preserves_provider_identifier(
         name="serialisation",
         steps=[PipelineStep(name="callable", provider="callable-step")],
     )
-    definition = PipelineDefinition(name="serialisation", pipeline=pipeline, parameters={})
+    definition = PipelineDefinition(
+        name="serialisation", pipeline=pipeline, parameters={}
+    )
     orchestrator.register(definition)
 
     stored = orchestrator.get_pipeline("serialisation")
