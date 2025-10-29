@@ -252,13 +252,13 @@ class PipelineApiClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def list_pipelines(self) -> list[dict[str, Any]]:
+    async def list_pipelines(self) -> Any:
         response = await self._request("GET", "pipelines")
         return response.json()
 
     async def trigger_run(
         self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> Any:
         response = await self._request(
             "POST",
             f"pipelines/{pipeline}/runs",
@@ -266,7 +266,7 @@ class PipelineApiClient:
         )
         return response.json()
 
-    async def get_run(self, run_id: str) -> dict[str, Any]:
+    async def get_run(self, run_id: str) -> Any:
         response = await self._request("GET", f"runs/{run_id}")
         return response.json()
 
@@ -587,7 +587,7 @@ def _with_root_path(root_path: str, path: str) -> str:
 
 def _render_pipeline_page(*, is_active: bool) -> str:
     active_class = "active" if is_active else ""
-    return """
+    return f"""
     <section id=\"page-pipelines\" class=\"page {active_class}\" data-pipeline-page>
       <div class=\"page-header\">\n        <h2>Pipeline orchestrator</h2>
         <p class=\"page-help\">Discover Trafalgar pipeline definitions, run orchestrated jobs, and inspect recent events.</p>
@@ -752,9 +752,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
     nav_items.append(
         f'<button type="button" class="tab-button {pipeline_class}" data-target="page-pipelines" data-tab="{pipeline_slug}" data-default-tab="false">Pipelines</button>'
     )
-    content_sections.append(
-        _render_pipeline_page(is_active=pipeline_active)
-    )
+    content_sections.append(_render_pipeline_page(is_active=pipeline_active))
     dashboard_class = "active" if dashboard_active else ""
     nav_items.append(
         f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">Dashboard</button>'
@@ -3436,7 +3434,7 @@ async def run_command(payload: RunCommandRequest) -> RunCommandResponse:
 @app.get("/api/pipelines", response_model=list[PipelineDefinitionPayload])
 async def list_pipelines(
     client: PipelineApiClient = Depends(get_pipeline_client),
-) -> list[dict[str, Any]]:
+) -> Any:
     try:
         return await client.list_pipelines()
     except PipelineApiError as exc:
@@ -3452,7 +3450,7 @@ async def trigger_pipeline_run(
     pipeline: str,
     submission: TriggerPipelineRunRequest,
     client: PipelineApiClient = Depends(get_pipeline_client),
-) -> dict[str, Any]:
+) -> Any:
     try:
         return await client.trigger_run(pipeline, parameters=submission.parameters)
     except PipelineApiError as exc:
@@ -3463,7 +3461,7 @@ async def trigger_pipeline_run(
 async def get_pipeline_run(
     run_id: str,
     client: PipelineApiClient = Depends(get_pipeline_client),
-) -> dict[str, Any]:
+) -> Any:
     try:
         return await client.get_run(run_id)
     except PipelineApiError as exc:

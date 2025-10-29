@@ -182,7 +182,7 @@ def test_index_includes_pipeline_page() -> None:
     assert response.status_code == 200
     body = response.text
     assert 'data-target="page-pipelines"' in body
-    assert 'data-pipeline-page' in body
+    assert "data-pipeline-page" in body
     assert 'id="pipeline-card-template"' in body
 
 
@@ -191,7 +191,7 @@ def test_pipeline_refresh_hook_exposed() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert 'window.triggerPipelineRefresh = () => ensureLoaded(true);' in body
+    assert "window.triggerPipelineRefresh = () => ensureLoaded(true);" in body
     assert "requestJson('/api/pipelines')" in body
 
 
@@ -204,7 +204,7 @@ def test_pipeline_endpoints_require_credentials() -> None:
 
 def test_pipeline_list_uses_client(monkeypatch: MonkeyPatch) -> None:
     class DummyClient:
-        async def list_pipelines(self) -> list[dict[str, str]]:
+        async def list_pipelines(self) -> list[dict[str, Any]]:
             return [
                 {
                     "name": "demo",
@@ -214,13 +214,19 @@ def test_pipeline_list_uses_client(monkeypatch: MonkeyPatch) -> None:
                 }
             ]
 
-        async def trigger_run(self, *args: Any, **kwargs: Any) -> dict[str, Any]:  # pragma: no cover - unused
+        async def trigger_run(
+            self, *args: Any, **kwargs: Any
+        ) -> dict[str, Any]:  # pragma: no cover - unused
             raise AssertionError("trigger_run should not be called")
 
-        async def get_run(self, *args: Any, **kwargs: Any) -> dict[str, Any]:  # pragma: no cover - unused
+        async def get_run(
+            self, *args: Any, **kwargs: Any
+        ) -> dict[str, Any]:  # pragma: no cover - unused
             raise AssertionError("get_run should not be called")
 
-        async def get_run_events(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:  # pragma: no cover - unused
+        async def get_run_events(
+            self, *args: Any, **kwargs: Any
+        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
             raise AssertionError("get_run_events should not be called")
 
         async def aclose(self) -> None:
@@ -251,11 +257,18 @@ def test_pipeline_run_proxy(monkeypatch: MonkeyPatch) -> None:
         def __init__(self) -> None:
             self.triggered: dict[str, Any] | None = None
 
-        async def list_pipelines(self) -> list[dict[str, Any]]:  # pragma: no cover - unused
+        async def list_pipelines(
+            self,
+        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
             raise AssertionError("list_pipelines should not be called")
 
-        async def trigger_run(self, pipeline: str, *, parameters: Mapping[str, Any] | None = None) -> dict[str, Any]:
-            self.triggered = {"pipeline": pipeline, "parameters": dict(parameters or {})}
+        async def trigger_run(
+            self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
+        ) -> dict[str, Any]:
+            self.triggered = {
+                "pipeline": pipeline,
+                "parameters": dict(parameters or {}),
+            }
             return {
                 "id": "run-1",
                 "pipeline": pipeline,
