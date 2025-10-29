@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -533,11 +534,17 @@ class PipelineOrchestrator:
         *,
         store: PipelineRunStore | None = None,
         executor: pipeline_executor.PipelineExecutor | None = None,
+        worker_pool: ThreadPoolExecutor | None = None,
     ) -> None:
         self._definitions: dict[str, PipelineDefinition] = {}
         self._lock = Lock()
         self._store = store or PipelineRunStore()
         self._executor = executor or pipeline_executor.PipelineExecutor()
+        self._worker_pool = worker_pool or ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="pipeline-runs"
+        )
+        self._shutdown = False
+        self._pending: set[Future[None]] = set()
         if definitions:
             for definition in definitions:
                 self.register(definition)
@@ -605,25 +612,59 @@ class PipelineOrchestrator:
             parameters=parameters,
         )
         self._store.create_run(run, initial_event)
+        future = self._submit_run(
+            definition=definition, run_id=run_id, parameters=parameters
+        )
+        self._register_future(future)
 
-        self._append_event(run_id, "running")
+        return self._store.get_run(run_id)
 
-        try:
-            self._executor.execute(
-                definition.pipeline,
-                parameters=parameters,
-                emit=self._build_step_emitter(run_id),
-            )
-        except Exception as exc:
-            self._append_event(
-                run_id,
-                "failed",
-                parameters={"error": str(exc)},
-            )
-        else:
-            self._append_event(run_id, "succeeded")
+    def _submit_run(
+        self,
+        *,
+        definition: PipelineDefinition,
+        run_id: str,
+        parameters: Mapping[str, Any],
+    ) -> Future[None]:
+        if self._shutdown:
+            msg = "pipeline orchestrator has been shut down"
+            raise RuntimeError(msg)
 
-        return self.get_run(run_id)
+        def _runner() -> None:
+            self._append_event(run_id, "running")
+            try:
+                self._executor.execute(
+                    definition.pipeline,
+                    parameters=parameters,
+                    emit=self._build_step_emitter(run_id),
+                )
+            except Exception as exc:
+                self._append_event(
+                    run_id,
+                    "failed",
+                    parameters={"error": str(exc)},
+                )
+            else:
+                self._append_event(run_id, "succeeded")
+
+        return self._worker_pool.submit(_runner)
+
+    def _register_future(self, future: Future[None]) -> None:
+        def _cleanup(completed: Future[None]) -> None:
+            with self._lock:
+                self._pending.discard(completed)
+
+        with self._lock:
+            self._pending.add(future)
+        future.add_done_callback(_cleanup)
+
+    def shutdown(self, *, wait: bool = True) -> None:
+        if self._shutdown:
+            return
+        self._shutdown = True
+        self._worker_pool.shutdown(wait=wait)
+        with self._lock:
+            self._pending.clear()
 
     def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
         def emit(
@@ -734,6 +775,8 @@ def get_pipeline_orchestrator(
 
 def set_pipeline_orchestrator(orchestrator: PipelineOrchestrator | None) -> None:
     global _default_orchestrator
+    if _default_orchestrator is not None and _default_orchestrator is not orchestrator:
+        _default_orchestrator.shutdown()
     _default_orchestrator = orchestrator
 
 
