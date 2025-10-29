@@ -15,7 +15,7 @@ import uuid
 from apps.onepiece.config import ProfileContext
 from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.factories import pipeline_from_config
-from libraries.pipeline.models import Pipeline
+from libraries.pipeline.models import Pipeline, PipelineStep
 
 
 @dataclass(slots=True)
@@ -41,12 +41,53 @@ class PipelineDefinition:
             object.__setattr__(self, "parameters", dict(self.parameters))
 
     def serialise(self) -> Mapping[str, Any]:
+        steps = [self._serialise_step(step) for step in self.pipeline.steps]
+        providers = {step["name"]: step["provider"] for step in steps}
+        dependency_graph = {
+            step["name"]: step["trigger"]["depends_on"] for step in steps
+        }
+
         return {
             "name": self.name,
             "display_name": self.display_name,
             "description": self.description,
             "parameters": dict(self.parameters),
+            "metadata": dict(self.pipeline.metadata),
+            "steps": steps,
+            "providers": providers,
+            "dependency_graph": dependency_graph,
         }
+
+    def _serialise_step(self, step: PipelineStep) -> Mapping[str, Any]:
+        trigger = step.trigger
+        return {
+            "name": step.name,
+            "provider": self._serialise_provider(step.provider),
+            "config": dict(step.config),
+            "metadata": dict(step.metadata),
+            "trigger": {
+                "kind": trigger.kind,
+                "depends_on": list(trigger.depends_on),
+                "event": trigger.event,
+                "filters": dict(trigger.filters),
+            },
+        }
+
+    @staticmethod
+    def _serialise_provider(provider: Any) -> str:
+        if isinstance(provider, str):
+            return provider
+
+        module = getattr(provider, "__module__", None)
+        qualname = getattr(provider, "__qualname__", None)
+        if module and qualname:
+            return f"{module}:{qualname}"
+
+        name = getattr(provider, "__name__", None)
+        if module and name:
+            return f"{module}:{name}"
+
+        return repr(provider)
 
 
 @dataclass(slots=True)

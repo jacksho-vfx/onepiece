@@ -41,6 +41,15 @@ def _write_pipeline_config(path: Path) -> None:
             name = "render"
             provider = "tests.pipeline:render"
 
+            [[pipelines.render_shots.steps]]
+            name = "notify"
+            provider = "tests.pipeline:notify"
+
+            [pipelines.render_shots.steps.trigger]
+            kind = "event"
+            event = "render.completed"
+            depends_on = ["render"]
+
             [pipelines.render_shots.parameters]
             quality = "string"
             priority = "int"
@@ -108,6 +117,39 @@ def test_list_pipelines_returns_registered_definitions(
     assert set(names) == set(profile_context.pipelines)
 
 
+def test_list_pipelines_includes_step_metadata(client: TestClient) -> None:
+    response = client.get("/pipelines", headers=_auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    render = next(item for item in payload if item["name"] == "render_shots")
+
+    steps = render["steps"]
+    assert [step["name"] for step in steps] == ["prepare", "render", "notify"]
+
+    providers = render["providers"]
+    assert providers == {
+        "prepare": "tests.pipeline:prepare",
+        "render": "tests.pipeline:render",
+        "notify": "tests.pipeline:notify",
+    }
+
+    graph = render["dependency_graph"]
+    assert graph["prepare"] == []
+    assert graph["render"] == ["prepare"]
+    assert graph["notify"] == ["render"]
+
+    triggers = {step["name"]: step["trigger"] for step in steps}
+    assert triggers["prepare"]["kind"] == "sequential"
+    assert triggers["render"]["depends_on"] == ["prepare"]
+    assert triggers["notify"] == {
+        "kind": "event",
+        "depends_on": ["render"],
+        "event": "render.completed",
+        "filters": {},
+    }
+
+
 def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
     response = client.post(
         "/pipelines/render_shots/runs",
@@ -148,3 +190,24 @@ def test_stream_run_events_returns_status_sequence(client: TestClient) -> None:
     statuses = [event["status"] for event in events]
     assert statuses == ["queued", "running", "succeeded"]
     assert all(event["id"] == run_id for event in events)
+
+
+def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None:
+    response = client.get("/pipelines/render_shots", headers=_auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["name"] == "render_shots"
+    assert payload["providers"]["notify"] == "tests.pipeline:notify"
+    assert payload["dependency_graph"]["render"] == ["prepare"]
+
+    notify_trigger = next(
+        step["trigger"] for step in payload["steps"] if step["name"] == "notify"
+    )
+    assert notify_trigger == {
+        "kind": "event",
+        "depends_on": ["render"],
+        "event": "render.completed",
+        "filters": {},
+    }
