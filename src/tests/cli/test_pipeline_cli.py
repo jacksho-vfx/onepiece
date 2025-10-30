@@ -148,7 +148,10 @@ def test_pipeline_list_displays_definitions(monkeypatch: MonkeyPatch) -> None:
                 "name": "orchestration.daily",
                 "display_name": "Daily orchestration",
                 "description": "Daily ingest orchestration",
-                "parameters": {"ingest_profile": "episodic", "notify_channel": None},
+                "parameters": {
+                    "ingest_profile": {"default": "episodic"},
+                    "notify_channel": {"required": True},
+                },
             }
         ]
     )
@@ -158,7 +161,10 @@ def test_pipeline_list_displays_definitions(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 0
     assert "orchestration.daily (Daily orchestration)" in result.output
-    assert "Parameters: ingest_profile, notify_channel" in result.output
+    assert (
+        "Parameters: ingest_profile (default=episodic), notify_channel (required)"
+        in result.output
+    )
     assert client.closed is True
 
 
@@ -191,7 +197,12 @@ def test_pipeline_describe_success(monkeypatch: MonkeyPatch) -> None:
             "name": "orchestration.daily",
             "display_name": "Daily orchestration",
             "description": "Daily ingest orchestration",
-            "parameters": {"ingest_profile": "episodic"},
+            "parameters": {
+                "ingest_profile": {
+                    "default": "episodic",
+                    "description": "Profile to use",
+                }
+            },
         }
     )
     _install_stub(monkeypatch, client)
@@ -204,6 +215,8 @@ def test_pipeline_describe_success(monkeypatch: MonkeyPatch) -> None:
     assert "Name: orchestration.daily" in result.output
     assert "Display name: Daily orchestration" in result.output
     assert "Parameters:" in result.output
+    assert "  - ingest_profile (default=episodic)" in result.output
+    assert "Profile to use" in result.output
     assert client.requested_name == "orchestration.daily"
     assert client.closed is True
 

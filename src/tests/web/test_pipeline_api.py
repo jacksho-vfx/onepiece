@@ -60,9 +60,16 @@ def _write_pipeline_config(path: Path) -> None:
             event = "render.completed"
             depends_on = ["render"]
 
-            [pipelines.render_shots.parameters]
-            quality = "string"
-            priority = "int"
+            [pipelines.render_shots.parameters.quality]
+            default = "string"
+            description = "Quality preset"
+
+            [pipelines.render_shots.parameters.priority]
+            default = "int"
+
+            [pipelines.render_shots.parameters.shot]
+            required = true
+            description = "Shot identifier"
 
             [pipelines.publish_assets]
             display_name = "Publish Assets"
@@ -181,7 +188,10 @@ def test_list_pipelines_returns_registered_definitions(
     render = next(item for item in payload if item["name"] == "render_shots")
     assert render["display_name"] == "Render Shots"
     assert "Render queued shots" in render["description"]
-    assert set(render["parameters"]) == {"quality", "priority"}
+    assert set(render["parameters"]) == {"quality", "priority", "shot"}
+    assert render["parameters"]["quality"]["default"] == "string"
+    assert render["parameters"]["quality"]["description"] == "Quality preset"
+    assert render["parameters"]["shot"]["required"] is True
     assert set(names) == set(profile_context.pipelines)
 
 
@@ -311,15 +321,43 @@ def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
     response = client.post(
         "/pipelines/render_shots/runs",
         headers=_auth_headers(),
-        json={"parameters": {"quality": "high"}},
+        json={"parameters": {"quality": "high", "shot": "SQ01"}},
     )
 
     assert response.status_code == 201
     payload = response.json()
     assert payload["pipeline"] == "render_shots"
-    assert payload["parameters"] == {"quality": "high"}
+    assert payload["parameters"] == {
+        "quality": "high",
+        "priority": "int",
+        "shot": "SQ01",
+    }
     assert payload["status"] == "running"
     assert "created_at" in payload
+
+
+def test_trigger_pipeline_run_rejects_missing_required_parameter(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/pipelines/render_shots/runs",
+        headers=_auth_headers(),
+        json={"parameters": {"quality": "high"}},
+    )
+
+    assert response.status_code == 400
+    assert "requires parameter 'shot'" in response.json()["detail"]
+
+
+def test_trigger_pipeline_run_rejects_unknown_parameter(client: TestClient) -> None:
+    response = client.post(
+        "/pipelines/render_shots/runs",
+        headers=_auth_headers(),
+        json={"parameters": {"shot": "SQ01", "unknown": "value"}},
+    )
+
+    assert response.status_code == 400
+    assert "does not define parameters" in response.json()["detail"]
 
 
 def test_stream_run_events_returns_status_sequence(client: TestClient) -> None:

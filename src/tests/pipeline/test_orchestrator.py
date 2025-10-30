@@ -12,6 +12,7 @@ from typing import Mapping
 import pytest
 
 from apps.trafalgar.pipeline import (
+    ParameterDefinition,
     PipelineDefinition,
     PipelineOrchestrator,
     PipelineRun,
@@ -109,7 +110,14 @@ def _build_pipeline() -> Pipeline:
 
 def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> None:
     pipeline = _build_pipeline()
-    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "department": ParameterDefinition(default="lighting"),
+            "shot": ParameterDefinition(default="sh010"),
+        },
+    )
     orchestrator.register(definition)
 
     run = orchestrator.trigger_run(
@@ -145,7 +153,14 @@ def test_run_serialisation_includes_step_timings(
     orchestrator: PipelineOrchestrator,
 ) -> None:
     pipeline = _build_pipeline()
-    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "department": ParameterDefinition(default="lighting"),
+            "shot": ParameterDefinition(default="sh010"),
+        },
+    )
     orchestrator.register(definition)
 
     run = orchestrator.trigger_run("demo")
@@ -201,6 +216,66 @@ def test_run_serialisation_includes_step_timings(
             int(event["parameters"]["duration_ms"]) for event in matching_events
         )
         assert metrics["total_duration_ms"] == expected_total
+
+
+def _parameterised_pipeline() -> PipelineDefinition:
+    pipeline = Pipeline(
+        name="parameter-demo",
+        steps=[
+            PipelineStep(
+                name="prepare",
+                provider="tests.pipeline:prepare",
+                config={"emits": "asset.ingested"},
+            )
+        ],
+    )
+    return PipelineDefinition(
+        name=pipeline.name,
+        pipeline=pipeline,
+        parameters={
+            "department": ParameterDefinition(default="lighting"),
+            "shot": ParameterDefinition(required=True),
+            "priority": ParameterDefinition(default="normal"),
+        },
+    )
+
+
+def test_trigger_run_merges_defaults(orchestrator: PipelineOrchestrator) -> None:
+    definition = _parameterised_pipeline()
+    orchestrator.register(definition)
+
+    run = orchestrator.trigger_run(
+        definition.name, parameters={"shot": "sh030", "priority": "rush"}
+    )
+
+    assert run.parameters == {
+        "department": "lighting",
+        "shot": "sh030",
+        "priority": "rush",
+    }
+
+
+def test_trigger_run_rejects_missing_required_parameter(
+    orchestrator: PipelineOrchestrator,
+) -> None:
+    definition = _parameterised_pipeline()
+    orchestrator.register(definition)
+
+    with pytest.raises(ValueError, match="requires parameter 'shot'"):
+        orchestrator.trigger_run(definition.name, parameters={"priority": "rush"})
+
+
+def test_trigger_run_rejects_unknown_parameter(
+    orchestrator: PipelineOrchestrator,
+) -> None:
+    definition = _parameterised_pipeline()
+    orchestrator.register(definition)
+
+    with pytest.raises(ValueError, match="does not define parameters: extra"):
+        orchestrator.trigger_run(
+            definition.name,
+            parameters={"shot": "sh030", "extra": "value"},
+        )
         if metrics["count"] > 0 and metrics["total_duration_ms"] is not None:
             assert metrics["average_duration_ms"] is not None
 
@@ -308,7 +383,7 @@ def test_upsert_replaces_existing_pipeline(orchestrator: PipelineOrchestrator) -
             metadata={"revision": 2},
         ),
         description="Updated",
-        parameters={"priority": "high"},
+        parameters={"priority": ParameterDefinition(default="high")},
     )
 
     created = orchestrator.upsert(replacement)
@@ -318,12 +393,19 @@ def test_upsert_replaces_existing_pipeline(orchestrator: PipelineOrchestrator) -
     assert stored.description == "Updated"
     assert stored.pipeline.metadata["revision"] == 2
     assert [step.name for step in stored.pipeline.steps] == ["seed", "publish"]
-    assert stored.parameters == {"priority": "high"}
+    assert stored.parameters["priority"].default == "high"
 
 
 def test_deregister_removes_pipeline(orchestrator: PipelineOrchestrator) -> None:
     pipeline = _build_pipeline()
-    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "department": ParameterDefinition(default="lighting"),
+            "shot": ParameterDefinition(default="sh010"),
+        },
+    )
     orchestrator.register(definition)
 
     orchestrator.deregister("demo")
@@ -434,7 +516,14 @@ def test_orchestrator_supports_async_providers(
     store = PipelineRunStore(database=tmp_path / "async.sqlite3")
     orchestrator = PipelineOrchestrator(store=store)
     pipeline = _build_pipeline()
-    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "department": ParameterDefinition(default="lighting"),
+            "shot": ParameterDefinition(default="sh010"),
+        },
+    )
     orchestrator.register(definition)
 
     run = orchestrator.trigger_run(
