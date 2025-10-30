@@ -880,9 +880,7 @@ class MediaIngestService:
             resolved = cap
         else:
             target_by_files = max(1, math.ceil(total_jobs / AUTO_WORKER_FILES_TARGET))
-            target_by_bytes = max(
-                1, math.ceil(total_bytes / AUTO_WORKER_BYTES_TARGET)
-            )
+            target_by_bytes = max(1, math.ceil(total_bytes / AUTO_WORKER_BYTES_TARGET))
             target = max(target_by_files, target_by_bytes)
             resolved = max(1, min(cap, min(total_jobs, target)))
             auto_tuned = True

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -171,17 +171,17 @@ def test_thread_executor_uses_autotuned_pool(
     recorded: dict[str, int] = {}
 
     class _ThreadPoolRecorder:
-        def __init__(self, *_, max_workers: int, **__: Any) -> None:
+        def __init__(self, *_: Any, max_workers: int, **__: Any) -> None:
             recorded["max_workers"] = max_workers
 
         def __enter__(self) -> "_ThreadPoolRecorder":
             return self
 
-        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
             return False
 
-        def submit(self, fn: Any, *args: Any) -> concurrent.futures.Future:
-            future: concurrent.futures.Future = concurrent.futures.Future()
+        def submit(self, fn: Any, *args: Any) -> concurrent.futures.Future:  # type: ignore[type-arg]
+            future: concurrent.futures.Future = concurrent.futures.Future()  # type: ignore[type-arg]
             try:
                 result = fn(*args)
             except Exception as error:  # pragma: no cover - exercised in tests
