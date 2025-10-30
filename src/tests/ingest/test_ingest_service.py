@@ -316,7 +316,9 @@ def _build_delivery(tmp_path: Path, checksum: str | None) -> Delivery:
     )
 
 
-def _create_upload_job(tmp_path: Path, checksum: str | None) -> tuple[_UploadJob, bytes]:
+def _create_upload_job(
+    tmp_path: Path, checksum: str | None
+) -> tuple[_UploadJob, bytes]:
     path = tmp_path / "SHOW01_ep001_sc01_0001_comp.mov"
     payload = b"frame-data"
     path.write_bytes(payload)

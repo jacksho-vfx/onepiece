@@ -1179,14 +1179,14 @@ class MediaIngestService:
                 if isinstance(value, str):
                     candidates.append(value)
 
-        for field in (
+        for entry in (
             "ChecksumSHA256",
             "ChecksumSHA1",
             "ChecksumCRC32",
             "ChecksumCRC32C",
             "ChecksumCRC64NVME",
         ):
-            value = metadata.get(field)
+            value = metadata.get(entry)
             if isinstance(value, str):
                 candidates.append(value)
 
@@ -1225,9 +1225,9 @@ class S3ClientProtocol(Protocol):
         Filename: str,
         Bucket: str,
         Key: str,
-        ExtraArgs: Mapping[str, Any] | None = ..., 
-        Callback: Callable[[int], None] | None = ..., 
-        Config: object | None = ..., 
+        ExtraArgs: Mapping[str, Any] | None = ...,
+        Callback: Callable[[int], None] | None = ...,
+        Config: object | None = ...,
     ) -> None:
         """Upload a local file to S3."""
 
