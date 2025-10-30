@@ -20,6 +20,12 @@ from apps.trafalgar.pipeline import (
     set_pipeline_orchestrator,
 )
 from apps.trafalgar.providers import pipeline_executor
+from apps.trafalgar.web import pipeline as pipeline_module
+from apps.trafalgar.web.security import (
+    DEFAULT_API_KEY_HEADER,
+    DEFAULT_API_SECRET_HEADER,
+)
+from fastapi.testclient import TestClient
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
@@ -70,6 +76,13 @@ def _register_test_factories(monkeypatch: pytest.MonkeyPatch) -> None:
         "discover_pipeline_step_factories",
         lambda: {"sequential": sequential_factory, "event-listener": event_factory},
     )
+
+
+def _auth_headers() -> dict[str, str]:
+    return {
+        DEFAULT_API_KEY_HEADER: "suite-key",
+        DEFAULT_API_SECRET_HEADER: "suite-secret",
+    }
 
 
 def _build_pipeline() -> Pipeline:
@@ -269,3 +282,57 @@ def test_get_pipeline_orchestrator_accepts_storage_config(
             get_pipeline_orchestrator(storage_config={"database": str(db_path)})
     finally:
         set_pipeline_orchestrator(None)
+
+
+def test_api_definitions_survive_restart(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    set_pipeline_orchestrator(None)
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    database = tmp_path / "runs.sqlite3"
+    definitions_path = tmp_path / "pipelines.json"
+    config_path = project_root / "onepiece.toml"
+    config_path.write_text(
+        textwrap.dedent(
+            f"""
+            default_profile = "default"
+
+            [profiles.default.pipeline.storage]
+            database = "{database}"
+            definitions = "{definitions_path}"
+            """
+        ).strip()
+        + "\n"
+    )
+
+    monkeypatch.setenv("ONEPIECE_PROJECT_ROOT", str(project_root))
+    monkeypatch.delenv("ONEPIECE_PROFILE", raising=False)
+
+    try:
+        with TestClient(pipeline_module.app) as client:
+            submission = {
+                "name": "persistent_pipeline",
+                "display_name": "Persistent Pipeline",
+                "description": "Created via API",
+                "parameters": {"quality": "string"},
+                "steps": [
+                    {"name": "prepare", "provider": "tests.pipeline:prepare"},
+                    {"name": "publish", "provider": "tests.pipeline:publish"},
+                ],
+            }
+            response = client.post(
+                "/pipelines", json=submission, headers=_auth_headers()
+            )
+            assert response.status_code == 201
+
+        set_pipeline_orchestrator(None)
+
+        with TestClient(pipeline_module.app) as client:
+            response = client.get("/pipelines", headers=_auth_headers())
+            assert response.status_code == 200
+            names = {entry["name"] for entry in response.json()}
+            assert "persistent_pipeline" in names
+    finally:
+        set_pipeline_orchestrator(None)
+        monkeypatch.delenv("ONEPIECE_PROJECT_ROOT", raising=False)

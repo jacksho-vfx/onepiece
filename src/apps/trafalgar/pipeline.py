@@ -101,6 +101,97 @@ class PipelineDefinition:
         return repr(provider)
 
 
+class PipelineDefinitionStore:
+    """Persist pipeline definitions to a JSON file on disk."""
+
+    def __init__(self, *, path: str | Path | None = None) -> None:
+        if path is None or str(path) == ":memory:":
+            self._path: Path | None = None
+        else:
+            resolved = Path(path)
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            self._path = resolved
+        self._lock = Lock()
+        self._definitions: dict[str, dict[str, Any]] = self._load_definitions()
+
+    def list_definitions(self) -> tuple[PipelineDefinition, ...]:
+        with self._lock:
+            payloads = [dict(payload) for payload in self._definitions.values()]
+        definitions = [
+            pipeline_definition_from_serialised(payload) for payload in payloads
+        ]
+        return tuple(definitions)
+
+    def save(self, definition: PipelineDefinition) -> None:
+        payload = dict(definition.serialise())
+        with self._lock:
+            self._definitions[definition.name] = payload
+            self._write_locked()
+
+    def remove(self, name: str) -> None:
+        with self._lock:
+            removed = self._definitions.pop(name, None)
+            if removed is None:
+                return
+            self._write_locked()
+
+    def _load_definitions(self) -> dict[str, dict[str, Any]]:
+        path = self._path
+        if path is None or not path.exists():
+            return {}
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        if not text.strip():
+            return {}
+        try:
+            payload = json.loads(text)
+        except (TypeError, ValueError):
+            return {}
+
+        data: Any
+        if isinstance(payload, Mapping):
+            definitions_section = payload.get("definitions")
+            if isinstance(definitions_section, Mapping):
+                data = definitions_section
+            elif isinstance(definitions_section, list):
+                data = definitions_section
+            else:
+                data = payload
+        else:
+            data = payload
+
+        definitions: dict[str, dict[str, Any]] = {}
+        if isinstance(data, Mapping):
+            for name, entry in data.items():
+                if not isinstance(entry, Mapping):
+                    continue
+                definitions[str(name)] = dict(entry)
+        elif isinstance(data, list):
+            for entry in data:
+                if not isinstance(entry, Mapping):
+                    continue
+                name = entry.get("name")
+                if not isinstance(name, str) or not name:
+                    continue
+                definitions[name] = dict(entry)
+        return definitions
+
+    def _write_locked(self) -> None:
+        if self._path is None:
+            return
+        serialisable = {
+            name: payload for name, payload in sorted(self._definitions.items())
+        }
+        document = {"definitions": serialisable}
+        tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp_path.write_text(
+            json.dumps(document, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        tmp_path.replace(self._path)
+
+
 @dataclass(slots=True)
 class PipelineRun:
     """Metadata describing a pipeline run returned by the orchestrator."""
@@ -914,6 +1005,7 @@ class PipelineOrchestrator:
         definitions: Iterable[PipelineDefinition] | None = None,
         *,
         store: PipelineRunStore | None = None,
+        definition_store: PipelineDefinitionStore | None = None,
         executor: pipeline_executor.PipelineExecutor | None = None,
         worker_pool: ThreadPoolExecutor | None = None,
         retention: PipelineRetentionPolicy | None = None,
@@ -921,6 +1013,7 @@ class PipelineOrchestrator:
         self._definitions: dict[str, PipelineDefinition] = {}
         self._lock = Lock()
         self._store = store or PipelineRunStore()
+        self._definition_store = definition_store
         self._executor = executor or pipeline_executor.PipelineExecutor()
         self._worker_pool = worker_pool or ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="pipeline-runs"
@@ -928,9 +1021,16 @@ class PipelineOrchestrator:
         self._shutdown = False
         self._pending: set[Future[None]] = set()
         self._retention = retention
+        initial_definitions: dict[str, PipelineDefinition] = {}
+        if self._definition_store is not None:
+            for persisted in self._definition_store.list_definitions():
+                initial_definitions[persisted.name] = persisted
         if definitions:
             for definition in definitions:
-                self.register(definition)
+                initial_definitions[definition.name] = definition
+        for definition in initial_definitions.values():
+            stored = self._prepare_definition(definition)
+            self._definitions[definition.name] = stored
 
     def register(self, definition: PipelineDefinition) -> None:
         stored = self._prepare_definition(definition)
@@ -939,12 +1039,18 @@ class PipelineOrchestrator:
                 msg = f"pipeline '{definition.name}' is already registered"
                 raise ValueError(msg)
             self._definitions[definition.name] = stored
+            definition_store = self._definition_store
+        if definition_store is not None:
+            definition_store.save(stored)
 
     def upsert(self, definition: PipelineDefinition) -> bool:
         stored = self._prepare_definition(definition)
         with self._lock:
             created = definition.name not in self._definitions
             self._definitions[definition.name] = stored
+            definition_store = self._definition_store
+        if definition_store is not None:
+            definition_store.save(stored)
         return created
 
     def deregister(self, name: str) -> None:
@@ -954,6 +1060,9 @@ class PipelineOrchestrator:
             except KeyError as exc:
                 msg = f"pipeline '{name}' is not registered"
                 raise KeyError(msg) from exc
+            definition_store = self._definition_store
+        if definition_store is not None:
+            definition_store.remove(name)
 
     def list_pipelines(self) -> list[PipelineDefinition]:
         with self._lock:
@@ -1166,18 +1275,30 @@ def get_pipeline_orchestrator(
     *,
     storage: PipelineRunStore | None = None,
     storage_config: Mapping[str, Any] | None = None,
+    definition_store: PipelineDefinitionStore | None = None,
 ) -> PipelineOrchestrator:
     global _default_orchestrator
     if _default_orchestrator is None:
-        if storage is not None and storage_config is not None:
-            msg = "provide either a storage instance or configuration, not both"
+        if (
+            storage is not None or definition_store is not None
+        ) and storage_config is not None:
+            msg = "provide either explicit stores or configuration, not both"
             raise ValueError(msg)
         retention: PipelineRetentionPolicy | None = None
         if storage is None and storage_config is not None:
-            storage = PipelineRunStore.from_config(storage_config)
+            if any(key in storage_config for key in ("database", "path")):
+                storage = PipelineRunStore.from_config(storage_config)
             retention = _retention_policy_from_storage(storage_config)
-        _default_orchestrator = PipelineOrchestrator(store=storage, retention=retention)
-    elif storage is not None or storage_config is not None:
+            if definition_store is None:
+                definition_store = _definition_store_from_storage(storage_config)
+        _default_orchestrator = PipelineOrchestrator(
+            store=storage, retention=retention, definition_store=definition_store
+        )
+    elif (
+        storage is not None
+        or storage_config is not None
+        or definition_store is not None
+    ):
         msg = (
             "pipeline orchestrator is already configured; "
             "reset it with set_pipeline_orchestrator(None) before supplying storage"
@@ -1236,6 +1357,21 @@ def pipeline_definition_from_profile_entry(
     )
 
 
+def pipeline_definition_from_serialised(
+    payload: Mapping[str, Any]
+) -> PipelineDefinition:
+    """Recreate a :class:`PipelineDefinition` from persisted payload data."""
+
+    if not isinstance(payload, Mapping):
+        msg = "persisted pipeline definition must be a mapping"
+        raise TypeError(msg)
+    name = payload.get("name")
+    if not isinstance(name, str) or not name:
+        msg = "persisted pipeline definition missing 'name'"
+        raise ValueError(msg)
+    return pipeline_definition_from_profile_entry(name, dict(payload))
+
+
 def _retention_policy_from_storage(
     storage_config: Mapping[str, Any]
 ) -> PipelineRetentionPolicy | None:
@@ -1247,6 +1383,25 @@ def _retention_policy_from_storage(
         raise ValueError(msg)
     retention_mapping = cast(Mapping[str, Any], retention_config)
     return PipelineRetentionPolicy.from_mapping(retention_mapping)
+
+
+def _definition_store_from_storage(
+    storage_config: Mapping[str, Any],
+) -> PipelineDefinitionStore | None:
+    raw_path = storage_config.get("definitions") or storage_config.get(
+        "definitions_path"
+    )
+    if raw_path is None:
+        return None
+    if isinstance(raw_path, Path):
+        path_value: Path | str = raw_path
+    else:
+        text = str(raw_path).strip()
+        if not text:
+            msg = "pipeline.storage.definitions must be a non-empty path"
+            raise ValueError(msg)
+        path_value = text
+    return PipelineDefinitionStore(path=path_value)
 
 
 def pipeline_definitions_from_profile(
@@ -1275,16 +1430,25 @@ def configure_orchestrator_from_profile(
     effective_storage = storage_config or profile.pipeline_storage
     retention = None
     store = None
+    definition_store = None
     if effective_storage:
         retention = _retention_policy_from_storage(effective_storage)
-        store = PipelineRunStore.from_config(effective_storage)
-    orchestrator = PipelineOrchestrator(definitions, store=store, retention=retention)
+        if any(key in effective_storage for key in ("database", "path")):
+            store = PipelineRunStore.from_config(effective_storage)
+        definition_store = _definition_store_from_storage(effective_storage)
+    orchestrator = PipelineOrchestrator(
+        definitions,
+        store=store,
+        retention=retention,
+        definition_store=definition_store,
+    )
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
 
 
 __all__ = [
     "PipelineDefinition",
+    "PipelineDefinitionStore",
     "PipelineOrchestrator",
     "PipelineRun",
     "PipelineRunEvent",
@@ -1294,6 +1458,7 @@ __all__ = [
     "get_pipeline_orchestrator",
     "set_pipeline_orchestrator",
     "pipeline_definition_from_profile_entry",
+    "pipeline_definition_from_serialised",
     "pipeline_definitions_from_profile",
     "configure_orchestrator_from_profile",
 ]
