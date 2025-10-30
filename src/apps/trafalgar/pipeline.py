@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, AsyncIterator, Iterable, Iterator, Mapping, cast
 
+logger = logging.getLogger(__name__)
 import json
 import sqlite3
 import uuid
@@ -1417,6 +1419,8 @@ class PipelineOrchestrator:
         self._shutdown = False
         self._pending: set[Future[None]] = set()
         self._retention = retention
+        self._retention_lock = Lock()
+        self._skip_next_auto_prune = False
         initial_definitions: dict[str, PipelineDefinition] = {}
         if self._definition_store is not None:
             for persisted in self._definition_store.list_definitions():
@@ -1537,7 +1541,18 @@ class PipelineOrchestrator:
             else:
                 self._append_event(run_id, "succeeded")
 
-        return self._worker_pool.submit(_runner)
+        future = self._worker_pool.submit(_runner)
+
+        if self._retention is not None:
+            def _trigger_prune(_: Future[None]) -> None:
+                try:
+                    self._schedule_retention_prune()
+                except Exception:  # pragma: no cover - defensive guard
+                    logger.exception("failed to schedule pipeline retention prune")
+
+            future.add_done_callback(_trigger_prune)
+
+        return future
 
     def _register_future(self, future: Future[None]) -> None:
         def _cleanup(completed: Future[None]) -> None:
@@ -1547,6 +1562,27 @@ class PipelineOrchestrator:
         with self._lock:
             self._pending.add(future)
         future.add_done_callback(_cleanup)
+
+    def _schedule_retention_prune(self) -> None:
+        policy = self._retention
+        if policy is None or not policy.configured:
+            return
+
+        with self._retention_lock:
+            if self._skip_next_auto_prune:
+                self._skip_next_auto_prune = False
+                return
+
+        def _run_prune() -> None:
+            try:
+                self.prune_history()
+            except Exception:  # pragma: no cover - defensive guard
+                logger.exception("pipeline retention prune failed")
+
+        try:
+            self._worker_pool.submit(_run_prune)
+        except RuntimeError:  # pragma: no cover - shutdown race
+            logger.debug("worker pool unavailable; skipping retention prune")
 
     def shutdown(self, *, wait: bool = True) -> None:
         if not self._shutdown:
@@ -1688,9 +1724,19 @@ class PipelineOrchestrator:
         max_runs: int | None = None,
         now: datetime | None = None,
     ) -> PipelinePruneResult:
-        if max_age is None and max_runs is None and self._retention is not None:
-            max_age = self._retention.max_age
-            max_runs = self._retention.max_runs
+        policy = self._retention
+        use_policy_defaults = max_age is None and max_runs is None and policy is not None
+
+        with self._retention_lock:
+            if use_policy_defaults:
+                self._skip_next_auto_prune = False
+            elif max_age is not None or max_runs is not None:
+                self._skip_next_auto_prune = True
+
+        if use_policy_defaults and policy is not None:
+            max_age = policy.max_age
+            max_runs = policy.max_runs
+
         return self._store.prune(max_age=max_age, max_runs=max_runs, now=now)
 
 
