@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Annotated, AsyncIterator
+from typing import Any, Annotated, AsyncIterator, Mapping
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
@@ -45,6 +45,16 @@ class PipelineRunSubmission(BaseModel):
     """Request payload used when triggering a pipeline run."""
 
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("parameters", mode="before")
+    @classmethod
+    def _validate_parameters(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if isinstance(value, Mapping):
+            return {str(key): val for key, val in value.items()}
+        msg = "parameters must be a mapping"
+        raise TypeError(msg)
 
 
 class PipelinePruneRequest(BaseModel):
@@ -162,6 +172,8 @@ def trigger_pipeline_run(
         run = orchestrator.trigger_run(pipeline, parameters=submission.parameters)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse(status_code=201, content=run.serialise())
 
 

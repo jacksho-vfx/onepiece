@@ -23,6 +23,85 @@ from libraries.pipeline.models import Pipeline, PipelineStep
 PROVIDER_REFERENCE_METADATA_KEY = pipeline_executor.PROVIDER_REFERENCE_METADATA_KEY
 
 
+_UNSET: Any = object()
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalised = value.strip().lower()
+        if normalised in {"1", "true", "yes", "on"}:
+            return True
+        if normalised in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
+@dataclass(frozen=True, slots=True)
+class ParameterDefinition:
+    """Schema describing a pipeline parameter."""
+
+    default: Any = _UNSET
+    required: bool = False
+    description: str | None = None
+
+    def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
+        object.__setattr__(self, "required", _coerce_bool(self.required))
+        description = self.description
+        if description is None:
+            return
+        text = str(description).strip()
+        object.__setattr__(self, "description", text or None)
+
+    @property
+    def has_default(self) -> bool:
+        return self.default is not _UNSET
+
+    def serialise(self) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {"required": self.required}
+        if self.has_default:
+            payload["default"] = self.default
+        if self.description is not None:
+            payload["description"] = self.description
+        return payload
+
+
+def _parameter_definition_from_payload(value: Any) -> ParameterDefinition:
+    if isinstance(value, ParameterDefinition):
+        return value
+    if isinstance(value, Mapping):
+        has_default = "default" in value
+        default = value.get("default") if has_default else _UNSET
+        required = _coerce_bool(value.get("required", False))
+        description = value.get("description")
+        return ParameterDefinition(
+            default=default if has_default else _UNSET,
+            required=required,
+            description=description,
+        )
+    return ParameterDefinition(default=value)
+
+
+def _parse_parameter_definitions(
+    raw: Mapping[str, Any] | None, *, location: str
+) -> dict[str, ParameterDefinition]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        msg = f"{location} parameters must be a mapping"
+        raise TypeError(msg)
+
+    parameters: dict[str, ParameterDefinition] = {}
+    for raw_name, raw_definition in raw.items():
+        name = str(raw_name).strip()
+        if not name:
+            msg = f"{location} parameter names must be non-empty"
+            raise ValueError(msg)
+        parameters[name] = _parameter_definition_from_payload(raw_definition)
+    return parameters
+
+
 @dataclass(slots=True)
 class PipelineDefinition:
     """A lightweight description of a runnable pipeline."""
@@ -31,7 +110,7 @@ class PipelineDefinition:
     pipeline: Pipeline
     display_name: str | None = None
     description: str | None = None
-    parameters: Mapping[str, Any] = field(default_factory=dict)
+    parameters: Mapping[str, ParameterDefinition] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         if not self.name:
@@ -43,7 +122,11 @@ class PipelineDefinition:
         if self.parameters is None:
             object.__setattr__(self, "parameters", {})
         else:
-            object.__setattr__(self, "parameters", dict(self.parameters))
+            parsed = _parse_parameter_definitions(
+                cast(Mapping[str, Any], self.parameters),
+                location=f"pipeline '{self.name}'",
+            )
+            object.__setattr__(self, "parameters", parsed)
 
     def serialise(self) -> Mapping[str, Any]:
         steps = [self._serialise_step(step) for step in self.pipeline.steps]
@@ -56,7 +139,10 @@ class PipelineDefinition:
             "name": self.name,
             "display_name": self.display_name,
             "description": self.description,
-            "parameters": dict(self.parameters),
+            "parameters": {
+                name: definition.serialise()
+                for name, definition in sorted(self.parameters.items())
+            },
             "metadata": dict(self.pipeline.metadata),
             "steps": steps,
             "providers": providers,
@@ -99,6 +185,35 @@ class PipelineDefinition:
             return f"{module}:{name}"
 
         return repr(provider)
+
+    def resolve_parameters(
+        self, provided: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        supplied = dict(provided or {})
+        schema = self.parameters
+        resolved: dict[str, Any] = {}
+
+        unknown = [name for name in supplied if name not in schema]
+        if unknown:
+            details = ", ".join(sorted(unknown))
+            msg = f"pipeline '{self.name}' does not define parameters: {details}"
+            raise ValueError(msg)
+
+        for name, definition in schema.items():
+            if name in supplied:
+                resolved[name] = supplied.pop(name)
+            elif definition.has_default:
+                resolved[name] = definition.default
+            elif definition.required:
+                msg = f"pipeline '{self.name}' requires parameter '{name}'"
+                raise ValueError(msg)
+
+        if supplied:
+            details = ", ".join(sorted(supplied))
+            msg = f"pipeline '{self.name}' does not define parameters: {details}"
+            raise ValueError(msg)
+
+        return resolved
 
 
 class PipelineDefinitionStore:
@@ -1362,8 +1477,8 @@ class PipelineOrchestrator:
     def trigger_run(
         self, pipeline_name: str, *, parameters: Mapping[str, Any] | None = None
     ) -> PipelineRun:
-        parameters = dict(parameters or {})
         definition = self.get_pipeline(pipeline_name)
+        parameters = definition.resolve_parameters(parameters)
         definition_snapshot = definition.serialise()
         run_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
@@ -1647,14 +1762,10 @@ def pipeline_definition_from_profile_entry(
         config.get("description", metadata.get("description"))
     )
 
-    parameters_raw = config.get("parameters")
-    if parameters_raw is None:
-        parameters: Mapping[str, Any] = {}
-    elif isinstance(parameters_raw, Mapping):
-        parameters = dict(parameters_raw)
-    else:
-        msg = f"pipeline '{name}' parameters must be a mapping"
-        raise TypeError(msg)
+    parameters = _parse_parameter_definitions(
+        cast(Mapping[str, Any] | None, config.get("parameters")),
+        location=f"pipeline '{name}'",
+    )
 
     return PipelineDefinition(
         name=pipeline.name,
@@ -1755,6 +1866,7 @@ def configure_orchestrator_from_profile(
 
 
 __all__ = [
+    "ParameterDefinition",
     "PipelineDefinition",
     "PipelineDefinitionStore",
     "PipelineOrchestrator",

@@ -2395,7 +2395,17 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                 input.id = `${{definition.name}}-${{name}}-input`;
                 input.name = name;
                 input.type = 'text';
-                const defaultValue = parameters[name];
+                const schema = parameters[name];
+                const schemaIsObject = Boolean(
+                  schema && typeof schema === 'object' && Array.isArray(schema) === false,
+                );
+                const defaultValue = schemaIsObject && Object.prototype.hasOwnProperty.call(schema, 'default')
+                  ? schema.default
+                  : schema;
+                const required = schemaIsObject && Boolean(schema.required);
+                const description = schemaIsObject && typeof schema.description === 'string'
+                  ? schema.description
+                  : '';
                 let defaultDisplay = '';
                 if (typeof defaultValue === 'string') {{
                   defaultDisplay = defaultValue;
@@ -2408,9 +2418,12 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                 }}
                 if (defaultDisplay) {{
                   input.placeholder = defaultDisplay;
+                }} else if (required) {{
+                  input.placeholder = 'Required parameter';
                 }} else {{
                   input.placeholder = 'Optional parameter';
                 }}
+                input.required = required;
                 field.appendChild(label);
                 field.appendChild(input);
                 if (defaultDisplay) {{
@@ -2418,6 +2431,12 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
                   hint.className = 'pipeline-param-default';
                   hint.textContent = `Default: ${{defaultDisplay}}`;
                   field.appendChild(hint);
+                }}
+                if (description) {{
+                  const help = document.createElement('span');
+                  help.className = 'pipeline-param-description';
+                  help.textContent = description;
+                  field.appendChild(help);
                 }}
                 container.appendChild(field);
               }});

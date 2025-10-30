@@ -390,6 +390,39 @@ def _create_pipeline_client() -> PipelineClient:
     return LocalPipelineClient()
 
 
+_MISSING = object()
+
+
+def _normalise_parameter_definition(
+    value: Any,
+) -> tuple[bool, Any, str | None]:
+    required = False
+    default: Any = _MISSING
+    description: str | None = None
+    if isinstance(value, Mapping):
+        if "required" in value:
+            required = bool(value.get("required"))
+        if "default" in value:
+            default = value.get("default")
+        raw_description = value.get("description")
+        if isinstance(raw_description, str):
+            stripped = raw_description.strip()
+            if stripped:
+                description = stripped
+    else:
+        default = value
+    return required, default, description
+
+
+def _format_parameter_default(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, sort_keys=True)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
 def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
     name = str(definition.get("name", ""))
     display = definition.get("display_name")
@@ -405,9 +438,20 @@ def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
 
     parameters = definition.get("parameters")
     if isinstance(parameters, Mapping) and parameters:
-        names = sorted(str(key) for key in parameters if str(key))
-        if names:
-            yield "  Parameters: " + ", ".join(names)
+        summaries: list[str] = []
+        for key in sorted(parameters):
+            required, default, _ = _normalise_parameter_definition(parameters[key])
+            details: list[str] = []
+            if required:
+                details.append("required")
+            if default is not _MISSING:
+                details.append(f"default={_format_parameter_default(default)}")
+            label = key
+            if details:
+                label = f"{key} (" + ", ".join(details) + ")"
+            summaries.append(label)
+        if summaries:
+            yield "  Parameters: " + ", ".join(summaries)
 
 
 def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
@@ -427,8 +471,18 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
     if isinstance(parameters, Mapping) and parameters:
         typer.echo("Parameters:")
         for key in sorted(parameters):
-            value = parameters[key]
-            typer.echo(f"  - {key}: {value}")
+            required, default, description = _normalise_parameter_definition(
+                parameters[key]
+            )
+            details: list[str] = []
+            if required:
+                details.append("required")
+            if default is not _MISSING:
+                details.append(f"default={_format_parameter_default(default)}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            typer.echo(f"  - {key}{suffix}")
+            if description:
+                typer.echo(f"      {description}")
     else:
         typer.echo("Parameters: <none>")
 
