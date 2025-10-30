@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from typing import Any
 
 from apps.trafalgar.app import _extract_pipeline_definition
 from apps.trafalgar.pipeline import PipelineOrchestrator
@@ -44,5 +45,5 @@ def test_sample_manifests_can_be_upserted(manifest_path: Path) -> None:
 
 
 class _PassthroughExecutor:
-    def resolve_pipeline(self, pipeline):
+    def resolve_pipeline(self, pipeline: Any) -> Any:
         return pipeline
