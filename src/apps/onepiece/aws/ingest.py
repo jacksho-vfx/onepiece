@@ -334,6 +334,11 @@ def ingest(
         "--report-path",
         help="Optional destination file for the analytics report. Defaults to stdout if omitted.",
     ),
+    force_reupload: bool = typer.Option(
+        False,
+        "--force-reupload/--no-force-reupload",
+        help="Upload files even when matching objects already exist in S3.",
+    ),
 ) -> None:
     """Validate filenames, copy media to S3, and register Versions in ShotGrid."""
 
@@ -415,8 +420,13 @@ def ingest(
         checkpoint_threshold_bytes=resolved.checkpoint_threshold,
         upload_chunk_size=resolved.upload_chunk_size,
         upload_concurrency=resolved.upload_concurrency,
+        force_reupload=force_reupload,
     )
-    status_messages = {"uploaded": "Uploaded", "skipped": "Skipped"}
+    status_messages = {
+        "uploaded": "Uploaded",
+        "skipped": "Skipped",
+        "skipped_existing": "Skipped existing",
+    }
 
     with progress_tracker(
         "Media Ingest",
@@ -452,9 +462,13 @@ def ingest(
         )
 
     for processed in report.processed:
-        typer.echo(
-            f"Uploaded {processed.path.name} -> s3://{processed.bucket}/{processed.key}"
-        )
+        destination = f"s3://{processed.bucket}/{processed.key}"
+        if processed.skipped:
+            typer.echo(
+                f"Skipped existing {processed.path.name} (already at {destination})"
+            )
+        else:
+            typer.echo(f"Uploaded {processed.path.name} -> {destination}")
 
     if report.invalid:
         typer.echo("\nSkipped files:")

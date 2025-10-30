@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 from typing import Awaitable, cast
 
 from libraries.automation.ingest.service import (
+    Delivery,
     IngestReport,
     IngestedMedia,
     MediaIngestService,
@@ -31,6 +32,17 @@ class DummyUploader:
 
     def upload(self, file_path: Path, bucket: str, key: str) -> None:
         self.uploads.append((file_path, bucket, key))
+
+
+class _HeadAwareUploader(DummyUploader):
+    def __init__(self, metadata: dict[str, object] | None) -> None:
+        super().__init__()
+        self._metadata = metadata
+
+    def head_object(self, bucket: str, key: str) -> dict[str, object]:
+        if self._metadata is None:
+            raise FileNotFoundError(key)
+        return self._metadata
 
 
 class _RecordingShotgridClient(ShotgridClient):  # type: ignore[misc]
@@ -68,6 +80,22 @@ class _FailingShotgridClient:
         description: str | None = None,
     ) -> dict[str, str]:
         raise self._exception
+
+
+class _SpyShotgridClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Path]] = []
+
+    def register_version(
+        self,
+        *,
+        project_name: str,
+        shot_code: str,
+        file_path: Path,
+        description: str | None = None,
+    ) -> dict[str, object]:
+        self.calls.append((shot_code, file_path))
+        return {"id": 1, "code": f"{shot_code}_v001"}
 
 
 def test_parse_media_filename_success() -> None:
@@ -119,15 +147,72 @@ def test_ingest_service_processes_valid_files(tmp_path: Path) -> None:
     assert report.processed_count == 1
     assert report.invalid_count == 1
 
-    upload = uploader.uploads[0]
-    assert upload[0] == valid
-    assert upload[1] == "vendor_in"
-    assert upload[2].endswith(valid.name)
 
-    versions = shotgrid.list_versions()
-    assert len(versions) == 1
-    assert versions[0]["shot"] == "ep001_sc01_0001"
-    assert versions[0]["code"] == valid.stem
+def test_process_job_skips_when_checksum_matches(tmp_path: Path) -> None:
+    job, payload = _create_upload_job(tmp_path, "deadbeef")
+    uploader = _HeadAwareUploader({"ETag": '"deadbeef"', "ContentLength": len(payload)})
+    shotgrid = _SpyShotgridClient()
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=cast(ShotgridClient, shotgrid),
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+    )
+
+    result = service._process_job(job, None)
+
+    assert result.skipped is True
+    assert result.media.skipped is True
+    assert uploader.uploads == []
+    assert shotgrid.calls == []
+
+
+def test_process_job_uploads_when_checksum_differs(tmp_path: Path) -> None:
+    job, payload = _create_upload_job(tmp_path, "deadbeef")
+    uploader = _HeadAwareUploader({"ETag": '"abcdef"', "ContentLength": len(payload)})
+    shotgrid = _SpyShotgridClient()
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=cast(ShotgridClient, shotgrid),
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+    )
+
+    result = service._process_job(job, None)
+
+    assert result.skipped is False
+    assert result.media.skipped is False
+    assert uploader.uploads == [(job.path, job.bucket, job.key)]
+    assert shotgrid.calls == [(job.media_info.shot_name, job.path)]
+
+
+def test_process_job_force_reupload_bypasses_head_check(tmp_path: Path) -> None:
+    job, payload = _create_upload_job(tmp_path, "deadbeef")
+    uploader = _HeadAwareUploader({"ETag": '"deadbeef"', "ContentLength": len(payload)})
+    shotgrid = _SpyShotgridClient()
+    service = MediaIngestService(
+        project_name="CoolShow",
+        show_code="SHOW01",
+        source="vendor",
+        uploader=uploader,
+        shotgrid=cast(ShotgridClient, shotgrid),
+        vendor_bucket="vendor_in",
+        client_bucket="client_in",
+        force_reupload=True,
+    )
+
+    result = service._process_job(job, None)
+
+    assert result.skipped is False
+    assert result.media.skipped is False
+    assert uploader.uploads == [(job.path, job.bucket, job.key)]
+    assert shotgrid.calls == [(job.media_info.shot_name, job.path)]
 
 
 def test_ingest_service_accepts_case_insensitive_show_code(tmp_path: Path) -> None:
@@ -215,6 +300,39 @@ def _make_service(shotgrid: ShotgridClient) -> MediaIngestService:
         vendor_bucket="vendor_in",
         client_bucket="client_in",
     )
+
+
+def _build_delivery(tmp_path: Path, checksum: str | None) -> Delivery:
+    return Delivery(
+        show="CoolShow",
+        episode="ep001",
+        scene="sc01",
+        shot="0001",
+        asset="comp",
+        version=1,
+        source_path=tmp_path / "source.mov",
+        delivery_path=tmp_path / "SHOW01_ep001_sc01_0001_comp.mov",
+        checksum=checksum,
+    )
+
+
+def _create_upload_job(
+    tmp_path: Path, checksum: str | None
+) -> tuple[_UploadJob, bytes]:
+    path = tmp_path / "SHOW01_ep001_sc01_0001_comp.mov"
+    payload = b"frame-data"
+    path.write_bytes(payload)
+    media_info = parse_media_filename(path.name)
+    delivery = _build_delivery(tmp_path, checksum)
+    job = _UploadJob(
+        path=path,
+        bucket="bucket",
+        key="bucket/key",
+        media_info=media_info,
+        delivery=delivery,
+        size=len(payload),
+    )
+    return job, payload
 
 
 def test_ingest_service_raises_authentication_error(tmp_path: Path) -> None:

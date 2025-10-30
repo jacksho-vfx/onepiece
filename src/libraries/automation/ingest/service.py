@@ -142,6 +142,14 @@ class ResumableUploaderProtocol(UploaderProtocol, Protocol):
         """Upload using *checkpoint* state and invoke *progress_callback* per chunk."""
 
 
+@runtime_checkable
+class ObjectInspectorProtocol(Protocol):
+    """Uploader that can inspect remote S3 object metadata."""
+
+    def head_object(self, bucket: str, key: str) -> Mapping[str, Any]:
+        """Return metadata describing ``s3://bucket/key`` if it exists."""
+
+
 class UploadCheckpointStore:
     """Thread-safe persistence helper for resumable upload checkpoints."""
 
@@ -227,6 +235,7 @@ class IngestedMedia:
     key: str
     media_info: MediaInfo
     delivery: Delivery | None = None
+    skipped: bool = False
 
 
 @dataclass
@@ -299,6 +308,7 @@ class _UploadJob:
 class _UploadResult:
     media: IngestedMedia
     warnings: list[str]
+    skipped: bool = False
 
 
 def _normalise_manifest_entry(
@@ -501,6 +511,7 @@ class MediaIngestService:
     checkpoint_threshold_bytes: int = 512 * 1024 * 1024
     upload_chunk_size: int = DEFAULT_UPLOAD_CHUNK_SIZE
     upload_concurrency: int | None = None
+    force_reupload: bool = False
 
     def __post_init__(self) -> None:
         def _env_flag(name: str, default: bool) -> bool:
@@ -846,7 +857,8 @@ class MediaIngestService:
         for result in resolved_results:
             report.processed.append(result.media)
             report.warnings.extend(result.warnings)
-            notify(result.media.path, "uploaded")
+            status = "skipped_existing" if result.skipped else "uploaded"
+            notify(result.media.path, status)
 
         return report
 
@@ -923,6 +935,29 @@ class MediaIngestService:
                 bucket=job.bucket,
                 key=job.key,
             )
+
+        skip_upload = False
+        if not self.force_reupload:
+            metadata = self._inspect_existing_object(job)
+            if metadata is not None and self._object_matches(job, metadata):
+                skip_upload = True
+                log.info(
+                    "ingest.skip_existing_object",
+                    file=str(job.path),
+                    bucket=job.bucket,
+                    key=job.key,
+                )
+
+        if skip_upload:
+            media = IngestedMedia(
+                path=job.path,
+                bucket=job.bucket,
+                key=job.key,
+                media_info=job.media_info,
+                delivery=job.delivery,
+                skipped=True,
+            )
+            return _UploadResult(media=media, warnings=warnings, skipped=True)
 
         self._upload_job(job, checkpoint_store, should_checkpoint)
         version = self._register_version(job)
@@ -1085,6 +1120,102 @@ class MediaIngestService:
             and job.size >= self.checkpoint_threshold_bytes
         )
 
+    def _inspect_existing_object(self, job: _UploadJob) -> Mapping[str, Any] | None:
+        if not isinstance(self.uploader, ObjectInspectorProtocol):
+            return None
+
+        inspector = cast(ObjectInspectorProtocol, self.uploader)
+        try:
+            return inspector.head_object(job.bucket, job.key)
+        except Exception as exc:  # pragma: no cover - defensive
+            if self._is_missing_object_error(exc):
+                return None
+            log.warning(
+                "ingest.head_object_failed",
+                file=str(job.path),
+                bucket=job.bucket,
+                key=job.key,
+                error=str(exc),
+            )
+            return None
+
+    def _object_matches(self, job: _UploadJob, metadata: Mapping[str, Any]) -> bool:
+        expected_checksum = job.delivery.checksum if job.delivery else None
+        content_length = metadata.get("ContentLength")
+        size_matches = False
+        if isinstance(content_length, int):
+            size_matches = content_length == job.size
+        elif isinstance(content_length, str):
+            try:
+                size_matches = int(content_length) == job.size
+            except ValueError:
+                size_matches = False
+
+        if expected_checksum:
+            checksum_matches = self._metadata_checksum_matches(
+                metadata, expected_checksum
+            )
+            if not checksum_matches:
+                return False
+            if content_length is None:
+                return True
+            return size_matches
+
+        return size_matches
+
+    @staticmethod
+    def _metadata_checksum_matches(metadata: Mapping[str, Any], checksum: str) -> bool:
+        checksum_normalized = checksum.lower()
+
+        candidates: list[str] = []
+        etag = metadata.get("ETag")
+        if isinstance(etag, str):
+            candidates.append(etag)
+
+        metadata_block = metadata.get("Metadata")
+        if isinstance(metadata_block, Mapping):
+            for key in ("checksum", "Checksum", "md5", "sha256"):
+                value = metadata_block.get(key)
+                if isinstance(value, str):
+                    candidates.append(value)
+
+        for entry in (
+            "ChecksumSHA256",
+            "ChecksumSHA1",
+            "ChecksumCRC32",
+            "ChecksumCRC32C",
+            "ChecksumCRC64NVME",
+        ):
+            value = metadata.get(entry)
+            if isinstance(value, str):
+                candidates.append(value)
+
+        for candidate in candidates:
+            normalized = candidate.strip('"').lower()
+            if normalized == checksum_normalized:
+                return True
+
+        return False
+
+    @staticmethod
+    def _is_missing_object_error(error: Exception) -> bool:
+        if isinstance(error, FileNotFoundError):
+            return True
+
+        response = getattr(error, "response", None)
+        if isinstance(response, Mapping):
+            error_payload = response.get("Error")
+            if isinstance(error_payload, Mapping):
+                code = str(error_payload.get("Code", "")).lower()
+                if code in {"404", "nosuchkey", "notfound"}:
+                    return True
+
+        status_code = getattr(error, "status_code", None)
+        if status_code == 404:
+            return True
+
+        return False
+
 
 class S3ClientProtocol(Protocol):
     """Subset of :mod:`boto3`'s S3 client used for uploads."""
@@ -1099,6 +1230,9 @@ class S3ClientProtocol(Protocol):
         Config: object | None = ...,
     ) -> None:
         """Upload a local file to S3."""
+
+    def head_object(self, Bucket: str, Key: str) -> Mapping[str, Any]:
+        """Return metadata describing an existing object."""
 
     def create_multipart_upload(self, Bucket: str, Key: str) -> Mapping[str, Any]:
         """Initiate a multipart upload."""
@@ -1192,6 +1326,9 @@ class Boto3Uploader:
             max_concurrency=self._max_concurrency,
         )
         self._client.upload_file(str(file_path), bucket, key, Config=config)
+
+    def head_object(self, bucket: str, key: str) -> Mapping[str, Any]:
+        return self._client.head_object(Bucket=bucket, Key=key)
 
     def upload_resumable(
         self,
