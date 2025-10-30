@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Annotated, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
@@ -45,6 +45,13 @@ class PipelineRunSubmission(BaseModel):
     """Request payload used when triggering a pipeline run."""
 
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelinePruneRequest(BaseModel):
+    """Optional overrides supplied when pruning pipeline history."""
+
+    max_age_hours: float | None = Field(default=None, ge=0, alias="max_age_hours")
+    max_runs: int | None = Field(default=None, ge=0, alias="max_runs")
 
 
 app = FastAPI(title="OnePiece Pipeline API", version=TRAFALGAR_VERSION)
@@ -156,6 +163,23 @@ def trigger_pipeline_run(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
     return JSONResponse(status_code=201, content=run.serialise())
+
+
+@router.post("/runs/prune")
+def prune_runs(
+    submission: PipelinePruneRequest | None = None,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_MANAGE)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+
+    overrides = submission or PipelinePruneRequest()
+    max_age = (
+        timedelta(hours=overrides.max_age_hours)
+        if overrides.max_age_hours is not None
+        else None
+    )
+    result = orchestrator.prune_history(max_age=max_age, max_runs=overrides.max_runs)
+    return JSONResponse(content=result.serialise())
 
 
 @router.get("/runs/{run_id}")

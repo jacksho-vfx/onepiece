@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from apps.onepiece.config import ProfileContext, load_profile
 from apps.trafalgar.pipeline import (
+    PipelineRetentionPolicy,
     PipelineRun,
     PipelineRunEvent,
     get_pipeline_orchestrator,
@@ -460,3 +461,36 @@ def test_list_runs_endpoint_validates_since_parameter(client: TestClient) -> Non
     assert response.status_code == 400
     payload = response.json()
     assert payload["detail"] == "Invalid 'since' timestamp"
+
+
+def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
+    orchestrator = get_pipeline_orchestrator()
+    orchestrator._retention = PipelineRetentionPolicy(
+        max_age=timedelta(days=1), max_runs=1
+    )
+
+    now = datetime.now(timezone.utc)
+    _seed_run(
+        run_id="run-old",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=now - timedelta(days=2),
+    )
+    _seed_run(
+        run_id="run-recent",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=now - timedelta(hours=1),
+    )
+
+    response = client.post("/runs/prune", headers=_auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["removed_runs"] == 1
+    assert payload["remaining_runs"] == 1
+    assert payload["max_runs"] == 1
+    assert payload["max_age_seconds"] == 86400
+
+    runs = orchestrator.list_runs()
+    assert [run.run_id for run in runs] == ["run-recent"]

@@ -1,5 +1,6 @@
 """Typer CLI entry points for the Trafalgar dashboard services."""
 
+from datetime import timedelta
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
@@ -197,6 +198,43 @@ def pipeline_run(
     payload = run.serialise()
     typer.echo(f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']}).")
     typer.echo(f"Current status: {payload['status']}")
+
+
+@pipeline_app.command("prune")
+def pipeline_prune(
+    max_age_hours: float | None = typer.Option(
+        None,
+        "--max-age-hours",
+        help="Prune runs created before the provided number of hours ago.",
+        min=0.0,
+    ),
+    max_runs: int | None = typer.Option(
+        None,
+        "--max-runs",
+        help="Retain at most this many recent runs when pruning.",
+        min=0,
+    ),
+) -> None:
+    """Apply pipeline run retention policies and report the outcome."""
+
+    orchestrator = get_pipeline_orchestrator()
+
+    if max_age_hours is None and max_runs is None:
+        policy = orchestrator.retention_policy
+        if policy is None or not policy.configured:
+            typer.echo("No retention policy configured; nothing to prune.")
+            raise typer.Exit(code=0)
+
+    max_age: timedelta | None = None
+    if max_age_hours is not None:
+        max_age = timedelta(hours=max_age_hours)
+
+    result = orchestrator.prune_history(max_age=max_age, max_runs=max_runs)
+
+    typer.echo(
+        f"Removed {result.removed_runs} runs and {result.removed_events} events from the store."
+    )
+    typer.echo(f"{result.remaining_runs} runs remain after pruning.")
 
 
 @pipeline_app.command("push")
