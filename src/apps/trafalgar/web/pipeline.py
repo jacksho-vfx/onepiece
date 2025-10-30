@@ -192,7 +192,12 @@ def trigger_pipeline_run(
 ) -> JSONResponse:
     orchestrator = get_pipeline_orchestrator()
     try:
-        run = orchestrator.trigger_run(pipeline, parameters=submission.parameters)
+        run = orchestrator.trigger_run(
+            pipeline,
+            parameters=submission.parameters,
+            submitted_by=_principal.identifier,
+            roles=_principal.roles,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
     except ValueError as exc:

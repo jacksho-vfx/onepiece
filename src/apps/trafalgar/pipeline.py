@@ -323,6 +323,8 @@ class PipelineRun:
     finished_at: datetime | None = None
     duration_ms: int | None = None
     metrics: Mapping[str, Any] = field(default_factory=dict)
+    submitted_by: str | None = None
+    roles: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         object.__setattr__(self, "parameters", dict(self.parameters))
@@ -331,6 +333,24 @@ class PipelineRun:
             object.__setattr__(self, "metrics", {})
         else:
             object.__setattr__(self, "metrics", dict(self.metrics))
+        submitted_by = self.submitted_by
+        if submitted_by is not None:
+            text = str(submitted_by).strip()
+            object.__setattr__(self, "submitted_by", text or None)
+        roles: tuple[str, ...]
+        if self.roles:
+            seen: set[str] = set()
+            normalised: list[str] = []
+            for role in self.roles:
+                text = str(role).strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                normalised.append(text)
+            roles = tuple(sorted(normalised))
+        else:
+            roles = ()
+        object.__setattr__(self, "roles", roles)
 
     def serialise(self) -> Mapping[str, Any]:
         timing: dict[str, Any] = {
@@ -384,6 +404,8 @@ class PipelineRun:
             "definition_snapshot": dict(self.definition_snapshot),
             "timing": timing,
             "step_metrics": steps_payload,
+            "submitted_by": self.submitted_by,
+            "roles": list(self.roles),
         }
 
 
@@ -621,6 +643,30 @@ class PipelineRunStore:
         return {}
 
     @staticmethod
+    def _encode_roles(roles: Iterable[str]) -> str:
+        return json.dumps(list(roles))
+
+    @staticmethod
+    def _decode_roles(payload: str | None) -> tuple[str, ...]:
+        if not payload:
+            return ()
+        try:
+            decoded = json.loads(payload)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(decoded, list):
+            return ()
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for role in decoded:
+            text = str(role).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            ordered.append(text)
+        return tuple(sorted(ordered))
+
+    @staticmethod
     def _encode_optional_datetime(value: datetime | None) -> str | None:
         if value is None:
             return None
@@ -775,7 +821,9 @@ class PipelineRunStore:
                     started_at TEXT,
                     finished_at TEXT,
                     duration_ms INTEGER,
-                    metrics TEXT NOT NULL DEFAULT '{}'
+                    metrics TEXT NOT NULL DEFAULT '{}',
+                    submitted_by TEXT,
+                    submitted_roles TEXT
                 )
                 """
             )
@@ -826,6 +874,16 @@ class PipelineRunStore:
                 self._connection.execute(
                     "UPDATE pipeline_runs SET metrics = '{}' WHERE metrics IS NULL"
                 )
+        if "submitted_by" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN submitted_by TEXT"
+                )
+        if "submitted_roles" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN submitted_roles TEXT"
+                )
 
     def create_run(self, run: PipelineRun, initial_event: PipelineRunEvent) -> None:
         payload = self._encode_parameters(run.parameters)
@@ -835,13 +893,15 @@ class PipelineRunStore:
         metrics_payload = self._encode_metrics(metrics)
         encoded_started_at = self._encode_optional_datetime(run.started_at)
         encoded_finished_at = self._encode_optional_datetime(run.finished_at)
+        encoded_roles = self._encode_roles(run.roles)
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO pipeline_runs (
                     run_id, pipeline, status, created_at, updated_at, parameters,
-                    definition_snapshot, started_at, finished_at, duration_ms, metrics
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    definition_snapshot, started_at, finished_at, duration_ms, metrics,
+                    submitted_by, submitted_roles
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
@@ -855,6 +915,8 @@ class PipelineRunStore:
                     encoded_finished_at,
                     run.duration_ms,
                     metrics_payload,
+                    run.submitted_by,
+                    encoded_roles,
                 ),
             )
             self._connection.execute(
@@ -986,7 +1048,7 @@ class PipelineRunStore:
                 """
                 SELECT run_id, pipeline, status, created_at, updated_at,
                        parameters, definition_snapshot, started_at, finished_at,
-                       duration_ms, metrics
+                       duration_ms, metrics, submitted_by, submitted_roles
                 FROM pipeline_runs
                 WHERE run_id = ?
                 """,
@@ -1011,6 +1073,8 @@ class PipelineRunStore:
             finished_at=self._decode_optional_datetime(row["finished_at"]),
             duration_ms=row["duration_ms"],
             metrics=self._normalise_metrics(self._decode_metrics(row["metrics"])),
+            submitted_by=row["submitted_by"],
+            roles=self._decode_roles(row["submitted_roles"]),
         )
 
     def list_runs(
@@ -1037,7 +1101,7 @@ class PipelineRunStore:
             (
                 "SELECT run_id, pipeline, status, created_at, updated_at, "
                 "parameters, definition_snapshot, started_at, finished_at, "
-                "duration_ms, metrics"
+                "duration_ms, metrics, submitted_by, submitted_roles"
             ),
             "FROM pipeline_runs",
         ]
@@ -1073,6 +1137,8 @@ class PipelineRunStore:
                 finished_at=self._decode_optional_datetime(row["finished_at"]),
                 duration_ms=row["duration_ms"],
                 metrics=self._normalise_metrics(self._decode_metrics(row["metrics"])),
+                submitted_by=row["submitted_by"],
+                roles=self._decode_roles(row["submitted_roles"]),
             )
             for row in rows
         ]
@@ -1478,13 +1544,23 @@ class PipelineOrchestrator:
         return replace(definition, pipeline=resolved)
 
     def trigger_run(
-        self, pipeline_name: str, *, parameters: Mapping[str, Any] | None = None
+        self,
+        pipeline_name: str,
+        *,
+        parameters: Mapping[str, Any] | None = None,
+        submitted_by: str | None = None,
+        roles: Iterable[str] | None = None,
     ) -> PipelineRun:
         definition = self.get_pipeline(pipeline_name)
         parameters = definition.resolve_parameters(parameters)
         definition_snapshot = definition.serialise()
         run_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
+        role_values: tuple[str, ...]
+        if roles is None:
+            role_values = ()
+        else:
+            role_values = tuple(str(role) for role in roles)
         run = PipelineRun(
             run_id=run_id,
             pipeline=definition.name,
@@ -1493,6 +1569,8 @@ class PipelineOrchestrator:
             updated_at=now,
             parameters=parameters,
             definition_snapshot=definition_snapshot,
+            submitted_by=submitted_by,
+            roles=role_values,
         )
         initial_event = PipelineRunEvent(
             run_id=run_id,

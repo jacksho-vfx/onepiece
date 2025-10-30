@@ -334,6 +334,8 @@ def test_trigger_pipeline_run_returns_run_payload(client: TestClient) -> None:
     }
     assert payload["status"] == "running"
     assert "created_at" in payload
+    assert payload["submitted_by"] == "suite"
+    assert "pipeline:run" in payload.get("roles", [])
 
 
 def test_trigger_pipeline_run_rejects_missing_required_parameter(
