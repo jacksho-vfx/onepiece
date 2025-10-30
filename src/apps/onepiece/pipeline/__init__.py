@@ -61,6 +61,14 @@ class PipelineClient(Protocol):
     ) -> Iterable[Mapping[str, Any]]:  # pragma: no cover - Protocol
         ...
 
+    def get_stats(
+        self,
+        *,
+        since: str | None = None,
+        include_durations: bool = False,
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
     def close(self) -> None:  # pragma: no cover - Protocol
         ...
 
@@ -179,6 +187,28 @@ class LocalPipelineClient:
                 raise item
             yield item  # type: ignore[misc]
 
+    def get_stats(
+        self,
+        *,
+        since: str | None = None,
+        include_durations: bool = False,
+    ) -> Mapping[str, Any]:
+        parsed_since: datetime | None = None
+        if since is not None:
+            try:
+                parsed_since = datetime.fromisoformat(since)
+            except ValueError as exc:
+                raise PipelineClientError("Invalid 'since' timestamp.") from exc
+            if parsed_since.tzinfo is None:
+                parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+            else:
+                parsed_since = parsed_since.astimezone(timezone.utc)
+
+        stats = self._orchestrator.aggregate_runs(
+            since=parsed_since, include_durations=include_durations
+        )
+        return {"pipelines": stats}
+
 
 class RemotePipelineClient:
     """Client that communicates with the Trafalgar pipeline API."""
@@ -284,6 +314,23 @@ class RemotePipelineClient:
                 raise PipelineClientError("Unable to reach pipeline API.") from exc
 
         return _generator()
+
+    def get_stats(
+        self,
+        *,
+        since: str | None = None,
+        include_durations: bool = False,
+    ) -> Mapping[str, Any]:
+        params: dict[str, Any] = {}
+        if since is not None:
+            params["since"] = since
+        if include_durations:
+            params["include_durations"] = True
+        response = self._request("GET", "runs/stats", params=params or None)
+        payload = response.json()
+        if not isinstance(payload, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return dict(payload)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
@@ -458,6 +505,44 @@ def _coerce_display_text(value: Any) -> str:
     return ""
 
 
+def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
+    pipelines = stats.get("pipelines")
+    if not isinstance(pipelines, Mapping) or not pipelines:
+        return []
+
+    lines: list[str] = []
+    for pipeline in sorted(pipelines):
+        lines.append(f"Pipeline: {pipeline}")
+        statuses = pipelines[pipeline]
+        if not isinstance(statuses, Mapping) or not statuses:
+            lines.append("  No runs recorded.")
+            continue
+        for status in sorted(statuses):
+            entry = statuses[status]
+            count = entry.get("count", 0)
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                count_int = 0
+            plural = "s" if count_int != 1 else ""
+            line = f"  {status}: {count_int} run{plural}"
+            durations = entry.get("durations")
+            if isinstance(durations, Mapping):
+                average = durations.get("average_seconds")
+                minimum = durations.get("min_seconds")
+                maximum = durations.get("max_seconds")
+                if all(
+                    isinstance(value, (int, float))
+                    for value in (average, minimum, maximum)
+                ):
+                    line += (
+                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "
+                        f"max {float(maximum):.2f}s)"
+                    )
+            lines.append(line)
+    return lines
+
+
 def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
     parameters: dict[str, str] = {}
     if not raw:
@@ -611,6 +696,40 @@ def list_runs(
     for run in runs:
         for line in _format_pipeline_run(run):
             typer.echo(line)
+
+
+@app.command("stats")
+def show_statistics(
+    include_durations: bool = typer.Option(
+        False,
+        "--include-durations",
+        "-d",
+        help="Display duration summaries for each status grouping.",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Restrict statistics to runs created on or after the ISO timestamp.",
+    ),
+) -> None:
+    """Display aggregated pipeline run statistics."""
+
+    with _using_client() as client:
+        try:
+            stats = client.get_stats(
+                since=since, include_durations=include_durations
+            )
+        except PipelineClientError as exc:
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    pipelines = stats.get("pipelines")
+    if not isinstance(pipelines, Mapping) or not pipelines:
+        typer.echo("No pipeline run statistics available.")
+        raise typer.Exit(code=0)
+
+    for line in _format_pipeline_statistics(stats):
+        typer.echo(line)
 
 
 @app.command("run-status")

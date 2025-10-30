@@ -31,12 +31,15 @@ class StubPipelineClient:
     runs_error: PipelineClientError | None = None
     run_status_error: PipelineClientError | None = None
     watch_error: PipelineClientError | None = None
+    stats_payload: Mapping[str, Any] | None = None
+    stats_error: PipelineClientError | None = None
 
     closed: bool = False
     requested_name: str | None = None
     run_parameters: Mapping[str, Any] | None = None
     list_runs_kwargs: Mapping[str, Any] | None = None
     requested_run_id: str | None = None
+    stats_kwargs: Mapping[str, Any] | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -95,6 +98,22 @@ class StubPipelineClient:
         for event in self.run_events or []:
             yield dict(event)
 
+    def get_stats(
+        self,
+        *,
+        since: str | None = None,
+        include_durations: bool = False,
+    ) -> Mapping[str, Any]:
+        self.stats_kwargs = {
+            "since": since,
+            "include_durations": include_durations,
+        }
+        if self.stats_error:
+            raise self.stats_error
+        if self.stats_payload is None:
+            raise AssertionError("stats payload was not configured")
+        return dict(self.stats_payload)
+
     def close(self) -> None:
         self.closed = True
 
@@ -117,6 +136,7 @@ def test_pipeline_command_group_loads() -> None:
     assert "describe" in result.output
     assert "run" in result.output
     assert "runs" in result.output
+    assert "stats" in result.output
     assert "run-status" in result.output
     assert "watch" in result.output
 
@@ -342,6 +362,58 @@ def test_pipeline_runs_failure(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 1
     assert "Pipeline request failed: boom" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_stats_displays_results(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        stats_payload={
+            "pipelines": {
+                "render": {
+                    "succeeded": {
+                        "count": 2,
+                        "durations": {
+                            "average_seconds": 12.5,
+                            "min_seconds": 10.0,
+                            "max_seconds": 15.0,
+                        },
+                    },
+                    "failed": {"count": 1},
+                }
+            }
+        }
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "stats",
+            "--include-durations",
+            "--since",
+            "2024-01-01T00:00:00+00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert "Pipeline: render" in result.output
+    assert "succeeded: 2 runs (avg 12.50s" in result.output
+    assert client.stats_kwargs == {
+        "since": "2024-01-01T00:00:00+00:00",
+        "include_durations": True,
+    }
+    assert client.closed is True
+
+
+def test_pipeline_stats_handles_empty(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(stats_payload={"pipelines": {}})
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "stats"])
+
+    assert result.exit_code == 0
+    assert "No pipeline run statistics available." in result.output
     assert client.closed is True
 
 

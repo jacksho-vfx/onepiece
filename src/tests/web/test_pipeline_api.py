@@ -126,16 +126,18 @@ def _seed_run(
     pipeline: str,
     status: str,
     created_at: datetime,
+    updated_at: datetime | None = None,
 ) -> None:
     orchestrator = get_pipeline_orchestrator()
     store = orchestrator._store
+    finished_at = updated_at or created_at
     store.create_run(
         PipelineRun(
             run_id=run_id,
             pipeline=pipeline,
             status=status,
             created_at=created_at,
-            updated_at=created_at,
+            updated_at=finished_at,
             parameters={},
             definition_snapshot={"name": pipeline, "steps": []},
         ),
@@ -143,7 +145,7 @@ def _seed_run(
             run_id=run_id,
             pipeline=pipeline,
             status=status,
-            timestamp=created_at,
+            timestamp=finished_at,
             parameters={},
         ),
     )
@@ -457,6 +459,84 @@ def test_list_runs_endpoint_supports_filters(client: TestClient) -> None:
 
 def test_list_runs_endpoint_validates_since_parameter(client: TestClient) -> None:
     response = client.get("/runs", headers=_auth_headers(), params={"since": "invalid"})
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["detail"] == "Invalid 'since' timestamp"
+
+
+def test_run_stats_endpoint_returns_grouped_counts(client: TestClient) -> None:
+    base = datetime(2024, 5, 1, 12, tzinfo=timezone.utc)
+    _seed_run(
+        run_id="run-1",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(minutes=2),
+    )
+    _seed_run(
+        run_id="run-2",
+        pipeline="render_shots",
+        status="failed",
+        created_at=base + timedelta(minutes=5),
+        updated_at=base + timedelta(minutes=7),
+    )
+    _seed_run(
+        run_id="run-3",
+        pipeline="publish_assets",
+        status="succeeded",
+        created_at=base + timedelta(minutes=10),
+        updated_at=base + timedelta(minutes=12),
+    )
+
+    response = client.get("/runs/stats", headers=_auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pipelines"]["render_shots"]["failed"] == {"count": 1}
+    assert payload["pipelines"]["render_shots"]["succeeded"] == {"count": 1}
+    assert payload["pipelines"]["publish_assets"] == {"succeeded": {"count": 1}}
+
+
+def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
+    base = datetime(2024, 6, 1, 8, tzinfo=timezone.utc)
+    _seed_run(
+        run_id="run-1",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(seconds=20),
+    )
+    _seed_run(
+        run_id="run-2",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base + timedelta(seconds=20),
+        updated_at=base + timedelta(seconds=70),
+    )
+
+    response = client.get(
+        "/runs/stats",
+        headers=_auth_headers(),
+        params={"include_durations": "true", "since": base.isoformat()},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    stats = payload["pipelines"]["render_shots"]["succeeded"]
+    assert stats["count"] == 2
+    durations = stats["durations"]
+    assert durations["min_seconds"] == 20.0
+    assert durations["max_seconds"] == 50.0
+    assert durations["average_seconds"] == 35.0
+
+
+def test_run_stats_endpoint_validates_since_parameter(client: TestClient) -> None:
+    response = client.get(
+        "/runs/stats",
+        headers=_auth_headers(),
+        params={"since": "not-a-timestamp"},
+    )
 
     assert response.status_code == 400
     payload = response.json()

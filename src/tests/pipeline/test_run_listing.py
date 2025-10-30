@@ -45,6 +45,36 @@ def _seed_runs(store: PipelineRunStore) -> list[PipelineRun]:
     return seeded
 
 
+def _create_run(
+    store: PipelineRunStore,
+    *,
+    run_id: str,
+    pipeline: str,
+    status: str,
+    created_at: datetime,
+    updated_at: datetime,
+) -> None:
+    run = PipelineRun(
+        run_id=run_id,
+        pipeline=pipeline,
+        status=status,
+        created_at=created_at,
+        updated_at=updated_at,
+        parameters={},
+        definition_snapshot={"name": pipeline, "steps": []},
+    )
+    store.create_run(
+        run,
+        PipelineRunEvent(
+            run_id=run_id,
+            pipeline=pipeline,
+            status=status,
+            timestamp=created_at,
+            parameters={},
+        ),
+    )
+
+
 def test_list_runs_orders_descending_by_creation() -> None:
     store = PipelineRunStore()
     _seed_runs(store)
@@ -80,3 +110,117 @@ def test_orchestrator_list_runs_proxies_store() -> None:
     runs = orchestrator.list_runs(limit=2)
 
     assert [run.run_id for run in runs] == ["run-3", "run-2"]
+
+
+def test_aggregate_runs_groups_statistics() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 2, 1, 10, tzinfo=timezone.utc)
+    _create_run(
+        store,
+        run_id="run-1",
+        pipeline="render",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(minutes=5),
+    )
+    _create_run(
+        store,
+        run_id="run-2",
+        pipeline="render",
+        status="failed",
+        created_at=base + timedelta(minutes=10),
+        updated_at=base + timedelta(minutes=12),
+    )
+    _create_run(
+        store,
+        run_id="run-3",
+        pipeline="publish",
+        status="succeeded",
+        created_at=base + timedelta(minutes=20),
+        updated_at=base + timedelta(minutes=32),
+    )
+
+    stats = store.aggregate_runs()
+
+    assert stats == {
+        "publish": {"succeeded": {"count": 1}},
+        "render": {
+            "failed": {"count": 1},
+            "succeeded": {"count": 1},
+        },
+    }
+
+
+def test_aggregate_runs_optionally_includes_durations() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 3, 1, 9, tzinfo=timezone.utc)
+    _create_run(
+        store,
+        run_id="run-1",
+        pipeline="render",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(seconds=30),
+    )
+    _create_run(
+        store,
+        run_id="run-2",
+        pipeline="render",
+        status="succeeded",
+        created_at=base + timedelta(seconds=30),
+        updated_at=base + timedelta(seconds=75),
+    )
+
+    stats = store.aggregate_runs(include_durations=True)
+
+    durations = stats["render"]["succeeded"]["durations"]
+    assert durations is not None
+    assert durations["min_seconds"] == 30.0
+    assert durations["max_seconds"] == 45.0
+    assert durations["average_seconds"] == 37.5
+
+
+def test_aggregate_runs_supports_since_filter() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 4, 1, 8, tzinfo=timezone.utc)
+    _create_run(
+        store,
+        run_id="run-1",
+        pipeline="render",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(minutes=1),
+    )
+    _create_run(
+        store,
+        run_id="run-2",
+        pipeline="render",
+        status="failed",
+        created_at=base + timedelta(minutes=2),
+        updated_at=base + timedelta(minutes=3),
+    )
+
+    stats = store.aggregate_runs(since=base + timedelta(minutes=1, seconds=1))
+
+    assert stats == {"render": {"failed": {"count": 1}}}
+
+
+def test_orchestrator_aggregate_runs_proxies_store() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 5, 1, 7, tzinfo=timezone.utc)
+    _create_run(
+        store,
+        run_id="run-1",
+        pipeline="render",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(minutes=2),
+    )
+    orchestrator = PipelineOrchestrator(store=store)
+
+    stats = orchestrator.aggregate_runs(include_durations=True)
+
+    assert "render" in stats
+    succeeded = stats["render"]["succeeded"]
+    assert succeeded["count"] == 1
+    assert succeeded["durations"]["average_seconds"] == 120.0

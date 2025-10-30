@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
@@ -254,3 +255,67 @@ def test_pipeline_delete_invokes_deregister(
     assert result.exit_code == 0
     orchestrator.deregister.assert_called_once_with("custom")
     assert "Pipeline 'custom' deregistered" in result.stdout
+
+
+def test_pipeline_stats_command_displays_results(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    stats = {
+        "render": {
+            "succeeded": {
+                "count": 3,
+                "durations": {
+                    "average_seconds": 30.0,
+                    "min_seconds": 20.0,
+                    "max_seconds": 45.0,
+                },
+            },
+            "failed": {"count": 1},
+        }
+    }
+    orchestrator = SimpleNamespace(aggregate_runs=Mock(return_value=stats))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        [
+            "pipeline",
+            "stats",
+            "--include-durations",
+            "--since",
+            "2024-01-01T00:00:00+00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    orchestrator.aggregate_runs.assert_called_once()
+    kwargs = orchestrator.aggregate_runs.call_args.kwargs
+    assert kwargs["include_durations"] is True
+    assert kwargs["since"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert "Pipeline: render" in result.stdout
+    assert "succeeded: 3 runs (avg 30.00s" in result.stdout
+
+
+def test_pipeline_stats_command_handles_empty(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    orchestrator = SimpleNamespace(aggregate_runs=Mock(return_value={}))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "stats"])
+
+    assert result.exit_code == 0
+    assert orchestrator.aggregate_runs.called
+    assert "No pipeline run statistics available." in result.stdout
