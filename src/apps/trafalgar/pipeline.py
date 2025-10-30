@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, AsyncIterator, Iterable, Iterator, Mapping
+from typing import Any, AsyncIterator, Iterable, Iterator, Mapping, cast
 
 import json
 import sqlite3
@@ -156,6 +156,103 @@ class PipelineRunEvent:
 class _RunEventSubscriber:
     loop: asyncio.AbstractEventLoop
     queue: asyncio.Queue[PipelineRunEvent]
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineRetentionPolicy:
+    """Constraints applied when pruning historical pipeline runs."""
+
+    max_age: timedelta | None = None
+    max_runs: int | None = None
+
+    def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
+        if self.max_age is not None and self.max_age.total_seconds() < 0:
+            msg = "retention max_age must be non-negative"
+            raise ValueError(msg)
+        if self.max_runs is not None and self.max_runs < 0:
+            msg = "retention max_runs must be non-negative"
+            raise ValueError(msg)
+
+    @property
+    def configured(self) -> bool:
+        return self.max_age is not None or self.max_runs is not None
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> PipelineRetentionPolicy | None:
+        """Construct a retention policy from a configuration mapping."""
+
+        if not payload:
+            return None
+
+        if not isinstance(payload, Mapping):  # pragma: no cover - defensive guard
+            msg = "retention configuration must be a mapping"
+            raise TypeError(msg)
+
+        max_runs_raw = payload.get("max_runs")
+        max_runs: int | None
+        if max_runs_raw is None:
+            max_runs = None
+        else:
+            try:
+                max_runs = int(max_runs_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("retention max_runs must be an integer") from exc
+            if max_runs < 0:
+                raise ValueError("retention max_runs must be non-negative")
+
+        duration_keys = {
+            "seconds": 1,
+            "minutes": 60,
+            "hours": 3600,
+            "days": 86400,
+        }
+        window_seconds: float | None = None
+        for key, multiplier in duration_keys.items():
+            if key not in payload:
+                continue
+            if window_seconds is not None:
+                msg = "only one of seconds/minutes/hours/days may be provided"
+                raise ValueError(msg)
+            raw_value = payload[key]
+            try:
+                window_seconds = float(raw_value) * multiplier
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"retention {key} value must be numeric") from exc
+        max_age: timedelta | None
+        if window_seconds is None:
+            max_age = None
+        else:
+            if window_seconds < 0:
+                raise ValueError("retention duration must be non-negative")
+            max_age = timedelta(seconds=window_seconds)
+
+        policy = cls(max_age=max_age, max_runs=max_runs)
+        if not policy.configured:
+            return None
+        return policy
+
+
+@dataclass(slots=True)
+class PipelinePruneResult:
+    """Outcome generated after pruning pipeline run history."""
+
+    removed_runs: int
+    removed_events: int
+    remaining_runs: int
+    max_age: timedelta | None = None
+    max_runs: int | None = None
+
+    def serialise(self) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {
+            "removed_runs": self.removed_runs,
+            "removed_events": self.removed_events,
+            "remaining_runs": self.remaining_runs,
+            "max_runs": self.max_runs,
+        }
+        payload["max_age_seconds"] = (
+            int(self.max_age.total_seconds()) if self.max_age is not None else None
+        )
+        return payload
 
 
 class PipelineRunStore:
@@ -502,6 +599,104 @@ class PipelineRunStore:
         for row in rows:
             yield self._row_to_run_event(row)
 
+    def prune(
+        self,
+        *,
+        max_age: timedelta | None = None,
+        max_runs: int | None = None,
+        now: datetime | None = None,
+    ) -> PipelinePruneResult:
+        if max_age is None and max_runs is None:
+            with self._lock:
+                remaining = self._count_runs_locked()
+            return PipelinePruneResult(
+                removed_runs=0,
+                removed_events=0,
+                remaining_runs=remaining,
+                max_age=None,
+                max_runs=None,
+            )
+
+        if max_age is not None and max_age.total_seconds() < 0:
+            msg = "max_age must be non-negative"
+            raise ValueError(msg)
+        if max_runs is not None and max_runs < 0:
+            msg = "max_runs must be non-negative"
+            raise ValueError(msg)
+
+        moment = now or datetime.now(timezone.utc)
+
+        with self._lock:
+            cursor = self._connection.execute(
+                """
+                SELECT run_id, created_at
+                FROM pipeline_runs
+                ORDER BY created_at ASC, run_id ASC
+                """
+            )
+            rows = cursor.fetchall()
+
+            cutoff = moment - max_age if max_age is not None else None
+            removal: list[str] = []
+
+            for row in rows:
+                if cutoff is None:
+                    break
+                created = self._decode_datetime(row["created_at"])
+                if created < cutoff:
+                    removal.append(row["run_id"])
+                else:
+                    break
+
+            if max_runs is not None:
+                retained = [
+                    row["run_id"] for row in rows if row["run_id"] not in removal
+                ]
+                overflow = len(retained) - max_runs
+                if overflow > 0:
+                    removal.extend(retained[:overflow])
+
+            if not removal:
+                remaining = len(rows)
+                return PipelinePruneResult(
+                    removed_runs=0,
+                    removed_events=0,
+                    remaining_runs=remaining,
+                    max_age=max_age,
+                    max_runs=max_runs,
+                )
+
+            placeholders = ",".join("?" for _ in removal)
+            parameters = tuple(removal)
+
+            with self._connection:
+                events_deleted = self._connection.execute(
+                    f"DELETE FROM pipeline_run_events WHERE run_id IN ({placeholders})",
+                    parameters,
+                ).rowcount
+                runs_deleted = self._connection.execute(
+                    f"DELETE FROM pipeline_runs WHERE run_id IN ({placeholders})",
+                    parameters,
+                ).rowcount
+
+            for run_id in removal:
+                self._subscribers.pop(run_id, None)
+
+            remaining = self._count_runs_locked()
+
+        return PipelinePruneResult(
+            removed_runs=int(runs_deleted or 0),
+            removed_events=int(events_deleted or 0),
+            remaining_runs=int(remaining),
+            max_age=max_age,
+            max_runs=max_runs,
+        )
+
+    def _count_runs_locked(self) -> int:
+        cursor = self._connection.execute("SELECT COUNT(*) FROM pipeline_runs")
+        row = cursor.fetchone()
+        return int(row[0]) if row is not None else 0
+
     def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
         with self._lock:
             rows = self._load_run_event_rows_locked(run_id)
@@ -633,6 +828,7 @@ class PipelineOrchestrator:
         store: PipelineRunStore | None = None,
         executor: pipeline_executor.PipelineExecutor | None = None,
         worker_pool: ThreadPoolExecutor | None = None,
+        retention: PipelineRetentionPolicy | None = None,
     ) -> None:
         self._definitions: dict[str, PipelineDefinition] = {}
         self._lock = Lock()
@@ -643,6 +839,7 @@ class PipelineOrchestrator:
         )
         self._shutdown = False
         self._pending: set[Future[None]] = set()
+        self._retention = retention
         if definitions:
             for definition in definitions:
                 self.register(definition)
@@ -847,6 +1044,22 @@ class PipelineOrchestrator:
     def serialise_run_events(self, run_id: str) -> list[Mapping[str, Any]]:
         return [event.serialise() for event in self.iter_run_events(run_id)]
 
+    @property
+    def retention_policy(self) -> PipelineRetentionPolicy | None:
+        return self._retention
+
+    def prune_history(
+        self,
+        *,
+        max_age: timedelta | None = None,
+        max_runs: int | None = None,
+        now: datetime | None = None,
+    ) -> PipelinePruneResult:
+        if max_age is None and max_runs is None and self._retention is not None:
+            max_age = self._retention.max_age
+            max_runs = self._retention.max_runs
+        return self._store.prune(max_age=max_age, max_runs=max_runs, now=now)
+
 
 _default_orchestrator: PipelineOrchestrator | None = None
 
@@ -861,9 +1074,11 @@ def get_pipeline_orchestrator(
         if storage is not None and storage_config is not None:
             msg = "provide either a storage instance or configuration, not both"
             raise ValueError(msg)
+        retention: PipelineRetentionPolicy | None = None
         if storage is None and storage_config is not None:
             storage = PipelineRunStore.from_config(storage_config)
-        _default_orchestrator = PipelineOrchestrator(store=storage)
+            retention = _retention_policy_from_storage(storage_config)
+        _default_orchestrator = PipelineOrchestrator(store=storage, retention=retention)
     elif storage is not None or storage_config is not None:
         msg = (
             "pipeline orchestrator is already configured; "
@@ -923,6 +1138,19 @@ def pipeline_definition_from_profile_entry(
     )
 
 
+def _retention_policy_from_storage(
+    storage_config: Mapping[str, Any]
+) -> PipelineRetentionPolicy | None:
+    retention_config = storage_config.get("retention")
+    if retention_config is None:
+        return None
+    if not isinstance(retention_config, Mapping):
+        msg = "pipeline.storage.retention must be a mapping"
+        raise ValueError(msg)
+    retention_mapping = cast(Mapping[str, Any], retention_config)
+    return PipelineRetentionPolicy.from_mapping(retention_mapping)
+
+
 def pipeline_definitions_from_profile(
     profile: ProfileContext,
 ) -> tuple[PipelineDefinition, ...]:
@@ -947,10 +1175,12 @@ def configure_orchestrator_from_profile(
 
     definitions = pipeline_definitions_from_profile(profile)
     effective_storage = storage_config or profile.pipeline_storage
-    store = (
-        PipelineRunStore.from_config(effective_storage) if effective_storage else None
-    )
-    orchestrator = PipelineOrchestrator(definitions, store=store)
+    retention = None
+    store = None
+    if effective_storage:
+        retention = _retention_policy_from_storage(effective_storage)
+        store = PipelineRunStore.from_config(effective_storage)
+    orchestrator = PipelineOrchestrator(definitions, store=store, retention=retention)
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
 
@@ -961,6 +1191,8 @@ __all__ = [
     "PipelineRun",
     "PipelineRunEvent",
     "PipelineRunStore",
+    "PipelineRetentionPolicy",
+    "PipelinePruneResult",
     "get_pipeline_orchestrator",
     "set_pipeline_orchestrator",
     "pipeline_definition_from_profile_entry",

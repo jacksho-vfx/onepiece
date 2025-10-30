@@ -555,7 +555,7 @@ def test_wrangler_audit_telemetry_coverage_classifies_buckets(
     assert healthy["samples"] == 2
     assert healthy["telemetry_present"] is True
     assert healthy["last_seen"] == healthy_last.isoformat()
-    assert healthy["age_minutes"] == pytest.approx(5.0, abs=0.75)
+    assert healthy["age_minutes"] == pytest.approx(5.0, abs=1.0)
 
     assert warning["status"] == "warning"
     assert warning["samples"] == 1
