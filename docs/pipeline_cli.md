@@ -200,7 +200,11 @@ The `docs/examples/pipelines/` directory contains ready-made definitions for
 sequential and event-driven automations. Pair the manifests with the matching
 JSON payloads to simulate orchestrator runs locally or inside CI. Use them as a
 starting point when shaping your own `onepiece.toml` pipelines or when
-demonstrating the orchestrator to stakeholders. 【F:docs/examples/pipelines/linear/pipeline.yaml†L1-L40】【F:docs/examples/pipelines/event-driven/pipeline.yaml†L1-L80】
+demonstrating the orchestrator to stakeholders. The orchestrator accepts the
+manifest-style `uses`/`with` steps included in the examples as well as the
+lower-level `provider`/`config` schema used by profile configuration, so you
+can iterate on whichever format your team prefers before promoting definitions
+into version control. 【F:docs/examples/pipelines/linear/pipeline.yaml†L1-L40】【F:docs/examples/pipelines/event-driven/pipeline.yaml†L1-L80】
 
 For a step-by-step walkthrough that ties the manifests back to CLI usage, see
 [§13 in `docs/cli_walkthroughs.md`](cli_walkthroughs.md#13-bootstrap-pipelines-with-sample-manifests).

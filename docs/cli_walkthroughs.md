@@ -490,6 +490,12 @@ reference placeholder paths such as `manifests/ep101-delivery.json` and
 `reports/{{ payload.delivery_id }}-reconcile.json`; replace them with the real
 locations inside your show repository or object store before testing.
 
+Both manifests use the concise `uses`/`with` layout popular with YAML-based
+workflows. The Trafalgar CLI and API now translate those blocks into the
+`provider`/`config` schema understood by profile entries, so you can submit
+either representation when iterating locally or promoting a definition to the
+orchestrator.
+
 To exercise the orchestrator locally:
 
 1. Load the relevant profile so the pipeline metadata is exposed alongside the
