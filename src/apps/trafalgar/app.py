@@ -1,6 +1,6 @@
 """Typer CLI entry points for the Trafalgar dashboard services."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
@@ -65,6 +65,42 @@ def _format_pipeline_definition(definition: PipelineDefinition) -> Any:
     if display == definition.name:
         return definition.name
     return f"{definition.name} ({display})"
+
+
+def _format_pipeline_statistics(
+    stats: Mapping[str, Mapping[str, Mapping[str, Any]]]
+) -> list[str]:
+    lines: list[str] = []
+    for pipeline in sorted(stats):
+        lines.append(f"Pipeline: {pipeline}")
+        statuses = stats[pipeline]
+        if not statuses:
+            lines.append("  No runs recorded.")
+            continue
+        for status in sorted(statuses):
+            entry = statuses[status]
+            count = entry.get("count", 0)
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                count_int = 0
+            plural = "s" if count_int != 1 else ""
+            line = f"  {status}: {count_int} run{plural}"
+            durations = entry.get("durations")
+            if isinstance(durations, Mapping):
+                average = durations.get("average_seconds")
+                minimum = durations.get("min_seconds")
+                maximum = durations.get("max_seconds")
+                if all(
+                    isinstance(value, (int, float))
+                    for value in (average, minimum, maximum)
+                ):
+                    line += (
+                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "  # type: ignore[arg-type]
+                        f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
+                    )
+            lines.append(line)
+    return lines
 
 
 def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
@@ -198,6 +234,47 @@ def pipeline_run(
     payload = run.serialise()
     typer.echo(f"Triggered pipeline '{payload['pipeline']}' (run id: {payload['id']}).")
     typer.echo(f"Current status: {payload['status']}")
+
+
+@pipeline_app.command("stats")
+def pipeline_stats(
+    include_durations: bool = typer.Option(
+        False,
+        "--include-durations",
+        "-d",
+        help="Display duration summaries for each status grouping.",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Restrict statistics to runs created on or after the ISO timestamp.",
+    ),
+) -> None:
+    """Display aggregated run statistics from the orchestrator."""
+
+    orchestrator = get_pipeline_orchestrator()
+
+    parsed_since: datetime | None = None
+    if since is not None:
+        try:
+            parsed_since = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise typer.BadParameter("Invalid 'since' timestamp.") from exc
+        if parsed_since.tzinfo is None:
+            parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+        else:
+            parsed_since = parsed_since.astimezone(timezone.utc)
+
+    stats = orchestrator.aggregate_runs(
+        include_durations=include_durations, since=parsed_since
+    )
+
+    if not stats:
+        typer.echo("No pipeline run statistics available.")
+        raise typer.Exit(code=0)
+
+    for line in _format_pipeline_statistics(stats):
+        typer.echo(line)
 
 
 @pipeline_app.command("prune")

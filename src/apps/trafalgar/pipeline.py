@@ -592,6 +592,94 @@ class PipelineRunStore:
             for row in rows
         ]
 
+    def aggregate_runs(
+        self,
+        *,
+        since: datetime | None = None,
+        include_durations: bool = False,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        """Return aggregated run statistics grouped by pipeline and status."""
+
+        class _Accumulator:
+            __slots__ = (
+                "count",
+                "duration_sum",
+                "duration_count",
+                "duration_min",
+                "duration_max",
+            )
+
+            def __init__(self) -> None:
+                self.count = 0
+                self.duration_sum = 0.0
+                self.duration_count = 0
+                self.duration_min: float | None = None
+                self.duration_max: float | None = None
+
+            def record(self, *, duration: float | None) -> None:
+                self.count += 1
+                if duration is None:
+                    return
+                self.duration_sum += duration
+                self.duration_count += 1
+                if self.duration_min is None or duration < self.duration_min:
+                    self.duration_min = duration
+                if self.duration_max is None or duration > self.duration_max:
+                    self.duration_max = duration
+
+            def serialise(self, *, include_durations: bool) -> dict[str, Any]:
+                payload: dict[str, Any] = {"count": self.count}
+                if include_durations and self.duration_count:
+                    average = self.duration_sum / self.duration_count
+                    payload["durations"] = {
+                        "average_seconds": average,
+                        "min_seconds": self.duration_min,
+                        "max_seconds": self.duration_max,
+                    }
+                return payload
+
+        clauses: list[str] = []
+        bindings: list[object] = []
+        if since is not None:
+            clauses.append("created_at >= ?")
+            bindings.append(self._encode_datetime(since))
+
+        query = [
+            "SELECT pipeline, status, created_at, updated_at",
+            "FROM pipeline_runs",
+        ]
+        if clauses:
+            query.append("WHERE " + " AND ".join(clauses))
+
+        statement = "\n".join(query)
+        params = tuple(bindings)
+
+        with self._lock:
+            cursor = self._connection.execute(statement, params)
+            rows = cursor.fetchall()
+
+        grouped: dict[str, dict[str, _Accumulator]] = {}
+        for row in rows:
+            pipeline = str(row["pipeline"])
+            status = str(row["status"])
+            created = self._decode_datetime(row["created_at"])
+            updated = self._decode_datetime(row["updated_at"])
+            duration = (updated - created).total_seconds()
+            bucket = grouped.setdefault(pipeline, {})
+            accumulator = bucket.setdefault(status, _Accumulator())
+            accumulator.record(duration=duration if include_durations else None)
+
+        result: dict[str, dict[str, dict[str, Any]]] = {}
+        for pipeline in sorted(grouped):
+            status_payload: dict[str, dict[str, Any]] = {}
+            for status in sorted(grouped[pipeline]):
+                accumulator = grouped[pipeline][status]
+                status_payload[status] = accumulator.serialise(
+                    include_durations=include_durations
+                )
+            result[pipeline] = status_payload
+        return result
+
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:
         with self._lock:
             rows = self._load_run_event_rows_locked(run_id)
@@ -1023,6 +1111,16 @@ class PipelineOrchestrator:
     ) -> list[PipelineRun]:
         return self._store.list_runs(
             pipeline=pipeline, status=status, limit=limit, since=since
+        )
+
+    def aggregate_runs(
+        self,
+        *,
+        since: datetime | None = None,
+        include_durations: bool = False,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        return self._store.aggregate_runs(
+            since=since, include_durations=include_durations
         )
 
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:

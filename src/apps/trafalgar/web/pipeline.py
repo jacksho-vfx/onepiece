@@ -182,6 +182,67 @@ def prune_runs(
     return JSONResponse(content=result.serialise())
 
 
+@router.get("/runs/stats")
+def run_statistics(
+    include_durations: Annotated[
+        bool,
+        Query(
+            description="Include duration summaries for each pipeline/status grouping.",
+        ),
+    ] = False,
+    since: Annotated[
+        str | None,
+        Query(
+            description="Restrict statistics to runs created on or after this ISO timestamp."
+        ),
+    ] = None,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    """Return aggregated run statistics for the orchestrator.
+
+    The payload groups counts by pipeline name and run status. Each entry has the
+    shape ``{"count": <int>}``. When ``include_durations`` is true, a
+    ``durations`` mapping with ``average_seconds``, ``min_seconds`` and
+    ``max_seconds`` is also included for statuses with recorded runs::
+
+        {
+            "pipelines": {
+                "render_shots": {
+                    "succeeded": {
+                        "count": 5,
+                        "durations": {
+                            "average_seconds": 42.0,
+                            "min_seconds": 30.5,
+                            "max_seconds": 55.2,
+                        },
+                    },
+                    "failed": {"count": 1},
+                }
+            }
+        }
+    """
+
+    orchestrator = get_pipeline_orchestrator()
+
+    parsed_since: datetime | None = None
+    if since is not None:
+        try:
+            parsed_since = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid 'since' timestamp"
+            ) from exc
+        if parsed_since.tzinfo is None:
+            parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+        else:
+            parsed_since = parsed_since.astimezone(timezone.utc)
+
+    stats = orchestrator.aggregate_runs(
+        include_durations=include_durations, since=parsed_since
+    )
+    return JSONResponse(content={"pipelines": stats})
+
+
 @router.get("/runs/{run_id}")
 def get_run(
     run_id: str,
