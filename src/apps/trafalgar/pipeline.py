@@ -178,9 +178,7 @@ class PipelineRetentionPolicy:
         return self.max_age is not None or self.max_runs is not None
 
     @classmethod
-    def from_mapping(
-        cls, payload: Mapping[str, Any]
-    ) -> PipelineRetentionPolicy | None:
+    def from_mapping(cls, payload: Mapping[str, Any]) -> PipelineRetentionPolicy | None:
         """Construct a retention policy from a configuration mapping."""
 
         if not payload:
@@ -219,9 +217,7 @@ class PipelineRetentionPolicy:
             try:
                 window_seconds = float(raw_value) * multiplier
             except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    f"retention {key} value must be numeric"
-                ) from exc
+                raise ValueError(f"retention {key} value must be numeric") from exc
         max_age: timedelta | None
         if window_seconds is None:
             max_age = None
@@ -653,7 +649,9 @@ class PipelineRunStore:
                     break
 
             if max_runs is not None:
-                retained = [row["run_id"] for row in rows if row["run_id"] not in removal]
+                retained = [
+                    row["run_id"] for row in rows if row["run_id"] not in removal
+                ]
                 overflow = len(retained) - max_runs
                 if overflow > 0:
                     removal.extend(retained[:overflow])
@@ -1080,9 +1078,7 @@ def get_pipeline_orchestrator(
         if storage is None and storage_config is not None:
             storage = PipelineRunStore.from_config(storage_config)
             retention = _retention_policy_from_storage(storage_config)
-        _default_orchestrator = PipelineOrchestrator(
-            store=storage, retention=retention
-        )
+        _default_orchestrator = PipelineOrchestrator(store=storage, retention=retention)
     elif storage is not None or storage_config is not None:
         msg = (
             "pipeline orchestrator is already configured; "
