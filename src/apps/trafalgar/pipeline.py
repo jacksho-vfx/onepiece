@@ -181,7 +181,9 @@ class PipelineDefinitionStore:
     def _write_locked(self) -> None:
         if self._path is None:
             return
-        serialisable = {name: payload for name, payload in sorted(self._definitions.items())}
+        serialisable = {
+            name: payload for name, payload in sorted(self._definitions.items())
+        }
         document = {"definitions": serialisable}
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
         tmp_path.write_text(
@@ -1277,7 +1279,9 @@ def get_pipeline_orchestrator(
 ) -> PipelineOrchestrator:
     global _default_orchestrator
     if _default_orchestrator is None:
-        if (storage is not None or definition_store is not None) and storage_config is not None:
+        if (
+            storage is not None or definition_store is not None
+        ) and storage_config is not None:
             msg = "provide either explicit stores or configuration, not both"
             raise ValueError(msg)
         retention: PipelineRetentionPolicy | None = None
@@ -1290,7 +1294,11 @@ def get_pipeline_orchestrator(
         _default_orchestrator = PipelineOrchestrator(
             store=storage, retention=retention, definition_store=definition_store
         )
-    elif storage is not None or storage_config is not None or definition_store is not None:
+    elif (
+        storage is not None
+        or storage_config is not None
+        or definition_store is not None
+    ):
         msg = (
             "pipeline orchestrator is already configured; "
             "reset it with set_pipeline_orchestrator(None) before supplying storage"
