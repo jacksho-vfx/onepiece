@@ -10,8 +10,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, AsyncIterator, Iterable, Iterator, Mapping, cast
-
-logger = logging.getLogger(__name__)
 import json
 import sqlite3
 import uuid
@@ -21,10 +19,8 @@ from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.factories import pipeline_from_config
 from libraries.pipeline.models import Pipeline, PipelineStep
 
-
+logger = logging.getLogger(__name__)
 PROVIDER_REFERENCE_METADATA_KEY = pipeline_executor.PROVIDER_REFERENCE_METADATA_KEY
-
-
 _UNSET: Any = object()
 
 
@@ -1544,6 +1540,7 @@ class PipelineOrchestrator:
         future = self._worker_pool.submit(_runner)
 
         if self._retention is not None:
+
             def _trigger_prune(_: Future[None]) -> None:
                 try:
                     self._schedule_retention_prune()
@@ -1725,7 +1722,9 @@ class PipelineOrchestrator:
         now: datetime | None = None,
     ) -> PipelinePruneResult:
         policy = self._retention
-        use_policy_defaults = max_age is None and max_runs is None and policy is not None
+        use_policy_defaults = (
+            max_age is None and max_runs is None and policy is not None
+        )
 
         with self._retention_lock:
             if use_policy_defaults:

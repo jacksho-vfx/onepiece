@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import time
 from pathlib import Path
-
 import pytest
+from typing import Any
 
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
@@ -170,7 +170,7 @@ def test_orchestrator_prunes_runs_after_completion(tmp_path: Path) -> None:
             pipeline: Pipeline,
             *,
             parameters: dict[str, object] | None,
-            emit,
+            emit: Any,
         ) -> None:
             _ = (pipeline, parameters, emit)
 
