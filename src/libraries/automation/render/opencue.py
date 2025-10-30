@@ -275,9 +275,7 @@ def _translate_capabilities(data: Mapping[str, Any]) -> AdapterCapabilities:
             chunk.get("default", defaults.get("default_chunk_size", 6))
         ),
         cancellation_supported=bool(
-            cancellation.get(
-                "supported", defaults.get("cancellation_supported", False)
-            )
+            cancellation.get("supported", defaults.get("cancellation_supported", False))
         ),
     )
 

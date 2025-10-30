@@ -39,7 +39,7 @@ class FakeOpenCueClient:
         self.limit_requests = 0
         self.base_url = "http://opencue"
 
-    def submit_job(self, payload: Mapping[str, Any]) -> Any:  # type: ignore[override]
+    def submit_job(self, payload: Mapping[str, Any]) -> Any:
         self.payloads.append(dict(payload))
         return {"id": "job-123", "status": "queued", "message": "queued"}
 
@@ -88,7 +88,7 @@ def test_submit_job_builds_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = client.payloads[0]
     assert payload["show"] == "onepiece"
     assert payload["pool"] == "farm-b"
-    assert payload["layers"][0]["chunk"] == 4  # type: ignore[index]
+    assert payload["layers"][0]["chunk"] == 4
 
 
 def test_submit_job_uses_capability_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,12 +106,12 @@ def test_submit_job_uses_capability_defaults(monkeypatch: pytest.MonkeyPatch) ->
     )
 
     assert result["job_id"] == "job-123"
-    assert client.payloads[0]["layers"][0]["chunk"] == 8  # type: ignore[index]
+    assert client.payloads[0]["layers"][0]["chunk"] == 8
 
 
 def test_submit_job_raises_for_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     class ValidationClient(FakeOpenCueClient):
-        def submit_job(self, payload: Mapping[str, Any]) -> Any:  # type: ignore[override]
+        def submit_job(self, payload: Mapping[str, Any]) -> Any:
             raise opencue.OpenCueValidationError("invalid")
 
     _patch_client(monkeypatch, ValidationClient())
