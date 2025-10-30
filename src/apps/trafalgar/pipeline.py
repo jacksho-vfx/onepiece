@@ -102,7 +102,6 @@ def _parse_parameter_definitions(
     return parameters
 
 
-
 @dataclass(slots=True)
 class PipelineDefinition:
     """A lightweight description of a runnable pipeline."""
