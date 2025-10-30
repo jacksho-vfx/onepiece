@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta, timezone
+import time
 from pathlib import Path
-
 import pytest
+from typing import Any
 
 from apps.trafalgar.pipeline import (
+    PipelineDefinition,
     PipelineOrchestrator,
     PipelineRetentionPolicy,
     PipelineRun,
     PipelineRunEvent,
     PipelineRunStore,
 )
+from libraries.pipeline.models import Pipeline, PipelineStep
 
 
 def _create_run(
@@ -45,6 +48,20 @@ def _create_run(
         parameters={},
         run_status="succeeded",
     )
+
+
+def _wait_for_completion(
+    orchestrator: PipelineOrchestrator, run_id: str, *, timeout: float = 5.0
+) -> PipelineRun:
+    deadline = time.monotonic() + timeout
+    while True:
+        run = orchestrator.get_run(run_id)
+        if run.status in {"succeeded", "failed"}:
+            return run
+        if time.monotonic() >= deadline:
+            msg = f"timed out waiting for run '{run_id}' to complete"
+            raise AssertionError(msg)
+        time.sleep(0.01)
 
 
 def test_store_prune_removes_old_runs_and_events(tmp_path: Path) -> None:
@@ -138,3 +155,63 @@ def test_orchestrator_prune_uses_retention(tmp_path: Path) -> None:
 
     runs = store.list_runs()
     assert [run.run_id for run in runs] == ["run-new"]
+
+
+def test_orchestrator_prunes_runs_after_completion(tmp_path: Path) -> None:
+    store = PipelineRunStore(database=tmp_path / "runs.sqlite3")
+    policy = PipelineRetentionPolicy(max_runs=2)
+
+    class _NoOpExecutor:
+        def resolve_pipeline(self, pipeline: Pipeline) -> Pipeline:
+            return pipeline
+
+        def execute(
+            self,
+            pipeline: Pipeline,
+            *,
+            parameters: dict[str, object] | None,
+            emit: Any,
+        ) -> None:
+            _ = (pipeline, parameters, emit)
+
+    orchestrator = PipelineOrchestrator(
+        store=store,
+        retention=policy,
+        executor=_NoOpExecutor(),
+    )
+
+    def _noop_provider(*_: object, **__: object) -> None:
+        return None
+
+    pipeline = Pipeline(
+        name="demo",
+        steps=[PipelineStep(name="noop", provider=_noop_provider)],
+    )
+
+    try:
+        orchestrator.register(
+            PipelineDefinition(
+                name="demo",
+                pipeline=pipeline,
+                parameters={},
+            )
+        )
+
+        run_ids: list[str] = []
+        for _ in range(3):
+            run = orchestrator.trigger_run("demo")
+            run_ids.append(run.run_id)
+            _wait_for_completion(orchestrator, run.run_id)
+
+        deadline = time.monotonic() + 2.0
+        remaining_ids: list[str] = []
+        while time.monotonic() < deadline:
+            remaining = store.list_runs()
+            remaining_ids = [run.run_id for run in remaining]
+            if len(remaining_ids) <= 2:
+                break
+            time.sleep(0.01)
+
+        assert remaining_ids == [run_ids[-1], run_ids[-2]]
+    finally:
+        orchestrator.shutdown()
