@@ -38,10 +38,16 @@ __all__ = [
     "DCC_GPU_REQUIREMENTS",
     "DCC_ASSET_REQUIREMENTS",
     "DCCGPUStatus",
+    "LinkStrategy",
 ]
 
 
 log = logging.getLogger(__name__)
+
+
+JSONPrimitive: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
+LinkStrategy: TypeAlias = Literal["copy", "hard", "symlink"]
 
 
 class SupportedDCC(Enum):
@@ -310,8 +316,32 @@ def verify_dcc_dependencies(
     )
 
 
-def _copy_output(src: Path, dst: Path, *, treat_dst_as_dir: bool = False) -> list[Path]:
+def _copy_output(
+    src: Path,
+    dst: Path,
+    *,
+    treat_dst_as_dir: bool = False,
+    link_strategy: LinkStrategy = "copy",
+) -> list[Path]:
     """Copy ``src`` to ``dst`` and return the created files."""
+
+    requested_strategy = link_strategy
+    downgrade_logged = False
+
+    def _log_downgrade(error: OSError, target_path: Path) -> None:
+        nonlocal downgrade_logged
+        if downgrade_logged:
+            return
+        log.warning(
+            "publish_scene_link_downgraded",
+            extra={
+                "requested_strategy": requested_strategy,
+                "source": str(src),
+                "target": str(target_path),
+                "error": str(error),
+            },
+        )
+        downgrade_logged = True
 
     if src.is_dir():
         if dst.exists():
@@ -319,18 +349,76 @@ def _copy_output(src: Path, dst: Path, *, treat_dst_as_dir: bool = False) -> lis
                 dst.unlink()
             else:
                 shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-        return [p for p in dst.rglob("*") if p.is_file()]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        if link_strategy == "copy":
+            shutil.copytree(src, dst)
+            return [p for p in dst.rglob("*") if p.is_file()]
+
+        if link_strategy == "symlink":
+            try:
+                dst.symlink_to(src, target_is_directory=True)
+            except OSError as exc:
+                _log_downgrade(exc, dst)
+                shutil.copytree(src, dst)
+            return [p for p in dst.rglob("*") if p.is_file()]
+
+        created_files: list[Path] = []
+        dst.mkdir(parents=True, exist_ok=True)
+        effective_strategy: LinkStrategy = link_strategy
+        for child in src.rglob("*"):
+            relative = child.relative_to(src)
+            target_path = dst / relative
+            if child.is_dir():
+                target_path.mkdir(exist_ok=True)
+                continue
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            while True:
+                try:
+                    if effective_strategy == "hard":
+                        os.link(child, target_path)
+                    else:
+                        shutil.copy2(child, target_path)
+                    break
+                except OSError as exc:
+                    if effective_strategy == "copy":
+                        raise
+                    _log_downgrade(exc, target_path)
+                    effective_strategy = "copy"
+            created_files.append(target_path)
+        return created_files
 
     target = dst
     if treat_dst_as_dir or (dst.exists() and dst.is_dir()):
+        dst.mkdir(parents=True, exist_ok=True)
         target = dst / src.name
     else:
         if dst.suffix == "":
             target = dst / src.name
 
+    if target.exists():
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, target)
+    effective_strategy = link_strategy
+    while True:
+        try:
+            if effective_strategy == "copy":
+                shutil.copy2(src, target)
+            elif effective_strategy == "hard":
+                os.link(src, target)
+            else:
+                os.symlink(src, target)
+            break
+        except OSError as exc:
+            if effective_strategy == "copy":
+                raise
+            _log_downgrade(exc, target)
+            effective_strategy = "copy"
+
     return [target]
 
 
@@ -342,10 +430,6 @@ def _select_thumbnail(candidates: Iterable[Path]) -> Path | None:
         if candidate.suffix.lower() in thumbnail_exts:
             return candidate
     return None
-
-
-JSONPrimitive: TypeAlias = str | int | float | bool | None
-JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 
 
 def _format_dependency_error(report: DCCDependencyReport, package_dir: Path) -> str:
@@ -391,6 +475,8 @@ def _prepare_package_contents(
     previews: Path,
     otio: Path,
     destination: Path,
+    *,
+    link_strategy: LinkStrategy = "copy",
 ) -> tuple[Path, list[Path], list[Path]]:
     """Create the package directory and populate it with scene outputs."""
 
@@ -399,12 +485,23 @@ def _prepare_package_contents(
     package_dir.mkdir(parents=True, exist_ok=True)
 
     renders_files = _copy_output(
-        Path(renders), package_dir / "renders", treat_dst_as_dir=True
+        Path(renders),
+        package_dir / "renders",
+        treat_dst_as_dir=True,
+        link_strategy=link_strategy,
     )
     previews_files = _copy_output(
-        Path(previews), package_dir / "previews", treat_dst_as_dir=True
+        Path(previews),
+        package_dir / "previews",
+        treat_dst_as_dir=True,
+        link_strategy=link_strategy,
     )
-    _copy_output(Path(otio), package_dir / "otio", treat_dst_as_dir=True)
+    _copy_output(
+        Path(otio),
+        package_dir / "otio",
+        treat_dst_as_dir=True,
+        link_strategy=link_strategy,
+    )
 
     return package_dir, renders_files, previews_files
 
@@ -723,6 +820,7 @@ def publish_scene(
     show_code: str,
     show_type: Literal["vfx", "prod"] = "vfx",
     *,
+    link_strategy: LinkStrategy = "copy",
     dry_run: bool = False,
     profile: str | None = None,
     direct_s3_path: str | None = None,
@@ -750,6 +848,7 @@ def publish_scene(
         previews,
         otio,
         destination,
+        link_strategy=link_strategy,
     )
 
     _write_metadata_and_thumbnails(
