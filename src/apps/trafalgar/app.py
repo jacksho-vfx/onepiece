@@ -24,6 +24,7 @@ from apps.trafalgar.pipeline import (
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
 )
+from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -180,9 +181,10 @@ def _extract_pipeline_definition(
         config_payload = payload
 
     try:
+        translated = translate_pipeline_manifest(dict(config_payload))
         return pipeline_definition_from_profile_entry(
             str(pipeline_name),
-            dict(config_payload),
+            translated,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from exc

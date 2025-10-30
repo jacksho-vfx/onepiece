@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Annotated, AsyncIterator, Mapping
+from typing import Any, Annotated, AsyncIterator, Mapping, Sequence
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
@@ -17,6 +17,7 @@ from apps.trafalgar.pipeline import (
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
 )
+from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from .security import (
     AuthenticatedPrincipal,
@@ -38,7 +39,25 @@ class PipelineDefinitionSubmission(BaseModel):
     description: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     parameters: dict[str, Any] = Field(default_factory=dict)
-    steps: list[dict[str, Any]] = Field(..., min_length=1)
+    steps: list[dict[str, Any]] | None = None
+    triggers: list[dict[str, Any]] | None = None
+
+    @field_validator("steps", "triggers", mode="before")
+    @classmethod
+    def _ensure_sequence(cls, value: Any) -> list[dict[str, Any]] | None:
+        if value is None:
+            return None
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return [dict(step) if isinstance(step, Mapping) else step for step in value]
+        msg = "must be supplied as a sequence"
+        raise TypeError(msg)
+
+    @model_validator(mode="after")
+    def _validate_manifest_shape(self) -> "PipelineDefinitionSubmission":
+        if not self.steps and not self.triggers:
+            msg = "pipeline definitions require 'steps' or 'triggers'"
+            raise ValueError(msg)
+        return self
 
 
 class PipelineRunSubmission(BaseModel):
@@ -89,9 +108,13 @@ def _definition_from_submission(
     submission: PipelineDefinitionSubmission,
 ) -> Any:
     try:
+        payload = submission.model_dump(
+            exclude={"name"}, by_alias=False, exclude_none=True
+        )
+        translated = translate_pipeline_manifest(payload)
         return pipeline_definition_from_profile_entry(
             submission.name,
-            submission.model_dump(exclude={"name"}, by_alias=False),
+            translated,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
