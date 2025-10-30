@@ -24,6 +24,7 @@ from apps.onepiece.utils.errors import (
     OnePieceRuntimeError,
     OnePieceValidationError,
 )
+from .jobs import RenderJobClient, RenderJobClientError
 from libraries.automation.render import deadline, mock, opencue, tractor
 from libraries.automation.render.base import (
     AdapterCapabilities,
@@ -890,3 +891,96 @@ def use_preset(
         user=merged.get("user"),
         refresh_capabilities=refresh_capabilities,
     )
+
+
+@app.command("status")
+def render_status(
+    job_id: str = typer.Argument(..., help="Identifier returned by the render farm."),
+    farm: str | None = typer.Option(
+        None,
+        "--farm",
+        help="Optional farm filter when job identifiers overlap between adapters.",
+    ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Configuration profile providing Trafalgar render settings.",
+    ),
+    raw: bool = typer.Option(
+        False,
+        "--raw",
+        help="Output the raw JSON payload for scripting integrations.",
+    ),
+) -> None:
+    """Fetch render job metadata from the Trafalgar render API."""
+
+    try:
+        client = RenderJobClient(profile=profile)
+    except OnePieceConfigError as exc:
+        raise OnePieceValidationError(str(exc)) from exc
+    except RenderJobClientError as exc:
+        raise OnePieceExternalServiceError(str(exc)) from exc
+
+    with client:
+        try:
+            job = client.get_job(job_id, farm=farm)
+        except RenderJobClientError as exc:
+            if exc.status_code == 404:
+                raise OnePieceExternalServiceError(
+                    f"Render job '{job_id}' was not found."
+                ) from exc
+            raise OnePieceExternalServiceError(str(exc)) from exc
+
+    if raw:
+        typer.echo(json.dumps(job, indent=2, sort_keys=True))
+        return
+
+    typer.secho(f"Render job {job.get('job_id', job_id)}", fg=typer.colors.CYAN)
+    farm_value = job.get("farm") or farm or "<unknown>"
+    farm_type = job.get("farm_type") or "<unknown>"
+    typer.echo(f"Farm: {farm_value} ({farm_type})")
+    typer.echo(f"Status: {job.get('status', '<unknown>')}")
+    message = job.get("message")
+    if isinstance(message, str) and message:
+        typer.echo(f"Message: {message}")
+
+    history = _extract_history(job)
+    if history:
+        typer.echo("History:")
+        for entry in history:
+            typer.echo(f"  - {entry}")
+    else:
+        typer.echo("History: <not available>")
+
+
+def _extract_history(job: Mapping[str, Any]) -> list[str]:
+    history: list[str] = []
+    raw_history = job.get("history") or job.get("status_history")
+    if isinstance(raw_history, list):
+        for entry in raw_history:
+            if isinstance(entry, Mapping):
+                status = _coerce_text(entry.get("status") or entry.get("state"))
+                timestamp = _coerce_text(entry.get("timestamp") or entry.get("time"))
+                if status and timestamp:
+                    history.append(f"{status} at {timestamp}")
+                elif status:
+                    history.append(status)
+                elif timestamp:
+                    history.append(timestamp)
+            elif isinstance(entry, (list, tuple)):
+                parts = [part for part in entry if _coerce_text(part)]
+                if parts:
+                    history.append(" at ".join(_coerce_text(part) for part in parts))
+            else:
+                text = _coerce_text(entry)
+                if text:
+                    history.append(text)
+    return history
+
+
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()

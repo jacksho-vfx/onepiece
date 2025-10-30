@@ -30,6 +30,38 @@ def _reset_capability_cache() -> Generator[None, None, None]:
     submit_module._refresh_capabilities_cache()
 
 
+class _StubRenderClient:
+    """Test double mimicking ``RenderJobClient`` for status lookups."""
+
+    def __init__(
+        self,
+        *,
+        profile: str | None = None,
+        response: Any = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.profile = profile
+        self.response = response
+        self.error = error
+        self.closed = False
+        self.calls: list[tuple[str, str | None]] = []
+
+    def __enter__(self) -> "_StubRenderClient":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.closed = True
+
+    def get_job(self, job_id: str, farm: str | None = None) -> Any:
+        self.calls.append((job_id, farm))
+        if self.error:
+            raise self.error
+        return self.response
+
+
 def _capture_logger(
     log_events: list[tuple[str, str, dict[str, Any]]]
 ) -> SimpleNamespace:
@@ -812,3 +844,56 @@ def test_render_submit_requires_output_directory(tmp_path: Path) -> None:
     assert result_not_dir.exit_code != 0
     assert isinstance(result_not_dir.exception, OnePieceValidationError)
     assert "not a directory" in str(result_not_dir.exception)
+
+
+def test_render_status_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "job_id": "job-42",
+        "farm": "mock",
+        "farm_type": "mock",
+        "status": "running",
+        "message": "Frame 5 of 10",
+        "status_history": [
+            {"status": "queued", "timestamp": "2024-05-01T10:00:00Z"},
+            {"status": "running", "timestamp": "2024-05-01T10:05:00Z"},
+        ],
+    }
+
+    stub = _StubRenderClient(response=payload)
+    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
+
+    result = runner.invoke(app, ["render", "status", "job-42"])
+
+    assert result.exit_code == 0, result.stdout
+    assert "Status: running" in result.stdout
+    assert "Message: Frame 5 of 10" in result.stdout
+    assert "History:" in result.stdout
+    assert "queued at 2024-05-01T10:00:00Z" in result.stdout
+    assert "running at 2024-05-01T10:05:00Z" in result.stdout
+    assert stub.calls == [("job-42", None)]
+    assert stub.closed is True
+
+
+def test_render_status_missing_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    error = submit_module.RenderJobClientError("Not found", status_code=404)
+    stub = _StubRenderClient(error=error)
+    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
+
+    result = runner.invoke(app, ["render", "status", "missing-job"])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, OnePieceExternalServiceError)
+    assert "was not found" in str(result.exception)
+
+
+def test_render_status_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    error = submit_module.RenderJobClientError("Server exploded", status_code=503)
+    stub = _StubRenderClient(error=error)
+    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
+
+    result = runner.invoke(app, ["render", "status", "job-99", "--farm", "mock"])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, OnePieceExternalServiceError)
+    assert "Server exploded" in str(result.exception)
+    assert stub.calls == [("job-99", "mock")]
