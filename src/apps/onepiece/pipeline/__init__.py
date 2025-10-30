@@ -580,6 +580,13 @@ def _format_pipeline_run(run: Mapping[str, Any]) -> Iterable[str]:
     yield f"  Created: {created}"
     yield f"  Updated: {updated}"
 
+    initiator = _coerce_display_text(run.get("submitted_by"))
+    if initiator:
+        yield f"  Submitted by: {initiator}"
+        role_list = _normalise_roles(run.get("roles"))
+        if role_list:
+            yield "  Roles: " + ", ".join(role_list)
+
     parameters = run.get("parameters")
     if isinstance(parameters, Mapping) and parameters:
         yield "  Parameters:"
@@ -637,6 +644,26 @@ def _coerce_display_text(value: Any) -> str:
         if stripped:
             return stripped
     return ""
+
+
+def _normalise_roles(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items: Iterable[str] = [value]
+    elif isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+        items = value
+    else:
+        return []
+    seen: set[str] = set()
+    roles: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        roles.append(text)
+    return sorted(roles)
 
 
 def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
@@ -914,6 +941,12 @@ def run_pipeline(
     status = run.get("status", "unknown")
     typer.echo(f"Triggered pipeline '{pipeline_name}' (run id: {run_id}).")
     typer.echo(f"Current status: {status}")
+    initiator = _coerce_display_text(run.get("submitted_by"))
+    if initiator:
+        typer.echo(f"Initiated by: {initiator}")
+        role_list = _normalise_roles(run.get("roles"))
+        if role_list:
+            typer.echo("Roles: " + ", ".join(role_list))
 
 
 @app.command("runs")

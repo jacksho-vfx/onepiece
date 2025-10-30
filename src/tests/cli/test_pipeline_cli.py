@@ -396,6 +396,8 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
             "id": "abc123",
             "pipeline": "orchestration.daily",
             "status": "succeeded",
+            "submitted_by": "suite",
+            "roles": ["pipeline:run", "pipeline:manage"],
         }
     )
     _install_stub(monkeypatch, client)
@@ -414,6 +416,8 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert "Triggered pipeline 'orchestration.daily' (run id: abc123)." in result.output
     assert "Current status: succeeded" in result.output
+    assert "Initiated by: suite" in result.output
+    assert "Roles: pipeline:manage, pipeline:run" in result.output
     assert client.requested_name == "orchestration.daily"
     assert client.run_parameters == {"ingest_profile": "episodic"}
     assert client.closed is True
@@ -479,6 +483,8 @@ def test_pipeline_runs_displays_runs(monkeypatch: MonkeyPatch) -> None:
                 "created_at": "2024-01-01T10:00:00+00:00",
                 "updated_at": "2024-01-01T10:10:00+00:00",
                 "parameters": {"ingest_profile": "episodic"},
+                "submitted_by": "suite",
+                "roles": ["pipeline:run"],
             }
         ]
     )
@@ -490,6 +496,7 @@ def test_pipeline_runs_displays_runs(monkeypatch: MonkeyPatch) -> None:
     assert "Run run-1" in result.output
     assert "Pipeline: orchestration.daily" in result.output
     assert "Parameters:" in result.output
+    assert "Submitted by: suite" in result.output
     assert client.closed is True
 
 
@@ -596,6 +603,8 @@ def test_pipeline_run_status_displays_run(monkeypatch: MonkeyPatch) -> None:
             "created_at": "2024-01-01T10:00:00+00:00",
             "updated_at": "2024-01-01T10:05:00+00:00",
             "parameters": {},
+            "submitted_by": "suite",
+            "roles": ["pipeline:run", "pipeline:manage"],
         }
     )
     _install_stub(monkeypatch, client)
@@ -605,6 +614,7 @@ def test_pipeline_run_status_displays_run(monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert "Run run-1" in result.output
     assert "Status: running" in result.output
+    assert "Submitted by: suite" in result.output
     assert client.requested_run_id == "run-1"
     assert client.closed is True
 
