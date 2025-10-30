@@ -203,12 +203,61 @@ class PipelineRun:
     updated_at: datetime
     parameters: Mapping[str, Any] = field(default_factory=dict)
     definition_snapshot: Mapping[str, Any] = field(default_factory=dict)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    metrics: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         object.__setattr__(self, "parameters", dict(self.parameters))
         object.__setattr__(self, "definition_snapshot", dict(self.definition_snapshot))
+        if self.metrics is None:
+            object.__setattr__(self, "metrics", {})
+        else:
+            object.__setattr__(self, "metrics", dict(self.metrics))
 
     def serialise(self) -> Mapping[str, Any]:
+        timing: dict[str, Any] = {
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration_ms": self.duration_ms,
+        }
+
+        totals = (
+            self.metrics.get("totals", {}) if isinstance(self.metrics, dict) else {}
+        )
+        if "step_duration_ms" in totals:
+            timing["total_step_duration_ms"] = totals.get("step_duration_ms")
+
+        steps_payload: dict[str, Any] = {}
+        if isinstance(self.metrics, dict):
+            steps = self.metrics.get("steps", {})
+            if isinstance(steps, dict):
+                for name, details in steps.items():
+                    if not isinstance(details, dict):
+                        continue
+                    count = details.get("count", 0)
+                    total_duration: int = details.get("total_duration_ms")  # type: ignore[assignment]
+                    try:
+                        total_duration_value = int(total_duration)
+                    except (TypeError, ValueError):
+                        total_duration_value = None
+                    average: float | None
+                    if count and total_duration_value is not None:
+                        average = total_duration_value / count
+                    else:
+                        average = None
+                    steps_payload[name] = {
+                        "count": count,
+                        "total_duration_ms": total_duration_value,
+                        "average_duration_ms": average,
+                        "last_started_at": details.get("last_started_at"),
+                        "last_finished_at": details.get("last_finished_at"),
+                        "last_duration_ms": details.get("last_duration_ms"),
+                    }
+
         return {
             "id": self.run_id,
             "pipeline": self.pipeline,
@@ -217,6 +266,8 @@ class PipelineRun:
             "updated_at": self.updated_at.isoformat(),
             "parameters": dict(self.parameters),
             "definition_snapshot": dict(self.definition_snapshot),
+            "timing": timing,
+            "step_metrics": steps_payload,
         }
 
 
@@ -453,6 +504,146 @@ class PipelineRunStore:
             return data
         return {}
 
+    @staticmethod
+    def _encode_optional_datetime(value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return PipelineRunStore._encode_datetime(value)
+
+    @staticmethod
+    def _decode_optional_datetime(value: str | None) -> datetime | None:
+        if value is None:
+            return None
+        return PipelineRunStore._decode_datetime(value)
+
+    @staticmethod
+    def _encode_metrics(metrics: Mapping[str, Any]) -> str:
+        return json.dumps(dict(metrics))
+
+    @staticmethod
+    def _decode_metrics(payload: str | None) -> dict[str, Any]:
+        if not payload:
+            return {}
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return {}
+
+    @staticmethod
+    def _initial_metrics() -> dict[str, Any]:
+        return {"steps": {}, "totals": {"step_duration_ms": 0}}
+
+    @staticmethod
+    def _normalise_metrics(metrics: Mapping[str, Any] | None) -> dict[str, Any]:
+        if isinstance(metrics, dict):
+            steps_source = metrics.get("steps", {})
+            totals_source = metrics.get("totals", {})
+        else:
+            steps_source = {}
+            totals_source = {}
+        steps: dict[str, dict[str, Any]] = {}
+        if isinstance(steps_source, dict):
+            for name, details in steps_source.items():
+                if isinstance(details, dict):
+                    steps[name] = dict(details)
+        totals: dict[str, Any]
+        if isinstance(metrics, dict) and isinstance(totals_source, dict):
+            totals = dict(totals_source)
+        else:
+            totals = {}
+        if "step_duration_ms" not in totals:
+            total_duration = 0
+            for data in steps.values():
+                value: int = data.get("total_duration_ms")  # type: ignore[assignment]
+                try:
+                    total_duration += int(value)
+                except (TypeError, ValueError):
+                    continue
+            totals["step_duration_ms"] = total_duration
+        return {"steps": steps, "totals": totals}
+
+    def _apply_event_metrics(
+        self,
+        *,
+        metrics: dict[str, Any],
+        status: str,
+        timestamp: datetime,
+        parameters: Mapping[str, Any],
+        run_status: str | None,
+        created_at: datetime,
+        started_at: datetime | None,
+        finished_at: datetime | None,
+        duration_ms: int | None,
+    ) -> tuple[dict[str, Any], datetime | None, datetime | None, int | None]:
+        steps = metrics.setdefault("steps", {})
+        totals = metrics.setdefault("totals", {})
+        if not isinstance(steps, dict):
+            steps = {}
+            metrics["steps"] = steps
+        if not isinstance(totals, dict):
+            totals = {}
+            metrics["totals"] = totals
+        totals.setdefault("step_duration_ms", 0)
+
+        step_name = parameters.get("step")
+        duration_value = parameters.get("duration_ms")
+        started_value = parameters.get("started_at")
+        finished_value = parameters.get("finished_at")
+
+        duration_int: int | None
+        try:
+            duration_int = int(duration_value) if duration_value is not None else None
+        except (TypeError, ValueError):
+            duration_int = None
+
+        if isinstance(step_name, str) and duration_int is not None:
+            existing = steps.get(step_name)
+            if not isinstance(existing, dict):
+                existing = {}
+            count_value = existing.get("count", 0)
+            try:
+                count = int(count_value)
+            except (TypeError, ValueError):
+                count = 0
+            total_value = existing.get("total_duration_ms", 0)
+            try:
+                total_duration_ms = int(total_value)
+            except (TypeError, ValueError):
+                total_duration_ms = 0
+            existing.update(
+                {
+                    "count": count + 1,
+                    "total_duration_ms": total_duration_ms + duration_int,
+                    "last_started_at": started_value,
+                    "last_finished_at": finished_value,
+                    "last_duration_ms": duration_int,
+                }
+            )
+            steps[step_name] = existing
+
+            total_steps_value = totals.get("step_duration_ms", 0)
+            try:
+                total_steps_duration = int(total_steps_value)
+            except (TypeError, ValueError):
+                total_steps_duration = 0
+            totals["step_duration_ms"] = total_steps_duration + duration_int
+
+        current_started = started_at
+        current_finished = finished_at
+        current_duration = duration_ms
+
+        if run_status == "running" and current_started is None:
+            current_started = timestamp
+        if run_status in {"succeeded", "failed"}:
+            current_finished = timestamp
+            anchor = current_started or created_at
+            if anchor is not None:
+                delta = current_finished - anchor
+                computed = int(max(delta.total_seconds() * 1000, 0))
+                current_duration = computed
+
+        return metrics, current_started, current_finished, current_duration
+
     def _initialise_schema(self) -> None:
         with self._connection:
             self._connection.execute(
@@ -464,7 +655,11 @@ class PipelineRunStore:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     parameters TEXT NOT NULL,
-                    definition_snapshot TEXT NOT NULL
+                    definition_snapshot TEXT NOT NULL,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    duration_ms INTEGER,
+                    metrics TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
@@ -492,18 +687,45 @@ class PipelineRunStore:
                 self._connection.execute(
                     "ALTER TABLE pipeline_runs ADD COLUMN definition_snapshot TEXT NOT NULL DEFAULT '{}'"
                 )
+        if "started_at" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN started_at TEXT"
+                )
+        if "finished_at" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN finished_at TEXT"
+                )
+        if "duration_ms" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN duration_ms INTEGER"
+                )
+        if "metrics" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE pipeline_runs ADD COLUMN metrics TEXT NOT NULL DEFAULT '{}'"
+                )
+                self._connection.execute(
+                    "UPDATE pipeline_runs SET metrics = '{}' WHERE metrics IS NULL"
+                )
 
     def create_run(self, run: PipelineRun, initial_event: PipelineRunEvent) -> None:
         payload = self._encode_parameters(run.parameters)
         definition_payload = self._encode_definition_snapshot(run.definition_snapshot)
         event_payload = self._encode_parameters(initial_event.parameters)
+        metrics = self._normalise_metrics(run.metrics)
+        metrics_payload = self._encode_metrics(metrics)
+        encoded_started_at = self._encode_optional_datetime(run.started_at)
+        encoded_finished_at = self._encode_optional_datetime(run.finished_at)
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO pipeline_runs (
                     run_id, pipeline, status, created_at, updated_at, parameters,
-                    definition_snapshot
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    definition_snapshot, started_at, finished_at, duration_ms, metrics
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
@@ -513,6 +735,10 @@ class PipelineRunStore:
                     self._encode_datetime(run.updated_at),
                     payload,
                     definition_payload,
+                    encoded_started_at,
+                    encoded_finished_at,
+                    run.duration_ms,
+                    metrics_payload,
                 ),
             )
             self._connection.execute(
@@ -541,7 +767,12 @@ class PipelineRunStore:
     ) -> None:
         with self._lock:
             cursor = self._connection.execute(
-                "SELECT pipeline FROM pipeline_runs WHERE run_id = ?",
+                """
+                SELECT pipeline, created_at, metrics, started_at, finished_at,
+                       duration_ms
+                FROM pipeline_runs
+                WHERE run_id = ?
+                """,
                 (run_id,),
             )
             row = cursor.fetchone()
@@ -549,8 +780,28 @@ class PipelineRunStore:
                 msg = f"run '{run_id}' could not be found"
                 raise KeyError(msg)
             pipeline = row["pipeline"]
+            created_at = self._decode_datetime(row["created_at"])
+            metrics = self._normalise_metrics(self._decode_metrics(row["metrics"]))
+            started_at = self._decode_optional_datetime(row["started_at"])
+            finished_at = self._decode_optional_datetime(row["finished_at"])
+            duration_ms = row["duration_ms"]
             encoded_parameters = self._encode_parameters(parameters)
             encoded_timestamp = self._encode_datetime(timestamp)
+
+            metrics, started_at, finished_at, duration_ms = self._apply_event_metrics(
+                metrics=metrics,
+                status=status,
+                timestamp=timestamp,
+                parameters=parameters,
+                run_status=run_status,
+                created_at=created_at,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=duration_ms,
+            )
+            encoded_metrics = self._encode_metrics(metrics)
+            encoded_started_at = self._encode_optional_datetime(started_at)
+            encoded_finished_at = self._encode_optional_datetime(finished_at)
 
             with self._connection:
                 self._connection.execute(
@@ -571,19 +822,36 @@ class PipelineRunStore:
                     self._connection.execute(
                         """
                         UPDATE pipeline_runs
-                        SET status = ?, updated_at = ?
+                        SET status = ?, updated_at = ?, started_at = ?,
+                            finished_at = ?, duration_ms = ?, metrics = ?
                         WHERE run_id = ?
                         """,
-                        (run_status, encoded_timestamp, run_id),
+                        (
+                            run_status,
+                            encoded_timestamp,
+                            encoded_started_at,
+                            encoded_finished_at,
+                            duration_ms,
+                            encoded_metrics,
+                            run_id,
+                        ),
                     )
                 else:
                     self._connection.execute(
                         """
                         UPDATE pipeline_runs
-                        SET updated_at = ?
+                        SET updated_at = ?, started_at = ?, finished_at = ?,
+                            duration_ms = ?, metrics = ?
                         WHERE run_id = ?
                         """,
-                        (encoded_timestamp, run_id),
+                        (
+                            encoded_timestamp,
+                            encoded_started_at,
+                            encoded_finished_at,
+                            duration_ms,
+                            encoded_metrics,
+                            run_id,
+                        ),
                     )
             subscribers = tuple(self._subscribers.get(run_id, ()))
 
@@ -601,7 +869,8 @@ class PipelineRunStore:
             cursor = self._connection.execute(
                 """
                 SELECT run_id, pipeline, status, created_at, updated_at,
-                       parameters, definition_snapshot
+                       parameters, definition_snapshot, started_at, finished_at,
+                       duration_ms, metrics
                 FROM pipeline_runs
                 WHERE run_id = ?
                 """,
@@ -622,6 +891,10 @@ class PipelineRunStore:
             definition_snapshot=self._decode_definition_snapshot(
                 row["definition_snapshot"]
             ),
+            started_at=self._decode_optional_datetime(row["started_at"]),
+            finished_at=self._decode_optional_datetime(row["finished_at"]),
+            duration_ms=row["duration_ms"],
+            metrics=self._normalise_metrics(self._decode_metrics(row["metrics"])),
         )
 
     def list_runs(
@@ -647,7 +920,8 @@ class PipelineRunStore:
         query = [
             (
                 "SELECT run_id, pipeline, status, created_at, updated_at, "
-                "parameters, definition_snapshot"
+                "parameters, definition_snapshot, started_at, finished_at, "
+                "duration_ms, metrics"
             ),
             "FROM pipeline_runs",
         ]
@@ -679,6 +953,10 @@ class PipelineRunStore:
                 definition_snapshot=self._decode_definition_snapshot(
                     row["definition_snapshot"]
                 ),
+                started_at=self._decode_optional_datetime(row["started_at"]),
+                finished_at=self._decode_optional_datetime(row["finished_at"]),
+                duration_ms=row["duration_ms"],
+                metrics=self._normalise_metrics(self._decode_metrics(row["metrics"])),
             )
             for row in rows
         ]
@@ -1161,6 +1439,9 @@ class PipelineOrchestrator:
         self._store.close()
 
     def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
+        starts: dict[str, list[datetime]] = {}
+        lock = Lock()
+
         def emit(
             status: str,
             *,
@@ -1169,6 +1450,33 @@ class PipelineOrchestrator:
             error: Exception | None = None,
         ) -> None:
             payload: dict[str, Any] = {"step": step.name}
+            now = datetime.now(timezone.utc)
+
+            if status == "step_started":
+                started_at = now
+                payload["started_at"] = started_at.isoformat()
+                with lock:
+                    starts.setdefault(step.name, []).append(started_at)
+            elif status in {"step_succeeded", "step_failed"}:
+                with lock:
+                    stack = starts.get(step.name)
+                    started_at = stack.pop() if stack else None  # type: ignore[assignment]
+                    if stack is not None and not stack:
+                        starts.pop(step.name, None)
+                if started_at is None:
+                    started_at = now
+                finished_at = now
+                duration_ms = max(
+                    int((finished_at - started_at).total_seconds() * 1000), 0
+                )
+                payload.update(
+                    {
+                        "started_at": started_at.isoformat(),
+                        "finished_at": finished_at.isoformat(),
+                        "duration_ms": duration_ms,
+                    }
+                )
+
             if event is not None:
                 payload["event"] = {
                     "name": event.name,

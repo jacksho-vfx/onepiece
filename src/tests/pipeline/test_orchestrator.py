@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from datetime import datetime
 from pathlib import Path
 import threading
 import time
@@ -138,6 +139,70 @@ def test_orchestrator_emits_step_events(orchestrator: PipelineOrchestrator) -> N
     assert step_payloads[2]["step"] == "listener"
     assert step_payloads[2]["event"]["name"] == "asset.ingested"
     assert step_payloads[2]["event"]["payload"]["shot"] == "sh020"
+
+
+def test_run_serialisation_includes_step_timings(
+    orchestrator: PipelineOrchestrator,
+) -> None:
+    pipeline = _build_pipeline()
+    definition = PipelineDefinition(name="demo", pipeline=pipeline, parameters={})
+    orchestrator.register(definition)
+
+    run = orchestrator.trigger_run("demo")
+    _wait_for_run(orchestrator, run.run_id, status="succeeded")
+
+    events = orchestrator.serialise_run_events(run.run_id)
+    step_started = [event for event in events if event["status"] == "step_started"]
+    assert step_started, "expected step_started events to be recorded"
+    assert all(
+        "started_at" in event["parameters"] for event in step_started
+    ), "step_started events should include a start timestamp"
+
+    completed = [
+        event
+        for event in events
+        if event["status"] in {"step_succeeded", "step_failed"}
+    ]
+    assert completed, "expected step completion events to be recorded"
+    assert all(
+        "duration_ms" in event["parameters"] for event in completed
+    ), "step completion events should include a duration"
+
+    run_payload = orchestrator.serialise_run(run.run_id)
+    timing = run_payload["timing"]
+    assert timing["started_at"] is not None
+    assert timing["finished_at"] is not None
+    assert timing["duration_ms"] is not None
+
+    started_at = datetime.fromisoformat(timing["started_at"])
+    finished_at = datetime.fromisoformat(timing["finished_at"])
+    calculated_duration = int((finished_at - started_at).total_seconds() * 1000)
+    assert (
+        abs(timing["duration_ms"] - calculated_duration) <= 5
+    ), "run duration should align with recorded timestamps"
+
+    completed_durations = [
+        int(event["parameters"]["duration_ms"]) for event in completed
+    ]
+    total_completed_duration = sum(completed_durations)
+    assert (
+        timing.get("total_step_duration_ms") == total_completed_duration
+    ), "aggregate step timing should match event totals"
+
+    step_metrics = run_payload["step_metrics"]
+    assert step_metrics, "expected step metrics to be reported"
+    for name, metrics in step_metrics.items():
+        assert metrics["count"] >= 1
+        assert metrics["last_duration_ms"] is not None
+        matching_events = [
+            event for event in completed if event["parameters"]["step"] == name
+        ]
+        expected_total = sum(
+            int(event["parameters"]["duration_ms"]) for event in matching_events
+        )
+        assert metrics["total_duration_ms"] == expected_total
+        if metrics["count"] > 0 and metrics["total_duration_ms"] is not None:
+            assert metrics["average_duration_ms"] is not None
 
 
 def test_serialise_preserves_provider_identifier(
