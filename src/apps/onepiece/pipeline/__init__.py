@@ -536,8 +536,8 @@ def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
                     for value in (average, minimum, maximum)
                 ):
                     line += (
-                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "
-                        f"max {float(maximum):.2f}s)"
+                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "  # type: ignore[arg-type]
+                        f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
                     )
             lines.append(line)
     return lines
@@ -716,9 +716,7 @@ def show_statistics(
 
     with _using_client() as client:
         try:
-            stats = client.get_stats(
-                since=since, include_durations=include_durations
-            )
+            stats = client.get_stats(since=since, include_durations=include_durations)
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc

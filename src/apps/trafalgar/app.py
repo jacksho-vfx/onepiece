@@ -96,8 +96,8 @@ def _format_pipeline_statistics(
                     for value in (average, minimum, maximum)
                 ):
                     line += (
-                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "
-                        f"max {float(maximum):.2f}s)"
+                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "  # type: ignore[arg-type]
+                        f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
                     )
             lines.append(line)
     return lines
