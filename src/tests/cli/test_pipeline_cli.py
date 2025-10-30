@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from pytest import MonkeyPatch
 from typing import Any, Iterable, Mapping
 
@@ -33,6 +34,11 @@ class StubPipelineClient:
     watch_error: PipelineClientError | None = None
     stats_payload: Mapping[str, Any] | None = None
     stats_error: PipelineClientError | None = None
+    create_response: Mapping[str, Any] | None = None
+    update_response: Mapping[str, Any] | None = None
+    create_error: PipelineClientError | None = None
+    update_error: PipelineClientError | None = None
+    delete_error: PipelineClientError | None = None
 
     closed: bool = False
     requested_name: str | None = None
@@ -40,6 +46,10 @@ class StubPipelineClient:
     list_runs_kwargs: Mapping[str, Any] | None = None
     requested_run_id: str | None = None
     stats_kwargs: Mapping[str, Any] | None = None
+    create_payload: Mapping[str, Any] | None = None
+    update_payload: Mapping[str, Any] | None = None
+    update_name: str | None = None
+    delete_name: str | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -114,6 +124,30 @@ class StubPipelineClient:
             raise AssertionError("stats payload was not configured")
         return dict(self.stats_payload)
 
+    def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        self.create_payload = dict(payload)
+        if self.create_error:
+            raise self.create_error
+        if self.create_response is None:
+            raise AssertionError("create response was not configured")
+        return dict(self.create_response)
+
+    def update_definition(
+        self, name: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        self.update_name = name
+        self.update_payload = dict(payload)
+        if self.update_error:
+            raise self.update_error
+        if self.update_response is None:
+            raise AssertionError("update response was not configured")
+        return dict(self.update_response)
+
+    def delete_definition(self, name: str) -> None:
+        self.delete_name = name
+        if self.delete_error:
+            raise self.delete_error
+
     def close(self) -> None:
         self.closed = True
 
@@ -125,6 +159,23 @@ def _install_stub(
 
     monkeypatch.setattr(pipeline_module, "_create_pipeline_client", lambda: client)
     return client
+
+
+def _write_pipeline_manifest(tmp_path: Path, name: str = "demo") -> Path:
+    manifest = tmp_path / "pipeline.toml"
+    manifest.write_text(
+        "\n".join(
+            [
+                f'name = "{name}"',
+                "",
+                "[[steps]]",
+                'id = "prepare"',
+                'uses = "tests.pipeline:prepare"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return manifest
 
 
 def test_pipeline_command_group_loads() -> None:
@@ -139,6 +190,9 @@ def test_pipeline_command_group_loads() -> None:
     assert "stats" in result.output
     assert "run-status" in result.output
     assert "watch" in result.output
+    assert "push" in result.output
+    assert "update" in result.output
+    assert "delete" in result.output
 
 
 def test_pipeline_list_displays_definitions(monkeypatch: MonkeyPatch) -> None:
@@ -230,6 +284,109 @@ def test_pipeline_describe_missing(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 2
     assert "Pipeline 'missing' was not found." in result.output
+    assert client.closed is True
+
+
+def test_pipeline_push_registers_definition(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = _write_pipeline_manifest(tmp_path, name="create-demo")
+    client = StubPipelineClient(create_response={"name": "create-demo"})
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "push", str(manifest)])
+
+    assert result.exit_code == 0
+    assert "Pipeline 'create-demo' created" in result.output
+    assert client.create_payload is not None
+    assert client.create_payload["name"] == "create-demo"
+    assert client.closed is True
+
+
+def test_pipeline_push_reports_conflict(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = _write_pipeline_manifest(tmp_path)
+    error = PipelineClientError("already exists", status_code=409)
+    client = StubPipelineClient(create_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "push", str(manifest)])
+
+    assert result.exit_code == 1
+    assert "Pipeline request failed: already exists" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_push_invalid_submission(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = _write_pipeline_manifest(tmp_path)
+    error = PipelineClientError("bad manifest", status_code=400)
+    client = StubPipelineClient(create_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "push", str(manifest)])
+
+    assert result.exit_code == 2
+    assert "bad manifest" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_update_replaces_definition(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = _write_pipeline_manifest(tmp_path, name="update-demo")
+    client = StubPipelineClient(update_response={"name": "update-demo"})
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "update", str(manifest)])
+
+    assert result.exit_code == 0
+    assert "Pipeline 'update-demo' updated" in result.output
+    assert client.update_name == "update-demo"
+    assert client.update_payload is not None
+    assert client.update_payload["name"] == "update-demo"
+    assert client.closed is True
+
+
+def test_pipeline_update_invalid_submission(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = _write_pipeline_manifest(tmp_path)
+    error = PipelineClientError("name mismatch", status_code=400)
+    client = StubPipelineClient(update_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "update", str(manifest)])
+
+    assert result.exit_code == 2
+    assert "name mismatch" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_delete_removes_definition(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient()
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "delete", "obsolete"])
+
+    assert result.exit_code == 0
+    assert "Pipeline 'obsolete' deleted" in result.output
+    assert client.delete_name == "obsolete"
+    assert client.closed is True
+
+
+def test_pipeline_delete_missing_definition(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("Unknown pipeline", status_code=404)
+    client = StubPipelineClient(delete_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "delete", "missing"])
+
+    assert result.exit_code == 2
+    assert "Unknown pipeline" in result.output
+    assert client.delete_name == "missing"
     assert client.closed is True
 
 

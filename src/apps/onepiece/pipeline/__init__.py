@@ -9,13 +9,19 @@ import threading
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from queue import Queue
 from typing import Any, Iterable, Iterator, Mapping, Protocol
 
 import httpx
 import typer
 
-from apps.trafalgar.pipeline import get_pipeline_orchestrator
+from apps.trafalgar.app import _load_pipeline_manifest
+from apps.trafalgar.pipeline import (
+    get_pipeline_orchestrator,
+    pipeline_definition_from_profile_entry,
+)
+from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.transport import (
     LEGACY_PIPELINE_API_URL_ENV,
     PIPELINE_API_URL_ENV,
@@ -67,6 +73,19 @@ class PipelineClient(Protocol):
         since: str | None = None,
         include_durations: bool = False,
     ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
+    def create_definition(
+        self, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
+    def update_definition(
+        self, name: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
+    def delete_definition(self, name: str) -> None:  # pragma: no cover - Protocol
         ...
 
     def close(self) -> None:  # pragma: no cover - Protocol
@@ -209,6 +228,29 @@ class LocalPipelineClient:
         )
         return {"pipelines": stats}
 
+    def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        definition = _definition_from_submission_payload(payload)
+        try:
+            self._orchestrator.register(definition)
+        except ValueError as exc:
+            raise PipelineClientError(str(exc), status_code=409) from exc
+        return dict(definition.serialise())
+
+    def update_definition(
+        self, name: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        definition = _definition_from_submission_payload(payload)
+        if definition.name != name:
+            raise PipelineClientError("Pipeline name mismatch.", status_code=400)
+        self._orchestrator.upsert(definition)
+        return dict(definition.serialise())
+
+    def delete_definition(self, name: str) -> None:
+        try:
+            self._orchestrator.deregister(name)
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+
 
 class RemotePipelineClient:
     """Client that communicates with the Trafalgar pipeline API."""
@@ -332,6 +374,25 @@ class RemotePipelineClient:
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
         return dict(payload)
 
+    def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        response = self._request("POST", "pipelines", json=dict(payload))
+        body = response.json()
+        if not isinstance(body, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return dict(body)
+
+    def update_definition(
+        self, name: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        response = self._request("PUT", f"pipelines/{name}", json=dict(payload))
+        body = response.json()
+        if not isinstance(body, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return dict(body)
+
+    def delete_definition(self, name: str) -> None:
+        self._request("DELETE", f"pipelines/{name}")
+
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
             response = self._client.request(method, path, **kwargs)
@@ -391,6 +452,26 @@ def _create_pipeline_client() -> PipelineClient:
 
 
 _MISSING = object()
+
+
+def _definition_from_submission_payload(
+    payload: Mapping[str, Any]
+) -> "PipelineDefinition":
+    from apps.trafalgar.pipeline import PipelineDefinition
+
+    name_value = payload.get("name")
+    if not isinstance(name_value, str) or not name_value.strip():
+        raise PipelineClientError(
+            "Pipeline submission must include a non-empty 'name'.",
+            status_code=400,
+        )
+    name = name_value.strip()
+    config = {key: value for key, value in payload.items() if key != "name"}
+    try:
+        translated = translate_pipeline_manifest(config)
+        return pipeline_definition_from_profile_entry(name, translated)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PipelineClientError(str(exc), status_code=400) from exc
 
 
 def _normalise_parameter_definition(
@@ -614,6 +695,56 @@ def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
     return parameters
 
 
+def _load_pipeline_submission(
+    manifest: Path, *, name: str | None = None
+) -> dict[str, Any]:
+    try:
+        payload = _load_pipeline_manifest(manifest)
+    except typer.BadParameter as exc:
+        raise typer.BadParameter(str(exc), param_hint="manifest") from exc
+
+    pipelines_section = payload.get("pipelines")
+    if isinstance(pipelines_section, Mapping):
+        if name is None:
+            if len(pipelines_section) != 1:
+                raise typer.BadParameter(
+                    "Manifest contains multiple pipelines; provide --name to select one.",
+                    param_hint="manifest",
+                )
+            selected_name, config_payload = next(iter(pipelines_section.items()))
+        else:
+            try:
+                config_payload = pipelines_section[name]
+            except KeyError as exc:
+                raise typer.BadParameter(
+                    f"Manifest does not include a pipeline named '{name}'.",
+                    param_hint="--name",
+                ) from exc
+            selected_name = name
+        if not isinstance(config_payload, Mapping):
+            raise typer.BadParameter(
+                "Pipeline entries must be mappings.", param_hint="manifest"
+            )
+    else:
+        raw_name = name or payload.get("name")
+        if not raw_name:
+            raise typer.BadParameter(
+                "Pipeline manifests must declare a 'name'.", param_hint="manifest"
+            )
+        selected_name = str(raw_name)
+        if name is not None and selected_name != name:
+            raise typer.BadParameter(
+                "Pipeline manifest name does not match the '--name' option "
+                f"('{selected_name}' != '{name}').",
+                param_hint="--name",
+            )
+        config_payload = payload
+
+    submission = dict(config_payload)
+    submission["name"] = str(selected_name)
+    return submission
+
+
 app = typer.Typer(
     name="pipeline",
     help="Interact with the OnePiece pipeline orchestrator.",
@@ -671,6 +802,85 @@ def describe_pipeline(
             raise typer.Exit(code=1) from exc
 
     _render_pipeline_details(definition)
+
+
+@app.command("push")
+def push_pipeline_definition(
+    manifest: Path = typer.Argument(..., help="TOML or YAML pipeline manifest."),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help="Pipeline name when the manifest contains multiple entries.",
+    ),
+) -> None:
+    """Register a new pipeline definition from a manifest file."""
+
+    submission = _load_pipeline_submission(manifest, name=name)
+
+    with _using_client() as client:
+        try:
+            result = client.create_definition(submission)
+        except PipelineClientError as exc:
+            if exc.status_code == 400:
+                raise typer.BadParameter(exc.message, param_hint="manifest") from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            if exc.status_code == 409:
+                raise typer.Exit(code=1) from exc
+            raise typer.Exit(code=1) from exc
+
+    pipeline_name = str(result.get("name", submission["name"]))
+    typer.echo(
+        f"Pipeline '{pipeline_name}' created from {manifest.resolve()}.",
+    )
+
+
+@app.command("update")
+def update_pipeline_definition(
+    manifest: Path = typer.Argument(..., help="TOML or YAML pipeline manifest."),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help="Pipeline name when the manifest contains multiple entries.",
+    ),
+) -> None:
+    """Replace an existing pipeline definition from a manifest file."""
+
+    submission = _load_pipeline_submission(manifest, name=name)
+    pipeline_name = str(submission["name"])
+
+    with _using_client() as client:
+        try:
+            result = client.update_definition(pipeline_name, submission)
+        except PipelineClientError as exc:
+            if exc.status_code == 400:
+                raise typer.BadParameter(exc.message, param_hint="manifest") from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    resolved_name = str(result.get("name", pipeline_name))
+    typer.echo(
+        f"Pipeline '{resolved_name}' updated from {manifest.resolve()}.",
+    )
+
+
+@app.command("delete")
+def delete_pipeline_definition(
+    name: str = typer.Argument(..., help="Pipeline identifier to remove."),
+) -> None:
+    """Delete a pipeline definition from the orchestrator."""
+
+    with _using_client() as client:
+        try:
+            client.delete_definition(name)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message, param_hint="name") from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Pipeline '{name}' deleted from the orchestrator.")
 
 
 @app.command("run")
