@@ -68,6 +68,7 @@ class _IngestResolvedOptions:
     vendor_bucket: str
     client_bucket: str
     max_workers: int
+    auto_workers: bool
     use_asyncio: bool
     resume: bool
     checkpoint_dir: Path
@@ -85,6 +86,7 @@ def _prepare_ingest_options(
     vendor_bucket: str | None,
     client_bucket: str | None,
     max_workers: int | None,
+    auto_workers: bool | None,
     use_asyncio: bool | None,
     resume: bool | None,
     checkpoint_dir: Path | None,
@@ -141,6 +143,14 @@ def _prepare_ingest_options(
     )
     if resolved_max_workers is None:
         resolved_max_workers = int(os.getenv("INGEST_MAX_WORKERS", "4"))
+
+    resolved_auto_workers = (
+        auto_workers
+        if auto_workers is not None
+        else _optional_bool(ingest_mapping.get("auto_workers"), "ingest.auto_workers")
+    )
+    if resolved_auto_workers is None:
+        resolved_auto_workers = _env_flag("INGEST_AUTO_WORKERS", True)
 
     resolved_use_asyncio = (
         use_asyncio
@@ -205,6 +215,7 @@ def _prepare_ingest_options(
         vendor_bucket=resolved_vendor_bucket,
         client_bucket=resolved_client_bucket,
         max_workers=resolved_max_workers,
+        auto_workers=resolved_auto_workers,
         use_asyncio=resolved_use_asyncio,
         resume=resolved_resume,
         checkpoint_dir=resolved_checkpoint_dir,
@@ -286,6 +297,11 @@ def ingest(
         "--max-workers",
         help="Maximum number of concurrent uploads when using worker pools.",
     ),
+    auto_workers: bool | None = typer.Option(
+        None,
+        "--auto-workers/--no-auto-workers",
+        help="Automatically scale ingest worker pools based on delivery size.",
+    ),
     use_asyncio: bool | None = typer.Option(
         None,
         "--use-asyncio/--no-use-asyncio",
@@ -359,6 +375,7 @@ def ingest(
         vendor_bucket=vendor_bucket,
         client_bucket=client_bucket,
         max_workers=max_workers,
+        auto_workers=auto_workers,
         use_asyncio=use_asyncio,
         resume=resume,
         checkpoint_dir=checkpoint_dir,
@@ -414,6 +431,7 @@ def ingest(
         client_bucket=resolved.client_bucket,
         dry_run=dry_run,
         max_workers=resolved.max_workers,
+        auto_tune_workers=resolved.auto_workers,
         use_asyncio=resolved.use_asyncio,
         resume_enabled=resolved.resume,
         checkpoint_dir=resolved.checkpoint_dir,

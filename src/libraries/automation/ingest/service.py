@@ -9,6 +9,7 @@ import hashlib
 import inspect
 import json
 import logging
+import math
 import os
 import threading
 from dataclasses import dataclass, field
@@ -49,6 +50,12 @@ MIN_MULTIPART_CHUNK_SIZE = 5 * 1024 * 1024
 
 DEFAULT_UPLOAD_CONCURRENCY = 10
 """Default concurrency level used by :class:`~boto3.s3.transfer.TransferConfig`."""
+
+AUTO_WORKER_BYTES_TARGET = 512 * 1024 * 1024
+"""Approximate payload size (in bytes) each worker should handle when auto-tuning."""
+
+AUTO_WORKER_FILES_TARGET = 8
+"""Target number of files per worker when auto-tuning based on file counts."""
 
 
 def _normalise_identifier(value: str) -> str:
@@ -505,6 +512,7 @@ class MediaIngestService:
     client_bucket: str = "client_in"
     dry_run: bool = False
     max_workers: int = 1
+    auto_tune_workers: bool = True
     use_asyncio: bool = False
     resume_enabled: bool = False
     checkpoint_dir: Path | None = None
@@ -532,6 +540,21 @@ class MediaIngestService:
                     default=self.max_workers,
                 )
         self.max_workers = max(1, self.max_workers)
+
+        self._configured_max_workers = self.max_workers
+        self._resolved_worker_count = self.max_workers
+        self._worker_analysis: dict[str, object] = {
+            "configured_cap": self._configured_max_workers,
+            "resolved_workers": self._resolved_worker_count,
+            "total_jobs": 0,
+            "total_bytes": 0,
+            "largest_job": 0,
+            "auto_tuned": False,
+        }
+
+        self.auto_tune_workers = _env_flag(
+            "INGEST_AUTO_WORKERS", self.auto_tune_workers
+        )
 
         self.use_asyncio = _env_flag("INGEST_USE_ASYNCIO", self.use_asyncio)
         self.resume_enabled = _env_flag("INGEST_RESUME_ENABLED", self.resume_enabled)
@@ -591,6 +614,18 @@ class MediaIngestService:
                 max_concurrency=self.upload_concurrency,
             )
 
+    @property
+    def worker_count(self) -> int:
+        """Return the concurrency that will be used for uploads."""
+
+        return self._resolved_worker_count
+
+    @property
+    def worker_analysis(self) -> Mapping[str, object]:
+        """Return details captured while sizing the worker pool."""
+
+        return dict(self._worker_analysis)
+
     def ingest_folder(
         self,
         folder: Path,
@@ -602,6 +637,8 @@ class MediaIngestService:
 
         if not folder.exists() or not folder.is_dir():
             raise FileNotFoundError(f"Incoming folder does not exist: {folder}")
+
+        self._reset_worker_state()
 
         manifest_entries: list[Delivery] = []
         if manifest is not None:
@@ -738,6 +775,8 @@ class MediaIngestService:
                 )
             )
 
+        self._apply_worker_tuning(upload_jobs)
+
         if manifest_entries:
             unmatched_entries = [
                 entry
@@ -797,6 +836,71 @@ class MediaIngestService:
         results = self._execute_uploads(upload_jobs, checkpoint_store)
 
         return self._finalise_ingest(report, results, _notify)
+
+    def _reset_worker_state(self) -> None:
+        """Restore worker tracking before analysing a new ingest batch."""
+
+        self.max_workers = self._configured_max_workers
+        self._resolved_worker_count = self._configured_max_workers
+        self._worker_analysis = {
+            "configured_cap": self._configured_max_workers,
+            "resolved_workers": self._resolved_worker_count,
+            "total_jobs": 0,
+            "total_bytes": 0,
+            "largest_job": 0,
+            "auto_tuned": False,
+        }
+
+    def _apply_worker_tuning(self, jobs: Sequence[_UploadJob]) -> None:
+        """Analyse *jobs* and update the configured worker count."""
+
+        resolved, analysis = self._determine_worker_count(jobs)
+        self._worker_analysis = analysis
+        self._resolved_worker_count = resolved
+        self.max_workers = resolved
+
+    def _determine_worker_count(
+        self, jobs: Sequence[_UploadJob]
+    ) -> tuple[int, dict[str, object]]:
+        """Return the worker count and telemetry for the provided *jobs*."""
+
+        cap = self._configured_max_workers
+        total_jobs = len(jobs)
+        total_bytes = sum(job.size for job in jobs)
+        largest_job = max((job.size for job in jobs), default=0)
+        target_by_files: int | None = None
+        target_by_bytes: int | None = None
+        auto_tuned = False
+
+        if total_jobs == 0:
+            resolved = cap
+        elif cap <= 1:
+            resolved = 1
+        elif not self.auto_tune_workers:
+            resolved = cap
+        else:
+            target_by_files = max(1, math.ceil(total_jobs / AUTO_WORKER_FILES_TARGET))
+            target_by_bytes = max(1, math.ceil(total_bytes / AUTO_WORKER_BYTES_TARGET))
+            target = max(target_by_files, target_by_bytes)
+            resolved = max(1, min(cap, min(total_jobs, target)))
+            auto_tuned = True
+
+        analysis: dict[str, object] = {
+            "configured_cap": cap,
+            "resolved_workers": resolved,
+            "total_jobs": total_jobs,
+            "total_bytes": total_bytes,
+            "largest_job": largest_job,
+            "auto_tuned": auto_tuned,
+        }
+        if target_by_files is not None:
+            analysis["target_by_files"] = target_by_files
+        if target_by_bytes is not None:
+            analysis["target_by_bytes"] = target_by_bytes
+
+        log.info("ingest.worker_count_resolved", **analysis)
+
+        return resolved, analysis
 
     def _resolve_bucket(self) -> str:
         source_normalized = self.source.lower()
