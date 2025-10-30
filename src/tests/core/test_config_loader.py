@@ -186,6 +186,7 @@ def test_prepare_ingest_options_cli_overrides(tmp_path: Path) -> None:
         vendor_bucket=None,
         client_bucket="cli-client",
         max_workers=2,
+        auto_workers=None,
         use_asyncio=None,
         resume=None,
         checkpoint_dir=None,
@@ -199,6 +200,7 @@ def test_prepare_ingest_options_cli_overrides(tmp_path: Path) -> None:
     assert resolved.vendor_bucket == "cfg-vendor"
     assert resolved.client_bucket == "cli-client"
     assert resolved.max_workers == 2
+    assert resolved.auto_workers is True
     assert resolved.use_asyncio is True
     assert resolved.resume is True
     assert resolved.checkpoint_dir == tmp_path / "checkpoints"
@@ -216,6 +218,7 @@ def test_prepare_ingest_options_requires_project_and_show_code() -> None:
             vendor_bucket=None,
             client_bucket=None,
             max_workers=None,
+            auto_workers=None,
             use_asyncio=None,
             resume=None,
             checkpoint_dir=None,
@@ -232,6 +235,7 @@ def test_prepare_ingest_options_requires_project_and_show_code() -> None:
             vendor_bucket=None,
             client_bucket=None,
             max_workers=None,
+            auto_workers=None,
             use_asyncio=None,
             resume=None,
             checkpoint_dir=None,
@@ -258,6 +262,7 @@ def test_prepare_ingest_options_expands_env_checkpoint_dir(
         vendor_bucket=None,
         client_bucket=None,
         max_workers=None,
+        auto_workers=None,
         use_asyncio=None,
         resume=None,
         checkpoint_dir=None,
