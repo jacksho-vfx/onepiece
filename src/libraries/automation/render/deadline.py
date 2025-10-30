@@ -1,11 +1,17 @@
-"""Render adapter that submits jobs to Deadline's REST API."""
+"""Render adapter that submits jobs to Deadline's REST API.
+
+In addition to job submission the adapter now provides lightweight helpers for
+polling job state and cancelling submissions when the Deadline REST API
+supports it.  Successful cancellation attempts automatically flag the adapter
+as supporting cancellation so callers can toggle related UI affordances.
+"""
 
 from __future__ import annotations
 
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, cast
 
 import requests
 import structlog
@@ -105,6 +111,79 @@ class DeadlineClient:
             raise DeadlineResponseError("Deadline returned invalid JSON") from exc
 
         return data
+
+    def get_job(self, job_id: str) -> Any:
+        """Return metadata for the Deadline job identified by ``job_id``."""
+
+        url = f"{self.base_url.rstrip('/')}/api/jobs/{job_id}"
+        auth = None
+        if self.username and self.password:
+            auth = (self.username, self.password)
+
+        try:
+            response = self.session.get(url, timeout=REQUEST_TIMEOUT, auth=auth)
+        except (requests.RequestException) as exc:  # pragma: no cover - network failure
+            raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
+
+        if response.status_code in {401, 403}:
+            raise DeadlineAuthenticationError(
+                _response_message(response) or "Deadline authentication failed"
+            )
+        if response.status_code == 404:
+            raise DeadlineResponseError(
+                _response_message(response) or "Deadline job not found"
+            )
+        if response.status_code >= 500:
+            raise DeadlineUnavailableError(
+                _response_message(response) or "Deadline encountered an error"
+            )
+
+        if not response.content:
+            raise DeadlineResponseError("Deadline returned an empty response")
+
+        try:
+            return response.json()
+        except json.JSONDecodeError as exc:
+            raise DeadlineResponseError("Deadline returned invalid JSON") from exc
+
+    def delete_job(self, job_id: str) -> Any:
+        """Request cancellation of the Deadline job identified by ``job_id``."""
+
+        url = f"{self.base_url.rstrip('/')}/api/jobs/{job_id}"
+        auth = None
+        if self.username and self.password:
+            auth = (self.username, self.password)
+
+        try:
+            response = self.session.delete(url, timeout=REQUEST_TIMEOUT, auth=auth)
+        except (requests.RequestException) as exc:  # pragma: no cover - network failure
+            raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
+
+        if response.status_code in {401, 403}:
+            raise DeadlineAuthenticationError(
+                _response_message(response) or "Deadline authentication failed"
+            )
+        if response.status_code == 404:
+            raise DeadlineResponseError(
+                _response_message(response) or "Deadline job not found"
+            )
+        if response.status_code == 409:
+            raise DeadlineValidationError(
+                _response_message(response)
+                or "Deadline refused to cancel the requested job"
+            )
+        if response.status_code >= 500:
+            raise DeadlineUnavailableError(
+                _response_message(response) or "Deadline encountered an error"
+            )
+
+        if not response.content:
+            return {"status": "cancelled", "message": "Job cancelled"}
+
+        try:
+            return response.json()
+        except json.JSONDecodeError as exc:
+            raise DeadlineResponseError("Deadline returned invalid JSON") from exc
 
     def get_limits(self) -> Any:
         """Return adapter limits advertised by Deadline."""
@@ -307,6 +386,149 @@ def submit_job(
     return result
 
 
+def get_job_status(job_id: str) -> SubmissionResult:
+    """Return the most recent state for a Deadline job."""
+
+    client = _get_client()
+
+    log.debug("render.deadline.get_job_status", job_id=job_id, base_url=client.base_url)
+
+    try:
+        payload = client.get_job(job_id)
+    except DeadlineAuthenticationError as exc:
+        raise RenderAdapterConfigurationError(
+            "Deadline rejected the configured credentials.",
+            hint="Verify the RENDER_DEADLINE_USERNAME and RENDER_DEADLINE_PASSWORD settings.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineUnavailableError as exc:
+        raise RenderAdapterUnavailableError(
+            "Deadline is unavailable.",
+            hint="Confirm the Deadline host is reachable and the REST API is enabled.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineResponseError as exc:
+        raise RenderAdapterError(
+            str(exc),
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineError as exc:  # pragma: no cover - defensive guard
+        raise RenderAdapterError(
+            "Unexpected Deadline error.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+
+    if not isinstance(payload, Mapping):
+        raise RenderAdapterError(
+            "Deadline returned unexpected job payload.",
+            context={"adapter": "deadline", "job_id": job_id},
+        )
+
+    payload_job_id = str(
+        payload.get("jobId")
+        or payload.get("JobID")
+        or payload.get("Id")
+        or payload.get("id")
+        or job_id
+    )
+    status = str(
+        payload.get("status")
+        or payload.get("State")
+        or payload.get("JobStatus")
+        or "unknown"
+    )
+    message = payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+
+    result: SubmissionResult = SubmissionResult(
+        job_id=payload_job_id,
+        status=status,
+        farm_type="deadline",
+    )
+    if isinstance(message, str) and message:
+        result["message"] = message
+
+    return result
+
+
+def cancel_job(job_id: str) -> SubmissionResult:
+    """Cancel a Deadline job and update adapter capabilities when supported."""
+
+    client = _get_client()
+
+    log.debug("render.deadline.cancel_job", job_id=job_id, base_url=client.base_url)
+
+    try:
+        payload = client.delete_job(job_id)
+    except DeadlineAuthenticationError as exc:
+        raise RenderAdapterConfigurationError(
+            "Deadline rejected the configured credentials.",
+            hint="Verify the RENDER_DEADLINE_USERNAME and RENDER_DEADLINE_PASSWORD settings.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineValidationError as exc:
+        raise RenderAdapterJobRejectedError(
+            str(exc),
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineUnavailableError as exc:
+        raise RenderAdapterUnavailableError(
+            "Deadline is unavailable.",
+            hint="Confirm the Deadline host is reachable and the REST API is enabled.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineResponseError as exc:
+        raise RenderAdapterError(
+            str(exc),
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+    except DeadlineError as exc:  # pragma: no cover - defensive guard
+        raise RenderAdapterError(
+            "Unexpected Deadline error.",
+            context={"adapter": "deadline", "job_id": job_id},
+        ) from exc
+
+    if not isinstance(payload, Mapping):
+        raise RenderAdapterError(
+            "Deadline returned unexpected job payload.",
+            context={"adapter": "deadline", "job_id": job_id},
+        )
+
+    status = str(
+        payload.get("status")
+        or payload.get("State")
+        or payload.get("JobStatus")
+        or "cancelled"
+    )
+    message = payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+
+    result: SubmissionResult = SubmissionResult(
+        job_id=str(job_id),
+        status=status,
+        farm_type="deadline",
+    )
+    if isinstance(message, str) and message:
+        result["message"] = message
+
+    # Successful cancellation implies Deadline supports the feature. Toggle the
+    # cached capabilities so callers can react immediately.
+    global _CAPABILITIES_CACHE
+    cache_timestamp = time.monotonic()
+    if _CAPABILITIES_CACHE:
+        cached_capabilities: dict[str, Any] = dict(_CAPABILITIES_CACHE[1])
+        if not cached_capabilities.get("cancellation_supported"):
+            cached_capabilities["cancellation_supported"] = True
+            _CAPABILITIES_CACHE = (
+                cache_timestamp,
+                cast(AdapterCapabilities, cached_capabilities),
+            )
+    else:
+        capabilities = _default_capabilities()
+        capabilities["cancellation_supported"] = True
+        _CAPABILITIES_CACHE = (cache_timestamp, capabilities)
+
+    return result
+
+
 def get_capabilities() -> AdapterCapabilities:
     """Return Deadline capabilities, querying and caching API metadata when possible."""
 
@@ -339,6 +561,8 @@ def get_capabilities() -> AdapterCapabilities:
 
 __all__ = [
     "submit_job",
+    "get_job_status",
+    "cancel_job",
     "get_capabilities",
     "DeadlineClient",
     "DeadlineError",

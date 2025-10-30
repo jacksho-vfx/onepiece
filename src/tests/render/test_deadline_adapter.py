@@ -9,7 +9,9 @@ from libraries.automation.render import config as render_config
 from libraries.automation.render import deadline
 from libraries.automation.render.base import (
     RenderAdapterConfigurationError,
+    RenderAdapterError,
     RenderAdapterJobRejectedError,
+    RenderAdapterUnavailableError,
 )
 
 
@@ -163,3 +165,91 @@ def test_get_capabilities_falls_back_when_unavailable(
     caps = deadline.get_capabilities()
     assert caps["default_priority"] == 50
     assert caps["cancellation_supported"] is False
+
+
+def test_get_job_status_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    class StatusClient:
+        base_url = "http://deadline"
+
+        def get_job(self, job_id: str) -> Any:
+            return {"jobId": job_id, "status": "rendering", "message": "working"}
+
+    _patch_client(monkeypatch, StatusClient())
+
+    result = deadline.get_job_status("abcd1234")
+
+    assert result == {
+        "job_id": "abcd1234",
+        "status": "rendering",
+        "farm_type": "deadline",
+        "message": "working",
+    }
+
+
+def test_get_job_status_raises_for_response_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ErrorClient:
+        base_url = "http://deadline"
+
+        def get_job(self, job_id: str) -> Any:
+            raise deadline.DeadlineResponseError("no job")
+
+    _patch_client(monkeypatch, ErrorClient())
+
+    with pytest.raises(RenderAdapterError):
+        deadline.get_job_status("missing")
+
+
+def test_get_job_status_raises_for_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class OfflineClient:
+        base_url = "http://deadline"
+
+        def get_job(self, job_id: str) -> Any:
+            raise deadline.DeadlineUnavailableError("offline")
+
+    _patch_client(monkeypatch, OfflineClient())
+
+    with pytest.raises(RenderAdapterUnavailableError):
+        deadline.get_job_status("abcd1234")
+
+
+def test_cancel_job_happy_path_updates_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CancelClient:
+        base_url = "http://deadline"
+
+        def delete_job(self, job_id: str) -> Any:
+            return {"status": "cancelled", "message": "stopped"}
+
+    deadline._CAPABILITIES_CACHE = None
+    _patch_client(monkeypatch, CancelClient())
+
+    result = deadline.cancel_job("abcd1234")
+
+    assert result == {
+        "job_id": "abcd1234",
+        "status": "cancelled",
+        "farm_type": "deadline",
+        "message": "stopped",
+    }
+    assert deadline._CAPABILITIES_CACHE is not None
+    assert deadline._CAPABILITIES_CACHE[1]["cancellation_supported"] is True
+
+
+def test_cancel_job_raises_for_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RejectClient:
+        base_url = "http://deadline"
+
+        def delete_job(self, job_id: str) -> Any:
+            raise deadline.DeadlineValidationError("busy")
+
+    _patch_client(monkeypatch, RejectClient())
+
+    with pytest.raises(RenderAdapterJobRejectedError):
+        deadline.cancel_job("abcd1234")
