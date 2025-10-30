@@ -12,6 +12,7 @@ from libraries.creative.dcc.dcc_client import (
     DCCDependencyReport,
     DCCPluginStatus,
     JSONValue,
+    LinkStrategy,
     publish_scene,
 )
 from libraries.creative.dcc.maya.unreal_export_checker import UnrealExportReport
@@ -64,6 +65,16 @@ def _validate_scene_name(value: str) -> str:
     if any(part in {"..", ""} for part in path.parts):
         raise typer.BadParameter("scene-name must not reference parent directories")
     return value
+
+
+def _validate_link_strategy(value: str) -> LinkStrategy:
+    lowered = value.lower()
+    allowed: tuple[LinkStrategy, ...] = ("copy", "hard", "symlink")
+    if lowered not in allowed:
+        raise typer.BadParameter(
+            "package-links must be one of 'copy', 'hard', or 'symlink'"
+        )
+    return cast(LinkStrategy, lowered)
 
 
 def _format_dependency_summary(report: DCCDependencyReport) -> str:
@@ -153,6 +164,12 @@ def publish(
         "--dependency-summary/--no-dependency-summary",
         help="Print dependency validation summary after publishing.",
     ),
+    package_links: LinkStrategy = typer.Option(
+        "copy",
+        "--package-links",
+        help="How to stage package contents locally: copy, hard, or symlink.",
+        callback=_validate_link_strategy,
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run/--no-dry-run",
@@ -194,6 +211,7 @@ def publish(
             maya_validation_callback=(
                 capture_maya_report if dependency_summary else None
             ),
+            link_strategy=package_links,
             dry_run=dry_run,
         )
     except ValueError as exc:

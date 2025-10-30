@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -222,6 +223,101 @@ def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
     assert render_files == [expected_package / "renders" / "beauty.exr"]
     assert preview_files == [expected_package / "previews" / "preview.jpg"]
     assert (expected_package / "otio" / "edit.otio").exists()
+
+
+def test_prepare_package_contents_hardlinks_outputs(tmp_path: Path) -> None:
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    package_dir, render_files, preview_files = _prepare_package_contents(
+        "ep01_sh099",
+        renders,
+        previews,
+        otio,
+        destination,
+        link_strategy="hard",
+    )
+
+    render_target = render_files[0]
+    preview_target = preview_files[0]
+    otio_target = package_dir / "otio" / "edit.otio"
+
+    assert os.stat(render_target).st_nlink >= 2
+    assert os.stat(render_target).st_ino == os.stat(renders / "beauty.exr").st_ino
+    assert os.stat(preview_target).st_nlink >= 2
+    assert os.stat(preview_target).st_ino == os.stat(previews / "preview.jpg").st_ino
+    assert os.stat(otio_target).st_nlink >= 2
+    assert os.stat(otio_target).st_ino == os.stat(otio).st_ino
+
+
+def test_prepare_package_contents_symlinks_outputs(tmp_path: Path) -> None:
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    package_dir, render_files, preview_files = _prepare_package_contents(
+        "ep01_sh099",
+        renders,
+        previews,
+        otio,
+        destination,
+        link_strategy="symlink",
+    )
+
+    assert (package_dir / "renders").is_symlink()
+    assert (package_dir / "previews").is_symlink()
+    assert os.path.samefile(render_files[0], renders / "beauty.exr")
+    assert os.path.samefile(preview_files[0], previews / "preview.jpg")
+    assert (package_dir / "otio" / "edit.otio").is_symlink()
+
+
+def test_prepare_package_contents_downgrades_linking_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    def failing_link(src: str, dst: str) -> None:
+        raise OSError("link not supported")
+
+    monkeypatch.setattr(os, "link", failing_link)
+    caplog.set_level(logging.WARNING)
+
+    package_dir, render_files, preview_files = _prepare_package_contents(
+        "ep01_sh099",
+        renders,
+        previews,
+        otio,
+        destination,
+        link_strategy="hard",
+    )
+
+    render_target = render_files[0]
+    preview_target = preview_files[0]
+
+    assert os.stat(render_target).st_nlink == 1
+    assert os.stat(preview_target).st_nlink == 1
+    assert "publish_scene_link_downgraded" in caplog.text
+
+
+def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    package_dir, render_files, preview_files = _prepare_package_contents(
+        "ep01_sh099",
+        renders,
+        previews,
+        otio,
+        destination,
+        link_strategy="symlink",
+    )
+
+    metadata_path, thumbnail_path = _write_metadata_and_thumbnails(
+        package_dir,
+        metadata,
+        preview_files,
+        render_files,
+    )
+
+    assert metadata_path.exists() and not metadata_path.is_symlink()
+    if thumbnail_path is not None:
+        assert thumbnail_path.exists() and not thumbnail_path.is_symlink()
 
 
 @pytest.mark.parametrize(
