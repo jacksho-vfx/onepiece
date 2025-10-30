@@ -191,6 +191,9 @@ class PipelineDefinition:
     ) -> dict[str, Any]:
         supplied = dict(provided or {})
         schema = self.parameters
+        if not schema:
+            return supplied
+
         resolved: dict[str, Any] = {}
 
         unknown = [name for name in supplied if name not in schema]
