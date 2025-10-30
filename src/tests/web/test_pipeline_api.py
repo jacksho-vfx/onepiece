@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import textwrap
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -431,6 +432,94 @@ def test_stream_run_events_delivers_live_updates(client: TestClient) -> None:
     events = _parse_stream_events(response.text)
     statuses = [event["status"] for event in events if event["id"] == run_id]
     assert statuses == ["queued", "running", "succeeded"]
+
+
+class _SerializableEvent:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def serialise(self) -> dict[str, Any]:
+        return self._payload
+
+
+def test_live_event_stream_emits_heartbeats(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(pipeline_module, "_HEARTBEAT_INTERVAL", 0.01)
+
+    async def _event_source() -> AsyncIterator[_SerializableEvent]:
+        await asyncio.sleep(0.03)
+        yield _SerializableEvent({"id": "run-1", "status": "running"})
+        await asyncio.sleep(0.03)
+        yield _SerializableEvent({"id": "run-1", "status": "succeeded"})
+
+    async def _exercise() -> None:
+        stream = pipeline_module._live_event_stream(_event_source())
+
+        outputs: list[bytes] = []
+        while True:
+            try:
+                item = await asyncio.wait_for(stream.__anext__(), timeout=1)
+            except StopAsyncIteration:
+                break
+            outputs.append(item)
+
+        assert outputs
+        assert outputs[0] == pipeline_module._HEARTBEAT_COMMENT
+
+        events = [chunk for chunk in outputs if chunk.startswith(b"data: ")]
+        assert [
+            json.loads(chunk.split(b"data: ", 1)[1])
+            for chunk in events
+        ] == [
+            {"id": "run-1", "status": "running"},
+            {"id": "run-1", "status": "succeeded"},
+        ]
+
+        running_index = outputs.index(events[0])
+        succeeded_index = outputs.index(events[1])
+
+        assert any(
+            chunk == pipeline_module._HEARTBEAT_COMMENT
+            for chunk in outputs[:running_index]
+        )
+        assert any(
+            chunk == pipeline_module._HEARTBEAT_COMMENT
+            for chunk in outputs[running_index + 1 : succeeded_index]
+        )
+
+    asyncio.run(_exercise())
+
+
+def test_live_event_stream_honours_cancellation(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(pipeline_module, "_HEARTBEAT_INTERVAL", 0.05)
+
+    cancelled = False
+
+    async def _slow_events() -> AsyncIterator[_SerializableEvent]:
+        nonlocal cancelled
+        try:
+            while True:
+                await asyncio.sleep(1)
+                yield _SerializableEvent({"id": "run-2", "status": "running"})
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+
+    async def _exercise() -> None:
+        stream = pipeline_module._live_event_stream(_slow_events())
+
+        first = await asyncio.wait_for(stream.__anext__(), timeout=1)
+        assert first == pipeline_module._HEARTBEAT_COMMENT
+
+        pending = asyncio.create_task(stream.__anext__())
+        await asyncio.sleep(0)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+
+        await stream.aclose()
+        assert cancelled
+
+    asyncio.run(_exercise())
 
 
 def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None:

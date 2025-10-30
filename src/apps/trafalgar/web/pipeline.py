@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Annotated, AsyncIterator, Mapping, Sequence
 
@@ -339,18 +340,64 @@ def _encode_event(payload: dict[str, Any]) -> bytes:
 
 
 _TERMINAL_STATUSES = {"succeeded", "failed"}
+_HEARTBEAT_INTERVAL = 15.0
+_HEARTBEAT_COMMENT = b": keep-alive\n\n"
+
+
+async def _cancel_task(task: asyncio.Task[Any] | None) -> None:
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    with suppress(asyncio.CancelledError, StopAsyncIteration):
+        await task
 
 
 async def _live_event_stream(
     events: AsyncIterator[Any],
 ) -> AsyncIterator[bytes]:
-    async for event in events:
-        payload = event.serialise()
-        if _should_stream_event(payload):
-            yield _encode_event(payload)
-            if payload.get("status") in _TERMINAL_STATUSES:
-                return
-            await asyncio.sleep(0)
+    heartbeat_task: asyncio.Task[None] | None = None
+    event_task: asyncio.Task[Any] | None = None
+
+    try:
+        while True:
+            if event_task is None:
+                event_task = asyncio.create_task(anext(events))
+            if heartbeat_task is None:
+                heartbeat_task = asyncio.create_task(
+                    asyncio.sleep(_HEARTBEAT_INTERVAL)
+                )
+
+            done, _ = await asyncio.wait(
+                {event_task, heartbeat_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if event_task in done:
+                try:
+                    event = event_task.result()
+                except StopAsyncIteration:
+                    return
+                finally:
+                    event_task = None
+
+                payload = event.serialise()
+                await _cancel_task(heartbeat_task)
+                heartbeat_task = None
+
+                if _should_stream_event(payload):
+                    yield _encode_event(payload)
+                    if payload.get("status") in _TERMINAL_STATUSES:
+                        return
+                await asyncio.sleep(0)
+
+            if heartbeat_task in done:
+                await _cancel_task(heartbeat_task)
+                heartbeat_task = None
+                yield _HEARTBEAT_COMMENT
+    finally:
+        await _cancel_task(event_task)
+        await _cancel_task(heartbeat_task)
 
 
 @router.get("/runs/{run_id}/events")
