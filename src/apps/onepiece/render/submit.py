@@ -892,6 +892,7 @@ def use_preset(
         refresh_capabilities=refresh_capabilities,
     )
 
+
 @app.command("status")
 def render_status(
     job_id: str = typer.Argument(..., help="Identifier returned by the render farm."),

@@ -75,14 +75,16 @@ class RenderJobClient:
             params = {"farm": farm}
         try:
             response = self._client.get(f"jobs/{job_id}", params=params)
-        except httpx.RequestError as exc:  # pragma: no cover - network failures are rare in tests
-            raise RenderJobClientError(
-                "Unable to reach Trafalgar render API."
-            ) from exc
+        except (
+            httpx.RequestError
+        ) as exc:  # pragma: no cover - network failures are rare in tests
+            raise RenderJobClientError("Unable to reach Trafalgar render API.") from exc
 
         if response.status_code == 404:
             detail = _extract_response_detail(response)
-            raise RenderJobClientError(detail or "Render job not found.", status_code=404)
+            raise RenderJobClientError(
+                detail or "Render job not found.", status_code=404
+            )
 
         if not response.is_success:
             detail = _extract_response_detail(response)
@@ -144,8 +146,7 @@ def _iter_profile_url_candidates(data: Mapping[str, Any]) -> list[Any]:
         trafalgar_block = render_block.get("trafalgar")
         if isinstance(trafalgar_block, Mapping):
             candidates.extend(
-                trafalgar_block.get(key)
-                for key in ("base_url", "api_url", "url")
+                trafalgar_block.get(key) for key in ("base_url", "api_url", "url")
             )
         candidates.extend(
             render_block.get(key)
