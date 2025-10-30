@@ -20,6 +20,7 @@ from apps.trafalgar.app import _load_pipeline_manifest
 from apps.trafalgar.pipeline import (
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
+    PipelineDefinition,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.transport import (
@@ -457,8 +458,6 @@ _MISSING = object()
 def _definition_from_submission_payload(
     payload: Mapping[str, Any]
 ) -> "PipelineDefinition":
-    from apps.trafalgar.pipeline import PipelineDefinition
-
     name_value = payload.get("name")
     if not isinstance(name_value, str) or not name_value.strip():
         raise PipelineClientError(
