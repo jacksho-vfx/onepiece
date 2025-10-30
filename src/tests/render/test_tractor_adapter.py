@@ -230,4 +230,3 @@ def test_cancel_job_raises_for_validation(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(RenderAdapterJobRejectedError):
         tractor.cancel_job("job-123")
-
