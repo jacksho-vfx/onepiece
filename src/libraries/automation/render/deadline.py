@@ -122,7 +122,7 @@ class DeadlineClient:
 
         try:
             response = self.session.get(url, timeout=REQUEST_TIMEOUT, auth=auth)
-        except (requests.RequestException) as exc:  # pragma: no cover - network failure
+        except requests.RequestException as exc:  # pragma: no cover - network failure
             raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
 
         if response.status_code in {401, 403}:
@@ -156,7 +156,7 @@ class DeadlineClient:
 
         try:
             response = self.session.delete(url, timeout=REQUEST_TIMEOUT, auth=auth)
-        except (requests.RequestException) as exc:  # pragma: no cover - network failure
+        except requests.RequestException as exc:  # pragma: no cover - network failure
             raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
 
         if response.status_code in {401, 403}:
@@ -437,7 +437,9 @@ def get_job_status(job_id: str) -> SubmissionResult:
         or payload.get("JobStatus")
         or "unknown"
     )
-    message = payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+    message = (
+        payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+    )
 
     result: SubmissionResult = SubmissionResult(
         job_id=payload_job_id,
@@ -499,7 +501,9 @@ def cancel_job(job_id: str) -> SubmissionResult:
         or payload.get("JobStatus")
         or "cancelled"
     )
-    message = payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+    message = (
+        payload.get("message") or payload.get("Message") or payload.get("StatusMessage")
+    )
 
     result: SubmissionResult = SubmissionResult(
         job_id=str(job_id),
