@@ -134,7 +134,9 @@ class PipelineRun:
             "duration_ms": self.duration_ms,
         }
 
-        totals = self.metrics.get("totals", {}) if isinstance(self.metrics, dict) else {}
+        totals = (
+            self.metrics.get("totals", {}) if isinstance(self.metrics, dict) else {}
+        )
         if "step_duration_ms" in totals:
             timing["total_step_duration_ms"] = totals.get("step_duration_ms")
 
@@ -146,7 +148,7 @@ class PipelineRun:
                     if not isinstance(details, dict):
                         continue
                     count = details.get("count", 0)
-                    total_duration = details.get("total_duration_ms")
+                    total_duration: int = details.get("total_duration_ms")  # type: ignore[assignment]
                     try:
                         total_duration_value = int(total_duration)
                     except (TypeError, ValueError):
@@ -461,7 +463,7 @@ class PipelineRunStore:
         if "step_duration_ms" not in totals:
             total_duration = 0
             for data in steps.values():
-                value = data.get("total_duration_ms")
+                value: int = data.get("total_duration_ms")  # type: ignore[assignment]
                 try:
                     total_duration += int(value)
                 except (TypeError, ValueError):
@@ -1261,7 +1263,7 @@ class PipelineOrchestrator:
             elif status in {"step_succeeded", "step_failed"}:
                 with lock:
                     stack = starts.get(step.name)
-                    started_at = stack.pop() if stack else None
+                    started_at = stack.pop() if stack else None  # type: ignore[assignment]
                     if stack is not None and not stack:
                         starts.pop(step.name, None)
                 if started_at is None:

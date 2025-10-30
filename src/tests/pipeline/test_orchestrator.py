@@ -152,9 +152,7 @@ def test_run_serialisation_includes_step_timings(
     _wait_for_run(orchestrator, run.run_id, status="succeeded")
 
     events = orchestrator.serialise_run_events(run.run_id)
-    step_started = [
-        event for event in events if event["status"] == "step_started"
-    ]
+    step_started = [event for event in events if event["status"] == "step_started"]
     assert step_started, "expected step_started events to be recorded"
     assert all(
         "started_at" in event["parameters"] for event in step_started
@@ -205,6 +203,7 @@ def test_run_serialisation_includes_step_timings(
         assert metrics["total_duration_ms"] == expected_total
         if metrics["count"] > 0 and metrics["total_duration_ms"] is not None:
             assert metrics["average_duration_ms"] is not None
+
 
 def test_serialise_preserves_provider_identifier(
     monkeypatch: pytest.MonkeyPatch,
