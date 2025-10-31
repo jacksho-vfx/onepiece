@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -40,7 +41,9 @@ class DummyProcess:
 
 
 @pytest.fixture
-def demo_targets(monkeypatch: pytest.MonkeyPatch) -> tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]]:
+def demo_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]]:
     """Provide instrumented demo targets for CLI tests."""
 
     prepare_calls: dict[str, int] = {}
@@ -109,7 +112,7 @@ def test_launch_commands_start_processes_and_open_browser(
 
     def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
         observed_tokens.append(os.environ.get("ALPHA_DASHBOARD_TOKEN"))
-        process = DummyProcess(*args, **kwargs)  # type: ignore[arg-type]
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
         processes.append(process)
         return process
 
@@ -173,7 +176,7 @@ def test_present_runs_prepare_hooks_once(
     processes: list[DummyProcess] = []
 
     def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
-        process = DummyProcess(*args, **kwargs)  # type: ignore[arg-type]
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
         processes.append(process)
         return process
 
@@ -210,7 +213,7 @@ def test_present_respects_skip_create_option(
 
     calls: list[str] = []
 
-    def _make_hook(name: str):
+    def _make_hook(name: str) -> Any:
         def _hook() -> None:
             calls.append(name)
 
