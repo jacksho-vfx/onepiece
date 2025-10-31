@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from libraries.automation.ingest import Delivery
+if TYPE_CHECKING:
+    from libraries.automation.ingest import Delivery
 
 
 def _format_shot_name(episode: str, scene: str, shot: str) -> str:
