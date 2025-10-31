@@ -22,6 +22,11 @@ from apps.trafalgar.app import (
 from apps.trafalgar.web.demo import prepare_demo_state as prepare_trafalgar_demo_state
 from apps.uta.app import DEFAULT_PORT as UTA_DEFAULT_PORT
 
+from apps.tester.presentation import (
+    prepare_pipeline_demos,
+    restore_pipeline_demo_environment,
+)
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_BROWSER_DELAY = 1.0
@@ -80,7 +85,7 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
 CreationHook = Callable[[], None]
 
 
-DEMO_CREATION_HOOKS: tuple[CreationHook, ...] = ()
+DEMO_CREATION_HOOKS: tuple[CreationHook, ...] = (prepare_pipeline_demos,)
 
 
 def _ensure_uvicorn() -> None:
@@ -210,6 +215,8 @@ def _launch_demo_targets(
                 os.environ[key] = previous_value
             else:
                 os.environ.pop(key, None)
+
+        restore_pipeline_demo_environment()
 
 
 @app.command("open")
