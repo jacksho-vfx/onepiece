@@ -710,7 +710,9 @@ def test_publish_scene_replaces_existing_file_targets(
 
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
-def test_publish_scene_skips_unchanged_files(sync_mock: MagicMock, tmp_path: Path) -> None:
+def test_publish_scene_skips_unchanged_files(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
     scene_name = "ep01_sh050"
@@ -779,7 +781,9 @@ def test_publish_scene_force_package_rebuilds_outputs(
             required=frozenset(), available=frozenset(), missing=frozenset()
         ),
         assets=DCCAssetStatus(required=(), present=(), missing=()),
-        gpu=DCCGPUStatus(required="OpenGL 4.1", detected="OpenGL 4.1", meets_requirement=True),
+        gpu=DCCGPUStatus(
+            required="OpenGL 4.1", detected="OpenGL 4.1", meets_requirement=True
+        ),
     )
 
     publish_scene(
@@ -836,6 +840,7 @@ def test_publish_scene_force_package_rebuilds_outputs(
 
     assert result.exit_code == 0
     assert render_target.read_text() == "Beauty"
+
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(

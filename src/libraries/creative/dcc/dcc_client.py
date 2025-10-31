@@ -395,6 +395,7 @@ def _copy_output(
             return
         new_manifest[key] = entry
 
+    created_files: list[Path] = []
     if src.is_dir():
         if link_strategy == "symlink":
             if dst.exists():
@@ -426,7 +427,6 @@ def _copy_output(
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.mkdir(parents=True, exist_ok=True)
 
-        created_files: list[Path] = []
         effective_strategy: LinkStrategy = link_strategy
         for child in sorted(src.rglob("*")):
             if child.is_dir():
@@ -1037,14 +1037,16 @@ def publish_scene(
     :data:`DCC_GPU_REQUIREMENTS` entry for ad-hoc validations.
     """
 
-    package_dir, renders_files, previews_files, package_manifest = _prepare_package_contents(
-        scene_name,
-        renders,
-        previews,
-        otio,
-        destination,
-        link_strategy=link_strategy,
-        force_package=force_package,
+    package_dir, renders_files, previews_files, package_manifest = (
+        _prepare_package_contents(
+            scene_name,
+            renders,
+            previews,
+            otio,
+            destination,
+            link_strategy=link_strategy,
+            force_package=force_package,
+        )
     )
 
     _write_metadata_and_thumbnails(
