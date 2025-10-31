@@ -170,6 +170,11 @@ def publish(
         help="How to stage package contents locally: copy, hard, or symlink.",
         callback=_validate_link_strategy,
     ),
+    force_package: bool = typer.Option(
+        False,
+        "--force-package/--no-force-package",
+        help="Ignore the package manifest and rebuild local outputs.",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run/--no-dry-run",
@@ -212,6 +217,7 @@ def publish(
                 capture_maya_report if dependency_summary else None
             ),
             link_strategy=package_links,
+            force_package=force_package,
             dry_run=dry_run,
         )
     except ValueError as exc:
