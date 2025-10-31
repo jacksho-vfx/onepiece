@@ -43,6 +43,7 @@ class DemoTarget:
     port: int
     path: str = "/"
     environment: Mapping[str, str] | None = None
+    prepare: Callable[[], None] | None = None
 
     def url(self, host: str) -> str:
         """Return the full HTTP URL for the target."""
@@ -56,17 +57,20 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
         label="Perona demo dashboard",
         import_path="apps.perona.web.dummy_dashboard:app",
         port=PERONA_DEMO_PORT,
+        prepare=None,
     ),
     DemoTarget(
         label="Trafalgar demo dashboard",
         import_path="apps.trafalgar.web.demo:app",
         port=TRAFALGAR_DEMO_PORT,
         environment={"TRAFALGAR_DASHBOARD_TOKEN": DEMO_DASHBOARD_TOKEN},
+        prepare=None,
     ),
     DemoTarget(
         label="Uta CLI web app",
         import_path="apps.uta.web:app",
         port=UTA_DEFAULT_PORT,
+        prepare=None,
     ),
 )
 
@@ -134,6 +138,15 @@ def _launch_demo_targets(
 
     try:
         for target in DEMO_TARGETS:
+            if target.prepare is not None:
+                try:
+                    target.prepare()
+                except Exception as exc:  # noqa: BLE001 - surface prep failures
+                    typer.echo(
+                        f"Preparation for {target.label} failed: {exc}",
+                        err=True,
+                    )
+                    raise typer.Exit(code=1) from exc
             if target.environment:
                 for key, value in target.environment.items():
                     if key not in original_env:
