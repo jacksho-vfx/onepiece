@@ -109,9 +109,9 @@ def test_list_runs_orders_descending_by_creation() -> None:
     store = PipelineRunStore()
     _seed_runs(store)
 
-    runs = store.list_runs()
+    page = store.list_runs()
 
-    assert [run.run_id for run in runs] == ["run-3", "run-2", "run-1"]
+    assert [run.run_id for run in page.runs] == ["run-3", "run-2", "run-1"]
 
 
 def test_list_runs_supports_filters_and_limit() -> None:
@@ -119,17 +119,52 @@ def test_list_runs_supports_filters_and_limit() -> None:
     seeded = _seed_runs(store)
 
     render_runs = store.list_runs(pipeline="render_shots")
-    assert [run.run_id for run in render_runs] == ["run-2", "run-1"]
+    assert [run.run_id for run in render_runs.runs] == ["run-2", "run-1"]
 
     failed_runs = store.list_runs(status="failed")
-    assert [run.run_id for run in failed_runs] == ["run-2"]
+    assert [run.run_id for run in failed_runs.runs] == ["run-2"]
 
     since_timestamp = seeded[1].created_at
     recent_runs = store.list_runs(since=since_timestamp)
-    assert [run.run_id for run in recent_runs] == ["run-3", "run-2"]
+    assert [run.run_id for run in recent_runs.runs] == ["run-3", "run-2"]
 
     limited = store.list_runs(limit=1)
-    assert [run.run_id for run in limited] == ["run-3"]
+    assert [run.run_id for run in limited.runs] == ["run-3"]
+
+
+def test_list_runs_paginates_with_cursors() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 4, 1, 12, tzinfo=timezone.utc)
+    for index in range(5):
+        created = base + timedelta(hours=index)
+        _create_run(
+            store,
+            run_id=f"run-{index}",
+            pipeline="render",
+            status="succeeded",
+            created_at=created,
+            updated_at=created,
+        )
+
+    first_page = store.list_runs(limit=2)
+    assert [run.run_id for run in first_page.runs] == ["run-4", "run-3"]
+    assert first_page.next_cursor is not None
+
+    second_page = store.list_runs(
+        limit=2,
+        before_id=first_page.next_cursor.before_id,
+        before_created_at=first_page.next_cursor.before_created_at,
+    )
+    assert [run.run_id for run in second_page.runs] == ["run-2", "run-1"]
+    assert second_page.next_cursor is not None
+
+    final_page = store.list_runs(
+        limit=2,
+        before_id=second_page.next_cursor.before_id,
+        before_created_at=second_page.next_cursor.before_created_at,
+    )
+    assert [run.run_id for run in final_page.runs] == ["run-0"]
+    assert final_page.next_cursor is None
 
 
 def test_orchestrator_list_runs_proxies_store() -> None:
@@ -137,9 +172,9 @@ def test_orchestrator_list_runs_proxies_store() -> None:
     _seed_runs(store)
     orchestrator = PipelineOrchestrator(store=store)
 
-    runs = orchestrator.list_runs(limit=2)
+    page = orchestrator.list_runs(limit=2)
 
-    assert [run.run_id for run in runs] == ["run-3", "run-2"]
+    assert [run.run_id for run in page.runs] == ["run-3", "run-2"]
 
 
 def test_aggregate_runs_groups_statistics() -> None:

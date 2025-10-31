@@ -342,6 +342,38 @@ class PipelineDefinitionStore:
             yield
 
 
+@dataclass(frozen=True, slots=True)
+class PipelineRunCursor:
+    """Opaque pagination cursor representing a point in the run history."""
+
+    before_id: str
+    before_created_at: datetime
+
+    def serialise(self) -> Mapping[str, Any]:
+        return {
+            "before_id": self.before_id,
+            "before_created_at": self.before_created_at.astimezone(
+                timezone.utc
+            ).isoformat(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineRunPage:
+    """A page of pipeline runs accompanied by pagination metadata."""
+
+    runs: list["PipelineRun"]
+    next_cursor: PipelineRunCursor | None = None
+
+    def serialise(self) -> Mapping[str, Any]:
+        return {
+            "runs": [run.serialise() for run in self.runs],
+            "next_cursor": (
+                self.next_cursor.serialise() if self.next_cursor is not None else None
+            ),
+        }
+
+
 @dataclass(slots=True)
 class PipelineRun:
     """Metadata describing a pipeline run returned by the orchestrator."""
@@ -1262,7 +1294,13 @@ class PipelineRunStore:
         status: str | None = None,
         limit: int | None = None,
         since: datetime | None = None,
-    ) -> list[PipelineRun]:
+        before_id: str | None = None,
+        before_created_at: datetime | None = None,
+    ) -> PipelineRunPage:
+        if (before_id is None) ^ (before_created_at is None):
+            msg = "'before_id' and 'before_created_at' must be supplied together"
+            raise ValueError(msg)
+
         clauses: list[str] = []
         bindings: list[object] = []
         if pipeline is not None:
@@ -1274,6 +1312,12 @@ class PipelineRunStore:
         if since is not None:
             clauses.append("created_at >= ?")
             bindings.append(self._encode_datetime(since))
+        if before_id is not None and before_created_at is not None:
+            encoded = self._encode_datetime(before_created_at)
+            clauses.append(
+                "(created_at < ? OR (created_at = ? AND run_id < ?))"
+            )
+            bindings.extend([encoded, encoded, before_id])
 
         query = [
             (
@@ -1286,13 +1330,15 @@ class PipelineRunStore:
         if clauses:
             query.append("WHERE " + " AND ".join(clauses))
         query.append("ORDER BY created_at DESC, run_id DESC")
+        effective_limit = None
         if limit is not None:
+            effective_limit = limit + 1
             query.append("LIMIT ?")
 
         statement = "\n".join(query)
         params: tuple[object, ...]
-        if limit is not None:
-            params = (*bindings, limit)
+        if effective_limit is not None:
+            params = (*bindings, effective_limit)
         else:
             params = tuple(bindings)
 
@@ -1300,7 +1346,12 @@ class PipelineRunStore:
             cursor = self._connection.execute(statement, params)
             rows = cursor.fetchall()
 
-        return [
+        has_more = False
+        if limit is not None and len(rows) > limit:
+            has_more = True
+            rows = rows[:limit]
+
+        runs = [
             PipelineRun(
                 run_id=row["run_id"],
                 pipeline=row["pipeline"],
@@ -1320,6 +1371,16 @@ class PipelineRunStore:
             )
             for row in rows
         ]
+
+        next_cursor: PipelineRunCursor | None = None
+        if has_more and runs:
+            last = runs[-1]
+            next_cursor = PipelineRunCursor(
+                before_id=last.run_id,
+                before_created_at=last.created_at,
+            )
+
+        return PipelineRunPage(runs=runs, next_cursor=next_cursor)
 
     def aggregate_runs(
         self,
@@ -2108,9 +2169,16 @@ class PipelineOrchestrator:
         status: str | None = None,
         limit: int | None = None,
         since: datetime | None = None,
-    ) -> list[PipelineRun]:
+        before_id: str | None = None,
+        before_created_at: datetime | None = None,
+    ) -> PipelineRunPage:
         return self._store.list_runs(
-            pipeline=pipeline, status=status, limit=limit, since=since
+            pipeline=pipeline,
+            status=status,
+            limit=limit,
+            since=since,
+            before_id=before_id,
+            before_created_at=before_created_at,
         )
 
     def aggregate_runs(
