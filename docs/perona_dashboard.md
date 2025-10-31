@@ -165,7 +165,7 @@ The Perona dashboard now bundles a catalogue of Wrangler scripts that surface
 targeted remediation guidance straight from render and production telemetry.
 Each script can be launched from the dashboard UI or through the Wrangler HTTP
 endpoints and returns structured JSON payloads with headlines, ranked results,
-and recommended follow-up actions. 【F:src/apps/perona/web/wrangler.py†L1334-L1426】
+and recommended follow-up actions. 【F:src/apps/perona/web/wrangler/scripts/cost.py†L17-L216】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】
 
 | Script | What it highlights | Typical follow-up |
 | --- | --- | --- |
@@ -184,7 +184,7 @@ Wrangler responses expose `headline` strings for dashboards, sorted result
 arrays, and `recommended_follow_up` text for each entry so operators can copy
 the next steps into tickets or chatops tooling. When no issues are found the
 payloads default to a success headline (for example “Frame times steady”) to
-confirm monitoring remains healthy. 【F:src/apps/perona/web/wrangler.py†L757-L914】【F:src/apps/perona/web/wrangler.py†L1334-L1426】
+confirm monitoring remains healthy. 【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】【F:src/apps/perona/web/wrangler/scripts/production.py†L193-L420】
 
 ### Launch the dummy demo dashboard
 
