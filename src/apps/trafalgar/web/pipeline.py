@@ -33,7 +33,9 @@ from .security import (
 class PipelineDefinitionSubmission(BaseModel):
     """Request payload describing a pipeline definition."""
 
-    model_config = ConfigDict(extra="allow")
+    _ALLOWED_EXTRA_FIELDS = frozenset({"summary", "version"})
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     name: str
     display_name: str | None = Field(default=None, alias="display_name")
@@ -59,6 +61,20 @@ class PipelineDefinitionSubmission(BaseModel):
             msg = "pipeline definitions require 'steps' or 'triggers'"
             raise ValueError(msg)
         return self
+
+    def unexpected_fields(self) -> list[str]:
+        extras = set(self.model_extra or {})
+        unexpected = sorted(extras - self._ALLOWED_EXTRA_FIELDS)
+        return unexpected
+
+    def translator_overrides(self) -> dict[str, Any]:
+        if not self.model_extra:
+            return {}
+        return {
+            key: value
+            for key, value in self.model_extra.items()
+            if key in self._ALLOWED_EXTRA_FIELDS and value is not None
+        }
 
 
 class PipelineRunSubmission(BaseModel):
@@ -108,10 +124,15 @@ def root(
 def _definition_from_submission(
     submission: PipelineDefinitionSubmission,
 ) -> Any:
+    unexpected = submission.unexpected_fields()
+    if unexpected:
+        detail = f"Unexpected fields: {', '.join(unexpected)}"
+        raise HTTPException(status_code=400, detail=detail)
     try:
         payload = submission.model_dump(
             exclude={"name"}, by_alias=False, exclude_none=True
         )
+        payload.update(submission.translator_overrides())
         translated = translate_pipeline_manifest(payload)
         return pipeline_definition_from_profile_entry(
             submission.name,
