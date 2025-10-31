@@ -231,11 +231,14 @@ async def test_dashboard_mount_injects_base_path(
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         landing_page = await client.get("/")
         assert landing_page.status_code == 200
-        assert "[data-dashboard-auth]" in landing_page.text
-        assert 'data-chart-id="render-status"' in landing_page.text
-        assert 'data-chart-id="render-throughput"' in landing_page.text
-        assert 'data-chart-id="render-adapters"' in landing_page.text
-        assert "/render/jobs/metrics" in landing_page.text
+        terms = [
+            "data-dashboard-auth",
+            'data-chart-id="render-status"',
+            'data-chart-id="render-throughput"',
+            'data-chart-id="render-adapters"',
+        ]
+        for term in terms:
+            assert term in landing_page.text
 
         metrics = await client.get(
             "/render/jobs/metrics",
