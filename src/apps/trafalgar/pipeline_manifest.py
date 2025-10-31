@@ -14,11 +14,27 @@ def translate_pipeline_manifest(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise TypeError(msg)
 
     config = dict(payload)
+    metadata_payload = config.get("metadata")
+    if metadata_payload is None:
+        metadata: dict[str, Any] | None = None
+    elif isinstance(metadata_payload, Mapping):
+        metadata = dict(metadata_payload)
+    else:
+        msg = "pipeline metadata must be a mapping"
+        raise TypeError(msg)
+
+    version = config.pop("version", None)
+    if version is not None:
+        if metadata is None:
+            metadata = {}
+        metadata["version"] = version
+
+    if metadata is not None:
+        config["metadata"] = metadata
+
     summary = config.get("summary")
     if summary is not None and "description" not in config:
         config["description"] = str(summary)
-
-    config.pop("version", None)
 
     triggers = config.get("triggers")
     if triggers:

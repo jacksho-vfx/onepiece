@@ -112,6 +112,7 @@ class PipelineDefinition:
     display_name: str | None = None
     description: str | None = None
     parameters: Mapping[str, ParameterDefinition] = field(default_factory=dict)
+    version: str | None = None
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         if not self.name:
@@ -129,6 +130,17 @@ class PipelineDefinition:
             )
             object.__setattr__(self, "parameters", parsed)
 
+        version = self.version
+        if version is not None:
+            text = str(version).strip()
+            object.__setattr__(self, "version", text or None)
+        if self.version is not None and "version" not in self.pipeline.metadata:
+            metadata = dict(self.pipeline.metadata)
+            metadata["version"] = self.version
+            object.__setattr__(
+                self, "pipeline", replace(self.pipeline, metadata=metadata)
+            )
+
     def serialise(self) -> Mapping[str, Any]:
         steps = [self._serialise_step(step) for step in self.pipeline.steps]
         providers = {step["name"]: step["provider"] for step in steps}
@@ -136,7 +148,7 @@ class PipelineDefinition:
             step["name"]: step["trigger"]["depends_on"] for step in steps
         }
 
-        return {
+        payload = {
             "name": self.name,
             "display_name": self.display_name,
             "description": self.description,
@@ -149,6 +161,9 @@ class PipelineDefinition:
             "providers": providers,
             "dependency_graph": dependency_graph,
         }
+        if self.version is not None:
+            payload["version"] = self.version
+        return payload
 
     def _serialise_step(self, step: PipelineStep) -> Mapping[str, Any]:
         trigger = step.trigger
@@ -2365,12 +2380,15 @@ def pipeline_definition_from_profile_entry(
         location=f"pipeline '{name}'",
     )
 
+    version = _coerce_optional_str(config.get("version", metadata.get("version")))
+
     return PipelineDefinition(
         name=pipeline.name,
         pipeline=pipeline,
         display_name=display_name,
         description=description,
         parameters=parameters,
+        version=version,
     )
 
 
