@@ -24,6 +24,7 @@ class StubPipelineClient:
     definition: Mapping[str, Any] | None = None
     run_payload: Mapping[str, Any] | None = None
     runs: list[Mapping[str, Any]] | None = None
+    runs_payload: Mapping[str, Any] | None = None
     run_metadata: Mapping[str, Any] | None = None
     run_events: list[Mapping[str, Any]] | None = None
     list_error: PipelineClientError | None = None
@@ -82,16 +83,22 @@ class StubPipelineClient:
         status: str | None = None,
         limit: int | None = None,
         since: str | None = None,
-    ) -> list[Mapping[str, Any]]:
+        before_id: str | None = None,
+        before_created_at: str | None = None,
+    ) -> Mapping[str, Any]:
         self.list_runs_kwargs = {
             "pipeline": pipeline,
             "status": status,
             "limit": limit,
             "since": since,
+            "before_id": before_id,
+            "before_created_at": before_created_at,
         }
         if self.runs_error:
             raise self.runs_error
-        return list(self.runs or [])
+        if self.runs_payload is not None:
+            return dict(self.runs_payload)
+        return {"runs": list(self.runs or []), "next_cursor": None}
 
     def get_run(self, run_id: str) -> Mapping[str, Any]:
         self.requested_run_id = run_id
@@ -526,6 +533,8 @@ def test_pipeline_runs_applies_filters(monkeypatch: MonkeyPatch) -> None:
         "status": "running",
         "limit": 5,
         "since": "2024-01-01T00:00:00+00:00",
+        "before_id": None,
+        "before_created_at": None,
     }
     assert client.closed is True
 
@@ -540,6 +549,64 @@ def test_pipeline_runs_failure(monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 1
     assert "Pipeline request failed: boom" in result.output
     assert client.closed is True
+
+
+def test_pipeline_runs_displays_next_page_hint(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        runs_payload={
+            "runs": [
+                {
+                    "id": "run-1",
+                    "pipeline": "orchestration.daily",
+                    "status": "succeeded",
+                    "created_at": "2024-01-01T10:00:00+00:00",
+                    "updated_at": "2024-01-01T10:10:00+00:00",
+                }
+            ],
+            "next_cursor": {
+                "before_id": "run-0",
+                "before_created_at": "2024-01-01T09:00:00+00:00",
+            },
+        }
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "runs"])
+
+    assert result.exit_code == 0
+    assert "More runs available." in result.output
+
+
+def test_pipeline_runs_requires_cursor_pairs() -> None:
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "runs",
+            "--before-id",
+            "run-123",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Both --before-id and --before-created-at" in result.output
+
+
+def test_pipeline_runs_requires_limit_with_cursor() -> None:
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "runs",
+            "--before-id",
+            "run-123",
+            "--before-created-at",
+            "2024-01-01T00:00:00+00:00",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--limit must be provided" in result.output
 
 
 def test_pipeline_stats_displays_results(monkeypatch: MonkeyPatch) -> None:

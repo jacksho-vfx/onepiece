@@ -127,7 +127,7 @@ def test_store_prune_removes_old_runs_and_events(tmp_path: Path) -> None:
     assert result.removed_runs_by_pipeline == {"render": 2, "ingest": 1}
 
     remaining_runs = store.list_runs()
-    remaining_by_pipeline = {run.pipeline: run.run_id for run in remaining_runs}
+    remaining_by_pipeline = {run.pipeline: run.run_id for run in remaining_runs.runs}
     assert remaining_by_pipeline == {"render": "run-3", "ingest": "run-5"}
 
     render_events = list(store.iter_run_events("run-3"))
@@ -192,7 +192,7 @@ def test_orchestrator_prune_uses_retention(tmp_path: Path) -> None:
     assert result.removed_runs_by_pipeline == {"render": 1, "simulation": 1}
 
     runs = store.list_runs()
-    remaining = {run.pipeline: run.run_id for run in runs}
+    remaining = {run.pipeline: run.run_id for run in runs.runs}
     assert remaining == {"render": "run-new", "simulation": "run-sim-2"}
 
 
@@ -246,7 +246,7 @@ def test_orchestrator_prunes_runs_after_completion(tmp_path: Path) -> None:
         remaining_ids: list[str] = []
         while time.monotonic() < deadline:
             remaining = store.list_runs()
-            remaining_ids = [run.run_id for run in remaining]
+            remaining_ids = [run.run_id for run in remaining.runs]
             if len(remaining_ids) <= 2:
                 break
             time.sleep(0.01)

@@ -39,7 +39,14 @@ from libraries.analytics.perona.models import (
     Sequence as PeronaSequence,
 )
 from apps.perona.version import PERONA_VERSION
-from apps.perona.web import dashboard as live_dashboard
+from apps.perona.web.dashboard import reports as live_reports
+from apps.perona.web.dashboard.routes import (
+    analytics as live_analytics,
+    metrics as live_metrics,
+    reports as live_report_routes,
+    shots as live_shots,
+)
+from apps.perona.web.dashboard.templates import dashboard_index_html
 
 
 app = FastAPI(
@@ -76,14 +83,14 @@ def health() -> dict[str, str]:
 def dashboard_ui() -> HTMLResponse:
     """Serve the static demo dashboard HTML shell."""
 
-    return HTMLResponse(content=live_dashboard._dashboard_index_html())
+    return HTMLResponse(content=dashboard_index_html())
 
 
 @app.get("/dashboard/summary")
 def dashboard_summary() -> Any:
     """Return the aggregated dashboard summary for the demo engine."""
 
-    return live_dashboard._build_daily_summary(_ENGINE)
+    return live_reports.build_daily_summary(_ENGINE)
 
 
 @app.get("/settings", response_model=SettingsSummary)
@@ -108,7 +115,7 @@ def render_feed(
 ) -> Any:
     """Return render telemetry samples from the demo engine."""
 
-    return live_dashboard.render_feed(
+    return live_metrics.render_feed(
         limit=limit, sequence=sequence, shot_id=shot_id, engine=_ENGINE
     )
 
@@ -121,7 +128,7 @@ async def render_feed_stream(
 ) -> Any:
     """Stream newline-delimited telemetry for widgets that expect live data."""
 
-    return await live_dashboard.render_feed_stream(
+    return await live_metrics.render_feed_stream(
         limit=limit, sequence=sequence, shot_id=shot_id, engine=_ENGINE
     )
 
@@ -130,28 +137,28 @@ async def render_feed_stream(
 def metrics_summary() -> Any:
     """Expose aggregated statistics calculated from the demo telemetry."""
 
-    return live_dashboard.metrics_summary(engine=_ENGINE)
+    return live_metrics.metrics_summary(engine=_ENGINE)
 
 
 @app.post("/cost/estimate", response_model=CostEstimate)
 def cost_estimate(payload: CostEstimateRequest) -> CostEstimate:
     """Estimate render costs using the deterministic demo engine."""
 
-    return live_dashboard.cost_estimate(payload=payload, engine=_ENGINE)
+    return live_analytics.cost_estimate(payload=payload, engine=_ENGINE)
 
 
 @app.get("/risk-heatmap", response_model=list[RiskIndicator])
 def risk_heatmap() -> Any:
     """Return the static render risk ordering from the demo dataset."""
 
-    return live_dashboard.risk_heatmap(engine=_ENGINE)
+    return live_analytics.risk_heatmap(engine=_ENGINE)
 
 
 @app.get("/pnl", response_model=PnLBreakdown)
 def pnl() -> PnLBreakdown:
     """Return the deterministic P&L breakdown bundled with the demo."""
 
-    return live_dashboard.pnl(engine=_ENGINE)
+    return live_analytics.pnl(engine=_ENGINE)
 
 
 @app.post("/optimization/backtest", response_model=OptimizationBacktestResponse)
@@ -160,7 +167,7 @@ def optimization_backtest(
 ) -> OptimizationBacktestResponse:
     """Execute what-if optimisation scenarios against the demo data."""
 
-    return live_dashboard.optimization_backtest(payload=payload, engine=_ENGINE)
+    return live_analytics.optimization_backtest(payload=payload, engine=_ENGINE)
 
 
 @app.get("/shots/lifecycle", response_model=list[Shot])
@@ -172,7 +179,7 @@ def shots_lifecycle(
 ) -> Any:
     """Return the canned lifecycle timelines for monitored demo shots."""
 
-    return live_dashboard.shots_lifecycle(
+    return live_shots.shots_lifecycle(
         sequence=sequence,
         artist=artist,
         start_date=start_date,
@@ -190,7 +197,7 @@ def shot_sequences(
 ) -> Any:
     """Return demo shots grouped by sequence for gallery style views."""
 
-    return live_dashboard.shot_sequences(
+    return live_shots.shot_sequences(
         sequence=sequence,
         artist=artist,
         start_date=start_date,
@@ -208,7 +215,7 @@ def shots_summary(
 ) -> Any:
     """Summarise shot progress using the deterministic lifecycle data."""
 
-    return live_dashboard.shots_summary(
+    return live_shots.shots_summary(
         sequence=sequence,
         artist=artist,
         start_date=start_date,
@@ -221,21 +228,21 @@ def shots_summary(
 def risk_summary() -> Any:
     """Return aggregate risk metadata derived from the demo indicators."""
 
-    return live_dashboard.risk_summary(engine=_ENGINE)
+    return live_analytics.risk_summary(engine=_ENGINE)
 
 
 @app.get("/costs")
 def costs_summary() -> Any:
     """Return combined cost and P&L data for the demo dataset."""
 
-    return live_dashboard.costs_summary(engine=_ENGINE)
+    return live_analytics.costs_summary(engine=_ENGINE)
 
 
 @app.get("/reports/daily")
 def daily_report(format: str = Query("csv")) -> Any:
     """Generate the daily summary report in CSV or PDF form."""
 
-    return live_dashboard.daily_report(format=format, engine=_ENGINE)
+    return live_report_routes.daily_report(format=format, engine=_ENGINE)
 
 
 @app.websocket("/ws/metrics")
@@ -270,7 +277,7 @@ async def ingest_metrics() -> dict[str, str]:
 async def render_feed_sample(limit: int = Query(5, ge=1, le=50)) -> StreamingResponse:
     """Return a short NDJSON sample without waiting for the stream."""
 
-    metrics = live_dashboard.render_feed(
+    metrics = live_metrics.render_feed(
         limit=limit, sequence=None, shot_id=None, engine=_ENGINE
     )
 
