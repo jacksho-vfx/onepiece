@@ -15,6 +15,7 @@ import yaml
 from apps.trafalgar.pipeline import (
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
+    PipelineDefinition,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.providers.pipeline_executor import (
@@ -125,10 +126,8 @@ def _apply_environment_overrides(
 
 
 def _definition_with_stubbed_providers(
-    definition: "PipelineDefinition",
-) -> "PipelineDefinition":
-    from apps.trafalgar.pipeline import PipelineDefinition  # local import to avoid cycle
-
+    definition: PipelineDefinition,
+) -> PipelineDefinition:
     pipeline = definition.pipeline
     updated_steps: list[PipelineStep] = []
     mutated = False
@@ -139,9 +138,7 @@ def _definition_with_stubbed_providers(
             metadata = dict(step.metadata)
             metadata.setdefault(PROVIDER_REFERENCE_METADATA_KEY, provider)
             stub = _make_stub_provider(provider)
-            updated_steps.append(
-                replace(step, provider=stub, metadata=metadata)
-            )
+            updated_steps.append(replace(step, provider=stub, metadata=metadata))
         else:
             updated_steps.append(step)
 
@@ -157,10 +154,12 @@ def _definition_with_stubbed_providers(
 
 
 def _make_stub_provider(reference: str) -> Callable[..., None]:
-    def _stub_provider(*_args, **_kwargs) -> None:
+    def _stub_provider(*_args: Any, **_kwargs: Any) -> None:
         return None
 
-    _stub_provider.__name__ = f"stub_provider_for_{reference.replace('.', '_').replace(':', '_')}"
+    _stub_provider.__name__ = (
+        f"stub_provider_for_{reference.replace('.', '_').replace(':', '_')}"
+    )
     return _stub_provider
 
 

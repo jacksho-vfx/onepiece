@@ -85,9 +85,7 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
 CreationHook = Callable[[], None]
 
 
-DEMO_CREATION_HOOKS: tuple[CreationHook, ...] = (
-    prepare_pipeline_demos,
-)
+DEMO_CREATION_HOOKS: tuple[CreationHook, ...] = (prepare_pipeline_demos,)
 
 
 def _ensure_uvicorn() -> None:
