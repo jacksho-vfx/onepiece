@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, AsyncIterator, Iterable, Iterator, Mapping, cast
+from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Mapping, cast
 import json
 import sqlite3
 import uuid
@@ -218,6 +218,14 @@ class PipelineDefinition:
             raise ValueError(msg)
 
         return resolved
+
+
+@dataclass(frozen=True)
+class WorkerPoolMetrics:
+    """Snapshot of the orchestrator worker pool utilisation."""
+
+    max_workers: int | None
+    active_workers: int
 
 
 class PipelineDefinitionStore:
@@ -1501,11 +1509,15 @@ class PipelineOrchestrator:
         self._store = store or PipelineRunStore()
         self._definition_store = definition_store
         self._executor = executor or pipeline_executor.PipelineExecutor()
-        self._worker_pool = worker_pool or ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="pipeline-runs"
-        )
+        if worker_pool is None:
+            worker_pool = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="pipeline-runs"
+            )
+        self._worker_pool = worker_pool
+        self._max_workers = self._determine_max_workers(worker_pool)
         self._shutdown = False
         self._pending: set[Future[None]] = set()
+        self._active_workers = 0
         self._retention = retention
         self._retention_lock = Lock()
         self._skip_next_auto_prune = False
@@ -1625,21 +1637,25 @@ class PipelineOrchestrator:
             raise RuntimeError(msg)
 
         def _runner() -> None:
-            self._append_event(run_id, "running")
+            self._increment_active_workers()
             try:
-                self._executor.execute(
-                    definition.pipeline,
-                    parameters=parameters,
-                    emit=self._build_step_emitter(run_id),
-                )
-            except Exception as exc:
-                self._append_event(
-                    run_id,
-                    "failed",
-                    parameters={"error": str(exc)},
-                )
-            else:
-                self._append_event(run_id, "succeeded")
+                self._append_event(run_id, "running")
+                try:
+                    self._executor.execute(
+                        definition.pipeline,
+                        parameters=parameters,
+                        emit=self._build_step_emitter(run_id),
+                    )
+                except Exception as exc:
+                    self._append_event(
+                        run_id,
+                        "failed",
+                        parameters={"error": str(exc)},
+                    )
+                else:
+                    self._append_event(run_id, "succeeded")
+            finally:
+                self._decrement_active_workers()
 
         future = self._worker_pool.submit(_runner)
 
@@ -1663,6 +1679,26 @@ class PipelineOrchestrator:
         with self._lock:
             self._pending.add(future)
         future.add_done_callback(_cleanup)
+
+    def worker_pool_metrics(self) -> WorkerPoolMetrics:
+        """Return the current worker utilisation and prune completed runs."""
+
+        with self._lock:
+            active_futures = {future for future in self._pending if not future.done()}
+            self._pending = active_futures
+            active_workers = self._active_workers
+
+        return WorkerPoolMetrics(
+            max_workers=self._max_workers, active_workers=active_workers
+        )
+
+    def _increment_active_workers(self) -> None:
+        with self._lock:
+            self._active_workers += 1
+
+    def _decrement_active_workers(self) -> None:
+        with self._lock:
+            self._active_workers = max(0, self._active_workers - 1)
 
     def _schedule_retention_prune(self) -> None:
         policy = self._retention
@@ -1691,7 +1727,15 @@ class PipelineOrchestrator:
             self._worker_pool.shutdown(wait=wait)
             with self._lock:
                 self._pending.clear()
+                self._active_workers = 0
         self._store.close()
+
+    @staticmethod
+    def _determine_max_workers(pool: ThreadPoolExecutor) -> int | None:
+        value = getattr(pool, "_max_workers", None)
+        if isinstance(value, int):
+            return value
+        return None
 
     def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
         starts: dict[str, list[datetime]] = {}
@@ -1990,6 +2034,7 @@ def configure_orchestrator_from_profile(
     profile: ProfileContext,
     *,
     storage_config: Mapping[str, Any] | None = None,
+    orchestrator_factory: Callable[..., PipelineOrchestrator] | None = None,
 ) -> PipelineOrchestrator:
     """Initialise the shared orchestrator with definitions from *profile*.
 
@@ -2007,12 +2052,26 @@ def configure_orchestrator_from_profile(
         if any(key in effective_storage for key in ("database", "path")):
             store = PipelineRunStore.from_config(effective_storage)
         definition_store = _definition_store_from_storage(effective_storage)
-    orchestrator = PipelineOrchestrator(
-        definitions,
-        store=store,
-        retention=retention,
-        definition_store=definition_store,
+
+    if orchestrator_factory is None:
+        orchestrator_factory = PipelineOrchestrator
+
+    max_workers = max(1, profile.pipeline_workers_max)
+    worker_pool = ThreadPoolExecutor(
+        max_workers=max_workers, thread_name_prefix="pipeline-runs"
     )
+
+    try:
+        orchestrator = orchestrator_factory(
+            definitions,
+            store=store,
+            retention=retention,
+            definition_store=definition_store,
+            worker_pool=worker_pool,
+        )
+    except Exception:
+        worker_pool.shutdown(wait=False, cancel_futures=True)
+        raise
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
 
@@ -2020,6 +2079,7 @@ def configure_orchestrator_from_profile(
 __all__ = [
     "ParameterDefinition",
     "PipelineDefinition",
+    "WorkerPoolMetrics",
     "PipelineDefinitionStore",
     "PipelineOrchestrator",
     "PipelineRun",

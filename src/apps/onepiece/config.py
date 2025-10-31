@@ -36,6 +36,10 @@ class ProfileContext:
         used by :class:`apps.trafalgar.pipeline.PipelineRunStore`, plus
         optional ``busy_timeout`` (seconds) or ``busy_timeout_ms`` keys that
         control SQLite's busy timeout.
+    pipeline_workers_max:
+        Maximum number of concurrent pipeline workers allowed for this
+        profile.  When unspecified the value defaults to the number of CPUs on
+        the current host (falling back to ``1`` if unknown).
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
@@ -46,6 +50,7 @@ class ProfileContext:
     pipelines: Mapping[str, Mapping[str, Any]]
     pipeline_storage: Mapping[str, Any]
     sources: tuple[Path, ...]
+    pipeline_workers_max: int
 
 
 def load_profile(
@@ -111,6 +116,7 @@ def load_profile(
         profile_data = {}
 
     pipeline_storage = _extract_pipeline_storage(selected_profile, profile_data)
+    pipeline_workers_max = _extract_pipeline_workers_max(selected_profile, profile_data)
 
     return ProfileContext(
         name=selected_profile,
@@ -118,6 +124,7 @@ def load_profile(
         pipelines=pipelines,
         pipeline_storage=pipeline_storage,
         sources=tuple(sources),
+        pipeline_workers_max=pipeline_workers_max,
     )
 
 
@@ -242,7 +249,14 @@ def _extract_pipelines(config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return extracted
 
 
-def _extract_pipeline_storage(
+def _default_worker_limit() -> int:
+    cpu_count = os.cpu_count()
+    if isinstance(cpu_count, int) and cpu_count > 0:
+        return cpu_count
+    return 1
+
+
+def _extract_pipeline_config(
     profile_name: str, profile_data: Mapping[str, Any]
 ) -> Mapping[str, Any]:
     pipeline_config = profile_data.get("pipeline")
@@ -252,7 +266,13 @@ def _extract_pipeline_storage(
         raise OnePieceConfigError(
             f"Profile '{profile_name}' pipeline section must be a mapping"
         )
+    return pipeline_config
 
+
+def _extract_pipeline_storage(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
     storage_config = pipeline_config.get("storage")
     if storage_config is None:
         return {}
@@ -262,3 +282,39 @@ def _extract_pipeline_storage(
         )
 
     return dict(storage_config)
+
+
+def _extract_pipeline_workers_max(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> int:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
+    workers_config = pipeline_config.get("workers")
+    if workers_config is None:
+        return _default_worker_limit()
+    if not isinstance(workers_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.workers section must be a mapping"
+        )
+
+    max_value = workers_config.get("max")
+    if max_value is None:
+        return _default_worker_limit()
+
+    if isinstance(max_value, bool):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.workers.max must be an integer"
+        )
+
+    try:
+        max_workers = int(max_value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.workers.max must be an integer"
+        ) from exc
+
+    if max_workers < 1:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.workers.max must be at least 1"
+        )
+
+    return max_workers
