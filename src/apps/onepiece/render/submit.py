@@ -41,9 +41,7 @@ from libraries.automation.render.optimization import (
 
 log = structlog.get_logger(__name__)
 
-app = typer.Typer(
-    name="render", help="Render farm submission and management commands."
-)
+app = typer.Typer(name="render", help="Render farm submission and management commands.")
 presets_app = typer.Typer(name="preset", help="Manage render submission presets.")
 app.add_typer(presets_app, name="preset")
 
@@ -957,9 +955,7 @@ def render_status(
 
 @app.command("cancel")
 def cancel_render_job(
-    job_id: str = typer.Argument(
-        ..., help="Identifier returned by the render farm."
-    ),
+    job_id: str = typer.Argument(..., help="Identifier returned by the render farm."),
     profile: str | None = typer.Option(
         None,
         "--profile",
@@ -1007,7 +1003,9 @@ def cancel_render_job(
                     status=exc.status_code,
                     force=True,
                 )
-                message = exc.message or "Render farm does not support job cancellation."
+                message = (
+                    exc.message or "Render farm does not support job cancellation."
+                )
                 typer.secho(
                     f"{message} (ignored due to --force).",
                     fg=typer.colors.YELLOW,

@@ -970,7 +970,9 @@ def test_render_cancel_requires_force_for_unsupported(
     assert ("error", "render.cancel.failed") in events
 
 
-def test_render_cancel_force_ignores_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_cancel_force_ignores_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     error = submit_module.RenderJobClientError(
         "Cancellation not supported",
         status_code=409,

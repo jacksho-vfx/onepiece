@@ -230,7 +230,11 @@ def _extract_error_response(
             hint = _coerce_text(error.get("hint")) or None
             code = _coerce_text(error.get("code")) or None
             detail = _coerce_text(payload.get("detail"))
-            final_message = message or detail or f"Render API request failed ({response.status_code})."
+            final_message = (
+                message
+                or detail
+                or f"Render API request failed ({response.status_code})."
+            )
             return final_message, code, hint
 
         detail = _coerce_text(payload.get("detail"))
