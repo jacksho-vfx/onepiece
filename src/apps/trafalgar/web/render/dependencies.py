@@ -119,7 +119,9 @@ def _initialise_render_service() -> "RenderSubmissionService":
 
 
 @lru_cache
-def get_render_service() -> "RenderSubmissionService":  # pragma: no cover - runtime wiring
+def get_render_service() -> (
+    "RenderSubmissionService"
+):  # pragma: no cover - runtime wiring
     return _initialise_render_service()
 
 

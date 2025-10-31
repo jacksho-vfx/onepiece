@@ -1103,7 +1103,7 @@ JOB_STATUS_POLL_INTERVAL_ENV = _dependencies.JOB_STATUS_POLL_INTERVAL_ENV
 JOB_STORE_PERSIST_THROTTLE_ENV = _dependencies.JOB_STORE_PERSIST_THROTTLE_ENV
 RENDER_SSE_KEEPALIVE_INTERVAL_ENV = _KEEPALIVE_ENV
 
-router = _routes.router
+router = _routes.router  # type: ignore[has-type]
 
 app.add_event_handler("startup", start_render_status_poller)
 app.add_event_handler("shutdown", stop_render_status_poller)
