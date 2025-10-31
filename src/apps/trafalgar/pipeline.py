@@ -1296,6 +1296,8 @@ class PipelineRunStore:
         since: datetime | None = None,
         before_id: str | None = None,
         before_created_at: datetime | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
     ) -> PipelineRunPage:
         if (before_id is None) ^ (before_created_at is None):
             msg = "'before_id' and 'before_created_at' must be supplied together"
@@ -1309,6 +1311,17 @@ class PipelineRunStore:
         if status is not None:
             clauses.append("status = ?")
             bindings.append(status)
+        if submitted_by is not None:
+            clauses.append("submitted_by = ?")
+            bindings.append(submitted_by)
+        if role is not None:
+            clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM json_each(COALESCE(submitted_roles, '[]')) "
+                "WHERE value = ?"
+                ")"
+            )
+            bindings.append(role)
         if since is not None:
             clauses.append("created_at >= ?")
             bindings.append(self._encode_datetime(since))
@@ -2195,6 +2208,8 @@ class PipelineOrchestrator:
         since: datetime | None = None,
         before_id: str | None = None,
         before_created_at: datetime | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
     ) -> PipelineRunPage:
         return self._store.list_runs(
             pipeline=pipeline,
@@ -2203,6 +2218,8 @@ class PipelineOrchestrator:
             since=since,
             before_id=before_id,
             before_created_at=before_created_at,
+            submitted_by=submitted_by,
+            role=role,
         )
 
     def aggregate_runs(

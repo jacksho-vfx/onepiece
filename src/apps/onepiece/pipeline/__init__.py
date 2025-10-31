@@ -56,6 +56,8 @@ class PipelineClient(Protocol):
         *,
         pipeline: str | None = None,
         status: str | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
         limit: int | None = None,
         since: str | None = None,
         before_id: str | None = None,
@@ -139,6 +141,8 @@ class LocalPipelineClient:
         *,
         pipeline: str | None = None,
         status: str | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
         limit: int | None = None,
         since: str | None = None,
         before_id: str | None = None,
@@ -181,6 +185,8 @@ class LocalPipelineClient:
         page = self._orchestrator.list_runs(
             pipeline=pipeline,
             status=status,
+            submitted_by=submitted_by,
+            role=role,
             limit=limit,
             since=parsed_since,
             before_id=before_id,
@@ -335,6 +341,8 @@ class RemotePipelineClient:
         *,
         pipeline: str | None = None,
         status: str | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
         limit: int | None = None,
         since: str | None = None,
         before_id: str | None = None,
@@ -353,6 +361,10 @@ class RemotePipelineClient:
             params["pipeline"] = pipeline
         if status is not None:
             params["status"] = status
+        if submitted_by is not None:
+            params["submitted_by"] = submitted_by
+        if role is not None:
+            params["role"] = role
         if limit is not None:
             params["limit"] = limit
         if since is not None:
@@ -1328,6 +1340,16 @@ def list_runs(
         "--status",
         help="Filter runs by status.",
     ),
+    submitted_by: str | None = typer.Option(
+        None,
+        "--submitted-by",
+        help="Filter runs by the submitting principal.",
+    ),
+    role: str | None = typer.Option(
+        None,
+        "--role",
+        help="Filter runs that include the specified submitting role.",
+    ),
     limit: int | None = typer.Option(
         None,
         "--limit",
@@ -1365,12 +1387,18 @@ def list_runs(
         raise typer.BadParameter(
             "--limit must be provided when using pagination cursors."
         )
+    if role is not None and not role.strip():
+        raise typer.BadParameter("--role must be a non-empty value.")
+    if submitted_by is not None and not submitted_by.strip():
+        raise typer.BadParameter("--submitted-by must be a non-empty value.")
 
     with _using_client() as client:
         try:
             page = client.list_runs(
                 pipeline=pipeline,
                 status=status,
+                submitted_by=submitted_by,
+                role=role,
                 limit=limit,
                 since=since,
                 before_id=before_id,
