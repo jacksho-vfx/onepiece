@@ -834,6 +834,10 @@ def _serialised_definition_to_manifest(definition: Mapping[str, Any]) -> dict[st
     if name is not None:
         manifest["name"] = str(name)
 
+    version = definition.get("version")
+    if version is not None:
+        manifest["version"] = version
+
     for field in ("display_name", "description"):
         value = definition.get(field)
         if isinstance(value, str) and value.strip():
@@ -841,7 +845,15 @@ def _serialised_definition_to_manifest(definition: Mapping[str, Any]) -> dict[st
 
     metadata = definition.get("metadata")
     if isinstance(metadata, Mapping) and metadata:
-        manifest["metadata"] = _normalise_manifest_value(metadata)
+        metadata_payload = dict(metadata)
+        metadata_version = metadata_payload.get("version")
+        if metadata_version is not None:
+            if "version" not in manifest:
+                manifest["version"] = metadata_version
+            if manifest.get("version") == metadata_version:
+                metadata_payload.pop("version", None)
+        if metadata_payload:
+            manifest["metadata"] = _normalise_manifest_value(metadata_payload)
 
     parameters = definition.get("parameters")
     if isinstance(parameters, Mapping) and parameters:
