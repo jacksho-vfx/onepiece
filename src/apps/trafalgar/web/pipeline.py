@@ -382,9 +382,7 @@ def list_runs(
     if role is not None and not role.strip():
         raise HTTPException(status_code=400, detail="'role' must be non-empty")
     if submitted_by is not None and not submitted_by.strip():
-        raise HTTPException(
-            status_code=400, detail="'submitted_by' must be non-empty"
-        )
+        raise HTTPException(status_code=400, detail="'submitted_by' must be non-empty")
 
     parsed_before_created: datetime | None = None
     if before_created_at is not None:
