@@ -1779,6 +1779,7 @@ class PipelineOrchestrator:
         definition_store: PipelineDefinitionStore | None = None,
         executor: pipeline_executor.PipelineExecutor | None = None,
         worker_pool: ThreadPoolExecutor | None = None,
+        max_workers: int = 1,
         retention: PipelineRetentionPolicy | None = None,
     ) -> None:
         self._definitions: dict[str, PipelineDefinition] = {}
@@ -1786,12 +1787,18 @@ class PipelineOrchestrator:
         self._store = store or PipelineRunStore()
         self._definition_store = definition_store
         self._executor = executor or pipeline_executor.PipelineExecutor()
+        if max_workers < 1:
+            msg = "max_workers must be at least 1"
+            raise ValueError(msg)
         if worker_pool is None:
             worker_pool = ThreadPoolExecutor(
-                max_workers=1, thread_name_prefix="pipeline-runs"
+                max_workers=max_workers, thread_name_prefix="pipeline-runs"
             )
         self._worker_pool = worker_pool
-        self._max_workers = self._determine_max_workers(worker_pool)
+        derived_max_workers = self._determine_max_workers(worker_pool)
+        if derived_max_workers is None and worker_pool is None:
+            derived_max_workers = max_workers
+        self._max_workers = derived_max_workers
         self._shutdown = False
         self._pending: set[Future[None]] = set()
         self._active_workers = 0
@@ -2342,22 +2349,32 @@ def configure_orchestrator_from_profile(
     if orchestrator_factory is None:
         orchestrator_factory = PipelineOrchestrator
 
-    max_workers = max(1, profile.pipeline_workers_max)
-    worker_pool = ThreadPoolExecutor(
-        max_workers=max_workers, thread_name_prefix="pipeline-runs"
-    )
+    raw_storage_max_workers = None
+    if effective_storage:
+        raw_storage_max_workers = effective_storage.get("max_workers")
 
-    try:
-        orchestrator = orchestrator_factory(
-            definitions,
-            store=store,
-            retention=retention,
-            definition_store=definition_store,
-            worker_pool=worker_pool,
-        )
-    except Exception:
-        worker_pool.shutdown(wait=False, cancel_futures=True)
-        raise
+    if raw_storage_max_workers is not None:
+        try:
+            storage_max_workers = int(raw_storage_max_workers)
+        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+            raise ValueError(
+                "pipeline.storage.max_workers must be an integer"
+            ) from exc
+        if storage_max_workers < 1:
+            raise ValueError(
+                "pipeline.storage.max_workers must be at least 1"
+            )
+        max_workers = storage_max_workers
+    else:
+        max_workers = max(1, profile.pipeline_workers_max)
+
+    orchestrator = orchestrator_factory(
+        definitions,
+        store=store,
+        retention=retention,
+        definition_store=definition_store,
+        max_workers=max_workers,
+    )
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
 

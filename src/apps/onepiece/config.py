@@ -33,9 +33,10 @@ class ProfileContext:
         Optional mapping describing pipeline persistence settings sourced from
         ``[profiles.<name>.pipeline.storage]``.  The section currently accepts
         a ``database`` (or ``path``) key pointing at a SQLite database file
-        used by :class:`apps.trafalgar.pipeline.PipelineRunStore`, plus
-        optional ``busy_timeout`` (seconds) or ``busy_timeout_ms`` keys that
-        control SQLite's busy timeout.
+        used by :class:`apps.trafalgar.pipeline.PipelineRunStore`, optional
+        ``busy_timeout`` (seconds) or ``busy_timeout_ms`` keys that control
+        SQLite's busy timeout, and ``max_workers`` to tune orchestrator
+        concurrency when definitions are persisted.
     pipeline_workers_max:
         Maximum number of concurrent pipeline workers allowed for this
         profile.  When unspecified the value defaults to the number of CPUs on

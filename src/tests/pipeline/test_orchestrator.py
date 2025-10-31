@@ -1,25 +1,61 @@
-# """Behavioural tests for the Trafalgar pipeline orchestrator."""
+"""Behavioural tests for the Trafalgar pipeline orchestrator."""
 
-# from __future__ import annotations
+from __future__ import annotations
 
-# from collections.abc import AsyncIterator, Callable
-# from datetime import datetime
-# from pathlib import Path
-# import threading
-# import time
-# from typing import Mapping
+from queue import Queue
+from threading import Event
+import time
 
-# import pytest
+from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
+from libraries.pipeline.models import Pipeline, PipelineStep
 
-# from apps.trafalgar.pipeline import (
-#     ParameterDefinition,
-#     PipelineDefinition,
-#     PipelineOrchestrator,
-#     PipelineRun,
-#     PipelineRunStore,
-# )
-# from apps.trafalgar.providers import pipeline_executor
-# from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
+
+def _wait_for_completion(
+    orchestrator: PipelineOrchestrator, run_id: str, *, timeout: float = 5.0
+) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        run = orchestrator.get_run(run_id)
+        if run.status in {"succeeded", "failed"}:
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"timed out waiting for run '{run_id}' to complete")
+
+
+def test_pipeline_runs_execute_concurrently_with_configured_max_workers() -> None:
+    starts: Queue[tuple[int, float]] = Queue()
+    release_events: dict[int, Event] = {}
+
+    def _blocking_provider(parameters: dict[str, object]) -> None:
+        index = int(parameters["index"])  # type: ignore[call-overload]
+        event = release_events.setdefault(index, Event())
+        starts.put((index, time.perf_counter()))
+        event.wait(timeout=5)
+
+    pipeline = Pipeline(
+        name="blocking",
+        steps=[PipelineStep(name="wait", provider=_blocking_provider)],
+    )
+    definition = PipelineDefinition(name="blocking", pipeline=pipeline)
+    orchestrator = PipelineOrchestrator((definition,), max_workers=2)
+
+    try:
+        first_run = orchestrator.trigger_run("blocking", parameters={"index": 1})
+        second_run = orchestrator.trigger_run("blocking", parameters={"index": 2})
+
+        first_started = starts.get(timeout=1.0)
+        second_started = starts.get(timeout=1.0)
+        assert {first_started[0], second_started[0]} == {1, 2}
+
+        release_events.setdefault(1, Event()).set()
+        release_events.setdefault(2, Event()).set()
+
+        _wait_for_completion(orchestrator, first_run.run_id)
+        _wait_for_completion(orchestrator, second_run.run_id)
+    finally:
+        for event in release_events.values():
+            event.set()
+        orchestrator.shutdown()
 
 
 # @pytest.fixture

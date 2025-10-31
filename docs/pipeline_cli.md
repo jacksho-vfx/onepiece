@@ -56,6 +56,15 @@ cannot clobber updates. Locks are automatically released even if a process
 crashes mid-write, and updates remain atomic thanks to the temporary-file swap
 used beneath the lock.
 
+### Tuning orchestrator concurrency
+
+Operators running the in-process orchestrator can increase parallelism by adding
+`pipeline.storage.max_workers` to their profile configuration. The CLI passes
+this setting through `configure_orchestrator_from_profile`, allowing multiple
+pipelines to execute at once when the backing storage can sustain the load.
+Omitting the key keeps the previous single-worker behaviour or falls back to
+`pipeline.workers.max` when defined.
+
 ## Deleting pipelines
 
 To remove a pipeline definition, call:
