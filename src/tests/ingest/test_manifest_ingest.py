@@ -9,7 +9,7 @@ from libraries.automation.ingest import (
     MediaIngestService,
     load_delivery_manifest,
 )
-from libraries.automation.ingest.service import IngestReport
+from libraries.automation.ingest.models import IngestReport
 from libraries.integrations.shotgrid.client import ShotgridClient
 
 

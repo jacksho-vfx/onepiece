@@ -16,10 +16,8 @@ from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
+from libraries.automation.ingest.models import IngestReport, IngestedMedia, MediaInfo
 from libraries.automation.ingest.service import (
-    IngestReport,
-    IngestedMedia,
-    MediaInfo,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
     ShotgridSchemaError,

@@ -7,10 +7,9 @@ import pytest
 from unittest.mock import AsyncMock
 from typing import Awaitable, cast
 
+from libraries.automation.ingest.models import IngestReport, IngestedMedia
 from libraries.automation.ingest.service import (
     Delivery,
-    IngestReport,
-    IngestedMedia,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
