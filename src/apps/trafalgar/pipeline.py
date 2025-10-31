@@ -2357,13 +2357,9 @@ def configure_orchestrator_from_profile(
         try:
             storage_max_workers = int(raw_storage_max_workers)
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
-            raise ValueError(
-                "pipeline.storage.max_workers must be an integer"
-            ) from exc
+            raise ValueError("pipeline.storage.max_workers must be an integer") from exc
         if storage_max_workers < 1:
-            raise ValueError(
-                "pipeline.storage.max_workers must be at least 1"
-            )
+            raise ValueError("pipeline.storage.max_workers must be at least 1")
         max_workers = storage_max_workers
     else:
         max_workers = max(1, profile.pipeline_workers_max)
