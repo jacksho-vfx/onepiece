@@ -310,9 +310,7 @@ def test_pipeline_pull_writes_toml_manifest(
         "display_name": "Daily orchestration",
         "description": "Daily ingest orchestration",
         "metadata": {"team": "pipeline"},
-        "parameters": {
-            "ingest_profile": {"default": "episodic", "required": False}
-        },
+        "parameters": {"ingest_profile": {"default": "episodic", "required": False}},
         "steps": [
             {
                 "name": "prepare",

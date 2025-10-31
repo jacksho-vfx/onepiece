@@ -824,9 +824,7 @@ def _load_pipeline_submission(
     return submission
 
 
-def _serialised_definition_to_manifest(
-    definition: Mapping[str, Any]
-) -> dict[str, Any]:
+def _serialised_definition_to_manifest(definition: Mapping[str, Any]) -> dict[str, Any]:
     manifest: dict[str, Any] = {}
 
     name = definition.get("name")
@@ -1018,7 +1016,9 @@ def _render_manifest_toml(manifest: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_table_body(section: str, table: Mapping[str, Any], lines: list[str]) -> None:
+def _render_table_body(
+    section: str, table: Mapping[str, Any], lines: list[str]
+) -> None:
     scalars: list[tuple[str, Any]] = []
     nested_tables: list[tuple[str, Mapping[str, Any]]] = []
     array_tables: list[tuple[str, Sequence[Mapping[str, Any]]]] = []
