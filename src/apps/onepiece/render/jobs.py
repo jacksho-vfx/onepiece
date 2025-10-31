@@ -11,6 +11,7 @@ import httpx
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.transport import resolve_pipeline_auth_headers
+from libraries.automation.render.base import SubmissionResult
 
 RENDER_API_URL_ENV = "TRAFALGAR_RENDER_API_URL"
 RENDER_API_TIMEOUT_ENV = "TRAFALGAR_RENDER_API_TIMEOUT"
@@ -20,10 +21,12 @@ DEFAULT_RENDER_API_TIMEOUT = 10.0
 
 @dataclass(slots=True)
 class RenderJobClientError(RuntimeError):
-    """Raised when Trafalgar render job lookups fail."""
+    """Raised when Trafalgar render job lookups or mutations fail."""
 
     message: str
     status_code: int | None = None
+    code: str | None = None
+    hint: str | None = None
 
     def __str__(self) -> str:  # pragma: no cover - dataclass hook
         return self.message
@@ -81,14 +84,22 @@ class RenderJobClient:
             raise RenderJobClientError("Unable to reach Trafalgar render API.") from exc
 
         if response.status_code == 404:
-            detail = _extract_response_detail(response)
+            message, code, hint = _extract_error_response(response)
             raise RenderJobClientError(
-                detail or "Render job not found.", status_code=404
+                message or "Render job not found.",
+                status_code=404,
+                code=code,
+                hint=hint,
             )
 
         if not response.is_success:
-            detail = _extract_response_detail(response)
-            raise RenderJobClientError(detail, status_code=response.status_code)
+            message, code, hint = _extract_error_response(response)
+            raise RenderJobClientError(
+                message,
+                status_code=response.status_code,
+                code=code,
+                hint=hint,
+            )
 
         try:
             payload = response.json()
@@ -100,6 +111,49 @@ class RenderJobClient:
         if not isinstance(payload, Mapping):
             raise RenderJobClientError("Render API returned an unexpected payload.")
         return dict(payload)
+
+    def cancel_job(self, job_id: str) -> SubmissionResult:
+        """Request cancellation of an existing render job."""
+
+        try:
+            response = self._client.delete(f"jobs/{job_id}")
+        except (httpx.RequestError,) as exc:  # pragma: no cover - network errors
+            raise RenderJobClientError("Unable to reach Trafalgar render API.") from exc
+
+        if response.status_code == 404:
+            message, code, hint = _extract_error_response(response)
+            raise RenderJobClientError(
+                message or "Render job not found.",
+                status_code=404,
+                code=code,
+                hint=hint,
+            )
+
+        if not response.is_success:
+            message, code, hint = _extract_error_response(response)
+            raise RenderJobClientError(
+                message,
+                status_code=response.status_code,
+                code=code,
+                hint=hint,
+            )
+
+        try:
+            payload = response.json()
+        except json.JSONDecodeError as exc:
+            raise RenderJobClientError(
+                "Render API returned a malformed response."
+            ) from exc
+
+        if not isinstance(payload, Mapping):
+            raise RenderJobClientError("Render API returned an unexpected payload.")
+
+        try:
+            return _parse_submission_result(payload, fallback_job_id=job_id)
+        except ValueError as exc:
+            raise RenderJobClientError(
+                "Render API returned job metadata missing required fields."
+            ) from exc
 
 
 def resolve_render_base_url(*, profile: str | None = None) -> str:
@@ -159,24 +213,67 @@ def _iter_profile_url_candidates(data: Mapping[str, Any]) -> list[Any]:
     return candidates
 
 
-def _extract_response_detail(response: httpx.Response) -> str:
+def _extract_error_response(
+    response: httpx.Response,
+) -> tuple[str, str | None, str | None]:
     try:
         payload = response.json()
     except ValueError:
         text = response.text.strip()
-        return text or f"Render API request failed ({response.status_code})."
+        message = text or f"Render API request failed ({response.status_code})."
+        return message, None, None
 
     if isinstance(payload, Mapping):
-        detail = payload.get("detail")
-        if isinstance(detail, str) and detail:
-            return detail
         error = payload.get("error")
         if isinstance(error, Mapping):
-            message = error.get("message")
-            if isinstance(message, str) and message:
-                return message
+            message = _coerce_text(error.get("message"))
+            hint = _coerce_text(error.get("hint")) or None
+            code = _coerce_text(error.get("code")) or None
+            detail = _coerce_text(payload.get("detail"))
+            final_message = (
+                message
+                or detail
+                or f"Render API request failed ({response.status_code})."
+            )
+            return final_message, code, hint
+
+        detail = _coerce_text(payload.get("detail"))
+        if detail:
+            return detail, None, None
+
     text = response.text.strip()
-    return text or f"Render API request failed ({response.status_code})."
+    message = text or f"Render API request failed ({response.status_code})."
+    return message, None, None
+
+
+def _parse_submission_result(
+    payload: Mapping[str, Any], *, fallback_job_id: str
+) -> SubmissionResult:
+    job_id = _coerce_text(payload.get("job_id")) or fallback_job_id
+    status = _coerce_text(payload.get("status"))
+    farm_type = _coerce_text(payload.get("farm_type") or payload.get("farm"))
+
+    missing: list[str] = []
+    if not status:
+        missing.append("status")
+    if not farm_type:
+        missing.append("farm_type")
+    if missing:
+        raise ValueError(", ".join(missing))
+
+    result: SubmissionResult = {
+        "job_id": job_id,
+        "status": status,
+        "farm_type": farm_type,
+    }
+
+    message = payload.get("message")
+    if isinstance(message, str):
+        message_text = message.strip()
+        if message_text:
+            result["message"] = message_text
+
+    return result
 
 
 def _normalise_base_url(url: str) -> str:

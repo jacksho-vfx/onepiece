@@ -51,6 +51,7 @@ If the ingest command exits early, review the CLI heading and take the suggested
 ### Review & render
 - `python -m apps.onepiece review dailies --project <project> [--playlist <playlist>] --output <quicktime.mov> [--codec <codec>]` — assemble ShotGrid Versions into a review QuickTime and manifest using the helpers in `libraries.automation.review`. 【F:src/libraries/automation/review/dailies.py†L1-L320】
 - `python -m apps.onepiece render submit --dcc <dcc> --scene <scene_file> [--frames <range>] --output <frames_dir> [--farm <deadline|tractor|…> --priority <n> --chunk-size <n> --user <user>]` — submit a render job to the configured farm adapter with detailed logging and adapter-aware defaults. 【F:src/apps/onepiece/render/submit.py†L1-L308】
+- `python -m apps.onepiece render cancel <job_id> [--force] [--profile <name>]` — request cancellation for an in-flight render job via Trafalgar, surfacing adapter hints when farms reject the request. 【F:src/apps/onepiece/render/submit.py†L958-L1051】
 - `python -m apps.onepiece render preset save <name> --farm <deadline|tractor|…> [--dcc <dcc>] [--scene <scene>] [--frames <range>] [--output <path>] [--priority <n> --chunk-size <n> --user <user>]` — persist a reusable render submission preset to disk. 【F:src/apps/onepiece/render/submit.py†L309-L388】
 
 ### Notifications and status tracking
