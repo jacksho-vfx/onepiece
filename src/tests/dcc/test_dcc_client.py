@@ -298,6 +298,95 @@ def test_prepare_package_contents_downgrades_linking_on_failure(
     assert "publish_scene_link_downgraded" in caplog.text
 
 
+def test_prepare_package_contents_parallel_copy_creates_expected_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ONEPIECE_DCC_COPY_WORKERS", "2")
+
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+
+    extra_render = renders / "deep" / "shadow.exr"
+    extra_render.parent.mkdir(parents=True, exist_ok=True)
+    extra_render.write_text("shadow")
+
+    extra_preview = previews / "plates" / "layout.jpg"
+    extra_preview.parent.mkdir(parents=True, exist_ok=True)
+    extra_preview.write_text("layout")
+
+    package_dir, render_files, preview_files, manifest = _prepare_package_contents(
+        "ep01_sh099", renders, previews, otio, destination
+    )
+
+    expected_render_files = [
+        package_dir / "renders" / "beauty.exr",
+        package_dir / "renders" / "deep" / "shadow.exr",
+    ]
+    expected_preview_files = [
+        package_dir / "previews" / "plates" / "layout.jpg",
+        package_dir / "previews" / "preview.jpg",
+    ]
+
+    assert render_files == expected_render_files
+    assert preview_files == expected_preview_files
+    for path in render_files + preview_files:
+        assert path.exists() and path.is_file()
+
+    manifest_keys = set(manifest)
+    expected_keys = {
+        str(path.relative_to(package_dir))
+        for path in render_files + preview_files + [package_dir / "otio" / "edit.otio"]
+    }
+    assert expected_keys <= manifest_keys
+
+
+def test_prepare_package_contents_parallel_copy_downgrades_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setenv("ONEPIECE_DCC_COPY_WORKERS", "4")
+
+    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+    (renders / "plate.exr").write_text("plate")
+    (previews / "alt_preview.jpg").write_text("preview alt")
+
+    def failing_link(src: str, dst: str) -> None:
+        raise OSError("link not supported")
+
+    monkeypatch.setattr(os, "link", failing_link)
+    caplog.set_level(logging.WARNING)
+
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
+        "ep01_sh099",
+        renders,
+        previews,
+        otio,
+        destination,
+        link_strategy="hard",
+    )
+
+    assert all(path.exists() and not path.is_symlink() for path in render_files)
+    assert all(path.exists() and not path.is_symlink() for path in preview_files)
+
+    downgrade_records = [
+        record
+        for record in caplog.records
+        if record.message == "publish_scene_link_downgraded"
+    ]
+    assert len(downgrade_records) == 3
+
+    def _targets_for(segment: str) -> set[str]:
+        return {
+            getattr(record, "target")
+            for record in downgrade_records
+            if segment in Path(getattr(record, "target")).parts
+        }
+
+    assert len(_targets_for("renders")) == 1
+    assert len(_targets_for("previews")) == 1
+    assert len(_targets_for("otio")) == 1
+
+
 def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 

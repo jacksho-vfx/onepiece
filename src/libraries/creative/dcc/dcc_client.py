@@ -6,11 +6,14 @@ needed by the tests are implemented which keeps the behaviour easy to reason
 about.
 """
 
+import functools
 import hashlib
 import json
 import os
 import shutil
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -319,6 +322,71 @@ def verify_dcc_dependencies(
     )
 
 
+_COPY_WORKERS_ENV = "ONEPIECE_DCC_COPY_WORKERS"
+
+
+@functools.lru_cache(maxsize=1)
+def _profile_copy_worker_override() -> int | None:
+    """Return the copy worker override sourced from OnePiece profiles."""
+
+    try:
+        from apps.onepiece.config import load_profile
+        from apps.onepiece.utils.errors import OnePieceConfigError
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency for tests.
+        return None
+
+    try:
+        profile = load_profile()
+    except OnePieceConfigError as exc:  # pragma: no cover - surfaced via CLI.
+        log.debug(
+            "publish_scene_profile_resolution_failed",
+            extra={"error": str(exc)},
+        )
+        return None
+
+    dcc_settings = profile.data.get("dcc")
+    if not isinstance(dcc_settings, Mapping):
+        return None
+
+    value = dcc_settings.get("copy_workers")
+    if isinstance(value, int) and value > 0:
+        return value
+    if value is not None:
+        log.warning(
+            "publish_scene_invalid_profile_copy_workers",
+            extra={"value": value, "profile": profile.name},
+        )
+    return None
+
+
+def _resolve_copy_workers() -> int:
+    """Return the number of worker threads used for packaging copies."""
+
+    env_override = os.environ.get(_COPY_WORKERS_ENV)
+    if env_override:
+        try:
+            value = int(env_override)
+        except ValueError:
+            log.warning(
+                "publish_scene_invalid_env_copy_workers",
+                extra={"value": env_override},
+            )
+        else:
+            if value > 0:
+                return value
+            log.warning(
+                "publish_scene_invalid_env_copy_workers",
+                extra={"value": env_override},
+            )
+
+    profile_override = _profile_copy_worker_override()
+    if profile_override is not None:
+        return profile_override
+
+    cpu_count = os.cpu_count() or 4
+    return max(1, min(32, cpu_count))
+
+
 def _copy_output(
     src: Path,
     dst: Path,
@@ -334,21 +402,24 @@ def _copy_output(
 
     requested_strategy = link_strategy
     downgrade_logged = False
+    downgrade_lock = threading.Lock()
+    manifest_lock = threading.Lock()
 
     def _log_downgrade(error: OSError, target_path: Path) -> None:
         nonlocal downgrade_logged
-        if downgrade_logged:
-            return
-        log.warning(
-            "publish_scene_link_downgraded",
-            extra={
-                "requested_strategy": requested_strategy,
-                "source": str(src),
-                "target": str(target_path),
-                "error": str(error),
-            },
-        )
-        downgrade_logged = True
+        with downgrade_lock:
+            if downgrade_logged:
+                return
+            log.warning(
+                "publish_scene_link_downgraded",
+                extra={
+                    "requested_strategy": requested_strategy,
+                    "source": str(src),
+                    "target": str(target_path),
+                    "error": str(error),
+                },
+            )
+            downgrade_logged = True
 
     def _manifest_key(path: Path) -> str | None:
         if package_dir is None:
@@ -393,7 +464,8 @@ def _copy_output(
     def _record_entry(key: str | None, entry: dict[str, Any]) -> None:
         if key is None or new_manifest is None:
             return
-        new_manifest[key] = entry
+        with manifest_lock:
+            new_manifest[key] = entry
 
     created_files: list[Path] = []
     if src.is_dir():
@@ -428,10 +500,22 @@ def _copy_output(
         dst.mkdir(parents=True, exist_ok=True)
 
         effective_strategy: LinkStrategy = link_strategy
+        strategy_lock = threading.Lock()
+        created_entries: list[tuple[int, Path]] = []
+        created_lock = threading.Lock()
+
+        files_to_process: list[tuple[int, Path]] = []
+        index = 0
         for child in sorted(src.rglob("*")):
             if child.is_dir():
                 (dst / child.relative_to(src)).mkdir(parents=True, exist_ok=True)
                 continue
+            files_to_process.append((index, child))
+            index += 1
+
+        def _process_file(task: tuple[int, Path]) -> None:
+            nonlocal effective_strategy
+            file_index, child = task
             relative = child.relative_to(src)
             target_path = dst / relative
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -440,15 +524,19 @@ def _copy_output(
             if skip:
                 if existing_entry is not None:
                     _record_entry(key, existing_entry)
-                created_files.append(target_path)
-                continue
+                with created_lock:
+                    created_entries.append((file_index, target_path))
+                return
+
             if target_path.exists() or target_path.is_symlink():
                 if target_path.is_dir() and not target_path.is_symlink():
                     shutil.rmtree(target_path)
                 else:
                     target_path.unlink()
-            local_strategy = effective_strategy
+
             while True:
+                with strategy_lock:
+                    local_strategy = effective_strategy
                 try:
                     if local_strategy == "copy":
                         shutil.copy2(child, target_path)
@@ -461,12 +549,30 @@ def _copy_output(
                     if local_strategy == "copy":
                         raise
                     _log_downgrade(exc, target_path)
-                    local_strategy = "copy"
-            effective_strategy = local_strategy
+                    with strategy_lock:
+                        effective_strategy = "copy"
+
             entry = _calculate_entry(child, _previous_entry(key))
             if entry:
                 _record_entry(key, entry)
-            created_files.append(target_path)
+            with created_lock:
+                created_entries.append((file_index, target_path))
+
+        worker_count = _resolve_copy_workers()
+        if files_to_process and worker_count > 1:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [
+                    executor.submit(_process_file, task) for task in files_to_process
+                ]
+                for future in futures:
+                    future.result()
+        else:
+            for task in files_to_process:
+                _process_file(task)
+
+        created_files = [
+            path for _, path in sorted(created_entries, key=lambda item: item[0])
+        ]
         return created_files
 
     target = dst
