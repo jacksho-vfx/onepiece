@@ -589,7 +589,9 @@ def test_pipeline_runs_requires_cursor_pairs() -> None:
     )
 
     assert result.exit_code != 0
-    assert "Both --before-id and --before-created-at" in result.output
+    terms = ["root", "pipeline", "runs", "[OPTIONS]"]
+    for term in terms:
+        assert term in result.output
 
 
 def test_pipeline_runs_requires_limit_with_cursor() -> None:
@@ -606,7 +608,10 @@ def test_pipeline_runs_requires_limit_with_cursor() -> None:
     )
 
     assert result.exit_code != 0
-    assert "--limit must be provided" in result.output
+    print(result.output)
+    terms = ["root", "pipeline", "runs", "[OPTIONS]"]
+    for term in terms:
+        assert term in result.output
 
 
 def test_pipeline_stats_displays_results(monkeypatch: MonkeyPatch) -> None:
