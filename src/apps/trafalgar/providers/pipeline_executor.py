@@ -60,12 +60,17 @@ class PipelineExecutor:
         self,
         *,
         step_factories: Mapping[str, Callable[[Mapping[str, Any]], Any]] | None = None,
+        event_queue_limit: int | None = 10_000,
     ) -> None:
         if step_factories is None:
             step_factories = plugins.discover_pipeline_step_factories()
         self._step_factories: dict[str, Callable[[Mapping[str, Any]], Any]] = dict(
             step_factories
         )
+        if event_queue_limit is not None and event_queue_limit <= 0:
+            msg = "event_queue_limit must be positive when provided"
+            raise ValueError(msg)
+        self._event_queue_limit = event_queue_limit
 
     def resolve_pipeline(self, pipeline: Pipeline) -> Pipeline:
         """Return a copy of *pipeline* with providers resolved to callables."""
@@ -91,6 +96,7 @@ class PipelineExecutor:
         parameters = dict(parameters or {})
         completed_steps: set[str] = set()
         events: Deque[QueuedEvent] = deque()
+        processed_events = 0
 
         sequential_steps = [
             step for step in pipeline.steps if step.trigger.is_sequential
@@ -138,21 +144,23 @@ class PipelineExecutor:
 
                     completed_steps.add(step.name)
                     self._extend_event_queue(events, emitted_events)
-                    self._process_event_queue(
+                    processed_events = self._process_event_queue(
                         pipeline,
                         queue=events,
                         completed_steps=completed_steps,
                         parameters=parameters,
                         emit=emit,
+                        processed_events=processed_events,
                     )
                     schedule_ready_steps()
 
-        self._process_event_queue(
+        processed_events = self._process_event_queue(
             pipeline,
             queue=events,
             completed_steps=completed_steps,
             parameters=parameters,
             emit=emit,
+            processed_events=processed_events,
         )
 
     # Resolution helpers -------------------------------------------------
@@ -263,13 +271,24 @@ class PipelineExecutor:
         completed_steps: set[str],
         parameters: Mapping[str, Any],
         emit: StepEventEmitter,
-    ) -> None:
+        processed_events: int,
+    ) -> int:
         while queue:
             retry: Deque[QueuedEvent] = deque()
             any_delivered = False
 
             while queue:
+                if (
+                    self._event_queue_limit is not None
+                    and processed_events >= self._event_queue_limit
+                ):
+                    msg = (
+                        "pipeline emitted too many events without quiescing; "
+                        "possible infinite event loop"
+                    )
+                    raise RuntimeError(msg)
                 queued_event = queue.popleft()
+                processed_events += 1
                 event = queued_event.event
                 delivered = False
                 should_retry = False
@@ -315,6 +334,7 @@ class PipelineExecutor:
                 if any_delivered:
                     continue
             break
+        return processed_events
 
     def _dependencies_satisfied(
         self, trigger: TriggerPolicy, completed_steps: set[str]
