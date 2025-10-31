@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from apps.trafalgar.pipeline import (
     PipelineOrchestrator,
     PipelineRun,
@@ -69,6 +71,34 @@ def _create_run(
             run_id=run_id,
             pipeline=pipeline,
             status=status,
+            timestamp=created_at,
+            parameters={},
+        ),
+    )
+
+
+def _create_queued_run(
+    store: PipelineRunStore,
+    *,
+    run_id: str,
+    pipeline: str,
+    created_at: datetime,
+) -> None:
+    run = PipelineRun(
+        run_id=run_id,
+        pipeline=pipeline,
+        status="queued",
+        created_at=created_at,
+        updated_at=created_at,
+        parameters={},
+        definition_snapshot={"name": pipeline, "steps": []},
+    )
+    store.create_run(
+        run,
+        PipelineRunEvent(
+            run_id=run_id,
+            pipeline=pipeline,
+            status="queued",
             timestamp=created_at,
             parameters={},
         ),
@@ -224,3 +254,112 @@ def test_orchestrator_aggregate_runs_proxies_store() -> None:
     succeeded = stats["render"]["succeeded"]
     assert succeeded["count"] == 1
     assert succeeded["durations"]["average_seconds"] == 120.0
+
+
+def test_append_event_records_queue_wait_metrics() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 7, 1, 9, tzinfo=timezone.utc)
+    _create_queued_run(
+        store,
+        run_id="run-queued",
+        pipeline="render",
+        created_at=base,
+    )
+
+    started = base + timedelta(seconds=12)
+    store.append_event(
+        "run-queued",
+        status="running",
+        timestamp=started,
+        parameters={},
+        run_status="running",
+    )
+
+    persisted = store.get_run("run-queued")
+    assert persisted.started_at == started
+
+    metrics = persisted.metrics
+    assert isinstance(metrics, dict)
+    totals = metrics.get("totals", {})
+    assert isinstance(totals, dict)
+    queue_metrics = totals.get("queue_wait", {})
+    assert isinstance(queue_metrics, dict)
+
+    assert queue_metrics.get("total_ms") == 12_000
+    assert queue_metrics.get("count") == 1
+    assert queue_metrics.get("last_wait_ms") == 12_000
+    assert queue_metrics.get("min_ms") == 12_000
+    assert queue_metrics.get("max_ms") == 12_000
+    assert "last_queued_at" not in queue_metrics
+
+
+def test_aggregate_runs_includes_queue_wait_statistics() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 7, 2, 10, tzinfo=timezone.utc)
+
+    _create_queued_run(
+        store,
+        run_id="run-success-1",
+        pipeline="render",
+        created_at=base,
+    )
+    first_start = base + timedelta(seconds=10)
+    first_finish = base + timedelta(seconds=40)
+    store.append_event(
+        "run-success-1",
+        status="running",
+        timestamp=first_start,
+        parameters={},
+        run_status="running",
+    )
+    store.append_event(
+        "run-success-1",
+        status="succeeded",
+        timestamp=first_finish,
+        parameters={},
+        run_status="succeeded",
+    )
+
+    later_created = base + timedelta(minutes=5)
+    _create_queued_run(
+        store,
+        run_id="run-success-2",
+        pipeline="render",
+        created_at=later_created,
+    )
+    second_start = later_created + timedelta(seconds=25)
+    second_finish = later_created + timedelta(seconds=80)
+    store.append_event(
+        "run-success-2",
+        status="running",
+        timestamp=second_start,
+        parameters={},
+        run_status="running",
+    )
+    store.append_event(
+        "run-success-2",
+        status="succeeded",
+        timestamp=second_finish,
+        parameters={},
+        run_status="succeeded",
+    )
+
+    queued_created = base + timedelta(minutes=10)
+    _create_queued_run(
+        store,
+        run_id="run-backlog",
+        pipeline="render",
+        created_at=queued_created,
+    )
+
+    stats = store.aggregate_runs(include_durations=True)
+
+    succeeded = stats["render"]["succeeded"]
+    waits = succeeded.get("queue_waits")
+    assert waits is not None
+    assert pytest.approx(waits["average_seconds"], rel=1e-3) == 17.5
+    assert waits["min_seconds"] == pytest.approx(10.0)
+    assert waits["max_seconds"] == pytest.approx(25.0)
+
+    queued = stats["render"]["queued"]
+    assert queued["backlog_count"] == 1
