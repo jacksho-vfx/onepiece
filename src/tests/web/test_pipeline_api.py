@@ -466,10 +466,7 @@ def test_live_event_stream_emits_heartbeats(monkeypatch: MonkeyPatch) -> None:
         assert outputs[0] == pipeline_module._HEARTBEAT_COMMENT
 
         events = [chunk for chunk in outputs if chunk.startswith(b"data: ")]
-        assert [
-            json.loads(chunk.split(b"data: ", 1)[1])
-            for chunk in events
-        ] == [
+        assert [json.loads(chunk.split(b"data: ", 1)[1]) for chunk in events] == [
             {"id": "run-1", "status": "running"},
             {"id": "run-1", "status": "succeeded"},
         ]

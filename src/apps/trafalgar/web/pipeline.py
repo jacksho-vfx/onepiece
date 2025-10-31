@@ -362,11 +362,9 @@ async def _live_event_stream(
     try:
         while True:
             if event_task is None:
-                event_task = asyncio.create_task(anext(events))
+                event_task = asyncio.create_task(anext(events))  # type: ignore[arg-type]
             if heartbeat_task is None:
-                heartbeat_task = asyncio.create_task(
-                    asyncio.sleep(_HEARTBEAT_INTERVAL)
-                )
+                heartbeat_task = asyncio.create_task(asyncio.sleep(_HEARTBEAT_INTERVAL))
 
             done, _ = await asyncio.wait(
                 {event_task, heartbeat_task},
