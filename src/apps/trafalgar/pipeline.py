@@ -1987,7 +1987,11 @@ class PipelineOrchestrator:
                     self._executor.execute(
                         definition.pipeline,
                         parameters=parameters,
-                        emit=self._build_step_emitter(run_id),
+                        emit=self._build_step_emitter(
+                            run_id,
+                            pipeline=definition.pipeline,
+                            parameters=parameters,
+                        ),
                     )
                 except Exception as exc:
                     self._append_event(
@@ -2080,9 +2084,18 @@ class PipelineOrchestrator:
             return value
         return None
 
-    def _build_step_emitter(self, run_id: str) -> pipeline_executor.StepEventEmitter:
+    def _build_step_emitter(
+        self,
+        run_id: str,
+        *,
+        pipeline: Pipeline,
+        parameters: Mapping[str, Any],
+    ) -> pipeline_executor.StepEventEmitter:
         starts: dict[str, list[datetime]] = {}
         lock = Lock()
+        pipeline_metadata = dict(pipeline.metadata)
+        step_metadata = {step.name: dict(step.metadata) for step in pipeline.steps}
+        resolved_parameters = dict(parameters)
 
         def emit(
             status: str,
@@ -2090,7 +2103,8 @@ class PipelineOrchestrator:
             step: pipeline_executor.ExecutedStep,
             event: pipeline_executor.StepTriggerEvent | None = None,
             error: Exception | None = None,
-        ) -> None:
+            context: pipeline_executor.StepExecutionContext | None = None,
+        ) -> pipeline_executor.StepExecutionContext | None:
             payload: dict[str, Any] = {"step": step.name}
             now = datetime.now(timezone.utc)
 
@@ -2099,6 +2113,17 @@ class PipelineOrchestrator:
                 payload["started_at"] = started_at.isoformat()
                 with lock:
                     starts.setdefault(step.name, []).append(started_at)
+                metadata = {
+                    "pipeline": dict(pipeline_metadata),
+                    "step": dict(step_metadata.get(step.name, {})),
+                }
+                context = pipeline_executor.StepExecutionContext(
+                    run_id=run_id,
+                    pipeline_name=pipeline.name,
+                    step_name=step.name,
+                    metadata=metadata,
+                    parameters=dict(resolved_parameters),
+                )
             elif status in {"step_succeeded", "step_failed"}:
                 with lock:
                     stack = starts.get(step.name)
@@ -2127,6 +2152,7 @@ class PipelineOrchestrator:
             if error is not None:
                 payload["error"] = str(error)
             self._append_event(run_id, status, parameters=payload)
+            return context
 
         return emit
 

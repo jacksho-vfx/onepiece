@@ -121,3 +121,23 @@ onepiece pipeline delete daily-render
 
 The command reports `Unknown pipeline` errors as argument validation problems so
 that they can be handled interactively.
+
+## Provider execution context
+
+Pipeline providers invoked by the orchestrator now receive a
+`StepExecutionContext` describing the current run. Sequential providers should
+accept `(context, parameters)` while event-driven providers should accept
+`(context, event, parameters)`. Existing two-argument callables continue to work
+without modification; the executor adapts legacy `(parameters)` and
+`(event, parameters)` functions automatically.
+
+The context exposes:
+
+- `run_id` – unique identifier for the active pipeline run.
+- `pipeline_name` – the name of the pipeline definition executing.
+- `step_name` – the step currently being evaluated.
+- `metadata` – a mapping containing `pipeline` and `step` metadata snapshots.
+- `parameters` – the resolved parameter mapping for the run.
+
+Use the context to avoid recomputing metadata lookups and to attach run-aware
+diagnostics or payloads to downstream systems.

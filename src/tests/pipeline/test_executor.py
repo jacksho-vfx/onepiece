@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 
 from apps.trafalgar.providers.pipeline_executor import (
     PipelineExecutor,
+    StepExecutionContext,
     StepTriggerEvent,
 )
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
@@ -123,3 +124,141 @@ def test_event_queue_guard_limits_infinite_event_churn() -> None:
 
     message = str(excinfo.value)
     assert "infinite event loop" in message
+
+
+def _make_contextual_emitter(
+    run_id: str,
+    pipeline: Pipeline,
+    parameters: Mapping[str, Any],
+) -> tuple[dict[str, StepExecutionContext], Any]:
+    contexts: dict[str, StepExecutionContext] = {}
+
+    def emit(
+        status: str,
+        *,
+        step: Any,
+        event: StepTriggerEvent | None = None,
+        error: Exception | None = None,
+        context: StepExecutionContext | None = None,
+    ) -> StepExecutionContext | None:
+        if status == "step_started":
+            step_definition = pipeline.get_step(step.name)
+            metadata = {
+                "pipeline": dict(pipeline.metadata),
+                "step": dict(step_definition.metadata),
+            }
+            generated = StepExecutionContext(
+                run_id=run_id,
+                pipeline_name=pipeline.name,
+                step_name=step.name,
+                metadata=metadata,
+                parameters=dict(parameters),
+            )
+            contexts[step.name] = generated
+            return generated
+        if context is not None:
+            assert context is contexts[step.name]
+        return None
+
+    return contexts, emit
+
+
+def test_sequential_provider_receives_context() -> None:
+    parameters = {"colour": "red"}
+    pipeline = Pipeline(
+        name="contextual",
+        metadata={"owner": "luffy"},
+        steps=[
+            PipelineStep(
+                name="alpha",
+                provider=lambda context, params: _validate_sequential_context(
+                    context,
+                    params,
+                    expected_run="run-ctx",
+                    expected_pipeline="contextual",
+                    expected_step="alpha",
+                    expected_metadata={
+                        "pipeline": {"owner": "luffy"},
+                        "step": {"label": "first"},
+                    },
+                    expected_parameters=parameters,
+                ),
+                metadata={"label": "first"},
+            ),
+        ],
+    )
+    contexts, emit = _make_contextual_emitter("run-ctx", pipeline, parameters)
+
+    executor = PipelineExecutor()
+    executor.execute(pipeline, parameters=parameters, emit=emit)
+
+    context = contexts["alpha"]
+    assert context.run_id == "run-ctx"
+    assert context.metadata["step"] == {"label": "first"}
+
+
+def _validate_sequential_context(
+    context: StepExecutionContext,
+    params: Mapping[str, Any],
+    *,
+    expected_run: str,
+    expected_pipeline: str,
+    expected_step: str,
+    expected_metadata: Mapping[str, Any],
+    expected_parameters: Mapping[str, Any],
+) -> None:
+    assert context.run_id == expected_run
+    assert context.pipeline_name == expected_pipeline
+    assert context.step_name == expected_step
+    assert context.metadata == expected_metadata
+    assert context.parameters == dict(expected_parameters)
+    assert params == expected_parameters
+
+
+def test_event_driven_provider_receives_context() -> None:
+    parameters = {"mode": "eventful"}
+    events: list[tuple[str, StepExecutionContext]] = []
+
+    def source_provider(
+        context: StepExecutionContext, params: Mapping[str, Any]
+    ) -> StepTriggerEvent:
+        events.append(("source", context))
+        assert context.step_name == "source"
+        assert params == parameters
+        return StepTriggerEvent(name="ready", payload={"value": 1})
+
+    def listener_provider(
+        context: StepExecutionContext,
+        event: StepTriggerEvent,
+        params: Mapping[str, Any],
+    ) -> None:
+        events.append(("listener", context))
+        assert event.name == "ready"
+        assert event.payload == {"value": 1}
+        assert params == parameters
+
+    pipeline = Pipeline(
+        name="eventing",
+        metadata={"owner": "nami"},
+        steps=[
+            PipelineStep(
+                name="source",
+                provider=source_provider,
+                metadata={"label": "source"},
+            ),
+            PipelineStep(
+                name="listener",
+                provider=listener_provider,
+                metadata={"label": "listener"},
+                trigger=TriggerPolicy(kind="event", event="ready"),
+            ),
+        ],
+    )
+
+    contexts, emit = _make_contextual_emitter("run-event", pipeline, parameters)
+    executor = PipelineExecutor()
+    executor.execute(pipeline, parameters=parameters, emit=emit)
+
+    assert [name for name, _ in events] == ["source", "listener"]
+    assert contexts["source"].run_id == "run-event"
+    assert contexts["listener"].metadata["step"] == {"label": "listener"}
