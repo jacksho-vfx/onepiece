@@ -19,14 +19,14 @@ from apps.onepiece.config import ProfileContext
 from libraries.pipeline.models import Pipeline, PipelineStep
 
 
-def _make_orchestrator(max_workers: int) -> tuple[
-    PipelineOrchestrator, Queue[tuple[int, float]], dict[int, Event]
-]:
+def _make_orchestrator(
+    max_workers: int,
+) -> tuple[PipelineOrchestrator, Queue[tuple[int, float]], dict[int, Event]]:
     starts: Queue[tuple[int, float]] = Queue()
     releases: dict[int, Event] = defaultdict(Event)
 
     def _blocking_provider(parameters: Mapping[str, object]) -> None:
-        index = int(parameters["index"])
+        index = int(parameters["index"])  # type: ignore[call-overload]
         starts.put((index, time.perf_counter()))
         releases[index].wait(timeout=5)
 
