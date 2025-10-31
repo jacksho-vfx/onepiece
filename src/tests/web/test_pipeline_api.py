@@ -247,6 +247,29 @@ def test_create_pipeline_registers_definition(client: TestClient) -> None:
     client.delete(f"/pipelines/{payload['name']}", headers=_auth_headers())
 
 
+def test_create_pipeline_allows_translated_synonyms(client: TestClient) -> None:
+    payload = _pipeline_submission(description=None)
+    payload.update({"summary": "Pipeline summary", "version": "1"})
+
+    response = client.post("/pipelines", headers=_auth_headers(), json=payload)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["description"] == "Pipeline summary"
+
+    client.delete(f"/pipelines/{payload['name']}", headers=_auth_headers())
+
+
+def test_create_pipeline_rejects_unexpected_fields(client: TestClient) -> None:
+    payload = _pipeline_submission()
+    payload.update({"summery": "typo", "stepp": []})
+
+    response = client.post("/pipelines", headers=_auth_headers(), json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unexpected fields: stepp, summery"
+
+
 def test_update_pipeline_replaces_definition(client: TestClient) -> None:
     payload = _pipeline_submission("revision_pipeline")
     creation = client.post("/pipelines", headers=_auth_headers(), json=payload)
