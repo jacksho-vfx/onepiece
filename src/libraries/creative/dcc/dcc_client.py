@@ -6,6 +6,7 @@ needed by the tests are implemented which keeps the behaviour easy to reason
 about.
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -48,6 +49,8 @@ log = logging.getLogger(__name__)
 JSONPrimitive: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 LinkStrategy: TypeAlias = Literal["copy", "hard", "symlink"]
+
+PackageManifest: TypeAlias = dict[str, dict[str, Any]]
 
 
 class SupportedDCC(Enum):
@@ -322,6 +325,10 @@ def _copy_output(
     *,
     treat_dst_as_dir: bool = False,
     link_strategy: LinkStrategy = "copy",
+    package_dir: Path | None = None,
+    previous_manifest: PackageManifest | None = None,
+    new_manifest: PackageManifest | None = None,
+    force_package: bool = False,
 ) -> list[Path]:
     """Copy ``src`` to ``dst`` and return the created files."""
 
@@ -343,48 +350,122 @@ def _copy_output(
         )
         downgrade_logged = True
 
+    def _manifest_key(path: Path) -> str | None:
+        if package_dir is None:
+            return None
+        try:
+            return str(path.relative_to(package_dir))
+        except ValueError:
+            return None
+
+    def _previous_entry(key: str | None) -> dict[str, Any] | None:
+        if key is None or previous_manifest is None:
+            return None
+        return previous_manifest.get(key)
+
+    def _calculate_entry(source: Path, entry: dict[str, Any] | None) -> dict[str, Any]:
+        checksum_required = bool(entry and entry.get("checksum"))
+        result: dict[str, Any] = {"size": source.stat().st_size}
+        if checksum_required:
+            result["checksum"] = _calculate_checksum(source)
+        return result
+
+    def _should_skip(
+        source: Path,
+        target_path: Path,
+        key: str | None,
+    ) -> tuple[bool, dict[str, Any] | None]:
+        if force_package or previous_manifest is None or key is None:
+            return False, None
+        entry = previous_manifest.get(key)
+        if entry is None:
+            return False, None
+        if entry.get("size") != source.stat().st_size:
+            return False, None
+        checksum = entry.get("checksum")
+        if checksum:
+            if _calculate_checksum(source) != checksum:
+                return False, None
+        if not target_path.exists() and not target_path.is_symlink():
+            return False, None
+        return True, entry
+
+    def _record_entry(key: str | None, entry: dict[str, Any]) -> None:
+        if key is None or new_manifest is None:
+            return
+        new_manifest[key] = entry
+
     if src.is_dir():
-        if dst.exists():
-            if dst.is_symlink() or not dst.is_dir():
-                dst.unlink()
-            else:
-                shutil.rmtree(dst)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        if link_strategy == "copy":
-            shutil.copytree(src, dst)
-            return [p for p in dst.rglob("*") if p.is_file()]
-
         if link_strategy == "symlink":
+            if dst.exists():
+                if dst.is_symlink() or not dst.is_dir():
+                    dst.unlink()
+                else:
+                    shutil.rmtree(dst)
+            dst.parent.mkdir(parents=True, exist_ok=True)
             try:
                 dst.symlink_to(src, target_is_directory=True)
+                created_files = [p for p in dst.rglob("*") if p.is_file()]
             except OSError as exc:
                 _log_downgrade(exc, dst)
                 shutil.copytree(src, dst)
-            return [p for p in dst.rglob("*") if p.is_file()]
+                created_files = [p for p in dst.rglob("*") if p.is_file()]
+
+            for child in sorted(src.rglob("*")):
+                if not child.is_file():
+                    continue
+                relative = child.relative_to(src)
+                target_path = dst / relative
+                key = _manifest_key(target_path)
+                entry = _calculate_entry(child, _previous_entry(key))
+                _record_entry(key, entry)
+            return created_files
+
+        if dst.exists() and (dst.is_symlink() or not dst.is_dir()):
+            dst.unlink()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.mkdir(parents=True, exist_ok=True)
 
         created_files: list[Path] = []
-        dst.mkdir(parents=True, exist_ok=True)
         effective_strategy: LinkStrategy = link_strategy
-        for child in src.rglob("*"):
+        for child in sorted(src.rglob("*")):
+            if child.is_dir():
+                (dst / child.relative_to(src)).mkdir(parents=True, exist_ok=True)
+                continue
             relative = child.relative_to(src)
             target_path = dst / relative
-            if child.is_dir():
-                target_path.mkdir(exist_ok=True)
-                continue
             target_path.parent.mkdir(parents=True, exist_ok=True)
+            key = _manifest_key(target_path)
+            skip, existing_entry = _should_skip(child, target_path, key)
+            if skip:
+                if existing_entry is not None:
+                    _record_entry(key, existing_entry)
+                created_files.append(target_path)
+                continue
+            if target_path.exists() or target_path.is_symlink():
+                if target_path.is_dir() and not target_path.is_symlink():
+                    shutil.rmtree(target_path)
+                else:
+                    target_path.unlink()
+            local_strategy = effective_strategy
             while True:
                 try:
-                    if effective_strategy == "hard":
+                    if local_strategy == "copy":
+                        shutil.copy2(child, target_path)
+                    elif local_strategy == "hard":
                         os.link(child, target_path)
                     else:
-                        shutil.copy2(child, target_path)
+                        os.symlink(child, target_path)
                     break
                 except OSError as exc:
-                    if effective_strategy == "copy":
+                    if local_strategy == "copy":
                         raise
                     _log_downgrade(exc, target_path)
-                    effective_strategy = "copy"
+                    local_strategy = "copy"
+            effective_strategy = local_strategy
+            entry = _calculate_entry(child, _previous_entry(key))
+            if entry:
+                _record_entry(key, entry)
             created_files.append(target_path)
         return created_files
 
@@ -396,30 +477,50 @@ def _copy_output(
         if dst.suffix == "":
             target = dst / src.name
 
-    if target.exists():
-        if target.is_dir() and not target.is_symlink():
-            shutil.rmtree(target)
-        else:
-            target.unlink()
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    effective_strategy = link_strategy
-    while True:
-        try:
-            if effective_strategy == "copy":
-                shutil.copy2(src, target)
-            elif effective_strategy == "hard":
-                os.link(src, target)
+    key = _manifest_key(target)
+    skip, existing_entry = _should_skip(src, target, key)
+    if not skip:
+        if target.exists() or target.is_symlink():
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
             else:
-                os.symlink(src, target)
-            break
-        except OSError as exc:
-            if effective_strategy == "copy":
-                raise
-            _log_downgrade(exc, target)
-            effective_strategy = "copy"
+                target.unlink()
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        effective_strategy = link_strategy
+        while True:
+            try:
+                if effective_strategy == "copy":
+                    shutil.copy2(src, target)
+                elif effective_strategy == "hard":
+                    os.link(src, target)
+                else:
+                    os.symlink(src, target)
+                break
+            except OSError as exc:
+                if effective_strategy == "copy":
+                    raise
+                _log_downgrade(exc, target)
+                effective_strategy = "copy"
+
+        entry = _calculate_entry(src, _previous_entry(key))
+    else:
+        entry = existing_entry or {}
+
+    if entry:
+        _record_entry(key, entry)
 
     return [target]
+
+
+def _calculate_checksum(path: Path) -> str:
+    """Return a stable checksum for ``path`` contents."""
+
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _select_thumbnail(candidates: Iterable[Path]) -> Path | None:
@@ -477,33 +578,52 @@ def _prepare_package_contents(
     destination: Path,
     *,
     link_strategy: LinkStrategy = "copy",
-) -> tuple[Path, list[Path], list[Path]]:
+    force_package: bool = False,
+) -> tuple[Path, list[Path], list[Path], PackageManifest]:
     """Create the package directory and populate it with scene outputs."""
 
     _validate_scene_name(scene_name)
     package_dir = destination / scene_name
     package_dir.mkdir(parents=True, exist_ok=True)
 
+    stored_manifest = _load_package_manifest(package_dir)
+    previous_manifest = {} if force_package else stored_manifest
+    manifest: PackageManifest = {}
+
     renders_files = _copy_output(
         Path(renders),
         package_dir / "renders",
         treat_dst_as_dir=True,
         link_strategy=link_strategy,
+        package_dir=package_dir,
+        previous_manifest=previous_manifest,
+        new_manifest=manifest,
+        force_package=force_package,
     )
     previews_files = _copy_output(
         Path(previews),
         package_dir / "previews",
         treat_dst_as_dir=True,
         link_strategy=link_strategy,
+        package_dir=package_dir,
+        previous_manifest=previous_manifest,
+        new_manifest=manifest,
+        force_package=force_package,
     )
     _copy_output(
         Path(otio),
         package_dir / "otio",
         treat_dst_as_dir=True,
         link_strategy=link_strategy,
+        package_dir=package_dir,
+        previous_manifest=previous_manifest,
+        new_manifest=manifest,
+        force_package=force_package,
     )
 
-    return package_dir, renders_files, previews_files
+    _prune_stale_package_files(package_dir, stored_manifest, manifest)
+
+    return package_dir, renders_files, previews_files, manifest
 
 
 _INVALID_SCENE_NAME_MESSAGE = (
@@ -552,6 +672,80 @@ def _write_metadata_and_thumbnails(
         shutil.copy2(thumbnail_candidate, thumbnail_path)
 
     return metadata_path, thumbnail_path
+
+
+def _manifest_path(package_dir: Path) -> Path:
+    return package_dir / ".onepiece-package.json"
+
+
+def _load_package_manifest(package_dir: Path) -> PackageManifest:
+    """Return the stored package manifest for ``package_dir`` when available."""
+
+    path = _manifest_path(package_dir)
+    try:
+        payload = json.loads(path.read_text())
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+        log.warning(
+            "publish_scene_manifest_unreadable",
+            extra={"package": str(package_dir), "error": str(exc)},
+        )
+        return {}
+
+    files = payload.get("files")
+    if not isinstance(files, Mapping):
+        return {}
+
+    manifest: PackageManifest = {}
+    for relative, entry in files.items():
+        if not isinstance(relative, str) or not isinstance(entry, Mapping):
+            continue
+        size = entry.get("size")
+        if not isinstance(size, int):
+            continue
+        manifest_entry: dict[str, Any] = {"size": size}
+        checksum = entry.get("checksum")
+        if isinstance(checksum, str):
+            manifest_entry["checksum"] = checksum
+        manifest[relative] = manifest_entry
+    return manifest
+
+
+def _write_package_manifest(package_dir: Path, manifest: PackageManifest) -> None:
+    """Persist ``manifest`` for ``package_dir``."""
+
+    path = _manifest_path(package_dir)
+    serialisable = {key: value for key, value in sorted(manifest.items())}
+    payload = {"files": serialisable}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _prune_stale_package_files(
+    package_dir: Path,
+    previous_manifest: PackageManifest,
+    manifest: PackageManifest,
+) -> None:
+    """Remove files that disappeared between manifest revisions."""
+
+    stale_keys = set(previous_manifest) - set(manifest)
+    for key in stale_keys:
+        target = package_dir / key
+        try:
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        except FileNotFoundError:
+            continue
+
+        parent = target.parent
+        while parent != package_dir:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
 
 def _load_package_metadata(package_dir: Path) -> Mapping[str, JSONValue] | None:
@@ -821,6 +1015,7 @@ def publish_scene(
     show_type: Literal["vfx", "prod"] = "vfx",
     *,
     link_strategy: LinkStrategy = "copy",
+    force_package: bool = False,
     dry_run: bool = False,
     profile: str | None = None,
     direct_s3_path: str | None = None,
@@ -842,13 +1037,14 @@ def publish_scene(
     :data:`DCC_GPU_REQUIREMENTS` entry for ad-hoc validations.
     """
 
-    package_dir, renders_files, previews_files = _prepare_package_contents(
+    package_dir, renders_files, previews_files, package_manifest = _prepare_package_contents(
         scene_name,
         renders,
         previews,
         otio,
         destination,
         link_strategy=link_strategy,
+        force_package=force_package,
     )
 
     _write_metadata_and_thumbnails(
@@ -910,5 +1106,7 @@ def publish_scene(
         profile=profile,
         direct_s3_path=direct_s3_path,
     )
+
+    _write_package_manifest(package_dir, package_manifest)
 
     return PublishSceneResult(package_dir=package_dir, destination=destination_path)

@@ -9,7 +9,9 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from typer.testing import CliRunner
 
+from apps.onepiece.dcc.publish import app as publish_app
 from libraries.creative.dcc.dcc_client import (
     DCC_ASSET_REQUIREMENTS,
     DCCDependencyReport,
@@ -214,7 +216,7 @@ def _create_publish_inputs(
 def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
     renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
 
-    package_dir, render_files, preview_files = _prepare_package_contents(
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099", renders, previews, otio, destination
     )
 
@@ -228,7 +230,7 @@ def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
 def test_prepare_package_contents_hardlinks_outputs(tmp_path: Path) -> None:
     renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
 
-    package_dir, render_files, preview_files = _prepare_package_contents(
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
         renders,
         previews,
@@ -252,7 +254,7 @@ def test_prepare_package_contents_hardlinks_outputs(tmp_path: Path) -> None:
 def test_prepare_package_contents_symlinks_outputs(tmp_path: Path) -> None:
     renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
 
-    package_dir, render_files, preview_files = _prepare_package_contents(
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
         renders,
         previews,
@@ -279,7 +281,7 @@ def test_prepare_package_contents_downgrades_linking_on_failure(
     monkeypatch.setattr(os, "link", failing_link)
     caplog.set_level(logging.WARNING)
 
-    package_dir, render_files, preview_files = _prepare_package_contents(
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
         renders,
         previews,
@@ -299,7 +301,7 @@ def test_prepare_package_contents_downgrades_linking_on_failure(
 def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
-    package_dir, render_files, preview_files = _prepare_package_contents(
+    package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
         renders,
         previews,
@@ -706,6 +708,134 @@ def test_publish_scene_replaces_existing_file_targets(
 
     sync_mock.assert_called_once()
 
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_skips_unchanged_files(sync_mock: MagicMock, tmp_path: Path) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    scene_name = "ep01_sh050"
+    publish_scene(
+        SupportedDCC.NUKE,
+        scene_name=scene_name,
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+        gpu_description="OpenGL 4.1",
+    )
+
+    package_dir = destination / scene_name
+    render_target = package_dir / "renders" / "beauty.exr"
+    preview_target = package_dir / "previews" / "preview.jpg"
+    manifest_path = package_dir / ".onepiece-package.json"
+
+    initial_render_inode = os.stat(render_target).st_ino
+    initial_preview_inode = os.stat(preview_target).st_ino
+    assert manifest_path.exists()
+
+    sync_mock.reset_mock()
+
+    publish_scene(
+        SupportedDCC.NUKE,
+        scene_name=scene_name,
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+        gpu_description="OpenGL 4.1",
+    )
+
+    assert sync_mock.call_count == 1
+    assert os.stat(render_target).st_ino == initial_render_inode
+    assert os.stat(preview_target).st_ino == initial_preview_inode
+    assert manifest_path.exists()
+
+
+@patch("libraries.creative.dcc.dcc_client.verify_dcc_dependencies")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_force_package_rebuilds_outputs(
+    sync_mock: MagicMock, verify_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    scene_name = "ep01_sh051"
+
+    verify_mock.return_value = DCCDependencyReport(
+        dcc=SupportedDCC.NUKE,
+        plugins=DCCPluginStatus(
+            required=frozenset(), available=frozenset(), missing=frozenset()
+        ),
+        assets=DCCAssetStatus(required=(), present=(), missing=()),
+        gpu=DCCGPUStatus(required="OpenGL 4.1", detected="OpenGL 4.1", meets_requirement=True),
+    )
+
+    publish_scene(
+        SupportedDCC.NUKE,
+        scene_name=scene_name,
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+        gpu_description="OpenGL 4.1",
+    )
+
+    package_dir = destination / scene_name
+    render_target = package_dir / "renders" / "beauty.exr"
+    assert render_target.read_text() == "beauty"
+
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata))
+
+    (renders / "beauty.exr").write_text("Beauty")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        publish_app,
+        [
+            "--dcc",
+            "nuke",
+            "--scene-name",
+            scene_name,
+            "--renders",
+            str(renders),
+            "--previews",
+            str(previews),
+            "--otio",
+            str(otio),
+            "--metadata",
+            str(metadata_path),
+            "--destination",
+            str(destination),
+            "--bucket",
+            "libraries-bucket",
+            "--show-code",
+            "OP",
+            "--force-package",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert render_target.read_text() == "Beauty"
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(
