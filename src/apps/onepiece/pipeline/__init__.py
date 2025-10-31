@@ -307,7 +307,7 @@ class RemotePipelineClient:
         definitions: list[Mapping[str, Any]] = []
         for item in payload:
             if isinstance(item, Mapping):
-                definitions.append(dict(item))
+                definitions.append(item)
         return definitions
 
     def get_definition(self, name: str) -> Mapping[str, Any]:
@@ -328,7 +328,7 @@ class RemotePipelineClient:
         payload = response.json()
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        return dict(payload)
+        return payload
 
     def list_runs(
         self,
@@ -365,23 +365,14 @@ class RemotePipelineClient:
         payload = response.json()
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        runs_payload = payload.get("runs")
-        runs: list[Mapping[str, Any]] = []
-        if isinstance(runs_payload, list):
-            for item in runs_payload:
-                if isinstance(item, Mapping):
-                    runs.append(dict(item))
-        cursor_payload = payload.get("next_cursor")
-        if cursor_payload is not None and not isinstance(cursor_payload, Mapping):
-            cursor_payload = None
-        return {"runs": runs, "next_cursor": cursor_payload}
+        return payload
 
     def get_run(self, run_id: str) -> Mapping[str, Any]:
         response = self._request("GET", f"runs/{run_id}")
         payload = response.json()
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        return dict(payload)
+        return payload
 
     def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
         def _generator() -> Iterator[Mapping[str, Any]]:
@@ -426,14 +417,14 @@ class RemotePipelineClient:
         payload = response.json()
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        return dict(payload)
+        return payload
 
     def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         response = self._request("POST", "pipelines", json=dict(payload))
         body = response.json()
         if not isinstance(body, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        return dict(body)
+        return body
 
     def update_definition(
         self, name: str, payload: Mapping[str, Any]
@@ -442,7 +433,7 @@ class RemotePipelineClient:
         body = response.json()
         if not isinstance(body, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
-        return dict(body)
+        return body
 
     def delete_definition(self, name: str) -> None:
         self._request("DELETE", f"pipelines/{name}")
@@ -1087,9 +1078,30 @@ def _using_client() -> AbstractContextManager[PipelineClient]:
     return _Context()
 
 
+_VALID_OUTPUT_FORMATS = {"text", "json"}
+
+
+def _resolve_output_format(raw: str) -> str:
+    value = raw.strip().lower()
+    if not value:
+        return "text"
+    if value not in _VALID_OUTPUT_FORMATS:
+        raise typer.BadParameter(
+            "--format must be either 'text' or 'json'.",
+            param_hint="--format",
+        )
+    return value
+
+
 @app.command("list")
-def list_pipelines() -> None:
+def list_pipelines(
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
     """List pipelines exposed by the orchestrator."""
+
+    output_format = _resolve_output_format(format)
 
     with _using_client() as client:
         try:
@@ -1097,6 +1109,10 @@ def list_pipelines() -> None:
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(definitions, indent=2))
+        return
 
     if not definitions:
         typer.echo("No pipelines are currently registered with the orchestrator.")
@@ -1110,8 +1126,13 @@ def list_pipelines() -> None:
 @app.command("describe")
 def describe_pipeline(
     name: str = typer.Argument(..., help="Pipeline identifier."),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
 ) -> None:
     """Describe a specific pipeline."""
+
+    output_format = _resolve_output_format(format)
 
     with _using_client() as client:
         try:
@@ -1121,6 +1142,10 @@ def describe_pipeline(
                 raise typer.BadParameter(exc.message) from exc
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(definition, indent=2))
+        return
 
     _render_pipeline_details(definition)
 
@@ -1324,8 +1349,13 @@ def list_runs(
         "--before-created-at",
         help="Return runs created before the provided ISO timestamp.",
     ),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
 ) -> None:
     """List pipeline runs recorded by the orchestrator."""
+
+    output_format = _resolve_output_format(format)
 
     if (before_id is None) ^ (before_created_at is None):
         raise typer.BadParameter(
@@ -1349,6 +1379,10 @@ def list_runs(
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(page, indent=2))
+        return
 
     runs_payload = page.get("runs") if isinstance(page, Mapping) else None
     runs_list = runs_payload if isinstance(runs_payload, list) else []
@@ -1385,8 +1419,13 @@ def show_statistics(
         "--since",
         help="Restrict statistics to runs created on or after the ISO timestamp.",
     ),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
 ) -> None:
     """Display aggregated pipeline run statistics."""
+
+    output_format = _resolve_output_format(format)
 
     with _using_client() as client:
         try:
@@ -1394,6 +1433,10 @@ def show_statistics(
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(stats, indent=2))
+        return
 
     pipelines = stats.get("pipelines")
     if not isinstance(pipelines, Mapping) or not pipelines:
@@ -1407,8 +1450,13 @@ def show_statistics(
 @app.command("run-status")
 def run_status(
     run_id: str = typer.Argument(..., help="Run identifier."),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
 ) -> None:
     """Display metadata for a specific pipeline run."""
+
+    output_format = _resolve_output_format(format)
 
     with _using_client() as client:
         try:
@@ -1418,6 +1466,10 @@ def run_status(
                 raise typer.BadParameter(exc.message) from exc
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(run, indent=2))
+        return
 
     for line in _format_pipeline_run(run):
         typer.echo(line)
