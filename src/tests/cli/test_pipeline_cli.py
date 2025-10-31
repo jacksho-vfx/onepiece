@@ -257,7 +257,7 @@ def test_pipeline_list_supports_json(monkeypatch: MonkeyPatch) -> None:
             "description": "Daily ingest orchestration",
         }
     ]
-    client = StubPipelineClient(definitions=payload)
+    client = StubPipelineClient(definitions=payload)  # type: ignore[arg-type]
     _install_stub(monkeypatch, client)
 
     result = runner.invoke(
