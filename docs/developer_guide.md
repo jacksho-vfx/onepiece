@@ -12,7 +12,7 @@ This guide describes how to set up a local development environment for OnePiece,
 
 > **Release spotlight (v1.0.0):** The CLI now resolves layered `onepiece.toml` profiles, the ingest helpers expose resumable upload controls, Trafalgar gains cache-tunable dashboards with render job management, and the new Uta Control Center turns the Typer command tree into a browser-based control room.
 >
-> **Latest merges:** Pipeline configuration now surfaces named definitions alongside profile data, the in-memory orchestrator gained a CLI and FastAPI surface for listing and triggering pipelines, and pipeline step factories can be extended through entry points. Perona's Wrangler automation added deadline escalations, cache rebuild recommendations, telemetry freshness checks, and render volatility spotlights so production leads can respond quickly. 【F:src/apps/onepiece/config.py†L1-L120】【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler.py†L1334-L1426】
+> **Latest merges:** Pipeline configuration now surfaces named definitions alongside profile data, the in-memory orchestrator gained a CLI and FastAPI surface for listing and triggering pipelines, and pipeline step factories can be extended through entry points. Perona's Wrangler automation added deadline escalations, cache rebuild recommendations, telemetry freshness checks, and render volatility spotlights so production leads can respond quickly. 【F:src/apps/onepiece/config.py†L1-L120】【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】
 
 ## Prerequisites
 
