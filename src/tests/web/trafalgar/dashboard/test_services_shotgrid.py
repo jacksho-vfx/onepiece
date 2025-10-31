@@ -49,7 +49,12 @@ def test_shotgrid_service_filters_versions_case_insensitively(
 
 
 def test_shotgrid_service_uses_default_provider() -> None:
-    service = dashboard.ShotGridService()
+    class GeneratorShotgridClient:
+        returns: list[dict[str, Any]] = []
+
+    service = dashboard.ShotGridService(
+        GeneratorShotgridClient(), known_projects={"alpha", "beta"}
+    )
 
     payload = service.overall_status()
 
