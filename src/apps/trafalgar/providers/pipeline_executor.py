@@ -18,6 +18,17 @@ PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
 
 
 @dataclass(slots=True)
+class StepExecutionContext:
+    """Contextual information provided to pipeline step providers."""
+
+    run_id: str
+    pipeline_name: str
+    step_name: str
+    metadata: Mapping[str, Any]
+    parameters: Mapping[str, Any]
+
+
+@dataclass(slots=True)
 class StepTriggerEvent:
     """Event emitted by a pipeline step and used to trigger event-driven steps."""
 
@@ -50,7 +61,8 @@ class StepEventEmitter(Protocol):
         step: ExecutedStep,
         event: StepTriggerEvent | None = None,
         error: Exception | None = None,
-    ) -> None: ...  # pragma: no cover - Protocol definition
+        context: StepExecutionContext | None = None,
+    ) -> StepExecutionContext | None: ...  # pragma: no cover - Protocol definition
 
 
 class PipelineExecutor:
@@ -117,6 +129,7 @@ class PipelineExecutor:
                 submitted.add(step.name)
                 future = executor.submit(
                     self._execute_sequential_step,
+                    pipeline,
                     step,
                     parameters=parameters,  # type: ignore[arg-type]
                     emit=emit,
@@ -204,13 +217,20 @@ class PipelineExecutor:
         step: PipelineStep,
         *,
         parameters: Mapping[str, Any],
+        context: StepExecutionContext,
         event: StepTriggerEvent | None = None,
     ) -> Any:
         provider = step.provider
         if event is None:
-            result = provider(parameters)
+            if self._supports_arguments(provider, context, parameters):
+                result = provider(context, parameters)
+            else:
+                result = provider(parameters)
         else:
-            result = provider(event, parameters)
+            if self._supports_arguments(provider, context, event, parameters):
+                result = provider(context, event, parameters)
+            else:
+                result = provider(event, parameters)
 
         return self._resolve_async_value(result)
 
@@ -248,19 +268,30 @@ class PipelineExecutor:
 
     def _execute_sequential_step(
         self,
+        pipeline: Pipeline,
         step: PipelineStep,
         *,
         parameters: Mapping[str, Any],
         emit: StepEventEmitter,
     ) -> list[StepTriggerEvent]:
         executed_step = ExecutedStep(name=step.name)
-        emit("step_started", step=executed_step)
+        context = emit("step_started", step=executed_step)
+        if context is None:
+            context = self._build_context(
+                pipeline=pipeline,
+                step=step,
+                parameters=parameters,
+            )
         try:
-            result = self._call_provider(step, parameters=parameters)
+            result = self._call_provider(
+                step,
+                parameters=parameters,
+                context=context,
+            )
         except Exception as exc:  # pragma: no cover - defensive guard
-            emit("step_failed", step=executed_step, error=exc)
+            emit("step_failed", step=executed_step, error=exc, context=context)
             raise
-        emit("step_succeeded", step=executed_step)
+        emit("step_succeeded", step=executed_step, context=context)
         return list(self._normalise_events(result))
 
     def _process_event_queue(
@@ -306,18 +337,40 @@ class PipelineExecutor:
                         continue
 
                     executed_step = ExecutedStep(name=step.name)
-                    emit("step_started", step=executed_step, event=event)
+                    context = emit(
+                        "step_started",
+                        step=executed_step,
+                        event=event,
+                    )
+                    if context is None:
+                        context = self._build_context(
+                            pipeline=pipeline,
+                            step=step,
+                            parameters=parameters,
+                        )
                     try:
                         result = self._call_provider(
                             step,
                             parameters=parameters,
+                            context=context,
                             event=event,
                         )
                     except Exception as exc:  # pragma: no cover - defensive guard
-                        emit("step_failed", step=executed_step, event=event, error=exc)
+                        emit(
+                            "step_failed",
+                            step=executed_step,
+                            event=event,
+                            error=exc,
+                            context=context,
+                        )
                         raise
 
-                    emit("step_succeeded", step=executed_step, event=event)
+                    emit(
+                        "step_succeeded",
+                        step=executed_step,
+                        event=event,
+                        context=context,
+                    )
                     queued_event.delivered_steps.add(step.name)
                     completed_steps.add(step.name)
                     delivered = True
@@ -354,6 +407,37 @@ class PipelineExecutor:
         if isinstance(payload, Mapping):
             return dict(payload)
         return {"value": payload}
+
+    def _build_context(
+        self,
+        *,
+        pipeline: Pipeline,
+        step: PipelineStep,
+        parameters: Mapping[str, Any],
+        run_id: str | None = None,
+    ) -> StepExecutionContext:
+        metadata = {
+            "pipeline": dict(pipeline.metadata),
+            "step": dict(step.metadata),
+        }
+        return StepExecutionContext(
+            run_id=run_id or "",
+            pipeline_name=pipeline.name,
+            step_name=step.name,
+            metadata=metadata,
+            parameters=dict(parameters),
+        )
+
+    def _supports_arguments(self, provider: Any, *args: Any) -> bool:
+        try:
+            signature = inspect.signature(provider)
+        except (TypeError, ValueError):
+            return False
+        try:
+            signature.bind_partial(*args)
+        except TypeError:
+            return False
+        return True
 
     def _resolve_async_value(self, value: Any) -> Any:
         if inspect.isawaitable(value):
