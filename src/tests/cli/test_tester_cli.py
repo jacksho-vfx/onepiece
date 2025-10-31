@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.tester import app as tester_app
+import apps.tester.presentation as tester_presentation
 
 
 runner = CliRunner()
@@ -239,3 +240,57 @@ def test_present_respects_skip_create_option(
     assert expected_message in result.output
     assert calls == expected_calls
     assert len(launch_calls) == 1
+
+
+def test_present_prepares_pipeline_demos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The presentation command should stage and register pipeline demos."""
+
+    class DummyOrchestrator:
+        def __init__(self) -> None:
+            self.registered: list[Any] = []
+
+        def upsert(self, definition: Any) -> bool:
+            self.registered.append(definition)
+            return True
+
+    dummy_orchestrator = DummyOrchestrator()
+    monkeypatch.setattr(
+        tester_presentation,
+        "get_pipeline_orchestrator",
+        lambda: dummy_orchestrator,
+    )
+
+    original_prepare = tester_presentation.prepare_pipeline_demos
+    calls = 0
+
+    def tracking_prepare() -> None:
+        nonlocal calls
+        original_prepare()
+        calls += 1
+
+    monkeypatch.setattr(tester_presentation, "prepare_pipeline_demos", tracking_prepare)
+    monkeypatch.setattr(tester_app, "DEMO_CREATION_HOOKS", (tracking_prepare,))
+
+    launch_calls: list[dict[str, object]] = []
+
+    def fake_launch(**kwargs):  # type: ignore[no-untyped-def]
+        launch_calls.append(kwargs)
+
+    monkeypatch.setattr(tester_app, "_launch_demo_targets", fake_launch)
+    monkeypatch.delenv("ONEPIECE_PROJECT_ROOT", raising=False)
+
+    result = runner.invoke(
+        tester_app.app,
+        ["present", "--browser-delay", "0", "--no-browser"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == 1
+    assert len(launch_calls) == 1
+
+    staged_root = tester_presentation.get_staged_pipeline_project_root()
+    assert staged_root is not None
+    assert os.environ.get("ONEPIECE_PROJECT_ROOT") == str(staged_root)
+    assert dummy_orchestrator.registered, "expected pipelines to be registered"
+
+    tester_presentation.restore_pipeline_demo_environment()

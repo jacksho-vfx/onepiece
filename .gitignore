@@ -24,6 +24,9 @@ ENV/
 htmlcov/
 .pytest_cache/
 
+# Demo fixtures
+.fixtures/
+
 # Mypy / Ruff / Black caches
 .mypy_cache/
 .ruff_cache/
