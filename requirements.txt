@@ -7,4 +7,5 @@ py-mini-racer
 click
 pytest
 pillow
+portalocker
 -e .[dev]

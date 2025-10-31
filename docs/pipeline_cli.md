@@ -47,6 +47,15 @@ onepiece pipeline update manifests/render.toml
 Both commands provide clear error messages when the manifest is invalid or when
 API responses indicate a conflict.
 
+### Concurrent updates
+
+Local orchestrator deployments persist pipeline definitions to JSON files on
+disk. The definition store now acquires advisory file locks while reading and
+writing those files, ensuring that parallel CLI commands or background services
+cannot clobber updates. Locks are automatically released even if a process
+crashes mid-write, and updates remain atomic thanks to the temporary-file swap
+used beneath the lock.
+
 ## Deleting pipelines
 
 To remove a pipeline definition, call:

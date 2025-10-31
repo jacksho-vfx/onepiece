@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,6 +14,8 @@ from typing import Any, AsyncIterator, Iterable, Iterator, Mapping, cast
 import json
 import sqlite3
 import uuid
+
+import portalocker
 
 from apps.onepiece.config import ProfileContext
 from apps.trafalgar.providers import pipeline_executor
@@ -223,10 +226,12 @@ class PipelineDefinitionStore:
     def __init__(self, *, path: str | Path | None = None) -> None:
         if path is None or str(path) == ":memory:":
             self._path: Path | None = None
+            self._file_lock_path: Path | None = None
         else:
             resolved = Path(path)
             resolved.parent.mkdir(parents=True, exist_ok=True)
             self._path = resolved
+            self._file_lock_path = resolved.with_suffix(resolved.suffix + ".lock")
         self._lock = Lock()
         self._definitions: dict[str, dict[str, Any]] = self._load_definitions()
 
@@ -253,12 +258,15 @@ class PipelineDefinitionStore:
 
     def _load_definitions(self) -> dict[str, dict[str, Any]]:
         path = self._path
-        if path is None or not path.exists():
+        if path is None:
             return {}
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            return {}
+        with self._file_lock(shared=True):
+            if not path.exists():
+                return {}
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                return {}
         if not text.strip():
             return {}
         try:
@@ -302,10 +310,28 @@ class PipelineDefinitionStore:
         }
         document = {"definitions": serialisable}
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(document, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        tmp_path.replace(self._path)
+        with self._file_lock(shared=False):
+            try:
+                tmp_path.write_text(
+                    json.dumps(document, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                tmp_path.replace(self._path)
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    @contextmanager
+    def _file_lock(self, *, shared: bool) -> Iterator[None]:
+        lock_path = self._file_lock_path
+        if lock_path is None:
+            yield
+            return
+        flags = portalocker.LOCK_SH if shared else portalocker.LOCK_EX
+        with portalocker.Lock(lock_path, mode="a+", flags=flags):
+            yield
 
 
 @dataclass(slots=True)
