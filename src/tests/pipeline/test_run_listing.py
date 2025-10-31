@@ -55,6 +55,8 @@ def _create_run(
     status: str,
     created_at: datetime,
     updated_at: datetime,
+    submitted_by: str | None = None,
+    roles: tuple[str, ...] | None = None,
 ) -> None:
     run = PipelineRun(
         run_id=run_id,
@@ -64,6 +66,8 @@ def _create_run(
         updated_at=updated_at,
         parameters={},
         definition_snapshot={"name": pipeline, "steps": []},
+        submitted_by=submitted_by,
+        roles=roles or (),
     )
     store.create_run(
         run,
@@ -83,6 +87,8 @@ def _create_queued_run(
     run_id: str,
     pipeline: str,
     created_at: datetime,
+    submitted_by: str | None = None,
+    roles: tuple[str, ...] | None = None,
 ) -> None:
     run = PipelineRun(
         run_id=run_id,
@@ -92,6 +98,8 @@ def _create_queued_run(
         updated_at=created_at,
         parameters={},
         definition_snapshot={"name": pipeline, "steps": []},
+        submitted_by=submitted_by,
+        roles=roles or (),
     )
     store.create_run(
         run,
@@ -130,6 +138,50 @@ def test_list_runs_supports_filters_and_limit() -> None:
 
     limited = store.list_runs(limit=1)
     assert [run.run_id for run in limited.runs] == ["run-3"]
+
+
+def test_list_runs_filters_by_submitter_and_role() -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 5, 1, 9, tzinfo=timezone.utc)
+    _create_run(
+        store,
+        run_id="run-1",
+        pipeline="render",
+        status="succeeded",
+        created_at=base,
+        updated_at=base,
+        submitted_by="suite",
+        roles=("pipeline:run",),
+    )
+    _create_run(
+        store,
+        run_id="run-2",
+        pipeline="render",
+        status="failed",
+        created_at=base + timedelta(hours=1),
+        updated_at=base + timedelta(hours=1),
+        submitted_by="operator",
+        roles=("pipeline:manage",),
+    )
+    _create_run(
+        store,
+        run_id="run-3",
+        pipeline="publish",
+        status="succeeded",
+        created_at=base + timedelta(hours=2),
+        updated_at=base + timedelta(hours=2),
+        submitted_by="suite",
+        roles=("pipeline:run", "pipeline:read"),
+    )
+
+    submitter_runs = store.list_runs(submitted_by="suite")
+    assert [run.run_id for run in submitter_runs.runs] == ["run-3", "run-1"]
+
+    role_runs = store.list_runs(role="pipeline:manage")
+    assert [run.run_id for run in role_runs.runs] == ["run-2"]
+
+    combined = store.list_runs(submitted_by="suite", role="pipeline:read")
+    assert [run.run_id for run in combined.runs] == ["run-3"]
 
 
 def test_list_runs_paginates_with_cursors() -> None:

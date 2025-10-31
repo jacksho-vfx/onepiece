@@ -324,6 +324,13 @@ def list_runs(
         str | None, Query(description="Filter runs for a pipeline")
     ] = None,
     status: Annotated[str | None, Query(description="Filter runs by status")] = None,
+    submitted_by: Annotated[
+        str | None, Query(description="Filter runs by submitting principal")
+    ] = None,
+    role: Annotated[
+        str | None,
+        Query(description="Filter runs submitted with the specified role"),
+    ] = None,
     limit: Annotated[
         int | None, Query(gt=0, description="Maximum number of runs to return")
     ] = None,
@@ -372,6 +379,12 @@ def list_runs(
             status_code=400,
             detail="'limit' must be provided when using a pagination cursor",
         )
+    if role is not None and not role.strip():
+        raise HTTPException(status_code=400, detail="'role' must be non-empty")
+    if submitted_by is not None and not submitted_by.strip():
+        raise HTTPException(
+            status_code=400, detail="'submitted_by' must be non-empty"
+        )
 
     parsed_before_created: datetime | None = None
     if before_created_at is not None:
@@ -390,6 +403,8 @@ def list_runs(
     page = orchestrator.list_runs(
         pipeline=pipeline,
         status=status,
+        submitted_by=submitted_by,
+        role=role,
         limit=limit,
         since=parsed_since,
         before_id=before_id,

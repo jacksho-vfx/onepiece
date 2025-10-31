@@ -89,6 +89,8 @@ class StubPipelineClient:
         *,
         pipeline: str | None = None,
         status: str | None = None,
+        submitted_by: str | None = None,
+        role: str | None = None,
         limit: int | None = None,
         since: str | None = None,
         before_id: str | None = None,
@@ -97,6 +99,8 @@ class StubPipelineClient:
         self.list_runs_kwargs = {
             "pipeline": pipeline,
             "status": status,
+            "submitted_by": submitted_by,
+            "role": role,
             "limit": limit,
             "since": since,
             "before_id": before_id,
@@ -719,8 +723,42 @@ def test_pipeline_runs_applies_filters(monkeypatch: MonkeyPatch) -> None:
     assert client.list_runs_kwargs == {
         "pipeline": "orchestration.daily",
         "status": "running",
+        "submitted_by": None,
+        "role": None,
         "limit": 5,
         "since": "2024-01-01T00:00:00+00:00",
+        "before_id": None,
+        "before_created_at": None,
+    }
+    assert client.closed is True
+
+
+def test_pipeline_runs_filters_by_submitter_and_role(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = StubPipelineClient(runs=[])
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "runs",
+            "--submitted-by",
+            "suite",
+            "--role",
+            "pipeline:run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert client.list_runs_kwargs == {
+        "pipeline": None,
+        "status": None,
+        "submitted_by": "suite",
+        "role": "pipeline:run",
+        "limit": None,
+        "since": None,
         "before_id": None,
         "before_created_at": None,
     }
