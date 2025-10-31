@@ -71,6 +71,7 @@ def _normalise_identifier(value: str) -> str:
 
 log = get_logger(__name__)
 
+
 class FilenameValidationError(ValueError):
     """Raised when a filename does not match the expected convention."""
 

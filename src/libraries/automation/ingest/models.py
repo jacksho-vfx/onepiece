@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from libraries.automation.ingest import Delivery
+
 
 def _format_shot_name(episode: str, scene: str, shot: str) -> str:
     return f"{episode}_{scene}_{shot}"
@@ -41,7 +43,7 @@ class IngestedMedia:
     bucket: str
     key: str
     media_info: MediaInfo
-    delivery: "Delivery" | None = None
+    delivery: Delivery | None = None
     skipped: bool = False
 
 
