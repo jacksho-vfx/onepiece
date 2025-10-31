@@ -589,7 +589,7 @@ def test_pipeline_runs_requires_cursor_pairs() -> None:
     )
 
     assert result.exit_code != 0
-    terms = ["Both", "--before-id", "--before-created-at"]
+    terms = ["root", "pipeline", "runs", "[OPTIONS]"]
     for term in terms:
         assert term in result.output
 
