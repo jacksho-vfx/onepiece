@@ -128,6 +128,14 @@ sections consumed by first-party commands.
 | `upload_chunk_size` | Multipart chunk size (bytes) used when resuming transfers. |
 | `use_asyncio` | Toggle asyncio orchestration for I/O-bound workloads. |
 
+### `[profiles.<name>.pipeline.storage]`
+
+| Key | Description |
+| --- | --- |
+| `database` / `path` | Location of the SQLite database backing pipeline run history. |
+| `busy_timeout` / `busy_timeout_ms` | Optional overrides for SQLite's busy timeout while persisting events. |
+| `max_workers` | Number of concurrent pipelines the orchestrator executes when storage-backed persistence is enabled. |
+
 ### `[profiles.<name>.render]`
 
 | Key | Description |
