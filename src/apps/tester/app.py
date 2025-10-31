@@ -162,7 +162,10 @@ def _process_ids_for_port_without_psutil(port: int) -> set[int]:
             columns = line.split()
             if len(columns) < 5:
                 continue
-            if columns[0].lower().startswith("tcp") and columns[3].upper() == "LISTENING":
+            if (
+                columns[0].lower().startswith("tcp")
+                and columns[3].upper() == "LISTENING"
+            ):
                 try:
                     pids.add(int(columns[-1]))
                 except ValueError:
@@ -172,7 +175,9 @@ def _process_ids_for_port_without_psutil(port: int) -> set[int]:
     return set()
 
 
-def _terminate_processes(pids: Iterable[int]) -> tuple[list[int], list[tuple[int, str]]]:
+def _terminate_processes(
+    pids: Iterable[int],
+) -> tuple[list[int], list[tuple[int, str]]]:
     """Attempt to terminate processes by PID, returning successes and failures."""
 
     terminated: list[int] = []
@@ -393,7 +398,9 @@ def close_demos() -> None:
         for pid in terminated:
             typer.echo(f"Sent SIGTERM to PID {pid} (port {port}).")
         for pid, reason in failures:
-            typer.echo(f"Failed to terminate PID {pid} (port {port}): {reason}", err=True)
+            typer.echo(
+                f"Failed to terminate PID {pid} (port {port}): {reason}", err=True
+            )
         terminated_total.extend(terminated)
         failures_total.extend((pid, reason) for pid, reason in failures)
 
