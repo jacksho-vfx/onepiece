@@ -4,35 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import getpass
-import os
-import re
 import threading
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
-import json
 from typing import (
     Any,
     Awaitable,
     Callable,
     Mapping,
-    Sequence,
-    AsyncGenerator,
     Collection,
     ClassVar,
 )
 
 import structlog
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, WebSocket, Query
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.responses import Response
-from starlette.websockets import WebSocketDisconnect
 
 from apps.onepiece.render.submit import (
-    DCC_CHOICES,
     FARM_ADAPTERS,
     FARM_CAPABILITY_PROVIDERS,
     _get_adapter_capabilities,
@@ -51,15 +41,32 @@ from libraries.automation.render.base import (
 )
 from libraries.automation.render.models import CapabilityProvider, RenderAdapter
 
-from apps.trafalgar.web.events import EventBroadcaster, resolve_keepalive_interval
+from apps.trafalgar.web.events import EventBroadcaster
 from apps.trafalgar.web.job_store import JobStore
 from apps.trafalgar.web.security import (
     AuthenticatedPrincipal,
     ROLE_RENDER_MANAGE,
     ROLE_RENDER_READ,
     ROLE_RENDER_SUBMIT,
-    create_protected_router,
-    require_roles,
+)
+from .schemas import (
+    APIErrorDetail,
+    APIErrorResponse,
+    CancellationCapabilityDescriptor,
+    ChunkingCapabilityDescriptor,
+    DurationMetrics,
+    FarmCapabilities,
+    FarmInfo,
+    FarmsResponse,
+    JobsListResponse,
+    PriorityCapabilityDescriptor,
+    RenderAdapterAnalytics,
+    RenderAnalyticsResponse,
+    RenderJobMetadata,
+    RenderJobRequest,
+    RenderJobResponse,
+    RenderStatusAnalytics,
+    RenderWindowAnalytics,
 )
 
 logger = structlog.get_logger(__name__)
@@ -135,88 +142,9 @@ TERMINAL_STATUSES: set[str] = {
 }
 
 
-class PriorityCapabilityDescriptor(BaseModel):
-    """Describe the priority range supported by a render adapter."""
-
-    default: int | None = Field(
-        None,
-        description="Default priority applied when a request omits an explicit value.",
-    )
-    minimum: int | None = Field(
-        None, description="Lowest accepted priority value for the adapter."
-    )
-    maximum: int | None = Field(
-        None, description="Highest accepted priority value for the adapter."
-    )
-
-
-class ChunkingCapabilityDescriptor(BaseModel):
-    """Describe how a render adapter handles frame chunk sizing."""
-
-    enabled: bool = Field(
-        False,
-        description="Whether the adapter supports chunking frames into smaller batches.",
-    )
-    minimum: int | None = Field(
-        None,
-        description="Smallest chunk size accepted when chunking is enabled.",
-    )
-    maximum: int | None = Field(
-        None,
-        description="Largest chunk size accepted when chunking is enabled.",
-    )
-    default: int | None = Field(
-        None, description="Default chunk size applied when chunking is enabled."
-    )
-
-
-class CancellationCapabilityDescriptor(BaseModel):
-    """Describe whether an adapter exposes job cancellation APIs."""
-
-    supported: bool = Field(
-        False,
-        description="Whether the adapter implements cancellation for in-flight jobs.",
-    )
-
-
-class FarmCapabilities(BaseModel):
-    """Structured capability metadata exposed for an adapter."""
-
-    priority: PriorityCapabilityDescriptor = Field(
-        default_factory=PriorityCapabilityDescriptor,
-        description="Priority handling characteristics for the adapter.",
-    )
-    chunking: ChunkingCapabilityDescriptor = Field(
-        default_factory=ChunkingCapabilityDescriptor,
-        description="Chunk sizing behaviour supported by the adapter.",
-    )
-    cancellation: CancellationCapabilityDescriptor = Field(
-        default_factory=CancellationCapabilityDescriptor,
-        description="Cancellation support advertised by the adapter.",
-    )
-
-
-class FarmInfo(BaseModel):
-    """Metadata describing a render farm adapter."""
-
-    name: str = Field(..., description="Adapter identifier used by the API and CLI.")
-    description: str = Field(
-        ..., description="Human readable description of the adapter."
-    )
-    capabilities: FarmCapabilities = Field(
-        default_factory=FarmCapabilities,
-        description="Capability descriptors declared by the adapter.",
-    )
-
-
-class FarmsResponse(BaseModel):
-    """Response payload enumerating available render farm adapters."""
-
-    farms: Sequence[FarmInfo]
-
-
 def _build_farm_capabilities(
-    farm: str, capabilities: AdapterCapabilities | None = None
+    farm: str,
+    capabilities: AdapterCapabilities | None,
 ) -> FarmCapabilities:
     """Translate adapter capability metadata into API descriptors."""
 
@@ -254,274 +182,6 @@ def _build_farm_capabilities(
             supported=raw_capabilities.get("cancellation_supported", False),
         ),
     )
-
-
-class RenderJobRequest(BaseModel):
-    """Request payload mirroring the CLI submission options."""
-
-    _farm_registry_provider: ClassVar[Callable[[], Collection[str]]] = staticmethod(
-        lambda: tuple(FARM_ADAPTERS)
-    )
-
-    _FRAME_SEGMENT_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
-        r"^(?P<start>-?\d+)(?:-(?P<end>-?\d+)(?:x(?P<step>\d+))?)?$"
-    )
-
-    dcc: str = Field(
-        ..., description="Digital content creation package (e.g. maya, nuke)."
-    )
-    scene: str = Field(
-        ..., description="Path to the scene file that should be rendered."
-    )
-    frames: str = Field(
-        "1-100",
-        description="Frame range to render, supporting Deadline style notation (e.g. 1-100x2).",
-    )
-    output: str = Field(..., description="Directory for rendered frames.")
-    farm: str = Field(
-        "mock",
-        description="Render farm to submit to (see /farms for the available adapters).",
-    )
-    priority: int | None = Field(
-        None,
-        ge=0,
-        description="Render job priority communicated to the adapter (defaults to adapter metadata).",
-    )
-    chunk_size: int | None = Field(
-        None,
-        ge=1,
-        description="Frames per chunk to dispatch when supported by the adapter.",
-    )
-    user: str | None = Field(
-        None,
-        description="Submitting user; defaults to the service account if omitted.",
-    )
-
-    @field_validator("dcc")
-    @classmethod
-    def _normalise_dcc(cls, value: str) -> str:
-        text = value.strip().lower()
-        if text not in DCC_CHOICES:
-            raise ValueError(
-                f"Unsupported DCC '{value}'. Choose one of: {', '.join(sorted(DCC_CHOICES))}."
-            )
-        return text
-
-    @classmethod
-    def configure_farm_registry(cls, provider: Callable[[], Collection[str]]) -> None:
-        """Inject the callable used to resolve registered farm adapters."""
-
-        cls._farm_registry_provider = provider
-
-    @field_validator("farm")
-    @classmethod
-    def _normalise_farm(cls, value: str, info: ValidationInfo) -> str:
-        text = value.strip().lower()
-        registry: Collection[str] | None = None
-        if info.context is not None:
-            registry = info.context.get("farm_registry")
-        if registry is None:
-            registry = cls._farm_registry_provider()
-        if text not in registry:
-            raise ValueError(
-                f"Unknown farm '{value}'. Choose one of: {', '.join(sorted(registry))}."
-            )
-        return text
-
-    @field_validator("scene", "output", "frames", "user", mode="before")
-    @classmethod
-    def _strip_string(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        if not text:
-            raise ValueError("Value cannot be empty.")
-        return text
-
-    @field_validator("frames")
-    @classmethod
-    def _validate_frames(cls, value: str) -> str:
-        segments = [segment.strip() for segment in value.split(",")]
-        if not segments or any(not segment for segment in segments):
-            raise ValueError(
-                "Frame range must be a comma separated list of frames or ranges (e.g. 1-10,20-30x2)."
-            )
-        for segment in segments:
-            match = cls._FRAME_SEGMENT_PATTERN.match(segment)
-            if match is None:
-                raise ValueError(
-                    "Frame range must use Deadline notation (e.g. 1-10,20-30x2)."
-                )
-            end_text = match.group("end")
-            if end_text is not None:
-                start = int(match.group("start"))
-                end = int(end_text)
-                if end < start:
-                    raise ValueError(
-                        f"Frame range segment '{segment}' must have the end greater than or equal to the start."
-                    )
-                step_text = match.group("step")
-                if step_text is not None and int(step_text) <= 0:
-                    raise ValueError(
-                        f"Frame range segment '{segment}' must use a positive step."
-                    )
-        return ",".join(segments)
-
-
-class RenderJobResponse(BaseModel):
-    """Response payload describing the outcome of a render submission."""
-
-    job_id: str = Field(
-        ..., description="Identifier returned by the render farm (if any)."
-    )
-    status: str = Field(
-        ..., description="Submission status reported by the render farm."
-    )
-    farm_type: str = Field(
-        ..., description="Render farm adapter that processed the submission."
-    )
-    message: str | None = Field(
-        None,
-        description="Optional detail returned by the adapter (for example not implemented notices).",
-    )
-
-
-class RenderJobMetadata(BaseModel):
-    """Structured metadata about a submitted render job."""
-
-    job_id: str = Field(..., description="Job identifier returned by the adapter.")
-    farm: str = Field(..., description="Registered adapter key handling the job.")
-    farm_type: str = Field(..., description="Adapter type reported by the farm.")
-    status: str = Field(..., description="Current status reported for the job.")
-    message: str | None = Field(
-        None, description="Optional status message provided by the adapter."
-    )
-    request: RenderJobRequest = Field(
-        ..., description="Original submission payload for the job."
-    )
-    submitted_at: datetime = Field(
-        ..., description="UTC timestamp recording when the job was stored."
-    )
-
-
-class JobsListResponse(BaseModel):
-    """Envelope returned when listing render jobs."""
-
-    jobs: Sequence[RenderJobMetadata]
-
-
-class DurationMetrics(BaseModel):
-    """Summarise accumulated and average durations in seconds."""
-
-    total_seconds: float = Field(
-        0.0, description="Total seconds accumulated across matching records."
-    )
-    average_seconds: float | None = Field(
-        None, description="Average duration per record if available."
-    )
-
-
-class RenderStatusAnalytics(BaseModel):
-    """Analytics describing job activity for a particular status."""
-
-    count: int = Field(
-        0, description="Number of jobs that have entered this status at least once."
-    )
-    active: int = Field(
-        0, description="Number of jobs currently reporting this status."
-    )
-    last_updated_at: datetime | None = Field(
-        None, description="Most recent update timestamp for jobs in this status."
-    )
-    durations: DurationMetrics = Field(
-        default_factory=DurationMetrics,
-        description="Aggregated timing information for the status.",
-    )
-
-
-class RenderAdapterAnalytics(BaseModel):
-    """Analytics summarising job activity for a render adapter."""
-
-    total_jobs: int = Field(
-        0, description="Total number of jobs tracked for the adapter."
-    )
-    statuses: dict[str, int] = Field(
-        default_factory=dict,
-        description="Current job counts grouped by status.",
-    )
-    completed_jobs: int = Field(
-        0, description="Number of jobs that have reached a terminal status."
-    )
-    average_completion_seconds: float | None = Field(
-        None,
-        description="Average submission-to-completion duration for completed jobs.",
-    )
-    first_submission_at: datetime | None = Field(
-        None,
-        description="Timestamp of the earliest recorded submission for the adapter.",
-    )
-    last_submission_at: datetime | None = Field(
-        None, description="Timestamp of the most recent submission for the adapter."
-    )
-
-
-class RenderWindowAnalytics(BaseModel):
-    """Analytics summarising submissions within a rolling window."""
-
-    total_jobs: int = Field(
-        0, description="Number of jobs submitted within the time window."
-    )
-    completed_jobs: int = Field(
-        0, description="Number of jobs submitted in the window that have completed."
-    )
-    average_completion_seconds: float | None = Field(
-        None,
-        description="Average completion duration for jobs submitted in the window.",
-    )
-
-
-class RenderAnalyticsResponse(BaseModel):
-    """Aggregated analytics derived from render job history."""
-
-    generated_at: datetime = Field(
-        ..., description="UTC timestamp indicating when the analytics were computed."
-    )
-    total_jobs: int = Field(
-        ..., description="Total number of jobs tracked by the service."
-    )
-    statuses: dict[str, RenderStatusAnalytics] = Field(
-        default_factory=dict,
-        description="Aggregated analytics grouped by job status.",
-    )
-    adapters: dict[str, RenderAdapterAnalytics] = Field(
-        default_factory=dict,
-        description="Aggregated analytics grouped by render adapter.",
-    )
-    submission_windows: dict[str, RenderWindowAnalytics] = Field(
-        default_factory=dict,
-        description="Aggregated analytics grouped by submission time window.",
-    )
-
-
-class APIErrorDetail(BaseModel):
-    """Standardised error payload returned by the render API."""
-
-    code: str = Field(
-        ..., description="Machine readable error code identifying the failure."
-    )
-    message: str = Field(..., description="Human readable summary of what went wrong.")
-    hint: str | None = Field(
-        None, description="Optional remediation guidance for operators."
-    )
-    context: dict[str, Any] | None = Field(
-        None, description="Structured context describing the failing request."
-    )
-
-
-class APIErrorResponse(BaseModel):
-    """Envelope returned for failed render API requests."""
-
-    error: APIErrorDetail
 
 
 @dataclass
@@ -673,15 +333,6 @@ class _JobRecord:
             status_history=history,
         )
 
-
-JOB_STORE_PATH_ENV = "TRAFALGAR_RENDER_JOBS_PATH"
-JOB_HISTORY_LIMIT_ENV = "TRAFALGAR_RENDER_JOBS_HISTORY_LIMIT"
-JOB_RETENTION_HOURS_ENV = "TRAFALGAR_RENDER_JOBS_RETENTION_HOURS"
-JOB_STATUS_POLL_INTERVAL_ENV = "TRAFALGAR_RENDER_STATUS_POLL_INTERVAL"
-JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
-RENDER_SSE_KEEPALIVE_INTERVAL_ENV = "TRAFALGAR_RENDER_SSE_KEEPALIVE_INTERVAL"
-_RENDER_SSE_STATE_ATTR = "render_sse_keepalive_interval"
-_DEFAULT_SSE_KEEPALIVE_INTERVAL = 30.0
 
 DEFAULT_STATUS_POLL_INTERVAL = 5.0
 DEFAULT_STORE_PERSIST_INTERVAL = 1.0
@@ -1390,132 +1041,6 @@ class RenderSubmissionService:
 JOB_EVENTS = EventBroadcaster(max_buffer=64)
 
 
-@lru_cache
-def get_render_service() -> (
-    RenderSubmissionService
-):  # pragma: no cover - runtime wiring
-    store_path = os.environ.get(JOB_STORE_PATH_ENV)
-    history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)
-    retention_hours_value = os.environ.get(JOB_RETENTION_HOURS_ENV)
-    poll_interval_value = os.environ.get(JOB_STATUS_POLL_INTERVAL_ENV)
-    persist_interval_value = os.environ.get(JOB_STORE_PERSIST_THROTTLE_ENV)
-
-    retention: timedelta | None = None
-    if retention_hours_value:
-        try:
-            hours = float(retention_hours_value)
-        except ValueError:
-            logger.warning(
-                "render.job.retention.invalid",
-                value=retention_hours_value,
-                env=JOB_RETENTION_HOURS_ENV,
-            )
-        else:
-            if hours <= 0:
-                logger.warning(
-                    "render.job.retention.ignored",
-                    value=retention_hours_value,
-                    env=JOB_RETENTION_HOURS_ENV,
-                )
-            else:
-                retention = timedelta(hours=hours)
-
-    job_store = JobStore(store_path, retention=retention) if store_path else None
-
-    history_limit = None
-    if history_limit_value:
-        try:
-            history_limit = int(history_limit_value)
-        except ValueError:
-            logger.warning(
-                "render.job.history_limit.invalid",
-                value=history_limit_value,
-                env=JOB_HISTORY_LIMIT_ENV,
-            )
-
-    poll_interval_override: float | None = None
-    if poll_interval_value is not None:
-        try:
-            poll_interval_override = float(poll_interval_value)
-        except ValueError:
-            logger.warning(
-                "render.job.poll_interval.invalid",
-                value=poll_interval_value,
-                env=JOB_STATUS_POLL_INTERVAL_ENV,
-            )
-            poll_interval_override = None
-        else:
-            if poll_interval_override <= 0:
-                logger.warning(
-                    "render.job.poll_interval.disabled",
-                    value=poll_interval_value,
-                    env=JOB_STATUS_POLL_INTERVAL_ENV,
-                )
-
-    persist_interval_override: float | None = None
-    if persist_interval_value is not None:
-        try:
-            persist_interval_override = float(persist_interval_value)
-        except ValueError:
-            logger.warning(
-                "render.job.store_interval.invalid",
-                value=persist_interval_value,
-                env=JOB_STORE_PERSIST_THROTTLE_ENV,
-            )
-            persist_interval_override = None
-        else:
-            if persist_interval_override <= 0:
-                logger.warning(
-                    "render.job.store_interval.disabled",
-                    value=persist_interval_value,
-                    env=JOB_STORE_PERSIST_THROTTLE_ENV,
-                )
-
-    service = RenderSubmissionService(
-        job_store=job_store,
-        history_limit=history_limit,
-        broadcaster=JOB_EVENTS,
-        status_poll_interval=poll_interval_override,
-        store_persist_interval=persist_interval_override,
-    )
-
-    RenderJobRequest.configure_farm_registry(service.adapter_keys)
-
-    return service
-
-
-def parse_render_job_request(
-    payload: Mapping[str, Any] = Body(...),
-    service: RenderSubmissionService = Depends(get_render_service),
-) -> RenderJobRequest:
-    """FastAPI dependency that validates render submissions with registry context."""
-
-    registry = service.adapter_keys()
-    try:
-        return RenderJobRequest.model_validate(
-            payload, context={"farm_registry": registry}
-        )
-    except ValidationError as exc:
-        raise RequestValidationError(exc.errors()) from exc
-
-
-app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
-router = create_protected_router()
-
-
-@app.on_event("startup")
-async def start_render_status_poller() -> None:
-    service = get_render_service()
-    service.start_background_polling()
-
-
-@app.on_event("shutdown")
-async def stop_render_status_poller() -> None:
-    service = get_render_service()
-    await service.stop_background_polling()
-
-
-@app.exception_handler(RenderSubmissionError)
 async def render_submission_error_handler(
     request: Request, exc: RenderSubmissionError
 ) -> JSONResponse:
@@ -1544,7 +1069,6 @@ async def render_submission_error_handler(
     )
 
 
-@app.middleware("http")
 async def log_requests(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -1561,242 +1085,65 @@ async def log_requests(
     return response
 
 
-@router.get("/")  # type: ignore[misc]
-def root(
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> Mapping[str, str]:
-    return {"message": "OnePiece Render API is running"}
+app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 
 
-@router.get("/health")  # type: ignore[misc]
-def health(
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> Mapping[str, Any]:
-    analytics = service.get_render_analytics()
-    status_summary = {
-        name: {
-            "count": metrics.count,
-            "active": metrics.active,
-            "average_duration_seconds": metrics.durations.average_seconds,
-        }
-        for name, metrics in analytics.statuses.items()
-    }
-    recent_submissions = {
-        window: window_metrics.total_jobs
-        for window, window_metrics in analytics.submission_windows.items()
-    }
-    active_jobs = sum(metric.active for metric in analytics.statuses.values())
-    return {
-        "status": "ok",
-        "render_history": service.get_metrics(),
-        "render_summary": {
-            "total_jobs": analytics.total_jobs,
-            "active_jobs": active_jobs,
-            "by_status": status_summary,
-            "submission_windows": recent_submissions,
-        },
-    }
+from . import dependencies as _dependencies  # noqa: E402
+from . import routes as _routes  # noqa: E402
+from .streaming import RENDER_SSE_KEEPALIVE_INTERVAL_ENV as _KEEPALIVE_ENV  # noqa: E402
 
+get_render_service = _dependencies.get_render_service
+parse_render_job_request = _dependencies.parse_render_job_request
+start_render_status_poller = _dependencies.start_render_status_poller
+stop_render_status_poller = _dependencies.stop_render_status_poller
+JOB_STORE_PATH_ENV = _dependencies.JOB_STORE_PATH_ENV
+JOB_HISTORY_LIMIT_ENV = _dependencies.JOB_HISTORY_LIMIT_ENV
+JOB_RETENTION_HOURS_ENV = _dependencies.JOB_RETENTION_HOURS_ENV
+JOB_STATUS_POLL_INTERVAL_ENV = _dependencies.JOB_STATUS_POLL_INTERVAL_ENV
+JOB_STORE_PERSIST_THROTTLE_ENV = _dependencies.JOB_STORE_PERSIST_THROTTLE_ENV
+RENDER_SSE_KEEPALIVE_INTERVAL_ENV = _KEEPALIVE_ENV
 
-@router.get("/farms", response_model=FarmsResponse)  # type: ignore[misc]
-def farms(
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> FarmsResponse:
-    entries = service.list_farms()
-    return FarmsResponse(farms=entries)
+router = _routes.router  # type: ignore[has-type]
 
-
-@router.post("/jobs")  # type: ignore[misc]
-async def create_job(
-    http_request: Request,
-    job_request: RenderJobRequest = Depends(parse_render_job_request),
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_SUBMIT)),
-) -> JSONResponse:
-    logger.info(
-        "render.api.submit.start",
-        dcc=job_request.dcc,
-        scene=job_request.scene,
-        frames=job_request.frames,
-        output=job_request.output,
-        farm=job_request.farm,
-        priority=job_request.priority,
-        user=job_request.user,
-    )
-    try:
-        result = service.submit_job(job_request)
-    except RenderSubmissionError as exc:
-        return await render_submission_error_handler(http_request, exc)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        logger.exception(
-            "render.api.submit.error",
-            farm=job_request.farm,
-            scene=job_request.scene,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Unexpected error while submitting render job.",
-        ) from exc
-
-    payload = RenderJobResponse(
-        job_id=result.get("job_id", ""),
-        status=result.get("status", "unknown"),
-        farm_type=result.get("farm_type", job_request.farm),
-        message=result.get("message"),
-    )
-
-    logger.info(
-        "render.api.submit.complete",
-        farm=payload.farm_type,
-        status=payload.status,
-        job_id=payload.job_id,
-    )
-
-    return JSONResponse(status_code=201, content=payload.model_dump())
-
-
-@router.get("/jobs", response_model=JobsListResponse)  # type: ignore[misc]
-def list_jobs(
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-    limit: int | None = Query(
-        None,
-        gt=0,
-        description="Maximum number of jobs to return.",
-    ),
-    status: list[str] | None = Query(
-        None,
-        description="Filter by one or more job status values.",
-    ),
-    farm: list[str] | None = Query(
-        None,
-        description="Filter by one or more farm identifiers.",
-    ),
-) -> JobsListResponse:
-    jobs = service.list_jobs(limit=limit, status=status, farm=farm)
-    return JobsListResponse(jobs=jobs)
-
-
-@router.get("/jobs/metrics", response_model=RenderAnalyticsResponse)  # type: ignore[misc]
-def job_metrics(
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> RenderAnalyticsResponse:
-    return service.get_render_analytics()
-
-
-def _format_sse_chunk(event_name: str | None, payload: bytes) -> bytes:
-    lines: list[bytes] = []
-    if event_name:
-        lines.append(b"event: " + event_name.encode("utf-8"))
-    lines.append(b"data: " + payload)
-    return b"\n".join(lines) + b"\n\n"
-
-
-def _resolve_render_keepalive_interval(request: Request) -> float:
-    return float(
-        resolve_keepalive_interval(
-            request,
-            env_name=RENDER_SSE_KEEPALIVE_INTERVAL_ENV,
-            state_attr=_RENDER_SSE_STATE_ATTR,
-            log_key="render.sse.keepalive",
-            default=_DEFAULT_SSE_KEEPALIVE_INTERVAL,
-        )
-    )
-
-
-async def _render_jobs_snapshot(
-    service: "RenderSubmissionService",
-) -> list[dict[str, Any]]:
-    jobs = await asyncio.to_thread(service.list_jobs)
-    return [job.model_dump(mode="json") for job in jobs]
-
-
-async def _job_event_stream(request: Request) -> AsyncGenerator[bytes, Any]:
-    service = get_render_service()
-    queue = await JOB_EVENTS.subscribe()
-    try:
-        jobs_snapshot = await _render_jobs_snapshot(service)
-        snapshot_event = {"event": "jobs.snapshot", "jobs": jobs_snapshot}
-        snapshot_payload = json.dumps(snapshot_event).encode("utf-8")
-        yield _format_sse_chunk("jobs.snapshot", snapshot_payload)
-
-        while True:
-            try:
-                interval = _resolve_render_keepalive_interval(request)
-                event = await asyncio.wait_for(queue.get(), timeout=interval)
-            except asyncio.TimeoutError:
-                if await request.is_disconnected():
-                    break
-                yield _format_sse_chunk(None, b"{}")
-                continue
-            payload = json.dumps(event).encode("utf-8")
-            event_name = event.get("event") if isinstance(event, Mapping) else None
-            chunk = _format_sse_chunk(
-                event_name if isinstance(event_name, str) else None, payload
-            )
-            yield chunk
-    finally:
-        await JOB_EVENTS.unsubscribe(queue)
-
-
-@router.get("/jobs/stream")  # type: ignore[misc]
-async def stream_jobs(
-    request: Request,
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> StreamingResponse:
-    return StreamingResponse(_job_event_stream(request), media_type="text/event-stream")
-
-
-@router.websocket("/jobs/ws")  # type: ignore[misc]
-async def jobs_websocket(
-    websocket: WebSocket,
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-    service: RenderSubmissionService = Depends(get_render_service),
-) -> None:
-    await websocket.accept()
-    queue = await JOB_EVENTS.subscribe()
-    try:
-        jobs_snapshot = await _render_jobs_snapshot(service)
-        handshake: dict[str, Any] = {
-            "type": "connected",
-            "snapshot": {"event": "jobs.snapshot", "jobs": jobs_snapshot},
-        }
-        await websocket.send_json(handshake)
-
-        while True:
-            event = await queue.get()
-            await websocket.send_json(event)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await JOB_EVENTS.unsubscribe(queue)
-
-
-@router.get("/jobs/{job_id}", response_model=RenderJobMetadata)  # type: ignore[misc]
-def get_job(
-    job_id: str,
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_READ)),
-) -> RenderJobMetadata:
-    try:
-        return service.get_job(job_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Job not found.") from exc
-
-
-@router.delete("/jobs/{job_id}", response_model=RenderJobMetadata)  # type: ignore[misc]
-def cancel_job(
-    job_id: str,
-    service: RenderSubmissionService = Depends(get_render_service),
-    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_RENDER_MANAGE)),
-) -> RenderJobMetadata:
-    try:
-        return service.cancel_job(job_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Job not found.") from exc
-
-
+app.add_event_handler("startup", start_render_status_poller)
+app.add_event_handler("shutdown", stop_render_status_poller)
+app.add_exception_handler(RenderSubmissionError, render_submission_error_handler)
+app.middleware("http")(log_requests)
 app.include_router(router)
+
+
+__all__ = [
+    "RenderSubmissionService",
+    "RenderJobRequest",
+    "RenderJobResponse",
+    "RenderJobMetadata",
+    "RenderAnalyticsResponse",
+    "RenderAdapterAnalytics",
+    "RenderStatusAnalytics",
+    "RenderWindowAnalytics",
+    "JobsListResponse",
+    "FarmsResponse",
+    "FarmInfo",
+    "FarmCapabilities",
+    "_JobRecord",
+    "JOB_EVENTS",
+    "JOB_STORE_PATH_ENV",
+    "JOB_HISTORY_LIMIT_ENV",
+    "JOB_RETENTION_HOURS_ENV",
+    "JOB_STATUS_POLL_INTERVAL_ENV",
+    "JOB_STORE_PERSIST_THROTTLE_ENV",
+    "RENDER_SSE_KEEPALIVE_INTERVAL_ENV",
+    "AuthenticatedPrincipal",
+    "ROLE_RENDER_MANAGE",
+    "ROLE_RENDER_READ",
+    "ROLE_RENDER_SUBMIT",
+    "RenderSubmissionError",
+    "get_render_service",
+    "parse_render_job_request",
+    "start_render_status_poller",
+    "stop_render_status_poller",
+    "render_submission_error_handler",
+    "log_requests",
+    "app",
+    "router",
+]
