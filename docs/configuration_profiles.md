@@ -133,8 +133,53 @@ sections consumed by first-party commands.
 | Key | Description |
 | --- | --- |
 | `database` / `path` | Location of the SQLite database backing pipeline run history. |
+| `definitions` / `definitions_path` | Directory where pipeline definitions are serialised so the orchestrator can reload them across restarts. |
 | `busy_timeout` / `busy_timeout_ms` | Optional overrides for SQLite's busy timeout while persisting events. |
+| `retention` | Mapping that constrains how much historical run data is retained. |
 | `max_workers` | Number of concurrent pipelines the orchestrator executes when storage-backed persistence is enabled. |
+
+Configure this section when you want the embedded orchestrator (or the CLI acting
+as a daemon) to persist run state between restarts. The `database` key accepts a
+filesystem path and ensures parent directories are created automatically. Use
+`path` as a backwards-compatible alias when migrating older profile files.
+
+Adding `definitions` (or `definitions_path`) points the orchestrator at a folder
+to mirror the active pipeline definitions. Local pushes atomically update the
+JSON files in that directory so subsequent CLI calls or services can reload the
+latest steps without re-registering them by hand.
+
+The optional `busy_timeout` value raises SQLite's lock wait window (seconds by
+default, or milliseconds via `busy_timeout_ms`). Increase it on shared NAS or
+network volumes to avoid transient `database is locked` errors when multiple
+workers emit run events at once.
+
+Retention settings provide guard rails for long-lived deployments. Populate the
+`retention` table to prune runs based on age or total volume. The orchestrator
+skips pruning when the mapping is empty.
+
+#### `pipeline.storage.retention`
+
+| Key | Description |
+| --- | --- |
+| `max_runs` | Upper bound on the total number of runs kept in the store. |
+| `seconds` / `minutes` / `hours` / `days` | Choose a single duration key to cap run age; values are converted to seconds. |
+| `pipelines.<name>.max_runs` | Override `max_runs` for a specific pipeline. Set per entry inside the `pipelines` table. |
+
+Example configuration persisting run history and definitions to disk:
+
+```toml
+[profiles.mystudio.pipeline.storage]
+database = "/var/lib/onepiece/pipelines.sqlite3"
+definitions = "/var/lib/onepiece/pipeline-definitions"
+busy_timeout = 10
+
+[profiles.mystudio.pipeline.storage.retention]
+days = 14
+max_runs = 500
+
+[profiles.mystudio.pipeline.storage.retention.pipelines.render]
+max_runs = 50
+```
 
 ### `[profiles.<name>.render]`
 
