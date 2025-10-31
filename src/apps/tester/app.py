@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from multiprocessing import Process
@@ -70,6 +71,12 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
 )
 
 
+CreationHook = Callable[[], None]
+
+
+DEMO_CREATION_HOOKS: tuple[CreationHook, ...] = ()
+
+
 def _ensure_uvicorn() -> None:
     """Ensure the optional uvicorn dependency is installed."""
 
@@ -91,44 +98,35 @@ def _serve_uvicorn(import_path: str, host: str, port: int, log_level: str) -> No
     uvicorn.run(import_path, host=host, port=port, reload=False, log_level=log_level)
 
 
-@app.command("open")
-def open_demos(
-    host: str = typer.Option(
-        DEFAULT_HOST,
-        "--host",
-        "-h",
-        help="Interface to bind demo services to.",
-        show_default=True,
-    ),
-    log_level: str = typer.Option(
-        DEFAULT_LOG_LEVEL,
-        "--log-level",
-        help="Log level passed to uvicorn.",
-        show_default=True,
-    ),
-    open_browser: bool = typer.Option(
-        True,
-        "--open-browser/--no-browser",
-        help="Open each demo surface in the default web browser.",
-        show_default=True,
-    ),
-    browser_path: str | None = typer.Option(
-        None,
-        "--browser-path",
-        help=(
-            "Optional browser path or alias supplied to ``webbrowser.get`` "
-            "when opening demo URLs."
-        ),
-    ),
-    browser_delay: float = typer.Option(
-        DEFAULT_BROWSER_DELAY,
-        "--browser-delay",
-        min=0.0,
-        help="Seconds to wait before launching browser tabs.",
-        show_default=True,
-    ),
+def _run_demo_creation_hooks(skip_create: bool) -> None:
+    """Execute registered creation hooks unless explicitly skipped."""
+
+    if skip_create:
+        typer.echo("Skipping demo creation hooks at caller request.")
+        return
+
+    for hook in DEMO_CREATION_HOOKS:
+        hook_name = getattr(hook, "__name__", repr(hook))
+        typer.echo(f"Running demo creation hook: {hook_name}")
+        try:
+            hook()
+        except Exception as exc:  # noqa: BLE001 - surface the failure to the user
+            typer.echo(
+                f"Demo creation hook '{hook_name}' failed: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
+
+
+def _launch_demo_targets(
+    *,
+    host: str,
+    log_level: str,
+    open_browser: bool,
+    browser_path: str | None,
+    browser_delay: float,
 ) -> None:
-    """Launch all dummy dashboards and supporting web apps."""
+    """Launch configured demo dashboards and supporting web apps."""
 
     _ensure_uvicorn()
     processes: list[tuple[DemoTarget, Process]] = []
@@ -199,4 +197,119 @@ def open_demos(
                 os.environ.pop(key, None)
 
 
-__all__ = ["app", "open_demos", "DEMO_TARGETS"]
+@app.command("open")
+def open_demos(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Interface to bind demo services to.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        DEFAULT_LOG_LEVEL,
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+    open_browser: bool = typer.Option(
+        True,
+        "--open-browser/--no-browser",
+        help="Open each demo surface in the default web browser.",
+        show_default=True,
+    ),
+    browser_path: str | None = typer.Option(
+        None,
+        "--browser-path",
+        help=(
+            "Optional browser path or alias supplied to ``webbrowser.get`` "
+            "when opening demo URLs."
+        ),
+    ),
+    browser_delay: float = typer.Option(
+        DEFAULT_BROWSER_DELAY,
+        "--browser-delay",
+        min=0.0,
+        help="Seconds to wait before launching browser tabs.",
+        show_default=True,
+    ),
+) -> None:
+    """Launch all dummy dashboards and supporting web apps."""
+
+    _launch_demo_targets(
+        host=host,
+        log_level=log_level,
+        open_browser=open_browser,
+        browser_path=browser_path,
+        browser_delay=browser_delay,
+    )
+
+
+@app.command(
+    "present",
+    help=(
+        "Prepare presentation-ready demo assets, then launch dashboards and "
+        "control surfaces."
+    ),
+)
+def present(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Interface to bind demo services to.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        DEFAULT_LOG_LEVEL,
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+    open_browser: bool = typer.Option(
+        True,
+        "--open-browser/--no-browser",
+        help="Open each demo surface in the default web browser.",
+        show_default=True,
+    ),
+    browser_path: str | None = typer.Option(
+        None,
+        "--browser-path",
+        help=(
+            "Optional browser path or alias supplied to ``webbrowser.get`` "
+            "when opening demo URLs."
+        ),
+    ),
+    browser_delay: float = typer.Option(
+        DEFAULT_BROWSER_DELAY,
+        "--browser-delay",
+        min=0.0,
+        help="Seconds to wait before launching browser tabs.",
+        show_default=True,
+    ),
+    skip_create: bool = typer.Option(
+        False,
+        "--skip-create",
+        help="Skip running presentation creation hooks before launching demos.",
+        show_default=True,
+    ),
+) -> None:
+    """Create presentation data before launching demo dashboards."""
+
+    _run_demo_creation_hooks(skip_create=skip_create)
+    _launch_demo_targets(
+        host=host,
+        log_level=log_level,
+        open_browser=open_browser,
+        browser_path=browser_path,
+        browser_delay=browser_delay,
+    )
+
+
+__all__ = [
+    "app",
+    "open_demos",
+    "present",
+    "DEMO_TARGETS",
+    "DEMO_CREATION_HOOKS",
+]
