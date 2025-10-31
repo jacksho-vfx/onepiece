@@ -9,6 +9,7 @@ render activity, deliveries, and review playlists.
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -16,6 +17,8 @@ from typing import Any, Iterable
 from fastapi import FastAPI
 
 from apps.trafalgar.web import dashboard
+
+__all__ = ["app", "prepare_demo_state"]
 
 
 def _utc(timestamp: str) -> str:
@@ -142,6 +145,46 @@ def _enrich_projects() -> dict[str, dict[str, Any]]:
 
 
 _PROJECT_CACHE = _enrich_projects()
+
+
+def prepare_demo_state() -> None:
+    """Rebuild cached demo payloads and warm common service responses."""
+
+    global _PROJECT_CACHE
+    _PROJECT_CACHE = _enrich_projects()
+
+    shotgrid = DemoShotGridService()
+    projects = shotgrid.discover_projects()
+    shotgrid.overall_status()
+    for project in projects:
+        shotgrid.project_summary(project)
+        shotgrid.project_episode_summary(project)
+
+    reconcile = DemoReconcileService()
+    reconcile.list_errors()
+    reconcile.summarise_errors()
+
+    DemoIngestFacade().summarise_recent_runs()
+
+    DemoReviewFacade().summarise_projects(projects)
+
+    delivery_service = DemoDeliveryService()
+    for project in projects:
+        deliveries = delivery_service.list_deliveries(project)
+        for delivery in deliveries:
+            identifier = delivery.get("delivery_id")
+            if not identifier:
+                continue
+            try:
+                delivery_service.get_delivery_manifest(project, identifier)
+            except KeyError:
+                continue
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(DemoRenderFacade().summarise_jobs())
+    finally:
+        loop.close()
 
 
 class DemoShotGridService:

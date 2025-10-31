@@ -19,6 +19,7 @@ from apps.trafalgar.app import (
     DEFAULT_PORT as TRAFALGAR_DEFAULT_PORT,
     DEMO_DASHBOARD_TOKEN,
 )
+from apps.trafalgar.web.demo import prepare_demo_state as prepare_trafalgar_demo_state
 from apps.uta.app import DEFAULT_PORT as UTA_DEFAULT_PORT
 
 DEFAULT_HOST = "127.0.0.1"
@@ -65,7 +66,7 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
         import_path="apps.trafalgar.web.demo:app",
         port=TRAFALGAR_DEMO_PORT,
         environment={"TRAFALGAR_DASHBOARD_TOKEN": DEMO_DASHBOARD_TOKEN},
-        prepare=None,
+        prepare=prepare_trafalgar_demo_state,
     ),
     DemoTarget(
         label="Uta CLI web app",
