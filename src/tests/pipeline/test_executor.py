@@ -5,7 +5,12 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from apps.trafalgar.providers.pipeline_executor import PipelineExecutor
+import pytest
+
+from apps.trafalgar.providers.pipeline_executor import (
+    PipelineExecutor,
+    StepTriggerEvent,
+)
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
@@ -89,3 +94,32 @@ def test_dependency_ordering_respected_for_sequential_steps() -> None:
     first_success = events.index(("step_succeeded", "first"))
     second_start = events.index(("step_started", "second"))
     assert first_success < second_start
+
+
+def test_event_queue_guard_limits_infinite_event_churn() -> None:
+    def source(_: dict[str, object]) -> StepTriggerEvent:
+        return StepTriggerEvent(name="loop", payload={})
+
+    def looper(event: StepTriggerEvent, _: dict[str, object]) -> StepTriggerEvent:
+        return StepTriggerEvent(name=event.name, payload=event.payload)
+
+    pipeline = Pipeline(
+        name="looping",
+        steps=[
+            PipelineStep(name="source", provider=source),
+            PipelineStep(
+                name="listener",
+                provider=looper,
+                trigger=TriggerPolicy(kind="event", event="loop"),
+            ),
+        ],
+    )
+
+    events, emit = _capture_events()
+    executor = PipelineExecutor(event_queue_limit=5)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        executor.execute(pipeline, parameters={}, emit=emit)
+
+    message = str(excinfo.value)
+    assert "infinite event loop" in message
