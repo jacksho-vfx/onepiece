@@ -65,6 +65,10 @@ pipelines to execute at once when the backing storage can sustain the load.
 Omitting the key keeps the previous single-worker behaviour or falls back to
 `pipeline.workers.max` when defined.
 
+For persistence layouts and retention options, consult
+[`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamepipelinestorage)
+so CLI-driven deployments match the storage settings used in Trafalgar.
+
 ## Deleting pipelines
 
 To remove a pipeline definition, call:

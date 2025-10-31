@@ -31,6 +31,11 @@ The table below highlights the core systems each OnePiece surface expects. Provi
 | **Render orchestration** | Farm adapter credentials (Deadline REST, Qube!, Tractor, etc.) configured via CLI profiles. | Render job registry backing store (PostgreSQL/DynamoDB) for farm status polling. | Uses Trafalgar's render APIs to schedule and monitor work. |
 | **Messaging & telemetry** | Optional: publish ingest/render events to Kafka, AWS SNS/SQS via CLI hooks. | Required for real-time dashboards; configure webhook or message bus subscriptions for ingest and render events. | Subscribes to the same message bus to display live statuses. |
 
+Pipeline operators planning to persist run history on shared infrastructure
+should review the profile storage guidance in
+[`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamepipelinestorage)
+before rolling out Trafalgar's pipeline services.
+
 ## Entry points mapped to pipeline stages
 
 Traditional pipelines emphasise linear stages (ingest → conform → review → publish), while modern approaches favour event-driven automation and control planes. The matrix below maps the primary OnePiece entry points to both views so teams can place them inside existing governance.
