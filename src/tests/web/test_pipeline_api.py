@@ -695,7 +695,9 @@ def test_run_stats_endpoint_validates_since_parameter(client: TestClient) -> Non
 def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
     orchestrator = get_pipeline_orchestrator()
     orchestrator._retention = PipelineRetentionPolicy(
-        max_age=timedelta(days=1), max_runs=1
+        max_age=timedelta(days=1),
+        max_runs=2,
+        max_runs_per_pipeline={"render_shots": 1, "layout_publish": 1},
     )
 
     now = datetime.now(timezone.utc)
@@ -711,15 +713,35 @@ def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
         status="succeeded",
         created_at=now - timedelta(hours=1),
     )
+    _seed_run(
+        run_id="run-layout",
+        pipeline="layout_publish",
+        status="succeeded",
+        created_at=now - timedelta(hours=3),
+    )
+    _seed_run(
+        run_id="run-layout-new",
+        pipeline="layout_publish",
+        status="succeeded",
+        created_at=now - timedelta(minutes=10),
+    )
 
     response = client.post("/runs/prune", headers=_auth_headers())
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["removed_runs"] == 1
-    assert payload["remaining_runs"] == 1
-    assert payload["max_runs"] == 1
+    assert payload["removed_runs"] == 2
+    assert payload["remaining_runs"] == 2
+    assert payload["max_runs"] == 2
     assert payload["max_age_seconds"] == 86400
+    assert payload["removed_runs_by_pipeline"] == {
+        "render_shots": 1,
+        "layout_publish": 1,
+    }
 
     runs = orchestrator.list_runs()
-    assert [run.run_id for run in runs] == ["run-recent"]
+    remaining = {run.pipeline: run.run_id for run in runs}
+    assert remaining == {
+        "render_shots": "run-recent",
+        "layout_publish": "run-layout-new",
+    }
