@@ -111,6 +111,44 @@ def test_sync_from_cli_forwards_profile(
     assert Path(captured["destination"]) == tmp_path
 
 
+def test_sync_from_cli_forwards_s5cmd_overrides(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _capture_s5_sync(monkeypatch, "apps.onepiece.aws.sync_from")
+
+    import apps.onepiece.aws as aws_pkg
+
+    sync_from_module = importlib.import_module("apps.onepiece.aws.sync_from")
+    monkeypatch.setattr(aws_pkg, "sync_from", sync_from_module.sync_from)
+
+    for group_info in app.registered_groups:
+        subapp = getattr(group_info, "typer_instance", None)
+        if subapp and subapp.info.name == "aws":
+            for cmd_info in subapp.registered_commands:
+                if cmd_info.name == "sync-from":
+                    cmd_info.callback = sync_from_module.sync_from
+                    break
+
+    exit_code, _ = _invoke(
+        [
+            "aws",
+            "sync-from",
+            "bucket",
+            "SHOW",
+            "plates",
+            str(tmp_path),
+            "--concurrency",
+            "7",
+            "--part-size",
+            "32MB",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["concurrency"] == 7
+    assert captured["part_size"] == "32MB"
+
+
 def test_sync_to_cli_forwards_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -171,3 +209,41 @@ def test_sync_to_cli_forwards_profile(
     assert captured["profile"] == "studio-prod"
     assert captured["destination"] == "s3://bucket/SHOW/plates"
     assert Path(captured["source"]) == tmp_path
+
+
+def test_sync_to_cli_forwards_s5cmd_overrides(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _capture_s5_sync(monkeypatch, "apps.onepiece.aws.sync_to")
+
+    import apps.onepiece.aws as aws_pkg
+
+    sync_to_module = importlib.import_module("apps.onepiece.aws.sync_to")
+    monkeypatch.setattr(aws_pkg, "sync_to", sync_to_module.sync_to)
+
+    for group_info in app.registered_groups:
+        subapp = getattr(group_info, "typer_instance", None)
+        if subapp and subapp.info.name == "aws":
+            for cmd_info in subapp.registered_commands:
+                if cmd_info.name == "sync-to":
+                    cmd_info.callback = sync_to_module.sync_to
+                    break
+
+    exit_code, _ = _invoke(
+        [
+            "aws",
+            "sync-to",
+            "bucket",
+            "SHOW",
+            "plates",
+            str(tmp_path),
+            "--concurrency",
+            "5",
+            "--part-size",
+            "128MB",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["concurrency"] == 5
+    assert captured["part_size"] == "128MB"

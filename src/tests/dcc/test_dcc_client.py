@@ -539,6 +539,8 @@ def test_sync_package_to_s3_uses_expected_destination(
             dry_run=True,
             profile="artist",
             direct_s3_path=None,
+            concurrency=None,
+            part_size=None,
         )
 
     expected_destination = "s3://libraries-bucket/vfx/OP/ep01_sh030"
@@ -550,6 +552,8 @@ def test_sync_package_to_s3_uses_expected_destination(
         include=None,
         exclude=None,
         profile="artist",
+        concurrency=None,
+        part_size=None,
     )
     assert "publish_scene_packaged" in caplog.text
 
@@ -597,10 +601,82 @@ def test_publish_scene_supports_direct_upload(
         include=None,
         exclude=None,
         profile="artist-profile",
+        concurrency=None,
+        part_size=None,
     )
 
     metadata_path = expected_package / "metadata.json"
     assert json.loads(metadata_path.read_text()) == metadata
+
+
+@patch("libraries.creative.dcc.dcc_client._profile_s5cmd_overrides")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_forwards_s5cmd_overrides(
+    sync_mock: MagicMock,
+    profile_override: MagicMock,
+    tmp_path: Path,
+) -> None:
+    profile_override.return_value = (None, None)
+
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    publish_scene(
+        SupportedDCC.NUKE,
+        scene_name="ep01_sh020",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        s5_concurrency=12,
+        s5_part_size="32MB",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+        gpu_description="OpenGL 4.1",
+    )
+
+    sync_mock.assert_called_once()
+    kwargs = sync_mock.call_args.kwargs
+    assert kwargs["concurrency"] == 12
+    assert kwargs["part_size"] == "32MB"
+
+
+@patch("libraries.creative.dcc.dcc_client._profile_s5cmd_overrides")
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_uses_profile_s5cmd_overrides(
+    sync_mock: MagicMock,
+    profile_override: MagicMock,
+    tmp_path: Path,
+) -> None:
+    profile_override.return_value = (6, "64MB")
+
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+
+    publish_scene(
+        SupportedDCC.NUKE,
+        scene_name="ep01_sh021",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["CaraVR", "OCIO"],
+        required_plugins=[],
+        required_assets=(),
+        gpu_description="OpenGL 4.1",
+    )
+
+    sync_mock.assert_called_once()
+    kwargs = sync_mock.call_args.kwargs
+    assert kwargs["concurrency"] == 6
+    assert kwargs["part_size"] == "64MB"
 
 
 @patch("libraries.creative.dcc.dcc_client.validate_unreal_export")
@@ -757,6 +833,8 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
         include=None,
         exclude=None,
         profile=None,
+        concurrency=None,
+        part_size=None,
     )
 
 

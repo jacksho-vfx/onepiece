@@ -30,6 +30,17 @@ def sync_from(
             "(sets AWS_PROFILE for the sync)."
         ),
     ),
+    concurrency: Optional[int] = typer.Option(
+        None,
+        "--concurrency",
+        min=1,
+        help="Override the s5cmd --concurrency value for the transfer.",
+    ),
+    part_size: Optional[str] = typer.Option(
+        None,
+        "--part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
 ) -> None:
     """Sync data from S3 into a local folder."""
 
@@ -42,6 +53,8 @@ def sync_from(
         include=include,
         exclude=exclude,
         profile=profile,
+        concurrency=concurrency,
+        part_size=part_size,
     )
 
 
@@ -62,6 +75,17 @@ def sync_to(
             "(sets AWS_PROFILE for the sync)."
         ),
     ),
+    concurrency: Optional[int] = typer.Option(
+        None,
+        "--concurrency",
+        min=1,
+        help="Override the s5cmd --concurrency value for the transfer.",
+    ),
+    part_size: Optional[str] = typer.Option(
+        None,
+        "--part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
 ) -> None:
     """Sync data from a local folder up to S3."""
 
@@ -74,6 +98,8 @@ def sync_to(
         include=include,
         exclude=exclude,
         profile=profile,
+        concurrency=concurrency,
+        part_size=part_size,
     )
 
 

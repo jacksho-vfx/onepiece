@@ -323,6 +323,8 @@ def verify_dcc_dependencies(
 
 
 _COPY_WORKERS_ENV = "ONEPIECE_DCC_COPY_WORKERS"
+_S5CMD_CONCURRENCY_KEY = "s5cmd_concurrency"
+_S5CMD_PART_SIZE_KEY = "s5cmd_part_size"
 
 
 @functools.lru_cache(maxsize=1)
@@ -359,6 +361,65 @@ def _profile_copy_worker_override() -> int | None:
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _profile_s5cmd_overrides() -> tuple[int | None, str | None]:
+    """Return (concurrency, part-size) overrides sourced from profiles."""
+
+    try:
+        from apps.onepiece.config import load_profile
+        from apps.onepiece.utils.errors import OnePieceConfigError
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency for tests.
+        return (None, None)
+
+    try:
+        profile = load_profile()
+    except OnePieceConfigError as exc:  # pragma: no cover - surfaced via CLI.
+        log.debug(
+            "publish_scene_profile_resolution_failed",
+            extra={"error": str(exc)},
+        )
+        return (None, None)
+
+    dcc_settings = profile.data.get("dcc")
+    if not isinstance(dcc_settings, Mapping):
+        return (None, None)
+
+    concurrency_value = dcc_settings.get(_S5CMD_CONCURRENCY_KEY)
+    part_size_value = dcc_settings.get(_S5CMD_PART_SIZE_KEY)
+
+    resolved_concurrency: int | None = None
+    if isinstance(concurrency_value, int):
+        if concurrency_value > 0:
+            resolved_concurrency = concurrency_value
+        else:
+            log.warning(
+                "publish_scene_invalid_profile_s5cmd_concurrency",
+                extra={"value": concurrency_value, "profile": profile.name},
+            )
+    elif concurrency_value is not None:
+        log.warning(
+            "publish_scene_invalid_profile_s5cmd_concurrency",
+            extra={"value": concurrency_value, "profile": profile.name},
+        )
+
+    resolved_part_size: str | None = None
+    if isinstance(part_size_value, str):
+        if part_size_value.strip():
+            resolved_part_size = part_size_value
+        else:
+            log.warning(
+                "publish_scene_invalid_profile_s5cmd_part_size",
+                extra={"value": part_size_value, "profile": profile.name},
+            )
+    elif part_size_value is not None:
+        log.warning(
+            "publish_scene_invalid_profile_s5cmd_part_size",
+            extra={"value": part_size_value, "profile": profile.name},
+        )
+
+    return resolved_concurrency, resolved_part_size
+
+
 def _resolve_copy_workers() -> int:
     """Return the number of worker threads used for packaging copies."""
 
@@ -385,6 +446,27 @@ def _resolve_copy_workers() -> int:
 
     cpu_count = os.cpu_count() or 4
     return max(1, min(32, cpu_count))
+
+
+def _resolve_s5cmd_settings(
+    concurrency: int | None,
+    part_size: str | None,
+) -> tuple[int | None, str | None]:
+    """Return the s5cmd overrides honouring CLI and profile sources."""
+
+    profile_concurrency, profile_part_size = _profile_s5cmd_overrides()
+
+    resolved_concurrency = (
+        concurrency if concurrency is not None else profile_concurrency
+    )
+    if resolved_concurrency is not None and resolved_concurrency <= 0:
+        raise ValueError("s5_concurrency must be greater than zero")
+
+    resolved_part_size = part_size if part_size is not None else profile_part_size
+    if resolved_part_size is not None and not str(resolved_part_size).strip():
+        raise ValueError("s5_part_size must be a non-empty string when provided")
+
+    return resolved_concurrency, resolved_part_size
 
 
 def _copy_output(
@@ -1074,6 +1156,8 @@ def _sync_package_to_s3(
     dry_run: bool,
     profile: str | None,
     direct_s3_path: str | None,
+    concurrency: int | None,
+    part_size: str | None,
 ) -> str:
     """Synchronise the packaged scene to S3 and return the destination path."""
 
@@ -1094,6 +1178,10 @@ def _sync_package_to_s3(
         show_code,
         show_type,
         destination_path,
+        extra={
+            "s5cmd_concurrency": concurrency if concurrency is not None else "default",
+            "s5cmd_part_size": part_size,
+        },
     )
 
     s5_sync(
@@ -1103,6 +1191,8 @@ def _sync_package_to_s3(
         include=None,
         exclude=None,
         profile=profile,
+        concurrency=concurrency,
+        part_size=part_size,
     )
 
     return destination_path
@@ -1125,6 +1215,8 @@ def publish_scene(
     dry_run: bool = False,
     profile: str | None = None,
     direct_s3_path: str | None = None,
+    s5_concurrency: int | None = None,
+    s5_part_size: str | None = None,
     dependency_callback: Callable[[DCCDependencyReport], None] | None = None,
     plugin_inventory: Iterable[str] | None = None,
     env: Mapping[str, str] | None = None,
@@ -1141,6 +1233,9 @@ def publish_scene(
     When provided, ``gpu_description`` records the detected GPU capability in the
     dependency report while ``required_gpu`` allows overriding the default
     :data:`DCC_GPU_REQUIREMENTS` entry for ad-hoc validations.
+    ``s5_concurrency`` and ``s5_part_size`` allow overriding the corresponding
+    :command:`s5cmd` flags either directly or via OnePiece profile configuration.
+    When omitted, :command:`s5cmd` defaults are used.
     """
 
     package_dir, renders_files, previews_files, package_manifest = (
@@ -1203,6 +1298,11 @@ def publish_scene(
         )
         raise RuntimeError(message)
 
+    resolved_concurrency, resolved_part_size = _resolve_s5cmd_settings(
+        s5_concurrency,
+        s5_part_size,
+    )
+
     destination_path = _sync_package_to_s3(
         package_dir,
         dcc=dcc,
@@ -1213,6 +1313,8 @@ def publish_scene(
         dry_run=dry_run,
         profile=profile,
         direct_s3_path=direct_s3_path,
+        concurrency=resolved_concurrency,
+        part_size=resolved_part_size,
     )
 
     _write_package_manifest(package_dir, package_manifest)
