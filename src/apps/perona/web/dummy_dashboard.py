@@ -72,6 +72,14 @@ _SETTINGS_SUMMARY = SettingsSummary.from_engine(
 )
 
 
+def prepare_demo_state() -> None:
+    """Eagerly instantiate engine-backed summaries for deterministic demos."""
+
+    live_reports.build_daily_summary(_ENGINE)
+    live_metrics.metrics_summary(engine=_ENGINE)
+    live_analytics.pnl(engine=_ENGINE)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Simple readiness check for the demo server."""
@@ -288,4 +296,4 @@ async def render_feed_sample(limit: int = Query(5, ge=1, le=50)) -> StreamingRes
     return StreamingResponse(_generator(), media_type="application/x-ndjson")
 
 
-__all__ = ["app"]
+__all__ = ["app", "prepare_demo_state"]
