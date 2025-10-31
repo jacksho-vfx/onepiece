@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+from pathlib import Path
 from typing import Any, Sequence
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typer.testing import CliRunner
@@ -32,6 +34,8 @@ PipelineApiClient = web_pipeline.PipelineApiClient
 PipelineApiError = web_pipeline.PipelineApiError
 get_pipeline_client = web_pipeline.get_pipeline_client
 
+STATIC_DIRECTORY = Path(__file__).with_name("static")
+
 _render_parameters = web_templates._render_parameters
 _render_command = web_templates._render_command
 _render_page = web_templates._render_page
@@ -45,6 +49,7 @@ _slugify = web_templates._slugify
 app = FastAPI(title="Uta Control Center", docs_url=None, redoc_url=None)
 app.mount("/dashboard", dashboard_app)
 app.mount("/render", render_app)
+app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="uta-static")
 
 
 class RunCommandRequest(BaseModel):
