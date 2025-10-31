@@ -127,9 +127,7 @@ def test_store_prune_removes_old_runs_and_events(tmp_path: Path) -> None:
     assert result.removed_runs_by_pipeline == {"render": 2, "ingest": 1}
 
     remaining_runs = store.list_runs()
-    remaining_by_pipeline = {
-        run.pipeline: run.run_id for run in remaining_runs.runs
-    }
+    remaining_by_pipeline = {run.pipeline: run.run_id for run in remaining_runs.runs}
     assert remaining_by_pipeline == {"render": "run-3", "ingest": "run-5"}
 
     render_events = list(store.iter_run_events("run-3"))

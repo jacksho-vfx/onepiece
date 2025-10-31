@@ -670,7 +670,9 @@ def test_list_runs_endpoint_returns_cursor_metadata(client: TestClient) -> None:
     )
 
     response = client.get(
-        "/runs", headers=_auth_headers(), params={"limit": 2, "pipeline": "render_shots"}
+        "/runs",
+        headers=_auth_headers(),
+        params={"limit": 2, "pipeline": "render_shots"},
     )
     assert response.status_code == 200
     payload = response.json()

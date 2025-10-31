@@ -142,7 +142,7 @@ class LocalPipelineClient:
         since: str | None = None,
         before_id: str | None = None,
         before_created_at: str | None = None,
-    ) -> Mapping[str, Any]:
+    ) -> Any:
         parsed_since: datetime | None = None
         if since is not None:
             try:
@@ -175,9 +175,7 @@ class LocalPipelineClient:
                     tzinfo=timezone.utc
                 )
             else:
-                parsed_before_created = parsed_before_created.astimezone(
-                    timezone.utc
-                )
+                parsed_before_created = parsed_before_created.astimezone(timezone.utc)
 
         page = self._orchestrator.list_runs(
             pipeline=pipeline,
@@ -1045,7 +1043,9 @@ def list_runs(
             "Both --before-id and --before-created-at must be provided together."
         )
     if before_id is not None and limit is None:
-        raise typer.BadParameter("--limit must be provided when using pagination cursors.")
+        raise typer.BadParameter(
+            "--limit must be provided when using pagination cursors."
+        )
 
     with _using_client() as client:
         try:

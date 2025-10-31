@@ -1314,9 +1314,7 @@ class PipelineRunStore:
             bindings.append(self._encode_datetime(since))
         if before_id is not None and before_created_at is not None:
             encoded = self._encode_datetime(before_created_at)
-            clauses.append(
-                "(created_at < ? OR (created_at = ? AND run_id < ?))"
-            )
+            clauses.append("(created_at < ? OR (created_at = ? AND run_id < ?))")
             bindings.extend([encoded, encoded, before_id])
 
         query = [
