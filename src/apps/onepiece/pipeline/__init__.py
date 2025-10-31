@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
-from typing import Any, Iterable, Iterator, Mapping, Protocol
+from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
 
 import httpx
 import typer
+import yaml
 
 from apps.trafalgar.app import _load_pipeline_manifest
 from apps.trafalgar.pipeline import (
@@ -823,6 +824,248 @@ def _load_pipeline_submission(
     return submission
 
 
+def _serialised_definition_to_manifest(definition: Mapping[str, Any]) -> dict[str, Any]:
+    manifest: dict[str, Any] = {}
+
+    name = definition.get("name")
+    if name is not None:
+        manifest["name"] = str(name)
+
+    for field in ("display_name", "description"):
+        value = definition.get(field)
+        if isinstance(value, str) and value.strip():
+            manifest[field] = value
+
+    metadata = definition.get("metadata")
+    if isinstance(metadata, Mapping) and metadata:
+        manifest["metadata"] = _normalise_manifest_value(metadata)
+
+    parameters = definition.get("parameters")
+    if isinstance(parameters, Mapping) and parameters:
+        manifest["parameters"] = {
+            str(key): _normalise_manifest_value(value)
+            for key, value in parameters.items()
+            if isinstance(value, Mapping)
+        }
+
+    steps = definition.get("steps")
+    sequential_steps: list[dict[str, Any]] = []
+    event_triggers: list[dict[str, Any]] = []
+    if isinstance(steps, Sequence):
+        for step in steps:
+            if not isinstance(step, Mapping):
+                continue
+            manifest_step = _serialised_step_to_manifest(step)
+            trigger = step.get("trigger")
+            depends_on = _normalise_dependencies(trigger)
+
+            if depends_on:
+                manifest_step["after"] = (
+                    depends_on[0] if len(depends_on) == 1 else depends_on
+                )
+
+            if isinstance(trigger, Mapping):
+                kind = str(trigger.get("kind", "sequential")).lower()
+            else:
+                kind = "sequential"
+
+            if kind == "event":
+                event_name = (
+                    trigger.get("event") if isinstance(trigger, Mapping) else None
+                )
+                if not isinstance(event_name, str) or not event_name:
+                    sequential_steps.append(manifest_step)
+                    continue
+                trigger_entry: dict[str, Any] = {"on": event_name}
+                filters = (
+                    trigger.get("filters") if isinstance(trigger, Mapping) else None
+                )
+                if isinstance(filters, Mapping) and filters:
+                    trigger_entry["filters"] = _normalise_manifest_value(filters)
+                trigger_entry["steps"] = [manifest_step]
+                event_triggers.append(trigger_entry)
+            else:
+                sequential_steps.append(manifest_step)
+
+    if sequential_steps:
+        manifest["steps"] = sequential_steps
+    if event_triggers:
+        manifest["triggers"] = event_triggers
+
+    return manifest
+
+
+def _normalise_manifest_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _normalise_manifest_value(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalise_manifest_value(item) for item in value]
+    return value
+
+
+def _serialised_step_to_manifest(step: Mapping[str, Any]) -> dict[str, Any]:
+    manifest_step: dict[str, Any] = {}
+
+    name = step.get("name")
+    manifest_step["id"] = str(name) if name is not None else ""
+
+    provider = step.get("provider")
+    manifest_step["uses"] = str(provider) if provider is not None else ""
+
+    config = step.get("config")
+    if isinstance(config, Mapping) and config:
+        manifest_step["with"] = _normalise_manifest_value(config)
+
+    metadata = step.get("metadata")
+    if isinstance(metadata, Mapping) and metadata:
+        manifest_step["metadata"] = _normalise_manifest_value(metadata)
+
+    return manifest_step
+
+
+def _normalise_dependencies(trigger: Any) -> list[str]:
+    if not isinstance(trigger, Mapping):
+        return []
+    dependencies = trigger.get("depends_on")
+    if dependencies is None:
+        return []
+    if isinstance(dependencies, Sequence) and not isinstance(
+        dependencies, (str, bytes, bytearray)
+    ):
+        return [str(dep) for dep in dependencies if str(dep)]
+    return [str(dependencies)] if str(dependencies) else []
+
+
+def _write_manifest(path: Path, manifest: Mapping[str, Any], *, format: str) -> None:
+    format_normalised = format.lower()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if format_normalised == "yaml":
+        text = yaml.safe_dump(manifest, sort_keys=False)
+    elif format_normalised == "toml":
+        text = _render_manifest_toml(manifest)
+    else:  # pragma: no cover - guarded by caller
+        raise ValueError(f"Unsupported manifest format: {format}")
+    path.write_text(text, encoding="utf-8")
+
+
+def _resolve_manifest_format(output: Path, requested: str | None) -> str:
+    if requested:
+        candidate = requested.lower()
+        if candidate not in {"toml", "yaml"}:
+            raise typer.BadParameter(
+                "Format must be either 'toml' or 'yaml'.",
+                param_hint="--format",
+            )
+        return candidate
+
+    suffix = output.suffix.lower()
+    if suffix == ".toml":
+        return "toml"
+    if suffix in {".yaml", ".yml"}:
+        return "yaml"
+    return "toml"
+
+
+def _render_manifest_toml(manifest: Mapping[str, Any]) -> str:
+    lines: list[str] = []
+
+    for key, value in manifest.items():
+        if key in {"metadata", "parameters", "steps", "triggers"}:
+            continue
+        if value is None:
+            continue
+        lines.append(f"{key} = {_format_toml_scalar(value)}")
+
+    metadata = manifest.get("metadata")
+    if isinstance(metadata, Mapping) and metadata:
+        if lines:
+            lines.append("")
+        lines.append("[metadata]")
+        _render_table_body("metadata", metadata, lines)
+
+    parameters = manifest.get("parameters")
+    if isinstance(parameters, Mapping) and parameters:
+        if lines:
+            lines.append("")
+        for name, definition in parameters.items():
+            if not isinstance(definition, Mapping) or not definition:
+                continue
+            lines.append(f"[parameters.{name}]")
+            _render_table_body(f"parameters.{name}", definition, lines)
+
+    steps = manifest.get("steps")
+    if isinstance(steps, Sequence) and steps:
+        for step in steps:
+            if not isinstance(step, Mapping):
+                continue
+            if lines:
+                lines.append("")
+            lines.append("[[steps]]")
+            _render_table_body("steps", step, lines)
+
+    triggers = manifest.get("triggers")
+    if isinstance(triggers, Sequence) and triggers:
+        for trigger in triggers:
+            if not isinstance(trigger, Mapping):
+                continue
+            if lines:
+                lines.append("")
+            lines.append("[[triggers]]")
+            _render_table_body("triggers", trigger, lines)
+
+    return "\n".join(lines) + "\n"
+
+
+def _render_table_body(
+    section: str, table: Mapping[str, Any], lines: list[str]
+) -> None:
+    scalars: list[tuple[str, Any]] = []
+    nested_tables: list[tuple[str, Mapping[str, Any]]] = []
+    array_tables: list[tuple[str, Sequence[Mapping[str, Any]]]] = []
+
+    for key, value in table.items():
+        if value is None:
+            continue
+        if isinstance(value, Mapping):
+            nested_tables.append((key, value))
+        elif _is_array_of_tables(value):
+            array_tables.append((key, value))
+        else:
+            scalars.append((key, value))
+
+    for key, value in scalars:
+        lines.append(f"{key} = {_format_toml_scalar(value)}")
+
+    for key, value in nested_tables:
+        lines.append("")
+        lines.append(f"[{section}.{key}]")
+        _render_table_body(f"{section}.{key}", value, lines)
+
+    for key, entries in array_tables:
+        for entry in entries:
+            lines.append("")
+            lines.append(f"[[{section}.{key}]]")
+            _render_table_body(f"{section}.{key}", entry, lines)
+
+
+def _is_array_of_tables(value: Any) -> bool:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return bool(value) and all(isinstance(item, Mapping) for item in value)
+    return False
+
+
+def _format_toml_scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return "[" + ", ".join(_format_toml_scalar(item) for item in value) + "]"
+    return json.dumps(value)
+
+
 app = typer.Typer(
     name="pipeline",
     help="Interact with the OnePiece pipeline orchestrator.",
@@ -880,6 +1123,52 @@ def describe_pipeline(
             raise typer.Exit(code=1) from exc
 
     _render_pipeline_details(definition)
+
+
+@app.command("pull")
+def pull_pipeline_definition(
+    name: str = typer.Argument(..., help="Pipeline identifier."),
+    output: Path = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        help="Destination manifest file (TOML or YAML).",
+    ),
+    manifest_format: str | None = typer.Option(
+        None,
+        "--format",
+        "-f",
+        help="Output format ('toml' or 'yaml'). Defaults to the --output suffix.",
+    ),
+) -> None:
+    """Fetch a pipeline definition and write it to a manifest file."""
+
+    with _using_client() as client:
+        try:
+            definition = client.get_definition(name)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    manifest = _serialised_definition_to_manifest(definition)
+    selected_format = _resolve_manifest_format(output, manifest_format)
+
+    try:
+        _write_manifest(output, manifest, format=selected_format)
+    except OSError as exc:  # pragma: no cover - depends on filesystem errors
+        typer.echo(f"Failed to write manifest: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    pipeline_name = manifest.get("name") or name
+    typer.echo(
+        "Pipeline '{pipeline}' written to {fmt} manifest at {path}.".format(
+            pipeline=pipeline_name,
+            fmt=selected_format.upper(),
+            path=output,
+        )
+    )
 
 
 @app.command("push")

@@ -7,6 +7,13 @@ from pathlib import Path
 from pytest import MonkeyPatch
 from typing import Any, Iterable, Mapping
 
+try:  # pragma: no cover - python >=3.11 ships tomllib
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - fallback for older versions
+    import tomli as tomllib  # type: ignore[no-redef]
+
+import yaml
+
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app as onepiece_app
@@ -197,6 +204,7 @@ def test_pipeline_command_group_loads() -> None:
     assert "stats" in result.output
     assert "run-status" in result.output
     assert "watch" in result.output
+    assert "pull" in result.output
     assert "push" in result.output
     assert "update" in result.output
     assert "delete" in result.output
@@ -288,6 +296,114 @@ def test_pipeline_describe_missing(monkeypatch: MonkeyPatch) -> None:
     _install_stub(monkeypatch, client)
 
     result = runner.invoke(onepiece_app, ["pipeline", "describe", "missing"])
+
+    assert result.exit_code == 2
+    assert "Pipeline 'missing' was not found." in result.output
+    assert client.closed is True
+
+
+def test_pipeline_pull_writes_toml_manifest(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    definition = {
+        "name": "orchestration.daily",
+        "display_name": "Daily orchestration",
+        "description": "Daily ingest orchestration",
+        "metadata": {"team": "pipeline"},
+        "parameters": {"ingest_profile": {"default": "episodic", "required": False}},
+        "steps": [
+            {
+                "name": "prepare",
+                "provider": "tests.pipeline:prepare",
+                "config": {"resolution": "4k"},
+                "metadata": {"description": "Prep assets"},
+            },
+            {
+                "name": "notify",
+                "provider": "tests.pipeline:notify",
+                "trigger": {
+                    "kind": "event",
+                    "event": "ingest.completed",
+                    "filters": {"project": "demo"},
+                },
+            },
+        ],
+    }
+    client = StubPipelineClient(definition=definition)
+    _install_stub(monkeypatch, client)
+
+    output = tmp_path / "pipeline.toml"
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "pull",
+            "orchestration.daily",
+            "--output",
+            str(output),
+            "--format",
+            "toml",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert output.exists()
+    document = tomllib.loads(output.read_text(encoding="utf-8"))
+    assert document["name"] == "orchestration.daily"
+    assert document["steps"][0]["id"] == "prepare"
+    assert document["steps"][0]["with"]["resolution"] == "4k"
+    assert document["triggers"][0]["on"] == "ingest.completed"
+    trigger_step = document["triggers"][0]["steps"][0]
+    assert trigger_step["id"] == "notify"
+    assert trigger_step["uses"] == "tests.pipeline:notify"
+    assert client.requested_name == "orchestration.daily"
+    assert client.closed is True
+    assert "written to TOML" in result.output
+
+
+def test_pipeline_pull_writes_yaml_manifest(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    definition = {
+        "name": "daily.render",
+        "steps": [
+            {
+                "name": "prepare",
+                "provider": "tests.pipeline:prepare",
+                "config": {"resolution": "4k"},
+            }
+        ],
+    }
+    client = StubPipelineClient(definition=definition)
+    _install_stub(monkeypatch, client)
+
+    output = tmp_path / "manifest.yaml"
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "pull", "daily.render", "--output", str(output)],
+    )
+
+    assert result.exit_code == 0
+    assert output.exists()
+    document = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert document["name"] == "daily.render"
+    assert document["steps"][0]["id"] == "prepare"
+    assert document["steps"][0]["uses"] == "tests.pipeline:prepare"
+    assert client.requested_name == "daily.render"
+    assert client.closed is True
+
+
+def test_pipeline_pull_reports_missing_pipeline(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("Pipeline 'missing' was not found.", status_code=404)
+    client = StubPipelineClient(describe_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "pull", "missing", "--output", "ignored.toml"],
+    )
 
     assert result.exit_code == 2
     assert "Pipeline 'missing' was not found." in result.output
