@@ -584,26 +584,38 @@ def test_list_runs_endpoint_supports_filters(client: TestClient) -> None:
     response = client.get("/runs", headers=_auth_headers())
     assert response.status_code == 200
     payload = response.json()
-    assert [item["id"] for item in payload] == ["run-c", "run-b", "run-a"]
+    assert [item["id"] for item in payload["runs"]] == [
+        "run-c",
+        "run-b",
+        "run-a",
+    ]
+    assert payload["next_cursor"] is None
 
     response = client.get(
         "/runs", headers=_auth_headers(), params={"pipeline": "render_shots"}
     )
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == ["run-b", "run-a"]
+    assert [item["id"] for item in response.json()["runs"]] == [
+        "run-b",
+        "run-a",
+    ]
 
     response = client.get("/runs", headers=_auth_headers(), params={"status": "failed"})
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == ["run-b"]
+    assert [item["id"] for item in response.json()["runs"]] == ["run-b"]
 
     since_iso = (base + timedelta(hours=1)).isoformat()
     response = client.get("/runs", headers=_auth_headers(), params={"since": since_iso})
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == ["run-c", "run-b"]
+    assert [item["id"] for item in response.json()["runs"]] == [
+        "run-c",
+        "run-b",
+    ]
 
     response = client.get("/runs", headers=_auth_headers(), params={"limit": 1})
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == ["run-c"]
+    payload = response.json()
+    assert [item["id"] for item in payload["runs"]] == ["run-c"]
 
 
 def test_list_runs_endpoint_validates_since_parameter(client: TestClient) -> None:
@@ -612,6 +624,77 @@ def test_list_runs_endpoint_validates_since_parameter(client: TestClient) -> Non
     assert response.status_code == 400
     payload = response.json()
     assert payload["detail"] == "Invalid 'since' timestamp"
+
+
+def test_list_runs_endpoint_enforces_cursor_constraints(client: TestClient) -> None:
+    response = client.get(
+        "/runs", headers=_auth_headers(), params={"before_id": "run-1"}
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "'before_id' and 'before_created_at' must be supplied together"
+    )
+
+    response = client.get(
+        "/runs",
+        headers=_auth_headers(),
+        params={
+            "before_id": "run-1",
+            "before_created_at": "2024-01-01T00:00:00+00:00",
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "'limit' must be provided when using a pagination cursor"
+    )
+
+
+def test_list_runs_endpoint_returns_cursor_metadata(client: TestClient) -> None:
+    base = datetime(2024, 6, 1, 12, tzinfo=timezone.utc)
+    _seed_run(
+        run_id="run-1", pipeline="render_shots", status="succeeded", created_at=base
+    )
+    _seed_run(
+        run_id="run-2",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base + timedelta(hours=1),
+    )
+    _seed_run(
+        run_id="run-3",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base + timedelta(hours=2),
+    )
+
+    response = client.get(
+        "/runs",
+        headers=_auth_headers(),
+        params={"limit": 2, "pipeline": "render_shots"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["id"] for item in payload["runs"]] == ["run-3", "run-2"]
+    cursor = payload["next_cursor"]
+    assert cursor["before_id"] == "run-2"
+    assert cursor["before_created_at"].startswith("2024-06-01T13:00:00")
+
+    response = client.get(
+        "/runs",
+        headers=_auth_headers(),
+        params={
+            "limit": 2,
+            "pipeline": "render_shots",
+            "before_id": cursor["before_id"],
+            "before_created_at": cursor["before_created_at"],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["id"] for item in payload["runs"]] == ["run-1"]
+    assert payload["next_cursor"] is None
 
 
 def test_run_stats_endpoint_returns_grouped_counts(client: TestClient) -> None:
@@ -809,8 +892,8 @@ def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
         "layout_publish": 1,
     }
 
-    runs = orchestrator.list_runs()
-    remaining = {run.pipeline: run.run_id for run in runs}
+    page = orchestrator.list_runs()
+    remaining = {run.pipeline: run.run_id for run in page.runs}
     assert remaining == {
         "render_shots": "run-recent",
         "layout_publish": "run-layout-new",

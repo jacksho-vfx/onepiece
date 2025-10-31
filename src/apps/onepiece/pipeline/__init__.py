@@ -57,7 +57,9 @@ class PipelineClient(Protocol):
         status: str | None = None,
         limit: int | None = None,
         since: str | None = None,
-    ) -> list[Mapping[str, Any]]:  # pragma: no cover - Protocol
+        before_id: str | None = None,
+        before_created_at: str | None = None,
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
         ...
 
     def get_run(self, run_id: str) -> Mapping[str, Any]:  # pragma: no cover - Protocol
@@ -138,7 +140,9 @@ class LocalPipelineClient:
         status: str | None = None,
         limit: int | None = None,
         since: str | None = None,
-    ) -> list[Mapping[str, Any]]:
+        before_id: str | None = None,
+        before_created_at: str | None = None,
+    ) -> Any:
         parsed_since: datetime | None = None
         if since is not None:
             try:
@@ -149,10 +153,39 @@ class LocalPipelineClient:
                 parsed_since = parsed_since.replace(tzinfo=timezone.utc)
             else:
                 parsed_since = parsed_since.astimezone(timezone.utc)
-        runs = self._orchestrator.list_runs(
-            pipeline=pipeline, status=status, limit=limit, since=parsed_since
+        if (before_id is None) ^ (before_created_at is None):
+            raise PipelineClientError(
+                "Both 'before_id' and 'before_created_at' must be provided."
+            )
+        if before_id is not None and limit is None:
+            raise PipelineClientError(
+                "A limit must be provided when using pagination cursors."
+            )
+
+        parsed_before_created: datetime | None = None
+        if before_created_at is not None:
+            try:
+                parsed_before_created = datetime.fromisoformat(before_created_at)
+            except ValueError as exc:
+                raise PipelineClientError(
+                    "Invalid 'before_created_at' timestamp."
+                ) from exc
+            if parsed_before_created.tzinfo is None:
+                parsed_before_created = parsed_before_created.replace(
+                    tzinfo=timezone.utc
+                )
+            else:
+                parsed_before_created = parsed_before_created.astimezone(timezone.utc)
+
+        page = self._orchestrator.list_runs(
+            pipeline=pipeline,
+            status=status,
+            limit=limit,
+            since=parsed_since,
+            before_id=before_id,
+            before_created_at=parsed_before_created,
         )
-        return [run.serialise() for run in runs]
+        return page.serialise()
 
     def get_run(self, run_id: str) -> Any:
         try:
@@ -303,7 +336,17 @@ class RemotePipelineClient:
         status: str | None = None,
         limit: int | None = None,
         since: str | None = None,
-    ) -> list[Mapping[str, Any]]:
+        before_id: str | None = None,
+        before_created_at: str | None = None,
+    ) -> Mapping[str, Any]:
+        if (before_id is None) ^ (before_created_at is None):
+            raise PipelineClientError(
+                "Both 'before_id' and 'before_created_at' must be provided."
+            )
+        if before_id is not None and limit is None:
+            raise PipelineClientError(
+                "A limit must be provided when using pagination cursors."
+            )
         params: dict[str, Any] = {}
         if pipeline is not None:
             params["pipeline"] = pipeline
@@ -313,15 +356,24 @@ class RemotePipelineClient:
             params["limit"] = limit
         if since is not None:
             params["since"] = since
+        if before_id is not None:
+            params["before_id"] = before_id
+        if before_created_at is not None:
+            params["before_created_at"] = before_created_at
         response = self._request("GET", "runs", params=params or None)
         payload = response.json()
-        if not isinstance(payload, list):
+        if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        runs_payload = payload.get("runs")
         runs: list[Mapping[str, Any]] = []
-        for item in payload:
-            if isinstance(item, Mapping):
-                runs.append(dict(item))
-        return runs
+        if isinstance(runs_payload, list):
+            for item in runs_payload:
+                if isinstance(item, Mapping):
+                    runs.append(dict(item))
+        cursor_payload = payload.get("next_cursor")
+        if cursor_payload is not None and not isinstance(cursor_payload, Mapping):
+            cursor_payload = None
+        return {"runs": runs, "next_cursor": cursor_payload}
 
     def get_run(self, run_id: str) -> Mapping[str, Any]:
         response = self._request("GET", f"runs/{run_id}")
@@ -973,25 +1025,62 @@ def list_runs(
         "--since",
         help="Return runs created on or after the ISO timestamp.",
     ),
+    before_id: str | None = typer.Option(
+        None,
+        "--before-id",
+        help="Return runs created before the provided run id.",
+    ),
+    before_created_at: str | None = typer.Option(
+        None,
+        "--before-created-at",
+        help="Return runs created before the provided ISO timestamp.",
+    ),
 ) -> None:
     """List pipeline runs recorded by the orchestrator."""
 
+    if (before_id is None) ^ (before_created_at is None):
+        raise typer.BadParameter(
+            "Both --before-id and --before-created-at must be provided together."
+        )
+    if before_id is not None and limit is None:
+        raise typer.BadParameter(
+            "--limit must be provided when using pagination cursors."
+        )
+
     with _using_client() as client:
         try:
-            runs = client.list_runs(
-                pipeline=pipeline, status=status, limit=limit, since=since
+            page = client.list_runs(
+                pipeline=pipeline,
+                status=status,
+                limit=limit,
+                since=since,
+                before_id=before_id,
+                before_created_at=before_created_at,
             )
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
 
-    if not runs:
+    runs_payload = page.get("runs") if isinstance(page, Mapping) else None
+    runs_list = runs_payload if isinstance(runs_payload, list) else []
+
+    if not runs_list:
         typer.echo("No pipeline runs were found.")
         raise typer.Exit(code=0)
 
-    for run in runs:
+    for run in runs_list:
         for line in _format_pipeline_run(run):
             typer.echo(line)
+
+    cursor_payload = page.get("next_cursor") if isinstance(page, Mapping) else None
+    if isinstance(cursor_payload, Mapping):
+        cursor_before_id = cursor_payload.get("before_id")
+        cursor_before_created_at = cursor_payload.get("before_created_at")
+        if cursor_before_id and cursor_before_created_at:
+            typer.echo(
+                "More runs available. Re-run with --before-id"
+                f" {cursor_before_id} --before-created-at {cursor_before_created_at}."
+            )
 
 
 @app.command("stats")

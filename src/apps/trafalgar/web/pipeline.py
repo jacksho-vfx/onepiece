@@ -331,6 +331,20 @@ def list_runs(
         str | None,
         Query(description="Return runs created on or after the provided ISO timestamp"),
     ] = None,
+    before_id: Annotated[
+        str | None,
+        Query(
+            alias="before_id",
+            description="Return runs created before the provided run id",
+        ),
+    ] = None,
+    before_created_at: Annotated[
+        str | None,
+        Query(
+            alias="before_created_at",
+            description="Return runs created before the provided ISO timestamp",
+        ),
+    ] = None,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
 ) -> JSONResponse:
     orchestrator = get_pipeline_orchestrator()
@@ -348,11 +362,40 @@ def list_runs(
         else:
             parsed_since = parsed_since.astimezone(timezone.utc)
 
-    runs = orchestrator.list_runs(
-        pipeline=pipeline, status=status, limit=limit, since=parsed_since
+    if (before_id is None) ^ (before_created_at is None):
+        raise HTTPException(
+            status_code=400,
+            detail="'before_id' and 'before_created_at' must be supplied together",
+        )
+    if before_id is not None and limit is None:
+        raise HTTPException(
+            status_code=400,
+            detail="'limit' must be provided when using a pagination cursor",
+        )
+
+    parsed_before_created: datetime | None = None
+    if before_created_at is not None:
+        try:
+            parsed_before_created = datetime.fromisoformat(before_created_at)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid 'before_created_at' timestamp",
+            ) from exc
+        if parsed_before_created.tzinfo is None:
+            parsed_before_created = parsed_before_created.replace(tzinfo=timezone.utc)
+        else:
+            parsed_before_created = parsed_before_created.astimezone(timezone.utc)
+
+    page = orchestrator.list_runs(
+        pipeline=pipeline,
+        status=status,
+        limit=limit,
+        since=parsed_since,
+        before_id=before_id,
+        before_created_at=parsed_before_created,
     )
-    payload = [run.serialise() for run in runs]
-    return JSONResponse(content=payload)
+    return JSONResponse(content=page.serialise())
 
 
 def _encode_event(payload: dict[str, Any]) -> bytes:
