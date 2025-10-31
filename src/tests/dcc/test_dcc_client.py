@@ -386,6 +386,7 @@ def test_prepare_package_contents_parallel_copy_downgrades_once(
     assert len(_targets_for("previews")) == 1
     assert len(_targets_for("otio")) == 1
 
+
 def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 

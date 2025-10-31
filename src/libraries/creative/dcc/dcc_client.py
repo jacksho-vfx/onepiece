@@ -561,14 +561,18 @@ def _copy_output(
         worker_count = _resolve_copy_workers()
         if files_to_process and worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                futures = [executor.submit(_process_file, task) for task in files_to_process]
+                futures = [
+                    executor.submit(_process_file, task) for task in files_to_process
+                ]
                 for future in futures:
                     future.result()
         else:
             for task in files_to_process:
                 _process_file(task)
 
-        created_files = [path for _, path in sorted(created_entries, key=lambda item: item[0])]
+        created_files = [
+            path for _, path in sorted(created_entries, key=lambda item: item[0])
+        ]
         return created_files
 
     target = dst
