@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, status
 
 from apps.perona.web import wrangler
@@ -11,7 +13,7 @@ router = APIRouter(prefix="/wrangler", tags=["wrangler"])
 
 
 @router.get("/scripts", response_model=list[wrangler.WranglerScriptMetadata])
-def list_wrangler_scripts() -> list[wrangler.WranglerScriptMetadata]:
+def list_wrangler_scripts() -> Any:
     """Return metadata for all registered Wrangler scripts."""
 
     return dependencies.list_wrangler_scripts()

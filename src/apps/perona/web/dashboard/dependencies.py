@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from collections import Counter
 from pathlib import Path
 from threading import Lock
 from typing import Any, Mapping, NamedTuple, Sequence

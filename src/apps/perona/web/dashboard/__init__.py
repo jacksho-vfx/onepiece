@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 
 from apps.perona.version import PERONA_VERSION
 
 from . import dependencies
-from .routes import analytics, metrics, reports as report_routes, shots, system, wrangler
+from .routes import (
+    analytics,
+    metrics,
+    reports as report_routes,
+    shots,
+    system,
+    wrangler,
+)
 from .templates import dashboard_index_html
 
 app = FastAPI(
@@ -70,13 +79,11 @@ _resolved_settings_path = getattr(dependencies, "_resolved_settings_path")
 _settings_signature = getattr(dependencies, "_settings_signature")
 _get_engine_cache_entry = dependencies.get_engine_cache_entry
 _load_engine = getattr(dependencies, "_load_engine")
-_settings_summary_from_cache = getattr(
-    dependencies, "_settings_summary_from_cache"
-)
+_settings_summary_from_cache = getattr(dependencies, "_settings_summary_from_cache")
 _engine_cache = getattr(dependencies, "_engine_cache")
 
 
-def get_engine(refresh: bool = Query(False, alias="refresh_engine")):
+def get_engine(refresh: bool = Query(False, alias="refresh_engine")) -> Any:
     """FastAPI dependency yielding the shared Perona engine instance."""
 
     return _load_engine(refresh)
@@ -91,7 +98,7 @@ def invalidate_engine_cache() -> None:
 reload_settings = dependencies.reload_settings
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if hasattr(dependencies, name):
         return getattr(dependencies, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

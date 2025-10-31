@@ -17,7 +17,7 @@ router = APIRouter(tags=["reports"])
 @router.get("/dashboard/summary")
 def dashboard_summary(
     engine: PeronaEngine = Depends(dependencies.get_engine),
-) -> dict[str, Any]:
+) -> Any:
     """Return the aggregated data backing the refreshed dashboard UI."""
 
     return report_utils.build_daily_summary(engine)
