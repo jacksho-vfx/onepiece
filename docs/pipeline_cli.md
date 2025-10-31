@@ -5,6 +5,20 @@ pipeline definitions from the command line. The new manifest-aware commands are
 ideal for synchronising local configuration files with either the in-process
 orchestrator or a remote Trafalgar deployment.
 
+## Command overview
+
+| Command | Summary | Output formats |
+| --- | --- | --- |
+| `list` | Show registered pipeline definitions. | `text` (default), `json` via `--format`. |
+| `describe` | Display a single pipeline definition. | `text`, `json` |
+| `runs` | List recorded pipeline runs. | `text`, `json` |
+| `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
+| `run-status` | Inspect metadata for a specific run. | `text`, `json` |
+
+Pass `--format json` to any of these commands to emit prettified JSON payloads,
+which is useful when scripting against the CLI. The default `text` format
+retains the human-readable summaries shown throughout this guide.
+
 ## Preparing a manifest
 
 Create a TOML or YAML manifest that matches the format consumed by the

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from pytest import MonkeyPatch
@@ -248,6 +249,38 @@ def test_pipeline_list_handles_empty(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
+def test_pipeline_list_supports_json(monkeypatch: MonkeyPatch) -> None:
+    payload = [
+        {
+            "name": "orchestration.daily",
+            "display_name": "Daily orchestration",
+            "description": "Daily ingest orchestration",
+        }
+    ]
+    client = StubPipelineClient(definitions=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "list", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.closed is True
+
+
+def test_pipeline_list_empty_json(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(definitions=[])
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "list", "--format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == []
+    assert client.closed is True
+
+
 def test_pipeline_list_failure(monkeypatch: MonkeyPatch) -> None:
     error = PipelineClientError("boom", status_code=500)
     client = StubPipelineClient(list_error=error)
@@ -287,6 +320,24 @@ def test_pipeline_describe_success(monkeypatch: MonkeyPatch) -> None:
     assert "  - ingest_profile (default=episodic)" in result.output
     assert "Profile to use" in result.output
     assert client.requested_name == "orchestration.daily"
+    assert client.closed is True
+
+
+def test_pipeline_describe_json(monkeypatch: MonkeyPatch) -> None:
+    payload = {
+        "name": "orchestration.daily",
+        "display_name": "Daily orchestration",
+    }
+    client = StubPipelineClient(definition=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "describe", "orchestration.daily", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
     assert client.closed is True
 
 
@@ -623,6 +674,27 @@ def test_pipeline_runs_displays_runs(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
+def test_pipeline_runs_json(monkeypatch: MonkeyPatch) -> None:
+    payload = {
+        "runs": [
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+            }
+        ],
+        "next_cursor": None,
+    }
+    client = StubPipelineClient(runs_payload=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "runs", "--format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.closed is True
+
+
 def test_pipeline_runs_applies_filters(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(runs=[])
     _install_stub(monkeypatch, client)
@@ -782,6 +854,18 @@ def test_pipeline_stats_handles_empty(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
+def test_pipeline_stats_json(monkeypatch: MonkeyPatch) -> None:
+    payload = {"pipelines": {"demo": {"succeeded": {"count": 1}}}}
+    client = StubPipelineClient(stats_payload=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "stats", "--format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.closed is True
+
+
 def test_pipeline_run_status_displays_run(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(
         run_metadata={
@@ -803,6 +887,22 @@ def test_pipeline_run_status_displays_run(monkeypatch: MonkeyPatch) -> None:
     assert "Run run-1" in result.output
     assert "Status: running" in result.output
     assert "Submitted by: suite" in result.output
+    assert client.requested_run_id == "run-1"
+    assert client.closed is True
+
+
+def test_pipeline_run_status_json(monkeypatch: MonkeyPatch) -> None:
+    payload = {"id": "run-1", "status": "running"}
+    client = StubPipelineClient(run_metadata=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run-status", "run-1", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
     assert client.requested_run_id == "run-1"
     assert client.closed is True
 
