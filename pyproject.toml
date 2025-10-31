@@ -14,6 +14,7 @@ dependencies = [
     "av>=12.0",
     "click>=8.3.0",
     "fastapi>=0.115.0",
+    "portalocker>=2.10.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.3.3",
     "PyYAML>=6.0.0",
