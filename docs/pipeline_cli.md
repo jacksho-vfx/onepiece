@@ -27,6 +27,34 @@ after = "prepare"
 Multiple pipelines can be bundled in a single file via a top-level `pipelines`
 section. When doing so, pass `--name` to select the entry to push or update.
 
+## Pulling existing definitions
+
+Use `onepiece pipeline pull` to serialise a definition from the orchestrator back
+to a manifest file. The command reconstructs step metadata, dependencies, and
+event triggers so the resulting TOML or YAML can be fed straight into
+`onepiece pipeline push` or `onepiece pipeline update`.
+
+```bash
+onepiece pipeline pull orchestration.daily --output manifests/orchestration.toml
+```
+
+The format is inferred from the file suffix, but you can override it explicitly:
+
+```bash
+onepiece pipeline pull orchestration.daily \
+  --output manifests/orchestration.yaml \
+  --format yaml
+```
+
+Once exported you can edit the manifest locally and push it back to the
+orchestrator, closing the loop:
+
+```bash
+onepiece pipeline pull orchestration.daily --output tmp/orchestration.toml
+# ...modify tmp/orchestration.toml...
+onepiece pipeline update tmp/orchestration.toml
+```
+
 ## Creating or updating pipelines
 
 Use `onepiece pipeline push` to create a new pipeline definition. The command
