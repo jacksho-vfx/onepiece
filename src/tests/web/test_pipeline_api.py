@@ -741,4 +741,7 @@ def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
 
     runs = orchestrator.list_runs()
     remaining = {run.pipeline: run.run_id for run in runs}
-    assert remaining == {"render_shots": "run-recent", "layout_publish": "run-layout-new"}
+    assert remaining == {
+        "render_shots": "run-recent",
+        "layout_publish": "run-layout-new",
+    }
