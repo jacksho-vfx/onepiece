@@ -25,6 +25,8 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, StreamingResponse
 
+from apps.perona.web import dashboard as live_dashboard
+from apps.perona.web import wrangler as wrangler_module
 from libraries.analytics.perona.engine import PeronaEngine
 from libraries.analytics.perona.models import (
     CostEstimate,
@@ -72,6 +74,20 @@ _SETTINGS_SUMMARY = SettingsSummary.from_engine(
 )
 
 
+def _get_demo_engine(refresh: bool = False) -> PeronaEngine:
+    """Return the shared in-memory engine instance used by the demo."""
+
+    return _ENGINE
+
+
+# Ensure Wrangler scripts executed via the dummy dashboard resolve the
+# deterministic in-memory engine instead of attempting to load configuration
+# from disk.  The production ``apps.perona.web.dashboard`` module exposes
+# ``get_engine`` as the canonical dependency for Wrangler helpers, so we patch
+# it here before any scripts execute.
+live_dashboard.get_engine = _get_demo_engine
+
+
 def prepare_demo_state() -> None:
     """Eagerly instantiate engine-backed summaries for deterministic demos."""
 
@@ -113,6 +129,34 @@ def settings_reload() -> SettingsSummary:
     """Mirror the real reload endpoint but keep the static payload."""
 
     return _SETTINGS_SUMMARY
+
+
+@app.get(
+    "/wrangler/scripts",
+    response_model=list[wrangler_module.WranglerScriptMetadata],
+)
+def list_wrangler_scripts() -> list[wrangler_module.WranglerScriptMetadata]:
+    """Expose Wrangler script metadata for the demo dashboard UI."""
+
+    return list(wrangler_module.iter_registered_scripts())
+
+
+@app.post(
+    "/wrangler/scripts/{script_id}",
+    response_model=wrangler_module.WranglerScriptResult,
+)
+async def execute_wrangler_script(
+    script_id: str,
+) -> wrangler_module.WranglerScriptResult:
+    """Execute a Wrangler script against the deterministic demo engine."""
+
+    try:
+        return await wrangler_module.execute_script(script_id)
+    except KeyError as exc:  # pragma: no cover - defensive guard for API usage
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown Wrangler script '{script_id}'",
+        ) from exc
 
 
 @app.get("/render-feed", response_model=list[RenderMetric])
