@@ -90,6 +90,20 @@ def test_store_prune_removes_old_runs_and_events(tmp_path: Path) -> None:
         status="succeeded",
         created_at=base - timedelta(hours=4),
     )
+    _create_run(
+        store,
+        run_id="run-4",
+        pipeline="ingest",
+        status="succeeded",
+        created_at=base - timedelta(days=1, hours=12),
+    )
+    _create_run(
+        store,
+        run_id="run-5",
+        pipeline="ingest",
+        status="succeeded",
+        created_at=base - timedelta(minutes=30),
+    )
 
     before_runs = store._connection.execute(
         "SELECT COUNT(*) FROM pipeline_runs"
@@ -97,37 +111,48 @@ def test_store_prune_removes_old_runs_and_events(tmp_path: Path) -> None:
     before_events = store._connection.execute(
         "SELECT COUNT(*) FROM pipeline_run_events"
     ).fetchone()[0]
-    assert before_runs == 3
-    assert before_events == 6
+    assert before_runs == 5
+    assert before_events == 10
 
     result = store.prune(
         max_age=timedelta(days=2),
-        max_runs=1,
+        max_runs=2,
         now=base,
+        max_runs_per_pipeline={"render": 1, "ingest": 1},
     )
 
-    assert result.removed_runs == 2
-    assert result.removed_events == 4
-    assert result.remaining_runs == 1
+    assert result.removed_runs == 3
+    assert result.removed_events == 6
+    assert result.remaining_runs == 2
+    assert result.removed_runs_by_pipeline == {"render": 2, "ingest": 1}
 
     remaining_runs = store.list_runs()
-    assert [run.run_id for run in remaining_runs] == ["run-3"]
+    remaining_by_pipeline = {
+        run.pipeline: run.run_id for run in remaining_runs
+    }
+    assert remaining_by_pipeline == {"render": "run-3", "ingest": "run-5"}
 
-    events = list(store.iter_run_events("run-3"))
-    assert [event.status for event in events] == ["succeeded", "succeeded"]
+    render_events = list(store.iter_run_events("run-3"))
+    assert [event.status for event in render_events] == ["succeeded", "succeeded"]
 
     with pytest.raises(KeyError):
         list(store.iter_run_events("run-1"))
+    with pytest.raises(KeyError):
+        list(store.iter_run_events("run-4"))
 
     after_events = store._connection.execute(
         "SELECT COUNT(*) FROM pipeline_run_events"
     ).fetchone()[0]
-    assert after_events == 2
+    assert after_events == 4
 
 
 def test_orchestrator_prune_uses_retention(tmp_path: Path) -> None:
     store = PipelineRunStore(database=tmp_path / "runs.sqlite3")
-    policy = PipelineRetentionPolicy(max_age=timedelta(days=1), max_runs=1)
+    policy = PipelineRetentionPolicy(
+        max_age=timedelta(days=1),
+        max_runs=2,
+        max_runs_per_pipeline={"render": 1, "simulation": 1},
+    )
     orchestrator = PipelineOrchestrator(store=store, retention=policy)
 
     base = datetime(2024, 4, 1, 9, tzinfo=timezone.utc)
@@ -145,16 +170,32 @@ def test_orchestrator_prune_uses_retention(tmp_path: Path) -> None:
         status="succeeded",
         created_at=base - timedelta(hours=2),
     )
+    _create_run(
+        store,
+        run_id="run-sim-1",
+        pipeline="simulation",
+        status="succeeded",
+        created_at=base - timedelta(hours=3),
+    )
+    _create_run(
+        store,
+        run_id="run-sim-2",
+        pipeline="simulation",
+        status="succeeded",
+        created_at=base - timedelta(minutes=30),
+    )
 
     result = orchestrator.prune_history(now=base)
 
-    assert result.removed_runs == 1
-    assert result.remaining_runs == 1
+    assert result.removed_runs == 2
+    assert result.remaining_runs == 2
     assert result.max_age == policy.max_age
     assert result.max_runs == policy.max_runs
+    assert result.removed_runs_by_pipeline == {"render": 1, "simulation": 1}
 
     runs = store.list_runs()
-    assert [run.run_id for run in runs] == ["run-new"]
+    remaining = {run.pipeline: run.run_id for run in runs}
+    assert remaining == {"render": "run-new", "simulation": "run-sim-2"}
 
 
 def test_orchestrator_prunes_runs_after_completion(tmp_path: Path) -> None:

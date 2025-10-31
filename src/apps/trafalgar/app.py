@@ -314,6 +314,12 @@ def pipeline_prune(
         f"Removed {result.removed_runs} runs and {result.removed_events} events from the store."
     )
     typer.echo(f"{result.remaining_runs} runs remain after pruning.")
+    if result.removed_runs_by_pipeline:
+        details = ", ".join(
+            f"{pipeline}: {count}"
+            for pipeline, count in sorted(result.removed_runs_by_pipeline.items())
+        )
+        typer.echo(f"Per-pipeline removals: {details}.")
 
 
 @pipeline_app.command("push")

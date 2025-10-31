@@ -470,6 +470,7 @@ class PipelineRetentionPolicy:
 
     max_age: timedelta | None = None
     max_runs: int | None = None
+    max_runs_per_pipeline: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         if self.max_age is not None and self.max_age.total_seconds() < 0:
@@ -478,10 +479,26 @@ class PipelineRetentionPolicy:
         if self.max_runs is not None and self.max_runs < 0:
             msg = "retention max_runs must be non-negative"
             raise ValueError(msg)
+        mapping: Mapping[str, int] = self.max_runs_per_pipeline
+        if mapping:
+            normalised: dict[str, int] = {}
+            for name, raw_value in mapping.items():
+                limit = int(raw_value)
+                if limit < 0:
+                    msg = "retention max_runs per pipeline must be non-negative"
+                    raise ValueError(msg)
+                normalised[str(name)] = limit
+            object.__setattr__(self, "max_runs_per_pipeline", normalised)
+        else:
+            object.__setattr__(self, "max_runs_per_pipeline", {})
 
     @property
     def configured(self) -> bool:
-        return self.max_age is not None or self.max_runs is not None
+        return (
+            self.max_age is not None
+            or self.max_runs is not None
+            or bool(self.max_runs_per_pipeline)
+        )
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> PipelineRetentionPolicy | None:
@@ -532,7 +549,37 @@ class PipelineRetentionPolicy:
                 raise ValueError("retention duration must be non-negative")
             max_age = timedelta(seconds=window_seconds)
 
-        policy = cls(max_age=max_age, max_runs=max_runs)
+        pipelines_raw = payload.get("pipelines")
+        per_pipeline: dict[str, int] = {}
+        if pipelines_raw is not None:
+            if not isinstance(pipelines_raw, Mapping):
+                msg = "retention pipelines configuration must be a mapping"
+                raise TypeError(msg)
+            for raw_name, raw_config in pipelines_raw.items():
+                name = str(raw_name)
+                if isinstance(raw_config, Mapping):
+                    raw_limit = raw_config.get("max_runs")
+                else:
+                    raw_limit = raw_config
+                if raw_limit is None:
+                    continue
+                try:
+                    limit = int(raw_limit)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "retention pipeline max_runs must be an integer"
+                    ) from exc
+                if limit < 0:
+                    raise ValueError(
+                        "retention pipeline max_runs must be non-negative"
+                    )
+                per_pipeline[name] = limit
+
+        policy = cls(
+            max_age=max_age,
+            max_runs=max_runs,
+            max_runs_per_pipeline=per_pipeline,
+        )
         if not policy.configured:
             return None
         return policy
@@ -547,6 +594,7 @@ class PipelinePruneResult:
     remaining_runs: int
     max_age: timedelta | None = None
     max_runs: int | None = None
+    removed_runs_by_pipeline: Mapping[str, int] = field(default_factory=dict)
 
     def serialise(self) -> Mapping[str, Any]:
         payload: dict[str, Any] = {
@@ -554,6 +602,7 @@ class PipelinePruneResult:
             "removed_events": self.removed_events,
             "remaining_runs": self.remaining_runs,
             "max_runs": self.max_runs,
+            "removed_runs_by_pipeline": dict(self.removed_runs_by_pipeline),
         }
         payload["max_age_seconds"] = (
             int(self.max_age.total_seconds()) if self.max_age is not None else None
@@ -1270,8 +1319,18 @@ class PipelineRunStore:
         max_age: timedelta | None = None,
         max_runs: int | None = None,
         now: datetime | None = None,
+        max_runs_per_pipeline: Mapping[str, int] | None = None,
     ) -> PipelinePruneResult:
-        if max_age is None and max_runs is None:
+        per_pipeline_limits: dict[str, int] = {}
+        if max_runs_per_pipeline:
+            for name, raw_value in max_runs_per_pipeline.items():
+                limit = int(raw_value)
+                if limit < 0:
+                    msg = "max_runs per pipeline must be non-negative"
+                    raise ValueError(msg)
+                per_pipeline_limits[str(name)] = limit
+
+        if max_age is None and max_runs is None and not per_pipeline_limits:
             with self._lock:
                 remaining = self._count_runs_locked()
             return PipelinePruneResult(
@@ -1280,6 +1339,7 @@ class PipelineRunStore:
                 remaining_runs=remaining,
                 max_age=None,
                 max_runs=None,
+                removed_runs_by_pipeline={},
             )
 
         if max_age is not None and max_age.total_seconds() < 0:
@@ -1294,7 +1354,7 @@ class PipelineRunStore:
         with self._lock:
             cursor = self._connection.execute(
                 """
-                SELECT run_id, created_at
+                SELECT run_id, pipeline, created_at
                 FROM pipeline_runs
                 ORDER BY created_at ASC, run_id ASC
                 """
@@ -1302,26 +1362,43 @@ class PipelineRunStore:
             rows = cursor.fetchall()
 
             cutoff = moment - max_age if max_age is not None else None
-            removal: list[str] = []
+            removal_set: set[str] = set()
+            removal_order: list[str] = []
+            removed_by_pipeline: dict[str, int] = {}
+            rows_by_pipeline: dict[str, list[sqlite3.Row]] = {}
+
+            def _mark_for_removal(run_id: str, pipeline: str) -> None:
+                if run_id in removal_set:
+                    return
+                removal_set.add(run_id)
+                removal_order.append(run_id)
+                removed_by_pipeline[pipeline] = removed_by_pipeline.get(pipeline, 0) + 1
 
             for row in rows:
+                pipeline = str(row["pipeline"])
+                rows_by_pipeline.setdefault(pipeline, []).append(row)
+
                 if cutoff is None:
-                    break
+                    continue
+
                 created = self._decode_datetime(row["created_at"])
                 if created < cutoff:
-                    removal.append(row["run_id"])
-                else:
-                    break
+                    _mark_for_removal(str(row["run_id"]), pipeline)
 
-            if max_runs is not None:
-                retained = [
-                    row["run_id"] for row in rows if row["run_id"] not in removal
+            for pipeline, pipeline_rows in rows_by_pipeline.items():
+                limit = per_pipeline_limits.get(pipeline, max_runs)
+                if limit is None:
+                    continue
+                retained_rows = [
+                    row for row in pipeline_rows if str(row["run_id"]) not in removal_set
                 ]
-                overflow = len(retained) - max_runs
-                if overflow > 0:
-                    removal.extend(retained[:overflow])
+                overflow = len(retained_rows) - limit
+                if overflow <= 0:
+                    continue
+                for row in retained_rows[:overflow]:
+                    _mark_for_removal(str(row["run_id"]), pipeline)
 
-            if not removal:
+            if not removal_order:
                 remaining = len(rows)
                 return PipelinePruneResult(
                     removed_runs=0,
@@ -1329,10 +1406,11 @@ class PipelineRunStore:
                     remaining_runs=remaining,
                     max_age=max_age,
                     max_runs=max_runs,
+                    removed_runs_by_pipeline={},
                 )
 
-            placeholders = ",".join("?" for _ in removal)
-            parameters = tuple(removal)
+            placeholders = ",".join("?" for _ in removal_order)
+            parameters = tuple(removal_order)
 
             with self._connection:
                 events_deleted = self._connection.execute(
@@ -1344,7 +1422,7 @@ class PipelineRunStore:
                     parameters,
                 ).rowcount
 
-            for run_id in removal:
+            for run_id in removal_order:
                 self._subscribers.pop(run_id, None)
 
             remaining = self._count_runs_locked()
@@ -1355,6 +1433,7 @@ class PipelineRunStore:
             remaining_runs=int(remaining),
             max_age=max_age,
             max_runs=max_runs,
+            removed_runs_by_pipeline=removed_by_pipeline,
         )
 
     def _count_runs_locked(self) -> int:
@@ -1836,11 +1915,20 @@ class PipelineOrchestrator:
             elif max_age is not None or max_runs is not None:
                 self._skip_next_auto_prune = True
 
+        max_runs_per_pipeline: Mapping[str, int] | None = None
         if use_policy_defaults and policy is not None:
             max_age = policy.max_age
             max_runs = policy.max_runs
+            max_runs_per_pipeline = policy.max_runs_per_pipeline
+        elif policy is not None:
+            max_runs_per_pipeline = policy.max_runs_per_pipeline
 
-        return self._store.prune(max_age=max_age, max_runs=max_runs, now=now)
+        return self._store.prune(
+            max_age=max_age,
+            max_runs=max_runs,
+            now=now,
+            max_runs_per_pipeline=max_runs_per_pipeline,
+        )
 
 
 _default_orchestrator: PipelineOrchestrator | None = None
