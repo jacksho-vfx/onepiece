@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
+import platform
+import signal
+import subprocess
 import time
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
+from importlib.util import find_spec
 from multiprocessing import Process
-from typing import Mapping
+from typing import Iterable, Mapping
 
 import typer
 
@@ -107,6 +111,94 @@ def _serve_uvicorn(import_path: str, host: str, port: int, log_level: str) -> No
 
     uvicorn = import_module("uvicorn")
     uvicorn.run(import_path, host=host, port=port, reload=False, log_level=log_level)
+
+
+def _process_ids_for_port(port: int) -> set[int]:
+    """Return process identifiers bound to the given TCP port."""
+
+    try:
+        psutil = import_module("psutil")
+    except ModuleNotFoundError:
+        return _process_ids_for_port_without_psutil(port)
+
+    pids: set[int] = set()
+    for connection in psutil.net_connections(kind="inet"):
+        local_address = connection.laddr
+        if not local_address or local_address.port != port:
+            continue
+        if connection.pid is not None:
+            pids.add(connection.pid)
+    return pids
+
+
+def _process_ids_for_port_without_psutil(port: int) -> set[int]:
+    """Best-effort fallback for resolving listening processes without psutil."""
+
+    system = platform.system()
+    if system in {"Linux", "Darwin"}:
+        try:
+            result = subprocess.run(
+                ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            return set()
+        if result.returncode not in {0, 1}:
+            return set()
+        return {int(line) for line in result.stdout.splitlines() if line.strip()}
+
+    if system == "Windows":
+        try:
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            return set()
+        pids: set[int] = set()
+        port_token = f":{port}"
+        for line in result.stdout.splitlines():
+            if port_token not in line:
+                continue
+            columns = line.split()
+            if len(columns) < 5:
+                continue
+            if (
+                columns[0].lower().startswith("tcp")
+                and columns[3].upper() == "LISTENING"
+            ):
+                try:
+                    pids.add(int(columns[-1]))
+                except ValueError:
+                    continue
+        return pids
+
+    return set()
+
+
+def _terminate_processes(
+    pids: Iterable[int],
+) -> tuple[list[int], list[tuple[int, str]]]:
+    """Attempt to terminate processes by PID, returning successes and failures."""
+
+    terminated: list[int] = []
+    failures: list[tuple[int, str]] = []
+    for pid in pids:
+        if pid == os.getpid():
+            continue
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        except PermissionError as exc:
+            failures.append((pid, str(exc)))
+        else:
+            terminated.append(pid)
+    return terminated, failures
 
 
 def _run_demo_creation_hooks(skip_create: bool) -> None:
@@ -219,6 +311,12 @@ def _launch_demo_targets(
         restore_pipeline_demo_environment()
 
 
+def _demo_ports() -> list[int]:
+    """Return a sorted list of ports reserved for demo processes."""
+
+    return sorted({target.port for target in DEMO_TARGETS})
+
+
 @app.command("open")
 def open_demos(
     host: str = typer.Option(
@@ -265,6 +363,61 @@ def open_demos(
         browser_path=browser_path,
         browser_delay=browser_delay,
     )
+
+
+@app.command("close")
+def close_demos() -> None:
+    """Terminate demo services bound to the configured ports."""
+
+    ports = _demo_ports()
+    if not ports:
+        typer.echo("No demo ports are configured.")
+        raise typer.Exit(code=0)
+
+    psutil_available = find_spec("psutil") is not None
+    psutil_warning_emitted = False
+    typer.echo(
+        "Checking for running demo processes on ports: "
+        + ", ".join(str(port) for port in ports)
+    )
+
+    terminated_total: list[int] = []
+    failures_total: list[tuple[int, str]] = []
+
+    for port in ports:
+        pids = _process_ids_for_port(port)
+        if not pids:
+            typer.echo(f"No processes found listening on port {port}.")
+            if not psutil_available and not psutil_warning_emitted:
+                typer.echo(
+                    "Install the optional 'psutil' dependency for improved "
+                    "process detection.",
+                    err=True,
+                )
+                psutil_warning_emitted = True
+            continue
+
+        typer.echo(
+            f"Attempting to stop processes listening on port {port}: "
+            + ", ".join(str(pid) for pid in sorted(pids))
+        )
+        terminated, failures = _terminate_processes(pids)
+        for pid in terminated:
+            typer.echo(f"Sent SIGTERM to PID {pid} (port {port}).")
+        for pid, reason in failures:
+            typer.echo(
+                f"Failed to terminate PID {pid} (port {port}): {reason}", err=True
+            )
+        terminated_total.extend(terminated)
+        failures_total.extend((pid, reason) for pid, reason in failures)
+
+    if terminated_total:
+        typer.echo(
+            "Requested termination for the following demo processes: "
+            + ", ".join(str(pid) for pid in sorted(set(terminated_total)))
+        )
+    elif not failures_total:
+        typer.echo("No demo processes were running on the configured ports.")
 
 
 @app.command(
@@ -331,6 +484,7 @@ def present(
 __all__ = [
     "app",
     "open_demos",
+    "close_demos",
     "present",
     "DEMO_TARGETS",
     "DEMO_CREATION_HOOKS",
