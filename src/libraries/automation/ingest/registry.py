@@ -10,7 +10,7 @@ from typing import Any, Iterable, List, Mapping, cast
 
 import structlog
 
-from libraries.automation.ingest.service import IngestReport, IngestedMedia, MediaInfo
+from libraries.automation.ingest.models import IngestReport, IngestedMedia, MediaInfo
 
 logger = structlog.get_logger(__name__)
 

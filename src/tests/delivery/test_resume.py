@@ -5,11 +5,11 @@ from typing import Any
 import pytest
 from pytest import LogCaptureFixture
 
-from libraries.automation.ingest.service import (
-    MediaIngestService,
+from libraries.automation.ingest.checkpoint import (
     UploadCheckpoint,
     UploadCheckpointStore,
 )
+from libraries.automation.ingest.service import MediaIngestService
 from libraries.integrations.shotgrid.client import ShotgridClient
 
 

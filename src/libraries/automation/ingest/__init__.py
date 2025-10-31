@@ -1,18 +1,15 @@
 """Utilities for ingesting incoming media deliveries."""
 
+from .checkpoint import ResumableUploaderProtocol, UploadCheckpoint, UploaderProtocol
+from .models import IngestReport, IngestedMedia, MediaInfo
 from .service import (
     Boto3Uploader,
     Delivery,
     DeliveryManifestError,
-    IngestReport,
     MediaIngestService,
-    MediaInfo,
-    ResumableUploaderProtocol,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
     ShotgridSchemaError,
-    UploadCheckpoint,
-    UploaderProtocol,
     load_delivery_manifest,
 )
 
@@ -22,6 +19,7 @@ __all__ = [
     "MediaIngestService",
     "MediaInfo",
     "IngestReport",
+    "IngestedMedia",
     "UploaderProtocol",
     "ResumableUploaderProtocol",
     "Boto3Uploader",
