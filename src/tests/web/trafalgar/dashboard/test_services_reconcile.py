@@ -58,7 +58,9 @@ def test_require_dashboard_auth_accepts_matching_token(
 ) -> None:
     monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "super-secret")
 
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="super-secret")
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials="super-secret"
+    )
 
     dashboard.require_dashboard_auth(credentials)
 

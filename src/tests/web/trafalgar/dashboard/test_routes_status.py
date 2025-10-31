@@ -49,7 +49,9 @@ async def test_status_endpoint_aggregates_counts(
         lambda: dashboard.ShotGridService(dummy_shotgrid_client_cls(versions))
     )
     dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
-        lambda: dashboard.ReconcileService(dummy_reconcile_provider_cls(reconcile_payload))
+        lambda: dashboard.ReconcileService(
+            dummy_reconcile_provider_cls(reconcile_payload)
+        )
     )
     ingest_summary = {
         "counts": {"total": 3, "successful": 2, "failed": 0, "running": 1},
@@ -195,7 +197,9 @@ async def test_metrics_endpoint_combines_dashboards(
         lambda: dashboard.ShotGridService(dummy_shotgrid_client_cls(versions))
     )
     dashboard.app.dependency_overrides[dashboard.get_reconcile_service] = (
-        lambda: dashboard.ReconcileService(dummy_reconcile_provider_cls(reconcile_payload))
+        lambda: dashboard.ReconcileService(
+            dummy_reconcile_provider_cls(reconcile_payload)
+        )
     )
     ingest_facade = dummy_ingest_facade_cls(ingest_summary)
     dashboard.app.dependency_overrides[dashboard.get_ingest_dashboard_facade] = (
@@ -540,9 +544,7 @@ async def test_deliveries_endpoint_handles_missing_entries(
 @pytest.mark.anyio("asyncio")
 async def test_deliveries_endpoint_uses_default_provider() -> None:
     transport = ASGITransport(app=dashboard.app)
-    async with AsyncClient(
-        transport=transport, base_url="http://testserver"
-    ) as client:
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get("/deliveries/alpha")
 
     assert response.status_code == 200

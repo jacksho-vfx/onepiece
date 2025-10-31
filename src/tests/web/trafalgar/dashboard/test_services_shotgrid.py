@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence, Type
 
 import pytest
@@ -37,7 +38,7 @@ def test_shotgrid_service_filters_versions_case_insensitively(
         {"project": "beta", "shot": "EP99_SC100_SH0500", "version": "v010"},
     ]
 
-    service = dashboard.ShotGridService(dummy_shotgrid_client_cls(versions))  # type: ignore[arg-type]
+    service = dashboard.ShotGridService(dummy_shotgrid_client_cls(versions))
 
     filtered = service._filter_versions("aLpHa")
 
@@ -56,7 +57,7 @@ def test_shotgrid_service_uses_default_provider() -> None:
 
 
 def test_shotgrid_service_discovers_projects_and_updates_registry(
-    tmp_path: "Path",
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     dummy_shotgrid_client_cls: Type[Any],
 ) -> None:
@@ -81,7 +82,7 @@ def test_shotgrid_service_discovers_projects_and_updates_registry(
 
 
 def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
-    tmp_path: "Path",
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     dummy_shotgrid_client_cls: Type[Any],
 ) -> None:
@@ -89,8 +90,8 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
     registry_path.write_text(json.dumps(["cached"]), encoding="utf-8")
     monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
 
-    class OfflineShotgridClient(dummy_shotgrid_client_cls):
-        def list_versions(self) -> Sequence[dict[str, Any]]:  # type: ignore[override]
+    class OfflineShotgridClient(dummy_shotgrid_client_cls):  # type: ignore[misc]
+        def list_versions(self) -> Sequence[dict[str, Any]]:
             raise RuntimeError("offline")
 
     service = dashboard.ShotGridService(
@@ -104,7 +105,7 @@ def test_shotgrid_service_discover_projects_falls_back_to_cache_and_env(
 
 
 def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
-    tmp_path: "Path",
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     dummy_shotgrid_client_cls: Type[Any],
 ) -> None:
@@ -112,8 +113,8 @@ def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
     monkeypatch.setenv("ONEPIECE_DASHBOARD_PROJECT_REGISTRY", str(registry_path))
     monkeypatch.delenv("ONEPIECE_DASHBOARD_PROJECTS", raising=False)
 
-    class UnexpectedProjectClient(dummy_shotgrid_client_cls):
-        def list_projects(self) -> None:  # type: ignore[override]
+    class UnexpectedProjectClient(dummy_shotgrid_client_cls):  # type: ignore[misc]
+        def list_projects(self) -> None:
             return None
 
     captured_events: list[tuple[str, dict[str, Any]]] = []
@@ -141,7 +142,7 @@ def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
 
 
 def test_shotgrid_service_uses_discovered_projects_without_reinit(
-    tmp_path: "Path", monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ProjectFetchingClient:
         def __init__(self) -> None:

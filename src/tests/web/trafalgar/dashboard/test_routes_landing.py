@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Sequence, Type
 
 import pytest
@@ -22,7 +23,7 @@ async def test_landing_page_returns_html() -> None:
 @pytest.mark.anyio("asyncio")
 async def test_landing_page_uses_discovered_projects(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: "Path",
+    tmp_path: Path,
     dummy_shotgrid_client_cls: Type[Any],
 ) -> None:
     registry_path = tmp_path / "projects.json"
