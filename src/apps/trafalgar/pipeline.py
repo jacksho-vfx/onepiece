@@ -137,7 +137,9 @@ class PipelineDefinition:
         if self.version is not None and "version" not in self.pipeline.metadata:
             metadata = dict(self.pipeline.metadata)
             metadata["version"] = self.version
-            object.__setattr__(self, "pipeline", replace(self.pipeline, metadata=metadata))
+            object.__setattr__(
+                self, "pipeline", replace(self.pipeline, metadata=metadata)
+            )
 
     def serialise(self) -> Mapping[str, Any]:
         steps = [self._serialise_step(step) for step in self.pipeline.steps]
@@ -2378,9 +2380,7 @@ def pipeline_definition_from_profile_entry(
         location=f"pipeline '{name}'",
     )
 
-    version = _coerce_optional_str(
-        config.get("version", metadata.get("version"))
-    )
+    version = _coerce_optional_str(config.get("version", metadata.get("version")))
 
     return PipelineDefinition(
         name=pipeline.name,
