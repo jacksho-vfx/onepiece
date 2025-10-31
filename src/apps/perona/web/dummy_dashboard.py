@@ -85,7 +85,7 @@ def _get_demo_engine(refresh: bool = False) -> PeronaEngine:
 # from disk.  The production ``apps.perona.web.dashboard`` module exposes
 # ``get_engine`` as the canonical dependency for Wrangler helpers, so we patch
 # it here before any scripts execute.
-live_dashboard.get_engine = _get_demo_engine  # type: ignore[assignment]
+live_dashboard.get_engine = _get_demo_engine
 
 
 def prepare_demo_state() -> None:
