@@ -42,9 +42,11 @@ def test_dashboard_chart_builders() -> None:
     """Inline dashboard script should expose test hooks for chart configs."""
 
     html = web._render_index("/")
-    script_src_matches = re.findall(r"<script src=\"([^\"]*control_center\.js)\"[^>]*>", html)
+    script_src_matches = re.findall(
+        r"<script src=\"([^\"]*control_center\.js)\"[^>]*>", html
+    )
     assert script_src_matches, "Expected control center script reference"
-    inline_script = Path('src/apps/uta/static/control_center.js').read_text()
+    inline_script = Path("src/apps/uta/static/control_center.js").read_text()
 
     assert "window.utaDashboardTestHooks" in inline_script
 
