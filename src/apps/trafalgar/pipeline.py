@@ -1397,16 +1397,8 @@ class PipelineRunStore:
             max_ms = _to_int(queue.get("max_ms"))
             total_seconds = total_ms / 1000.0
             average_seconds = total_seconds / count if count else 0.0
-            min_seconds = (
-                min_ms / 1000.0
-                if min_ms is not None
-                else average_seconds
-            )
-            max_seconds = (
-                max_ms / 1000.0
-                if max_ms is not None
-                else average_seconds
-            )
+            min_seconds = min_ms / 1000.0 if min_ms is not None else average_seconds
+            max_seconds = max_ms / 1000.0 if max_ms is not None else average_seconds
             return _QueueMetrics(
                 total_seconds=total_seconds,
                 count=count,

@@ -98,7 +98,7 @@ def _format_pipeline_statistics(
                     for value in (average, minimum, maximum)
                 ):
                     details.append(
-                        f"avg {float(average):.2f}s, min {float(minimum):.2f}s, max {float(maximum):.2f}s"
+                        f"avg {float(average):.2f}s, min {float(minimum):.2f}s, max {float(maximum):.2f}s"  # type: ignore[arg-type]
                     )
             queue_waits = entry.get("queue_waits")
             if isinstance(queue_waits, Mapping):
@@ -111,15 +111,15 @@ def _format_pipeline_statistics(
                 ):
                     details.append(
                         (
-                            f"queue wait avg {float(wait_average):.2f}s, "
-                            f"min {float(wait_min):.2f}s, max {float(wait_max):.2f}s"
+                            f"queue wait avg {float(wait_average):.2f}s, "  # type: ignore[arg-type]
+                            f"min {float(wait_min):.2f}s, max {float(wait_max):.2f}s"  # type: ignore[arg-type]
                         )
                     )
             if details:
                 line += " (" + "; ".join(details) + ")"
             backlog = entry.get("backlog_count")
             try:
-                backlog_int = int(backlog)
+                backlog_int = int(backlog)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 backlog_int = 0
             if backlog_int > 0:
