@@ -17,6 +17,17 @@ def sync_to(
     include: list[str] | None = typer.Option(None, "--include"),
     exclude: list[str] | None = typer.Option(None, "--exclude"),
     profile: str | None = None,
+    concurrency: int | None = typer.Option(
+        None,
+        "--concurrency",
+        min=1,
+        help="Override the s5cmd --concurrency value for uploads.",
+    ),
+    part_size: str | None = typer.Option(
+        None,
+        "--part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
 ) -> None:
     """Sync local folder TO S3 using s5cmd with optional dry-run and filters."""
     include = include or []
@@ -48,6 +59,8 @@ def sync_to(
             exclude=exclude,
             progress_callback=_on_progress,
             profile=profile,
+            concurrency=concurrency,
+            part_size=part_size,
         )
 
         if events == 0:

@@ -27,6 +27,8 @@ def s5_sync(
     dry_run: bool = False,
     include: Optional[List[str]] = None,
     exclude: Optional[List[str]] = None,
+    concurrency: int | None = None,
+    part_size: str | None = None,
     progress_callback: Callable[[str], None] | None = None,
     profile: Optional[str] = None,
 ) -> None:
@@ -36,6 +38,11 @@ def s5_sync(
     """
 
     cmd = ["s5cmd", "sync"]
+
+    if concurrency is not None:
+        cmd += ["--concurrency", str(concurrency)]
+    if part_size is not None:
+        cmd += ["--part-size", str(part_size)]
 
     if include:
         for pattern in include:
@@ -51,7 +58,13 @@ def s5_sync(
     destination_str = _normalise_path(destination)
     cmd += [source_str, destination_str]
 
-    log.info("running_s5cmd", command=" ".join(cmd))
+    effective_concurrency = concurrency if concurrency is not None else "default"
+    log.info(
+        "running_s5cmd",
+        command=" ".join(cmd),
+        concurrency=effective_concurrency,
+        part_size=part_size,
+    )
 
     popen_env = None
     if profile is not None:
@@ -111,6 +124,7 @@ def s5_sync(
         uploaded=uploaded,
         skipped=skipped,
         failed=failed,
+        concurrency=effective_concurrency,
     )
 
     print("--- S5CMD Sync Summary ---")
@@ -119,6 +133,7 @@ def s5_sync(
     print(f"Downloaded: {downloaded}")
     print(f"Skipped:    {skipped}")
     print(f"Failed:     {failed}")
+    print(f"Concurrency: {effective_concurrency}")
 
     if process.returncode != 0:
         stderr_message = stderr_output.strip()

@@ -261,7 +261,11 @@ def deliver(
                 description = line if line else "Syncing files"
                 upload_progress.advance(description=description)
 
-            s5_sync(sync_dir, destination, progress_callback=_on_progress)
+            s5_sync(
+                source=sync_dir,
+                destination=destination,
+                progress_callback=_on_progress,
+            )
 
             if events == 0:
                 upload_progress.advance(description="Sync completed")

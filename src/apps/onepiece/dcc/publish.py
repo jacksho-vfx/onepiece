@@ -77,6 +77,14 @@ def _validate_link_strategy(value: str) -> LinkStrategy:
     return cast(LinkStrategy, lowered)
 
 
+def _validate_positive_concurrency(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if value <= 0:
+        raise typer.BadParameter("s5-concurrency must be greater than zero")
+    return value
+
+
 def _format_dependency_summary(report: DCCDependencyReport) -> str:
     def _join_plugins(status: DCCPluginStatus, attribute: str) -> str:
         value = getattr(status, attribute)
@@ -180,6 +188,17 @@ def publish(
         "--dry-run/--no-dry-run",
         help="Synchronise to S3 without uploading new files.",
     ),
+    s5_concurrency: int | None = typer.Option(
+        None,
+        "--s5-concurrency",
+        help="Override the s5cmd --concurrency value for uploads.",
+        callback=_validate_positive_concurrency,
+    ),
+    s5_part_size: str | None = typer.Option(
+        None,
+        "--s5-part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
 ) -> None:
     """Package a scene and publish it to S3."""
 
@@ -219,6 +238,8 @@ def publish(
             link_strategy=package_links,
             force_package=force_package,
             dry_run=dry_run,
+            s5_concurrency=s5_concurrency,
+            s5_part_size=s5_part_size,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--scene-name") from exc
