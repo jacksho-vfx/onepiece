@@ -17,6 +17,27 @@ def test_demo_dashboard_ui_returns_html_shell() -> None:
     assert "<title>Perona Dashboard</title>" in response.text
 
 
+def test_demo_wrangler_scripts_can_be_listed_and_executed() -> None:
+    dummy_dashboard.prepare_demo_state()
+
+    response = client.get("/wrangler/scripts")
+
+    assert response.status_code == 200
+
+    scripts = response.json()
+    assert isinstance(scripts, list)
+    assert scripts, "Expected demo Wrangler scripts to be available"
+
+    script_id = scripts[0]["script_id"]
+    run_response = client.post(f"/wrangler/scripts/{script_id}")
+
+    assert run_response.status_code == 200
+
+    result = run_response.json()
+    assert result["script_id"] == script_id
+    assert result["status"] == "success"
+
+
 def test_demo_shot_sequences_endpoint_returns_grouped_sequences() -> None:
     response = client.get("/shots/sequences")
     assert response.status_code == 200
