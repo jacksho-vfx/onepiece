@@ -649,19 +649,81 @@ def test_run_stats_endpoint_returns_grouped_counts(client: TestClient) -> None:
 
 def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
     base = datetime(2024, 6, 1, 8, tzinfo=timezone.utc)
-    _seed_run(
-        run_id="run-1",
-        pipeline="render_shots",
-        status="succeeded",
+    orchestrator = get_pipeline_orchestrator()
+    store = orchestrator._store
+
+    def _enqueue_success(
+        run_id: str,
+        *,
+        created_at: datetime,
+        wait_seconds: int,
+        finish_offset_seconds: int,
+    ) -> None:
+        run = PipelineRun(
+            run_id=run_id,
+            pipeline="render_shots",
+            status="queued",
+            created_at=created_at,
+            updated_at=created_at,
+            parameters={},
+            definition_snapshot={"name": "render_shots", "steps": []},
+        )
+        store.create_run(
+            run,
+            PipelineRunEvent(
+                run_id=run_id,
+                pipeline="render_shots",
+                status="queued",
+                timestamp=created_at,
+                parameters={},
+            ),
+        )
+        store.append_event(
+            run_id,
+            status="running",
+            timestamp=created_at + timedelta(seconds=wait_seconds),
+            parameters={},
+            run_status="running",
+        )
+        store.append_event(
+            run_id,
+            status="succeeded",
+            timestamp=created_at + timedelta(seconds=finish_offset_seconds),
+            parameters={},
+            run_status="succeeded",
+        )
+
+    _enqueue_success(
+        "run-1",
         created_at=base,
-        updated_at=base + timedelta(seconds=20),
+        wait_seconds=5,
+        finish_offset_seconds=20,
     )
-    _seed_run(
-        run_id="run-2",
-        pipeline="render_shots",
-        status="succeeded",
+    _enqueue_success(
+        "run-2",
         created_at=base + timedelta(seconds=20),
-        updated_at=base + timedelta(seconds=70),
+        wait_seconds=30,
+        finish_offset_seconds=50,
+    )
+
+    queued_created = base + timedelta(minutes=2)
+    store.create_run(
+        PipelineRun(
+            run_id="run-backlog",
+            pipeline="render_shots",
+            status="queued",
+            created_at=queued_created,
+            updated_at=queued_created,
+            parameters={},
+            definition_snapshot={"name": "render_shots", "steps": []},
+        ),
+        PipelineRunEvent(
+            run_id="run-backlog",
+            pipeline="render_shots",
+            status="queued",
+            timestamp=queued_created,
+            parameters={},
+        ),
     )
 
     response = client.get(
@@ -672,12 +734,20 @@ def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    stats = payload["pipelines"]["render_shots"]["succeeded"]
+    pipeline_stats = payload["pipelines"]["render_shots"]
+    stats = pipeline_stats["succeeded"]
     assert stats["count"] == 2
     durations = stats["durations"]
     assert durations["min_seconds"] == 20.0
     assert durations["max_seconds"] == 50.0
     assert durations["average_seconds"] == 35.0
+    waits = stats["queue_waits"]
+    assert waits["min_seconds"] == 5.0
+    assert waits["max_seconds"] == 30.0
+    assert waits["average_seconds"] == pytest.approx(17.5)
+
+    queued_stats = pipeline_stats["queued"]
+    assert queued_stats["backlog_count"] == 1
 
 
 def test_run_stats_endpoint_validates_since_parameter(client: TestClient) -> None:

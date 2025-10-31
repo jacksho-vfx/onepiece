@@ -262,6 +262,8 @@ def test_pipeline_stats_command_displays_results(
 ) -> None:
     stats = {
         "render": {
+            "failed": {"count": 1},
+            "queued": {"count": 2, "backlog_count": 2},
             "succeeded": {
                 "count": 3,
                 "durations": {
@@ -269,8 +271,12 @@ def test_pipeline_stats_command_displays_results(
                     "min_seconds": 20.0,
                     "max_seconds": 45.0,
                 },
+                "queue_waits": {
+                    "average_seconds": 6.0,
+                    "min_seconds": 2.0,
+                    "max_seconds": 8.0,
+                },
             },
-            "failed": {"count": 1},
         }
     }
     orchestrator = SimpleNamespace(aggregate_runs=Mock(return_value=stats))
@@ -299,7 +305,11 @@ def test_pipeline_stats_command_displays_results(
     assert kwargs["include_durations"] is True
     assert kwargs["since"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
     assert "Pipeline: render" in result.stdout
-    assert "succeeded: 3 runs (avg 30.00s" in result.stdout
+    assert "queued: 2 runs [backlog: 2]" in result.stdout
+    assert (
+        "succeeded: 3 runs (avg 30.00s, min 20.00s, max 45.00s; "
+        "queue wait avg 6.00s, min 2.00s, max 8.00s)" in result.stdout
+    )
 
 
 def test_pipeline_stats_command_handles_empty(

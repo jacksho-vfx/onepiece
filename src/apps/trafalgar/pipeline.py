@@ -395,11 +395,38 @@ class PipelineRun:
             "duration_ms": self.duration_ms,
         }
 
+        def _as_int(value: Any) -> int | None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
         totals = (
             self.metrics.get("totals", {}) if isinstance(self.metrics, dict) else {}
         )
         if "step_duration_ms" in totals:
             timing["total_step_duration_ms"] = totals.get("step_duration_ms")
+
+        queue_totals = totals.get("queue_wait")
+        if isinstance(queue_totals, Mapping):
+            total_wait_value = _as_int(queue_totals.get("total_ms"))
+            count_value = _as_int(queue_totals.get("count"))
+            last_wait_value = _as_int(queue_totals.get("last_wait_ms"))
+            min_wait_value = _as_int(queue_totals.get("min_ms"))
+            max_wait_value = _as_int(queue_totals.get("max_ms"))
+            if total_wait_value is not None:
+                timing["total_queue_wait_ms"] = total_wait_value
+            if count_value is not None:
+                timing["queue_wait_count"] = count_value
+                if count_value:
+                    if total_wait_value is not None:
+                        timing["average_queue_wait_ms"] = total_wait_value / count_value
+                    if min_wait_value is not None:
+                        timing["min_queue_wait_ms"] = min_wait_value
+                    if max_wait_value is not None:
+                        timing["max_queue_wait_ms"] = max_wait_value
+            if last_wait_value is not None:
+                timing["last_queue_wait_ms"] = last_wait_value
 
         steps_payload: dict[str, Any] = {}
         if isinstance(self.metrics, dict):
@@ -774,7 +801,13 @@ class PipelineRunStore:
 
     @staticmethod
     def _initial_metrics() -> dict[str, Any]:
-        return {"steps": {}, "totals": {"step_duration_ms": 0}}
+        return {
+            "steps": {},
+            "totals": {
+                "step_duration_ms": 0,
+                "queue_wait": {},
+            },
+        }
 
     @staticmethod
     def _normalise_metrics(metrics: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -803,6 +836,11 @@ class PipelineRunStore:
                 except (TypeError, ValueError):
                     continue
             totals["step_duration_ms"] = total_duration
+        queue_source = totals.get("queue_wait", {})
+        if isinstance(queue_source, dict):
+            totals["queue_wait"] = dict(queue_source)
+        else:
+            totals["queue_wait"] = {}
         return {"steps": steps, "totals": totals}
 
     def _apply_event_metrics(
@@ -827,6 +865,10 @@ class PipelineRunStore:
             totals = {}
             metrics["totals"] = totals
         totals.setdefault("step_duration_ms", 0)
+        queue_totals = totals.setdefault("queue_wait", {})
+        if not isinstance(queue_totals, dict):
+            queue_totals = {}
+            totals["queue_wait"] = queue_totals
 
         step_name = parameters.get("step")
         duration_value = parameters.get("duration_ms")
@@ -875,8 +917,53 @@ class PipelineRunStore:
         current_finished = finished_at
         current_duration = duration_ms
 
-        if run_status == "running" and current_started is None:
-            current_started = timestamp
+        def _to_int(value: Any) -> int | None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        if run_status == "queued":
+            queue_totals["last_queued_at"] = timestamp.isoformat()
+
+        if run_status == "running":
+            anchor_text = queue_totals.pop("last_queued_at", None)
+            anchor = None
+            if isinstance(anchor_text, str):
+                try:
+                    parsed = datetime.fromisoformat(anchor_text)
+                except ValueError:
+                    parsed = None
+                if parsed is not None:
+                    if parsed.tzinfo is None:
+                        anchor = parsed.replace(tzinfo=timezone.utc)
+                    else:
+                        anchor = parsed.astimezone(timezone.utc)
+            if anchor is None:
+                anchor = created_at
+            if anchor is not None:
+                wait_delta = timestamp - anchor
+                wait_ms = int(max(wait_delta.total_seconds() * 1000, 0))
+                existing_total = _to_int(queue_totals.get("total_ms")) or 0
+                queue_totals["total_ms"] = existing_total + wait_ms
+                existing_count = _to_int(queue_totals.get("count")) or 0
+                queue_totals["count"] = existing_count + 1
+                queue_totals["last_wait_ms"] = wait_ms
+
+                previous_min = _to_int(queue_totals.get("min_ms"))
+                if previous_min is None or wait_ms < previous_min:
+                    queue_totals["min_ms"] = wait_ms
+                else:
+                    queue_totals["min_ms"] = previous_min
+
+                previous_max = _to_int(queue_totals.get("max_ms"))
+                if previous_max is None or wait_ms > previous_max:
+                    queue_totals["max_ms"] = wait_ms
+                else:
+                    queue_totals["max_ms"] = previous_max
+
+            if current_started is None:
+                current_started = timestamp
         if run_status in {"succeeded", "failed"}:
             current_finished = timestamp
             anchor = current_started or created_at
@@ -971,6 +1058,16 @@ class PipelineRunStore:
         definition_payload = self._encode_definition_snapshot(run.definition_snapshot)
         event_payload = self._encode_parameters(initial_event.parameters)
         metrics = self._normalise_metrics(run.metrics)
+        totals = metrics.setdefault("totals", {})
+        queue_totals = totals.setdefault("queue_wait", {})
+        if not isinstance(queue_totals, dict):
+            queue_totals = {}
+            totals["queue_wait"] = queue_totals
+        queue_totals.setdefault("total_ms", 0)
+        queue_totals.setdefault("count", 0)
+        queue_totals.setdefault("min_ms", None)
+        queue_totals.setdefault("max_ms", None)
+        queue_totals["last_queued_at"] = run.created_at.isoformat()
         metrics_payload = self._encode_metrics(metrics)
         encoded_started_at = self._encode_optional_datetime(run.started_at)
         encoded_finished_at = self._encode_optional_datetime(run.finished_at)
@@ -1232,6 +1329,22 @@ class PipelineRunStore:
     ) -> dict[str, dict[str, dict[str, Any]]]:
         """Return aggregated run statistics grouped by pipeline and status."""
 
+        class _QueueMetrics:
+            __slots__ = ("total_seconds", "count", "min_seconds", "max_seconds")
+
+            def __init__(
+                self,
+                *,
+                total_seconds: float,
+                count: int,
+                min_seconds: float,
+                max_seconds: float,
+            ) -> None:
+                self.total_seconds = total_seconds
+                self.count = count
+                self.min_seconds = min_seconds
+                self.max_seconds = max_seconds
+
         class _Accumulator:
             __slots__ = (
                 "count",
@@ -1239,6 +1352,10 @@ class PipelineRunStore:
                 "duration_count",
                 "duration_min",
                 "duration_max",
+                "queue_wait_sum",
+                "queue_wait_count",
+                "queue_wait_min",
+                "queue_wait_max",
             )
 
             def __init__(self) -> None:
@@ -1247,19 +1364,46 @@ class PipelineRunStore:
                 self.duration_count = 0
                 self.duration_min: float | None = None
                 self.duration_max: float | None = None
+                self.queue_wait_sum = 0.0
+                self.queue_wait_count = 0
+                self.queue_wait_min: float | None = None
+                self.queue_wait_max: float | None = None
 
-            def record(self, *, duration: float | None) -> None:
+            def record(
+                self,
+                *,
+                duration: float | None,
+                queue: _QueueMetrics | None,
+            ) -> None:
                 self.count += 1
-                if duration is None:
+                if duration is not None:
+                    self.duration_sum += duration
+                    self.duration_count += 1
+                    if self.duration_min is None or duration < self.duration_min:
+                        self.duration_min = duration
+                    if self.duration_max is None or duration > self.duration_max:
+                        self.duration_max = duration
+                if queue is None or queue.count <= 0:
                     return
-                self.duration_sum += duration
-                self.duration_count += 1
-                if self.duration_min is None or duration < self.duration_min:
-                    self.duration_min = duration
-                if self.duration_max is None or duration > self.duration_max:
-                    self.duration_max = duration
+                self.queue_wait_sum += queue.total_seconds
+                self.queue_wait_count += queue.count
+                if (
+                    self.queue_wait_min is None
+                    or queue.min_seconds < self.queue_wait_min
+                ):
+                    self.queue_wait_min = queue.min_seconds
+                if (
+                    self.queue_wait_max is None
+                    or queue.max_seconds > self.queue_wait_max
+                ):
+                    self.queue_wait_max = queue.max_seconds
 
-            def serialise(self, *, include_durations: bool) -> dict[str, Any]:
+            def serialise(
+                self,
+                *,
+                include_durations: bool,
+                status: str,
+            ) -> dict[str, Any]:
                 payload: dict[str, Any] = {"count": self.count}
                 if include_durations and self.duration_count:
                     average = self.duration_sum / self.duration_count
@@ -1268,7 +1412,46 @@ class PipelineRunStore:
                         "min_seconds": self.duration_min,
                         "max_seconds": self.duration_max,
                     }
+                if include_durations and self.queue_wait_count:
+                    queue_average = self.queue_wait_sum / self.queue_wait_count
+                    payload["queue_waits"] = {
+                        "average_seconds": queue_average,
+                        "min_seconds": self.queue_wait_min,
+                        "max_seconds": self.queue_wait_max,
+                    }
+                if status == "queued":
+                    payload["backlog_count"] = self.count
                 return payload
+
+        def _to_int(value: Any) -> int | None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _extract_queue_metrics(payload: Mapping[str, Any]) -> _QueueMetrics | None:
+            totals = payload.get("totals")
+            if not isinstance(totals, Mapping):
+                return None
+            queue = totals.get("queue_wait")
+            if not isinstance(queue, Mapping):
+                return None
+            count = _to_int(queue.get("count"))
+            total_ms = _to_int(queue.get("total_ms"))
+            if count is None or count <= 0 or total_ms is None:
+                return None
+            min_ms = _to_int(queue.get("min_ms"))
+            max_ms = _to_int(queue.get("max_ms"))
+            total_seconds = total_ms / 1000.0
+            average_seconds = total_seconds / count if count else 0.0
+            min_seconds = min_ms / 1000.0 if min_ms is not None else average_seconds
+            max_seconds = max_ms / 1000.0 if max_ms is not None else average_seconds
+            return _QueueMetrics(
+                total_seconds=total_seconds,
+                count=count,
+                min_seconds=min_seconds,
+                max_seconds=max_seconds,
+            )
 
         clauses: list[str] = []
         bindings: list[object] = []
@@ -1276,8 +1459,11 @@ class PipelineRunStore:
             clauses.append("created_at >= ?")
             bindings.append(self._encode_datetime(since))
 
+        select_fields = ["pipeline", "status", "created_at", "updated_at"]
+        if include_durations:
+            select_fields.append("metrics")
         query = [
-            "SELECT pipeline, status, created_at, updated_at",
+            "SELECT " + ", ".join(select_fields),
             "FROM pipeline_runs",
         ]
         if clauses:
@@ -1297,9 +1483,20 @@ class PipelineRunStore:
             created = self._decode_datetime(row["created_at"])
             updated = self._decode_datetime(row["updated_at"])
             duration = (updated - created).total_seconds()
+            queue_metrics: _QueueMetrics | None = None
+            if include_durations:
+                metrics_payload = row["metrics"]
+                if metrics_payload is not None:
+                    decoded = self._normalise_metrics(
+                        self._decode_metrics(metrics_payload)
+                    )
+                    queue_metrics = _extract_queue_metrics(decoded)
             bucket = grouped.setdefault(pipeline, {})
             accumulator = bucket.setdefault(status, _Accumulator())
-            accumulator.record(duration=duration if include_durations else None)
+            accumulator.record(
+                duration=duration if include_durations else None,
+                queue=queue_metrics if include_durations else None,
+            )
 
         result: dict[str, dict[str, dict[str, Any]]] = {}
         for pipeline in sorted(grouped):
@@ -1307,7 +1504,8 @@ class PipelineRunStore:
             for status in sorted(grouped[pipeline]):
                 accumulator = grouped[pipeline][status]
                 status_payload[status] = accumulator.serialise(
-                    include_durations=include_durations
+                    include_durations=include_durations,
+                    status=status,
                 )
             result[pipeline] = status_payload
         return result

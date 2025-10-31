@@ -87,6 +87,7 @@ def _format_pipeline_statistics(
                 count_int = 0
             plural = "s" if count_int != 1 else ""
             line = f"  {status}: {count_int} run{plural}"
+            details: list[str] = []
             durations = entry.get("durations")
             if isinstance(durations, Mapping):
                 average = durations.get("average_seconds")
@@ -96,10 +97,33 @@ def _format_pipeline_statistics(
                     isinstance(value, (int, float))
                     for value in (average, minimum, maximum)
                 ):
-                    line += (
-                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "  # type: ignore[arg-type]
-                        f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
+                    details.append(
+                        f"avg {float(average):.2f}s, min {float(minimum):.2f}s, max {float(maximum):.2f}s"  # type: ignore[arg-type]
                     )
+            queue_waits = entry.get("queue_waits")
+            if isinstance(queue_waits, Mapping):
+                wait_average = queue_waits.get("average_seconds")
+                wait_min = queue_waits.get("min_seconds")
+                wait_max = queue_waits.get("max_seconds")
+                if all(
+                    isinstance(value, (int, float))
+                    for value in (wait_average, wait_min, wait_max)
+                ):
+                    details.append(
+                        (
+                            f"queue wait avg {float(wait_average):.2f}s, "  # type: ignore[arg-type]
+                            f"min {float(wait_min):.2f}s, max {float(wait_max):.2f}s"  # type: ignore[arg-type]
+                        )
+                    )
+            if details:
+                line += " (" + "; ".join(details) + ")"
+            backlog = entry.get("backlog_count")
+            try:
+                backlog_int = int(backlog)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                backlog_int = 0
+            if backlog_int > 0:
+                line += f" [backlog: {backlog_int}]"
             lines.append(line)
     return lines
 
