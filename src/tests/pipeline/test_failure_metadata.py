@@ -47,7 +47,9 @@ def _wait_for_status(
         if run.status == status:
             return
         time.sleep(0.05)
-    raise AssertionError(f"Run '{run_id}' did not reach status '{status}' within timeout")
+    raise AssertionError(
+        f"Run '{run_id}' did not reach status '{status}' within timeout"
+    )
 
 
 def _auth_headers() -> dict[str, str]:
