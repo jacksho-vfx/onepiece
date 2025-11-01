@@ -13,6 +13,7 @@ orchestrator or a remote Trafalgar deployment.
 | `describe` | Display a single pipeline definition. | `text`, `json` |
 | `runs` | List recorded pipeline runs. | `text`, `json` |
 | `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
+| `prune` | Apply run retention policies and report removals. | `text`, `json` |
 | `run-status` | Inspect metadata for a specific run. | `text`, `json` |
 
 Pass `--format json` to any of these commands to emit prettified JSON payloads,
@@ -121,6 +122,26 @@ onepiece pipeline delete daily-render
 
 The command reports `Unknown pipeline` errors as argument validation problems so
 that they can be handled interactively.
+
+## Pruning pipeline run history
+
+Use `onepiece pipeline prune` to apply retention settings to the run store on
+command. The CLI invokes either the in-process orchestrator or the configured
+remote API and then displays the returned summary.
+
+```bash
+onepiece pipeline prune --max-age-hours 48 --max-runs 250
+```
+
+Both options are optional:
+
+- `--max-age-hours` prunes runs created before the configured number of hours
+  ago. Fractional values are accepted (for example `1.5` for ninety minutes).
+- `--max-runs` retains only the newest runs up to the supplied limit after the
+  prune completes.
+
+Omit both flags to use the retention policy configured in Trafalgar. Pair the
+command with `--format json` when piping the summary into automation tools.
 
 ## Provider execution context
 
