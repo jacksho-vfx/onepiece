@@ -5,9 +5,13 @@ from __future__ import annotations
 from queue import Queue
 from threading import Barrier, BrokenBarrierError, Event
 import time
+from typing import Any
 
 from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
-from apps.trafalgar.providers.pipeline_executor import PipelineExecutor, StepTriggerEvent
+from apps.trafalgar.providers.pipeline_executor import (
+    PipelineExecutor,
+    StepTriggerEvent,
+)
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
@@ -67,7 +71,7 @@ def test_event_driven_steps_execute_in_parallel() -> None:
     def source_provider(_: dict[str, object]) -> StepTriggerEvent:
         return StepTriggerEvent(name="asset.ready", payload={})
 
-    def make_listener(name: str):
+    def make_listener(name: str) -> Any:
         def provider(event: StepTriggerEvent, _: dict[str, object]) -> None:
             starts.put((name, time.perf_counter()))
             try:
