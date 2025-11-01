@@ -15,6 +15,7 @@ from . import KNOWN_SEQUENCES
 
 client = TestClient(app)
 
+
 def test_render_feed_stream() -> None:
     with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
         assert response.status_code == 200
@@ -25,6 +26,7 @@ def test_render_feed_stream() -> None:
             payloads.append(json.loads(raw_line))
     assert len(payloads) == 3
     assert all("gpuUtilisation" in item for item in payloads)
+
 
 def test_render_feed_stream_filters() -> None:
     params = {"sequence": "SQ05", "shot_id": "SQ05_SH045", "limit": 2}
@@ -39,6 +41,7 @@ def test_render_feed_stream_filters() -> None:
     assert {item["sequence"] for item in payloads} == {"SQ05"}
     assert {item["shot_id"] for item in payloads} == {"SQ05_SH045"}
 
+
 def test_metrics_summary_endpoint() -> None:
     response = client.get("/metrics")
     assert response.status_code == 200
@@ -47,6 +50,7 @@ def test_metrics_summary_endpoint() -> None:
     assert data["averages"]["fps"] > 0
     assert data["latest_sample"]["sequence"] in KNOWN_SEQUENCES
     assert any(entry["sequence"] in KNOWN_SEQUENCES for entry in data["sequences"])
+
 
 def test_metrics_summary_matches_manual_calculation() -> None:
     engine = dashboard_module.get_engine()
@@ -110,12 +114,14 @@ def test_metrics_summary_matches_manual_calculation() -> None:
 
     assert summary["latest_sample"] == expected_payload
 
+
 def test_metrics_websocket_stream() -> None:
     with client.websocket_connect("/ws/metrics") as websocket:
         payload_one = websocket.receive_json()
         payload_two = websocket.receive_json()
     assert payload_one["sequence"] in KNOWN_SEQUENCES
     assert payload_two["shot_id"].startswith("SQ")
+
 
 def test_metrics_ingest_persists_payload(tmp_path: Path) -> None:
     metrics_path = tmp_path / "metrics.ndjson"
@@ -151,6 +157,7 @@ def test_metrics_ingest_persists_payload(tmp_path: Path) -> None:
         assert stored["gpuUtilisation"] == pytest.approx(0.78)
     finally:
         dashboard_module._metrics_store = original_store
+
 
 def test_metrics_ingest_rejects_empty_payload(tmp_path: Path) -> None:
     metrics_path = tmp_path / "metrics.ndjson"

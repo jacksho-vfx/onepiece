@@ -18,12 +18,14 @@ from libraries.analytics.perona.engine import (
 
 client = TestClient(app)
 
+
 def test_dashboard_ui_root_serves_html() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"].lower()
     assert "<title>Perona Dashboard</title>" in response.text
+
 
 def test_dashboard_summary_endpoint() -> None:
     response = client.get("/dashboard/summary")
@@ -39,10 +41,12 @@ def test_dashboard_summary_endpoint() -> None:
     assert shots["total"] >= 0
     assert "by_stage" in shots
 
+
 def test_health_endpoint() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
 
 def test_settings_endpoint_defaults() -> None:
     response = client.get("/settings")
@@ -61,8 +65,10 @@ def test_settings_endpoint_defaults() -> None:
     )
     assert baseline["currency"] == DEFAULT_CURRENCY
 
+
 def test_app_version_matches_perona_version() -> None:
     assert app.version == PERONA_VERSION
+
 
 def test_render_feed_limit() -> None:
     response = client.get("/render-feed", params={"limit": 5})
@@ -73,6 +79,7 @@ def test_render_feed_limit() -> None:
     first = data[0]
     assert {"sequence", "shot_id", "fps"}.issubset(first.keys())
 
+
 def test_render_feed_filters() -> None:
     params = {"sequence": "SQ18", "shot_id": "SQ18_SH220"}
     response = client.get("/render-feed", params=params)
@@ -81,6 +88,7 @@ def test_render_feed_filters() -> None:
     assert data, "Expected filtered render feed to return samples"
     assert {item["sequence"] for item in data} == {"SQ18"}
     assert {item["shot_id"] for item in data} == {"SQ18_SH220"}
+
 
 def test_settings_reload_between_requests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -141,6 +149,7 @@ gpu_hourly_rate = 8.5
 
     monkeypatch.delenv("PERONA_SETTINGS_PATH", raising=False)
     invalidate_engine_cache()
+
 
 def test_settings_endpoint_honours_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -252,6 +261,7 @@ gpu_hourly_rate = 7.0
     assert restored.json()["baseline_cost"] == pytest.approx(default_cost)
 
     invalidate_engine_cache()
+
 
 def test_settings_endpoint_reports_warnings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

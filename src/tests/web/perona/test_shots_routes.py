@@ -9,12 +9,14 @@ from . import KNOWN_SEQUENCES
 
 client = TestClient(app)
 
+
 def test_shots_lifecycle_endpoint() -> None:
     response = client.get("/shots/lifecycle")
     assert response.status_code == 200
     data = response.json()
     assert data
     assert {"sequence", "shot_id", "current_stage"}.issubset(data[0].keys())
+
 
 def test_shots_sequences_endpoint() -> None:
     response = client.get("/shots/sequences")
@@ -29,6 +31,7 @@ def test_shots_sequences_endpoint() -> None:
         shot_ids = [shot["shot_id"] for shot in sequence["shots"]]
         assert shot_ids == sorted(shot_ids)
 
+
 def test_shots_summary_filters_by_sequence() -> None:
     response = client.get("/shots", params={"sequence": "SQ05"})
     assert response.status_code == 200
@@ -39,6 +42,7 @@ def test_shots_summary_filters_by_sequence() -> None:
     assert data["by_sequence"] == [{"name": "SQ05", "shots": 1}]
     assert not data["active_shots"]
 
+
 def test_shots_lifecycle_filters_by_artist() -> None:
     response = client.get("/shots/lifecycle", params={"artist": "M. Chen"})
     assert response.status_code == 200
@@ -47,6 +51,7 @@ def test_shots_lifecycle_filters_by_artist() -> None:
     shot = data[0]
     assert shot["sequence"] == "SQ12"
     assert shot["shot_id"] == "SQ12_SH010"
+
 
 def test_shots_filters_by_date_range() -> None:
     params = {
@@ -60,6 +65,7 @@ def test_shots_filters_by_date_range() -> None:
     sequences = {item["name"] for item in data["by_sequence"]}
     assert "SQ05" in sequences
     assert "SQ05" not in {shot["sequence"] for shot in data["active_shots"]}
+
 
 def test_shots_filters_include_active_stages_within_window() -> None:
     now = datetime.utcnow()
@@ -79,6 +85,7 @@ def test_shots_filters_include_active_stages_within_window() -> None:
     active_sequences = {shot["sequence"] for shot in data["active_shots"]}
     assert {"SQ12", "SQ18", "SQ09"}.issubset(active_sequences)
 
+
 def test_shot_sequences_support_filters() -> None:
     response = client.get("/shots/sequences", params={"artist": "R. Ali"})
     assert response.status_code == 200
@@ -87,6 +94,7 @@ def test_shot_sequences_support_filters() -> None:
     sequence = data[0]
     assert sequence["name"] == "SQ18"
     assert {shot["shot_id"] for shot in sequence["shots"]} == {"SQ18_SH220"}
+
 
 def test_shots_summary_endpoint() -> None:
     response = client.get("/shots")

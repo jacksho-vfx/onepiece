@@ -25,6 +25,7 @@ from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 client = TestClient(app)
 
+
 def test_wrangler_scripts_listing_returns_metadata() -> None:
     wrangler_module.register_script(
         wrangler_module.WranglerScriptMetadata(
@@ -164,11 +165,13 @@ def test_wrangler_scripts_listing_returns_metadata() -> None:
         "tags": [],
     }
 
+
 def test_wrangler_execute_missing_script_returns_404() -> None:
     response = client.post("/wrangler/scripts/unknown-task")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Unknown Wrangler script."}
+
 
 def test_wrangler_execute_script_returns_payload() -> None:
     async def runner() -> wrangler_module.WranglerScriptResult:
@@ -197,6 +200,7 @@ def test_wrangler_execute_script_returns_payload() -> None:
     assert payload["message"] == "Completed"
     assert payload["payload"] == {"refreshed": 12}
 
+
 def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None:
     response = client.post("/wrangler/scripts/boost_gpu_utilisation")
 
@@ -220,6 +224,7 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
         assert item["sequence"]
         assert isinstance(item["recommendation"], str)
         assert item["recommendation"]
+
 
 def test_wrangler_evaluate_optimisation_playbook_returns_ranked_scenarios(
     monkeypatch: pytest.MonkeyPatch,
@@ -314,6 +319,7 @@ def test_wrangler_evaluate_optimisation_playbook_returns_ranked_scenarios(
     assert leader["name"] in payload["message"]
     assert formatted_amount in payload["message"]
 
+
 def test_wrangler_check_telemetry_freshness_reports_age(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -353,6 +359,7 @@ def test_wrangler_check_telemetry_freshness_reports_age(
     assert body["age_minutes"] is not None
     assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
 
+
 def test_wrangler_check_telemetry_freshness_handles_missing_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -386,6 +393,7 @@ def test_wrangler_check_telemetry_freshness_handles_missing_samples(
     assert body["age_minutes"] is None
     assert body["status"] is None
     assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
+
 
 def test_wrangler_audit_telemetry_coverage_classifies_buckets(
     monkeypatch: pytest.MonkeyPatch,
@@ -539,6 +547,7 @@ def test_wrangler_audit_telemetry_coverage_classifies_buckets(
     assert missing["last_seen"] is None
     assert missing["age_minutes"] is None
 
+
 def test_wrangler_audit_telemetry_coverage_handles_empty_telemetry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -564,6 +573,7 @@ def test_wrangler_audit_telemetry_coverage_handles_empty_telemetry(
     assert body["counts"] == {"healthy": 0, "warning": 0, "stale": 0, "missing": 0}
     assert body["attention_total"] == 0
     assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
+
 
 def test_wrangler_analyse_cost_drivers_script_returns_summary(
     monkeypatch: pytest.MonkeyPatch,
@@ -622,6 +632,7 @@ def test_wrangler_analyse_cost_drivers_script_returns_summary(
     assert body["recommended_actions"] == list(recommendations)
     mock_engine.cost_insights.assert_called_once_with(top_n=5)
 
+
 def test_wrangler_analyse_cost_drivers_script_handles_missing_statistics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -643,6 +654,7 @@ def test_wrangler_analyse_cost_drivers_script_handles_missing_statistics(
     assert body["top_features"] == []
     assert body["recommended_actions"] == list(recommendations)
     mock_engine.cost_insights.assert_called_once_with(top_n=5)
+
 
 def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
     monkeypatch: pytest.MonkeyPatch,
@@ -714,6 +726,7 @@ def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
     assert body["projected_savings"]["amount"] == pytest.approx(400.0)
     assert any("Projected utilisation" in note for note in body["notes"])
 
+
 def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     response = client.post("/wrangler/scripts/escalate_deadline_shots")
 
@@ -730,6 +743,7 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
     assert first["drivers"]
     assert any("deadline" in driver.lower() for driver in first["drivers"])
     assert "deadline_horizon" in first
+
 
 def test_wrangler_flag_frame_time_regressions_reports_sequences(
     monkeypatch: pytest.MonkeyPatch,
@@ -795,6 +809,7 @@ def test_wrangler_flag_frame_time_regressions_reports_sequences(
         or "profil" in regression["recommendation"].lower()
     )
 
+
 def test_wrangler_flag_frame_time_regressions_reports_healthy_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -846,6 +861,7 @@ def test_wrangler_flag_frame_time_regressions_reports_healthy_message(
     assert body["regression_count"] == 0
     assert body["threshold_percentage"] == pytest.approx(10.0, rel=0, abs=0.01)
 
+
 def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
     response = client.post("/wrangler/scripts/flag_render_volatility")
 
@@ -869,6 +885,7 @@ def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
     assert isinstance(variance["sample_count"], int)
     assert variance["average_frame_time_ms"] >= 0
     assert "coefficient_of_variation" in variance
+
 
 def test_wrangler_flag_render_error_streaks_script_ranks_streaks(
     monkeypatch: pytest.MonkeyPatch,
@@ -961,6 +978,7 @@ def test_wrangler_flag_render_error_streaks_script_ranks_streaks(
 
     clear_engine.stream_render_metrics.assert_called_once_with()
 
+
 def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
     response = client.post("/wrangler/scripts/explain_pnl_delta")
 
@@ -991,6 +1009,7 @@ def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
     assert isinstance(contributions[0]["delta_cost"], float)
     assert isinstance(contributions[0]["percentage_points"], float)
     assert contributions[0]["factor"] in payload["message"]
+
 
 def test_wrangler_explain_pnl_delta_handles_missing_contributions(
     monkeypatch: pytest.MonkeyPatch,
@@ -1043,6 +1062,7 @@ def test_wrangler_explain_pnl_delta_handles_missing_contributions(
     mock_engine.pnl_explainer.assert_called_once_with()
     mock_engine.estimate_cost.assert_called_once_with(DEFAULT_BASELINE_COST_INPUT)
 
+
 def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None:
     response = client.post("/wrangler/scripts/rebuild_unstable_caches")
 
@@ -1072,6 +1092,7 @@ def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None
         assert metrics["resim_count"] >= 0
     if "avg_cache_gb" in metrics:
         assert metrics["avg_cache_gb"] > 0
+
 
 def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
     response = client.post("/wrangler/scripts/list_failing_jobs")
@@ -1104,6 +1125,7 @@ def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
         assert isinstance(entry["recommended_follow_up"], str)
         assert entry["recommended_follow_up"]
 
+
 def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> None:
     response = client.post("/wrangler/scripts/highlight_stage_bottlenecks")
 
@@ -1134,6 +1156,7 @@ def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> No
 
     assert isinstance(body["next_steps"], list)
     assert body["next_steps"], "Expected suggested next steps"
+
 
 def test_wrangler_identify_unowned_shots_flags_missing_assignments(
     monkeypatch: pytest.MonkeyPatch,
@@ -1210,6 +1233,7 @@ def test_wrangler_identify_unowned_shots_flags_missing_assignments(
     assert flagged["current_stage"].lower() == "comp"
     assert flagged["stage_started_at"].endswith("+00:00")
     assert flagged["suggested_follow_up"].lower().startswith("assign comp")
+
 
 def test_wrangler_identify_unowned_shots_handles_fully_assigned(
     monkeypatch: pytest.MonkeyPatch,

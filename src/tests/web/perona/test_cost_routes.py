@@ -11,6 +11,7 @@ from libraries.analytics.perona.engine import DEFAULT_CURRENCY, DEFAULT_SETTINGS
 
 client = TestClient(app)
 
+
 def test_cost_estimate_endpoint() -> None:
     payload = {
         "frame_count": 60,
@@ -30,6 +31,7 @@ def test_cost_estimate_endpoint() -> None:
     assert data["cost_per_frame"] == pytest.approx(0.7249, rel=1e-4)
     assert data["currency"] == DEFAULT_CURRENCY
 
+
 def test_cost_estimate_endpoint_supports_currency_override() -> None:
     payload = {
         "frame_count": 60,
@@ -46,6 +48,7 @@ def test_cost_estimate_endpoint_supports_currency_override() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["currency"] == "USD"
+
 
 def test_cost_insights_endpoint_returns_payload() -> None:
     invalidate_engine_cache()
@@ -69,6 +72,7 @@ def test_cost_insights_endpoint_returns_payload() -> None:
     assert isinstance(recommendations, list)
     assert len(recommendations) == 2
     assert data["settings_path"] == str(DEFAULT_SETTINGS_PATH.expanduser())
+
 
 def test_cost_insights_endpoint_handles_missing_dataset(
     monkeypatch: pytest.MonkeyPatch,
@@ -96,6 +100,7 @@ def test_cost_insights_endpoint_handles_missing_dataset(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "No telemetry statistics available."}
+
 
 def test_settings_signature_uses_high_resolution_timestamps(
     monkeypatch: pytest.MonkeyPatch,
@@ -135,12 +140,14 @@ def test_settings_signature_uses_high_resolution_timestamps(
 
     assert first_signature != second_signature
 
+
 def test_risk_heatmap_endpoint() -> None:
     response = client.get("/risk-heatmap")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 3
     assert data[0]["risk_score"] >= data[-1]["risk_score"]
+
 
 def test_pnl_endpoint() -> None:
     response = client.get("/pnl")
@@ -151,6 +158,7 @@ def test_pnl_endpoint() -> None:
     assert data["current_cost"] == pytest.approx(
         data["baseline_cost"] + data["delta_cost"]
     )
+
 
 def test_optimization_backtest_endpoint() -> None:
     payload = {
@@ -174,6 +182,7 @@ def test_optimization_backtest_endpoint() -> None:
     assert scenario["savings_vs_baseline"] > 0
     assert scenario["savings_percent"] > 0
 
+
 def test_risk_summary_endpoint() -> None:
     response = client.get("/risk")
     assert response.status_code == 200
@@ -183,6 +192,7 @@ def test_risk_summary_endpoint() -> None:
     assert len(data["top_risks"]) <= 3
     for critical in data["critical"]:
         assert critical["risk_score"] >= 75
+
 
 def test_costs_summary_endpoint() -> None:
     response = client.get("/costs")
@@ -200,6 +210,7 @@ def test_costs_summary_endpoint() -> None:
     delta = data["cost_per_frame"]["current"] - data["cost_per_frame"]["baseline"]
     assert data["cost_per_frame"]["delta"] == pytest.approx(delta, rel=1e-4)
 
+
 def test_daily_report_csv_export() -> None:
     response = client.get("/reports/daily", params={"format": "csv"})
     assert response.status_code == 200
@@ -215,12 +226,14 @@ def test_daily_report_csv_export() -> None:
     assert any(line.startswith("metrics.total_samples,") for line in lines)
     assert any("risk.top_risks[1].risk_score" in line for line in lines)
 
+
 def test_daily_report_pdf_export() -> None:
     response = client.get("/reports/daily", params={"format": "pdf"})
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
     assert len(response.content) > 200
+
 
 def test_daily_report_rejects_unknown_format() -> None:
     response = client.get("/reports/daily", params={"format": "txt"})
