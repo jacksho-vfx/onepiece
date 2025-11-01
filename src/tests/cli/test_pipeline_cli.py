@@ -1167,7 +1167,12 @@ def test_pipeline_watch_surfaces_failure_error(monkeypatch: MonkeyPatch) -> None
                 "pipeline": "orchestration.daily",
                 "status": "failed",
                 "timestamp": "2024-01-01T10:10:00+00:00",
-                "parameters": {"error": "step ingest failed"},
+                "parameters": {
+                    "error": "step ingest failed",
+                    "error_message": "step ingest failed",
+                    "error_type": "RuntimeError",
+                    "traceback": "Traceback (most recent call last):\nRuntimeError: step ingest failed\n",
+                },
             }
         ]
     )
@@ -1177,7 +1182,9 @@ def test_pipeline_watch_surfaces_failure_error(monkeypatch: MonkeyPatch) -> None
 
     assert result.exit_code == 0
     assert "failed" in result.output
-    assert "Error: step ingest failed" in result.output
+    assert "Error: step ingest failed (RuntimeError)" in result.output
+    assert "Traceback:" in result.output
+    assert "RuntimeError: step ingest failed" in result.output
 
 
 def test_pipeline_watch_missing_run(monkeypatch: MonkeyPatch) -> None:

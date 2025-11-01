@@ -13,6 +13,7 @@ from threading import Lock
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Mapping, cast
 import json
 import sqlite3
+import traceback
 import uuid
 
 import portalocker
@@ -25,6 +26,21 @@ from libraries.pipeline.models import Pipeline, PipelineStep
 logger = logging.getLogger(__name__)
 PROVIDER_REFERENCE_METADATA_KEY = pipeline_executor.PROVIDER_REFERENCE_METADATA_KEY
 _UNSET: Any = object()
+
+
+def _serialise_exception(error: BaseException) -> dict[str, str]:
+    """Return a serialisable payload describing *error*."""
+
+    error_message = str(error) or error.__class__.__name__
+    traceback_text = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    return {
+        "error": error_message,
+        "error_type": type(error).__name__,
+        "error_message": error_message,
+        "traceback": traceback_text,
+    }
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -1168,6 +1184,7 @@ class PipelineRunStore:
         parameters: Mapping[str, Any],
         run_status: str | None,
     ) -> None:
+        stored_parameters = dict(parameters)
         with self._lock:
             cursor = self._connection.execute(
                 """
@@ -1188,14 +1205,14 @@ class PipelineRunStore:
             started_at = self._decode_optional_datetime(row["started_at"])
             finished_at = self._decode_optional_datetime(row["finished_at"])
             duration_ms = row["duration_ms"]
-            encoded_parameters = self._encode_parameters(parameters)
+            encoded_parameters = self._encode_parameters(stored_parameters)
             encoded_timestamp = self._encode_datetime(timestamp)
 
             metrics, started_at, finished_at, duration_ms = self._apply_event_metrics(
                 metrics=metrics,
                 status=status,
                 timestamp=timestamp,
-                parameters=parameters,
+                parameters=stored_parameters,
                 run_status=run_status,
                 created_at=created_at,
                 started_at=started_at,
@@ -1263,7 +1280,7 @@ class PipelineRunStore:
             pipeline=pipeline,
             status=status,
             timestamp=timestamp,
-            parameters=dict(parameters),
+            parameters=stored_parameters,
         )
         self._publish_event(subscribers, event)
 
@@ -2022,10 +2039,11 @@ class PipelineOrchestrator:
                         ),
                     )
                 except Exception as exc:
+                    failure_payload = _serialise_exception(exc)
                     self._append_event(
                         run_id,
                         "failed",
-                        parameters={"error": str(exc)},
+                        parameters=failure_payload,
                     )
                 else:
                     self._append_event(run_id, "succeeded")
@@ -2178,7 +2196,7 @@ class PipelineOrchestrator:
                     "payload": dict(event.payload),
                 }
             if error is not None:
-                payload["error"] = str(error)
+                payload.update(_serialise_exception(error))
             self._append_event(run_id, status, parameters=payload)
             return context
 
