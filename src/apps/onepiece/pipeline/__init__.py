@@ -737,11 +737,47 @@ def _format_event_parameters(parameters: Mapping[str, Any]) -> Iterable[str]:
             formatted = json.dumps(payload, sort_keys=True)
             yield f"  Trigger payload: {formatted}"
 
-    error_text = _coerce_display_text(parameters.get("error"))
-    if error_text:
-        yield f"  Error: {error_text}"
+    error_message = _coerce_display_text(parameters.get("error_message"))
+    error_type = _coerce_display_text(parameters.get("error_type"))
+    error_fallback = _coerce_display_text(parameters.get("error"))
+    if error_message and error_type:
+        yield f"  Error: {error_message} ({error_type})"
+    elif error_message:
+        yield f"  Error: {error_message}"
+    elif error_type and error_fallback:
+        yield f"  Error: {error_fallback} ({error_type})"
+    elif error_fallback:
+        yield f"  Error: {error_fallback}"
+    elif error_type:
+        yield f"  Error: {error_type}"
 
-    ignored_keys = {"step", "event", "error"}
+    traceback_value = parameters.get("traceback")
+    traceback_lines: list[str] = []
+    if isinstance(traceback_value, str):
+        text = traceback_value.rstrip()
+        if text:
+            traceback_lines = text.splitlines()
+    elif isinstance(traceback_value, Sequence) and not isinstance(
+        traceback_value, (str, bytes, bytearray)
+    ):
+        traceback_lines = [str(line).rstrip("\n") for line in traceback_value]
+
+    if traceback_lines:
+        yield "  Traceback:"
+        for line in traceback_lines:
+            if line:
+                yield f"    {line}"
+            else:
+                yield ""
+
+    ignored_keys = {
+        "step",
+        "event",
+        "error",
+        "error_type",
+        "error_message",
+        "traceback",
+    }
     extras = [
         (str(key), parameters[key]) for key in parameters if key not in ignored_keys
     ]
