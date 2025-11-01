@@ -35,6 +35,25 @@ database = "{database}"
     assert context.pipeline_storage == {"database": str(database)}
 
 
+def test_load_profile_exposes_executor_event_workers(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write(
+        workspace / "onepiece.toml",
+        """
+default_profile = "default"
+
+[profiles.default.pipeline.executor]
+event_max_workers = 4
+""".strip()
+        + "\n",
+    )
+
+    context = load_profile(workspace=workspace)
+
+    assert context.pipeline_executor_event_max_workers == 4
+
+
 def test_load_profile_merges_precedence(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:

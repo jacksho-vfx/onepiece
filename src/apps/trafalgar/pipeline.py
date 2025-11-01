@@ -2491,12 +2491,17 @@ def configure_orchestrator_from_profile(
     else:
         max_workers = max(1, profile.pipeline_workers_max)
 
+    executor = pipeline_executor.PipelineExecutor(
+        event_max_workers=profile.pipeline_executor_event_max_workers
+    )
+
     orchestrator = orchestrator_factory(
         definitions,
         store=store,
         retention=retention,
         definition_store=definition_store,
         max_workers=max_workers,
+        executor=executor,
     )
     set_pipeline_orchestrator(orchestrator)
     return orchestrator
