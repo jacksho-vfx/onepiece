@@ -305,6 +305,21 @@ def run_statistics(
     return JSONResponse(content={"pipelines": stats})
 
 
+@router.get("/workers/metrics")
+def worker_metrics(
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    """Return the current worker pool utilisation for the orchestrator."""
+
+    orchestrator = get_pipeline_orchestrator()
+    metrics = orchestrator.worker_pool_metrics()
+    payload = {
+        "max_workers": metrics.max_workers,
+        "active_workers": metrics.active_workers,
+    }
+    return JSONResponse(content=payload)
+
+
 @router.get("/runs/{run_id}")
 def get_run(
     run_id: str,

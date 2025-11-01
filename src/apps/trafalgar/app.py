@@ -6,6 +6,7 @@ from multiprocessing import Process
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+import json
 import os
 import secrets
 import webbrowser
@@ -23,6 +24,7 @@ from apps.trafalgar.pipeline import (
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
+    WorkerPoolMetrics,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 
@@ -49,6 +51,8 @@ pipeline_app = typer.Typer(
     name="pipeline",
     help="Interact with the Trafalgar pipeline orchestrator.",
 )
+
+_VALID_OUTPUT_FORMATS = {"text", "json"}
 
 
 @pipeline_app.callback()
@@ -126,6 +130,27 @@ def _format_pipeline_statistics(
                 line += f" [backlog: {backlog_int}]"
             lines.append(line)
     return lines
+
+
+def _resolve_output_format(raw: str) -> str:
+    value = raw.strip().lower()
+    if not value:
+        return "text"
+    if value not in _VALID_OUTPUT_FORMATS:
+        raise typer.BadParameter(
+            "--format must be either 'text' or 'json'.",
+            param_hint="--format",
+        )
+    return value
+
+
+def _format_worker_metrics(metrics: WorkerPoolMetrics) -> str:
+    limit = metrics.max_workers
+    if limit is None:
+        limit_display = "unbounded"
+    else:
+        limit_display = str(int(limit))
+    return f"Active workers: {int(metrics.active_workers)} (limit: {limit_display})."
 
 
 def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
@@ -231,6 +256,31 @@ def pipeline_list() -> None:
         if definition.parameters:
             params = ", ".join(sorted(definition.parameters))
             typer.echo(f"  Parameters: {params}")
+
+
+@pipeline_app.command("workers")
+def pipeline_workers(
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Display the current worker pool utilisation."""
+
+    output_format = _resolve_output_format(format)
+
+    orchestrator = get_pipeline_orchestrator()
+    metrics = orchestrator.worker_pool_metrics()
+
+    payload = {
+        "max_workers": metrics.max_workers,
+        "active_workers": metrics.active_workers,
+    }
+
+    if output_format == "json":
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    typer.echo(_format_worker_metrics(metrics))
 
 
 @pipeline_app.command("run")

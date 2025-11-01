@@ -14,6 +14,7 @@ orchestrator or a remote Trafalgar deployment.
 | `runs` | List recorded pipeline runs. | `text`, `json` |
 | `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
 | `run-status` | Inspect metadata for a specific run. | `text`, `json` |
+| `workers` | Inspect current worker pool utilisation. | `text`, `json` |
 
 Pass `--format json` to any of these commands to emit prettified JSON payloads,
 which is useful when scripting against the CLI. The default `text` format
@@ -110,6 +111,21 @@ Omitting the key keeps the previous single-worker behaviour or falls back to
 For persistence layouts and retention options, consult
 [`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamepipelinestorage)
 so CLI-driven deployments match the storage settings used in Trafalgar.
+
+### Monitoring worker capacity
+
+The worker pool metrics endpoint provides quick visibility into how busy the
+orchestrator is. Run `onepiece pipeline workers` to fetch the latest snapshot:
+
+```bash
+onepiece pipeline workers
+# Active workers: 2 (limit: 6).
+```
+
+Supply `--format json` when feeding the metrics into monitoring dashboards or
+automation jobs. When targeting a remote Trafalgar deployment, the CLI proxies
+the `GET /workers/metrics` API with the same authentication headers that power
+other pipeline commands.
 
 ## Deleting pipelines
 

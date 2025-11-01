@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
@@ -329,3 +330,69 @@ def test_pipeline_stats_command_handles_empty(
     assert result.exit_code == 0
     assert orchestrator.aggregate_runs.called
     assert "No pipeline run statistics available." in result.stdout
+
+
+def test_pipeline_workers_command_displays_metrics(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    metrics = SimpleNamespace(max_workers=5, active_workers=2)
+    orchestrator = SimpleNamespace(worker_pool_metrics=Mock(return_value=metrics))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "workers"])
+
+    assert result.exit_code == 0
+    orchestrator.worker_pool_metrics.assert_called_once()
+    assert "Active workers: 2 (limit: 5)." in result.stdout
+
+
+def test_pipeline_workers_command_supports_json(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    metrics = SimpleNamespace(max_workers=None, active_workers=1)
+    orchestrator = SimpleNamespace(worker_pool_metrics=Mock(return_value=metrics))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        ["pipeline", "workers", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload == {"max_workers": None, "active_workers": 1}
+
+
+def test_pipeline_workers_command_validates_format(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    metrics = SimpleNamespace(max_workers=3, active_workers=1)
+    orchestrator = SimpleNamespace(worker_pool_metrics=Mock(return_value=metrics))
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+    mocker.patch(
+        "apps.trafalgar.app.get_pipeline_orchestrator",
+        return_value=orchestrator,
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        ["pipeline", "workers", "--format", "yaml"],
+    )
+
+    assert result.exit_code != 0
+    orchestrator.worker_pool_metrics.assert_not_called()
+    assert "--format must be either 'text' or 'json'." in result.stderr
