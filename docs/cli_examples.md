@@ -7,6 +7,7 @@
 - [OnePiece CLI](#onepiece-cli-onepiece--python--m-appsonepiece-) — Explore ingest, DCC, render, review, and validation commands.
 - [Trafalgar CLI](#trafalgar-cli-python--m-appstrafalgar-) — Run the dashboard, ingest, and render services from the console.
 - [Uta Control Center](#uta-control-center-onepiece-uta-) — Launch the browser-based command catalog and automation bridge.
+- [Tester CLI](#tester-cli-python--m-appstester-) — Spin up seeded demo dashboards and restore walkthrough assets in seconds.
 
 ## OnePiece CLI (`onepiece …` / `python -m apps.onepiece …`)
 
@@ -149,4 +150,14 @@ The Trafalgar Typer app exposes dashboard and ingest helpers under `web` and `in
 - `python -m apps.uta serve [--host <host>] [--port <port>] [--reload/--no-reload] [--open-browser/--no-browser]` — launch the browser UI that introspects every OnePiece CLI command, groups them into tabs, and embeds the Trafalgar dashboard within the same session. The interface now ships with a persistent search/favourites bar, density badges for parameter-heavy commands, and clearer status chips for long-running jobs.
 - `python -m apps.uta serve --no-browser` — start the server without opening a browser automatically (useful on headless hosts or when tunnelling the port).
 - `curl -X POST http://127.0.0.1:8050/api/run -H 'Content-Type: application/json' -d '{"path": ["aws", "ingest"], "extra_args": "--help"}'` — invoke a command through the JSON API to integrate the UI runner with automation.
+
+## Tester CLI (`python -m apps.tester …`)
+
+The tester entry point orchestrates the bundled demo surfaces so you can tour the dashboards or capture screenshots without connecting to production systems. It prepares seeded datasets, ensures optional dependencies like `uvicorn` are available, and opens browser tabs automatically.
+
+- `python -m apps.tester present [--host <host>] [--log-level <level>] [--open-browser/--no-browser] [--browser-path <alias>] [--browser-delay <seconds>] [--skip-create]` — run pipeline presentation hooks, seed demo datasets, and launch every dashboard. Use `--skip-create` to reuse existing fixtures without restaging them. 【F:src/apps/tester/app.py†L1-L220】
+- `python -m apps.tester open [--host <host>] [--log-level <level>] [--open-browser/--no-browser]` — launch the demo dashboards without rerunning presentation hooks. Handy when iterating on UI changes or verifying copy updates. 【F:src/apps/tester/app.py†L221-L420】
+- `python -m apps.tester close` — terminate lingering demo processes and reclaim the reserved ports. 【F:src/apps/tester/app.py†L221-L420】
+
+When the helper detects that `uvicorn` is missing it exits with an actionable hint (`pip install onepiece[uvicorn]`) so you can install the optional server dependency before retrying. On platforms without `psutil` it falls back to `lsof`/`netstat` lookups to cleanly reclaim demo ports, keeping the command reliable on bare workstations and CI runners alike. Pipeline demo manifests are staged from `docs/examples/pipelines/` and restored automatically once the demos shut down so repeated walkthroughs remain deterministic. 【F:src/apps/tester/app.py†L1-L420】【F:src/apps/tester/presentation.py†L1-L220】
 
