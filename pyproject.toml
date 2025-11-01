@@ -89,32 +89,52 @@ target-version = "py312"
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = ["src"]
-packages = ["apps", "libraries", "tests"]
+files = ["src/apps", "src/libraries", "src/tests"]
+strict = true
+pretty = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+exclude = "^(\\.venv|build|dist|\\.git|\\.mypy_cache)/"
+disallow_untyped_decorators = false
+ignore_missing_imports = true
+warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
-module = "structlog"
+module = "pydantic.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "onepiece.tests.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "onepiece.libraries.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "apps.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "nuke"
+module = "pydantic_settings.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "mypy-pymel.*"
+module = "av.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "imageio.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pymel.*"
+ignore_missing_imports = true
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "nuke.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "typer.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "typer.testing.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "requests.*"
+ignore_missing_imports = false
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -24,7 +24,7 @@ lint:
 	$(VENV)/ruff check src
 
 typecheck:
-	$(VENV)/mypy src --strict
+	$(VENV)/mypy
 
 test:
 	$(VENV)/pytest --maxfail=1 --disable-warnings -q
@@ -33,12 +33,7 @@ install-dev:
 	rm -rf .venv
 	python3 -m venv .venv
 	$(PIP) install -U pip
-	if [ -f requirements.txt ]; then $(PIP) install -r requirements.txt; fi
-	$(PIP) install black ruff mypy pytest pre-commit
-	$(PIP) install pydantic pydantic-settings typer
-	$(PIP) install types-requests types-PyYAML
-	$(PIP) install universal-pathlib
-	$(PIP) install requests types-requests
+	$(PIP) install -e .[dev]
 
 precommit:
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure --config $(PRE_COMMIT_CONFIG)
