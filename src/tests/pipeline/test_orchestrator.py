@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from queue import Queue
-from threading import Event
+from threading import Barrier, BrokenBarrierError, Event
 import time
+from typing import Any
 
 from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
-from libraries.pipeline.models import Pipeline, PipelineStep
+from apps.trafalgar.providers.pipeline_executor import (
+    PipelineExecutor,
+    StepTriggerEvent,
+)
+from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
 def _wait_for_completion(
@@ -55,6 +60,63 @@ def test_pipeline_runs_execute_concurrently_with_configured_max_workers() -> Non
     finally:
         for event in release_events.values():
             event.set()
+        orchestrator.shutdown()
+
+
+def test_event_driven_steps_execute_in_parallel() -> None:
+    barrier = Barrier(2)
+    starts: Queue[tuple[str, float]] = Queue()
+    finishes: Queue[tuple[str, float]] = Queue()
+
+    def source_provider(_: dict[str, object]) -> StepTriggerEvent:
+        return StepTriggerEvent(name="asset.ready", payload={})
+
+    def make_listener(name: str) -> Any:
+        def provider(event: StepTriggerEvent, _: dict[str, object]) -> None:
+            starts.put((name, time.perf_counter()))
+            try:
+                barrier.wait(timeout=5)
+            except BrokenBarrierError as exc:  # pragma: no cover - defensive guard
+                raise AssertionError(
+                    f"event-driven step '{name}' did not run in parallel"
+                ) from exc
+            finishes.put((name, time.perf_counter()))
+
+        return provider
+
+    pipeline = Pipeline(
+        name="events",
+        steps=[
+            PipelineStep(name="seed", provider=source_provider),
+            PipelineStep(
+                name="listener_a",
+                provider=make_listener("listener_a"),
+                trigger=TriggerPolicy(kind="event", event="asset.ready"),
+            ),
+            PipelineStep(
+                name="listener_b",
+                provider=make_listener("listener_b"),
+                trigger=TriggerPolicy(kind="event", event="asset.ready"),
+            ),
+        ],
+    )
+    definition = PipelineDefinition(name="events", pipeline=pipeline)
+    executor = PipelineExecutor(event_max_workers=2)
+    orchestrator = PipelineOrchestrator((definition,), executor=executor)
+
+    try:
+        run = orchestrator.trigger_run("events", parameters={})
+        _wait_for_completion(orchestrator, run.run_id)
+
+        first_start = starts.get(timeout=1.0)
+        second_start = starts.get(timeout=1.0)
+        assert {first_start[0], second_start[0]} == {"listener_a", "listener_b"}
+        assert abs(first_start[1] - second_start[1]) < 0.5
+
+        first_finish = finishes.get(timeout=1.0)
+        second_finish = finishes.get(timeout=1.0)
+        assert {first_finish[0], second_finish[0]} == {"listener_a", "listener_b"}
+    finally:
         orchestrator.shutdown()
 
 

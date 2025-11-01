@@ -41,6 +41,10 @@ class ProfileContext:
         Maximum number of concurrent pipeline workers allowed for this
         profile.  When unspecified the value defaults to the number of CPUs on
         the current host (falling back to ``1`` if unknown).
+    pipeline_executor_event_max_workers:
+        Optional upper bound for concurrent event-driven pipeline step
+        execution.  When unspecified, event-driven steps share the sequential
+        executor pool.
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
@@ -52,6 +56,7 @@ class ProfileContext:
     pipeline_storage: Mapping[str, Any]
     sources: tuple[Path, ...]
     pipeline_workers_max: int
+    pipeline_executor_event_max_workers: int | None
 
 
 def load_profile(
@@ -118,6 +123,9 @@ def load_profile(
 
     pipeline_storage = _extract_pipeline_storage(selected_profile, profile_data)
     pipeline_workers_max = _extract_pipeline_workers_max(selected_profile, profile_data)
+    pipeline_executor_event_max_workers = _extract_pipeline_executor_event_max_workers(
+        selected_profile, profile_data
+    )
 
     return ProfileContext(
         name=selected_profile,
@@ -126,6 +134,7 @@ def load_profile(
         pipeline_storage=pipeline_storage,
         sources=tuple(sources),
         pipeline_workers_max=pipeline_workers_max,
+        pipeline_executor_event_max_workers=pipeline_executor_event_max_workers,
     )
 
 
@@ -316,6 +325,41 @@ def _extract_pipeline_workers_max(
     if max_workers < 1:
         raise OnePieceConfigError(
             f"Profile '{profile_name}' pipeline.workers.max must be at least 1"
+        )
+
+    return max_workers
+
+
+def _extract_pipeline_executor_event_max_workers(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> int | None:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
+    executor_config = pipeline_config.get("executor")
+    if executor_config is None:
+        return None
+    if not isinstance(executor_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor section must be a mapping"
+        )
+
+    raw_value = executor_config.get("event_max_workers")
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.event_max_workers must be an integer"
+        )
+
+    try:
+        max_workers = int(raw_value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.event_max_workers must be an integer"
+        ) from exc
+
+    if max_workers < 1:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.event_max_workers must be at least 1"
         )
 
     return max_workers

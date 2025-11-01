@@ -6,8 +6,15 @@ import asyncio
 import inspect
 from collections import deque
 from collections.abc import AsyncIterable
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Executor,
+    Future,
+    ThreadPoolExecutor,
+    wait,
+)
 from dataclasses import dataclass, field, replace
+from contextlib import ExitStack
 from typing import Any, Callable, Deque, Iterable, Mapping, Protocol
 
 from libraries.pipeline.factories import resolve_provider
@@ -73,6 +80,7 @@ class PipelineExecutor:
         *,
         step_factories: Mapping[str, Callable[[Mapping[str, Any]], Any]] | None = None,
         event_queue_limit: int | None = 10_000,
+        event_max_workers: int | None = None,
     ) -> None:
         if step_factories is None:
             step_factories = plugins.discover_pipeline_step_factories()
@@ -83,6 +91,10 @@ class PipelineExecutor:
             msg = "event_queue_limit must be positive when provided"
             raise ValueError(msg)
         self._event_queue_limit = event_queue_limit
+        if event_max_workers is not None and event_max_workers < 1:
+            msg = "event_max_workers must be at least 1 when provided"
+            raise ValueError(msg)
+        self._event_max_workers = event_max_workers
 
     def resolve_pipeline(self, pipeline: Pipeline) -> Pipeline:
         """Return a copy of *pipeline* with providers resolved to callables."""
@@ -141,7 +153,15 @@ class PipelineExecutor:
         else:
             max_workers = 1
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ExitStack() as stack:
+            executor = stack.enter_context(ThreadPoolExecutor(max_workers=max_workers))
+            if self._event_max_workers is None:
+                event_executor: Executor = executor
+            else:
+                event_executor = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=self._event_max_workers)
+                )
+
             schedule_ready_steps()
 
             while inflight:
@@ -164,17 +184,19 @@ class PipelineExecutor:
                         parameters=parameters,
                         emit=emit,
                         processed_events=processed_events,
+                        event_executor=event_executor,
                     )
                     schedule_ready_steps()
 
-        processed_events = self._process_event_queue(
-            pipeline,
-            queue=events,
-            completed_steps=completed_steps,
-            parameters=parameters,
-            emit=emit,
-            processed_events=processed_events,
-        )
+            processed_events = self._process_event_queue(
+                pipeline,
+                queue=events,
+                completed_steps=completed_steps,
+                parameters=parameters,
+                emit=emit,
+                processed_events=processed_events,
+                event_executor=event_executor,
+            )
 
     # Resolution helpers -------------------------------------------------
 
@@ -331,6 +353,48 @@ class PipelineExecutor:
         emit("step_succeeded", step=executed_step, context=context)
         return list(self._normalise_events(result))
 
+    def _execute_event_step(
+        self,
+        pipeline: Pipeline,
+        step: PipelineStep,
+        *,
+        event: StepTriggerEvent,
+        parameters: Mapping[str, Any],
+        emit: StepEventEmitter,
+    ) -> list[StepTriggerEvent]:
+        executed_step = ExecutedStep(name=step.name)
+        context = emit("step_started", step=executed_step, event=event)
+        if context is None:
+            context = self._build_context(
+                pipeline=pipeline,
+                step=step,
+                parameters=parameters,
+            )
+        try:
+            result = self._call_provider(
+                step,
+                parameters=parameters,
+                context=context,
+                event=event,
+            )
+        except Exception as exc:  # pragma: no cover - defensive guard
+            emit(
+                "step_failed",
+                step=executed_step,
+                event=event,
+                error=exc,
+                context=context,
+            )
+            raise
+
+        emit(
+            "step_succeeded",
+            step=executed_step,
+            event=event,
+            context=context,
+        )
+        return list(self._normalise_events(result))
+
     def _process_event_queue(
         self,
         pipeline: Pipeline,
@@ -340,10 +404,13 @@ class PipelineExecutor:
         parameters: Mapping[str, Any],
         emit: StepEventEmitter,
         processed_events: int,
+        event_executor: Executor,
     ) -> int:
-        while queue:
+        inflight: dict[Future[list[StepTriggerEvent]], PipelineStep] = {}
+
+        while queue or inflight:
             retry: Deque[QueuedEvent] = deque()
-            any_delivered = False
+            dispatched = False
 
             while queue:
                 if (
@@ -373,46 +440,18 @@ class PipelineExecutor:
                         should_retry = True
                         continue
 
-                    executed_step = ExecutedStep(name=step.name)
-                    context = emit(
-                        "step_started",
-                        step=executed_step,
-                        event=event,
-                    )
-                    if context is None:
-                        context = self._build_context(
-                            pipeline=pipeline,
-                            step=step,
-                            parameters=parameters,
-                        )
-                    try:
-                        result = self._call_provider(
-                            step,
-                            parameters=parameters,
-                            context=context,
-                            event=event,
-                        )
-                    except Exception as exc:  # pragma: no cover - defensive guard
-                        emit(
-                            "step_failed",
-                            step=executed_step,
-                            event=event,
-                            error=exc,
-                            context=context,
-                        )
-                        raise
-
-                    emit(
-                        "step_succeeded",
-                        step=executed_step,
-                        event=event,
-                        context=context,
-                    )
                     queued_event.delivered_steps.add(step.name)
-                    completed_steps.add(step.name)
+                    future = event_executor.submit(
+                        self._execute_event_step,
+                        pipeline,
+                        step,
+                        event=event,
+                        parameters=parameters,
+                        emit=emit,
+                    )
+                    inflight[future] = step
                     delivered = True
-                    any_delivered = True
-                    self._extend_event_queue(queue, self._normalise_events(result))
+                    dispatched = True
 
                 if should_retry:
                     retry.append(queued_event)
@@ -421,8 +460,23 @@ class PipelineExecutor:
 
             if retry:
                 queue.extend(retry)
-                if any_delivered:
+                if dispatched:
                     continue
+
+            if inflight:
+                done, _ = wait(tuple(inflight.keys()), return_when=FIRST_COMPLETED)
+                for future in done:
+                    step = inflight.pop(future)
+                    try:
+                        emitted_events = future.result()
+                    except Exception:
+                        for pending in list(inflight):
+                            pending.cancel()
+                        raise
+                    completed_steps.add(step.name)
+                    self._extend_event_queue(queue, emitted_events)
+                continue
+
             break
         return processed_events
 
