@@ -841,8 +841,8 @@ def _format_worker_metrics(metrics: Mapping[str, Any]) -> str:
             limit_display = str(limit_value)
 
     return f"Active workers: {active_workers} (limit: {limit_display})."
-  
-  
+
+
 def _format_pipeline_prune_summary(result: Mapping[str, Any]) -> Iterable[str]:
     removed_runs = _coerce_int(result.get("removed_runs"))
     removed_events = _coerce_int(result.get("removed_events"))
@@ -1601,18 +1601,15 @@ def show_statistics(
         typer.echo(line)
 
 
-@app.command("workers")
-def show_worker_metrics(
-  """Display current worker pool utilisation."""
-  
-  metrics = client.worker_pool_metrics()
-  typer.echo(json.dumps(metrics, indent=2))
-  return
+# @app.command("workers")
+# def show_worker_metrics(client: str | None = None) -> None:
+#     """Display current worker pool utilisation."""
+#
+#     metrics = client.worker_pool_metrics()
+#     typer.echo(json.dumps(metrics, indent=2))
+#     return typer.echo(_format_worker_metrics(metrics))
 
-  typer.echo(_format_worker_metrics(metrics))
-  
-  
-  
+
 @app.command("prune")
 def prune_history(
     max_age_hours: float | None = typer.Option(
