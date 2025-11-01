@@ -11,6 +11,11 @@
 
 This overview ties together the major OnePiece surfaces so you can decide how to host the services, harden integrations, and stage a rollout that complements your studio's workflow maturity.
 
+Need a sandbox to explore the surfaces before wiring production services?
+`tester present` launches the Trafalgar, Perona, and Uta demo applications with
+seeded pipeline manifests so architects can explore the orchestrator, dashboards,
+and browser control centre together. 【F:src/apps/tester/app.py†L1-L220】
+
 ## Recommended deployment topologies
 
 | Topology | When to choose it | Hosting approach | Operational notes |

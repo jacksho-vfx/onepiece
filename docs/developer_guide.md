@@ -58,6 +58,10 @@ onepiece/
    pip install -e .[dev]
    ```
 
+   Workstations that rely on `pip install -r requirements.txt` now receive the
+   same dependency set declared in `pyproject.toml`, so you can mirror the
+   production footprint without enabling the development extras. 【F:requirements.txt†L1-L17】
+
 3. **Configure service credentials**. Export the environment variables documented in the top-level README under *Configuring integrations*.
 
 4. **Run the verification suite** to ensure your environment is healthy:
@@ -110,6 +114,17 @@ onepiece/
 - Use the `--dry-run` flags offered by the `aws` and `publish` commands to inspect their behaviour without transferring data.
 - Enable structured logging by exporting `ONEPIECE_LOG_LEVEL=DEBUG` and `ONEPIECE_LOG_FORMAT=json` when you need machine-parseable telemetry for complex ingest or render investigations.
 - The sample manifests under `docs/examples/` cover ingest, ShotGrid hierarchy seeding, render metrics, and Trafalgar event streams. Copy them into a throwaway directory so you can tweak values freely while testing edge cases.
+
+## Launching demo surfaces for manual QA
+
+The `tester` CLI bootstraps the Trafalgar, Perona, and Uta demo applications in
+one shot, preloading canned datasets and opening the matching browser tabs. Run
+`tester present` during documentation reviews, onboarding sessions, or UI
+regression tests when you need a predictable environment without hitting live
+services. The command seeds pipeline demos, verifies that `uvicorn` is
+available, cleans up stale processes bound to demo ports, and exposes teardown
+helpers such as `tester close` for a clean slate. Use `tester open --no-browser`
+to skip seeding and browser automation when iterating locally. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
 
 ## Extending delivery integrations
 

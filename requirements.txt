@@ -1,11 +1,18 @@
-hypothesis
-pydantic
-universal-pathlib
-pymel
-structlog
-py-mini-racer
-click
-pytest
-pillow
-portalocker
--e .[dev]
+# Core runtime dependencies mirror ``pyproject.toml`` so workstations that
+# rely on ``pip install -r requirements.txt`` stay in sync with the packaged
+# distribution. Optional extras (for example the Maya utilities or demo
+# dashboards) can still be installed via ``pip install .[extra]`` when needed.
+av>=12.0
+click>=8.3.0
+fastapi>=0.115.0
+portalocker>=2.10.0
+pydantic>=2.8.0
+pydantic-settings>=2.3.3
+Pillow>=10.4.0
+PyYAML>=6.0.0
+requests>=2.32.0
+rich>=13.7.0
+structlog>=23.3.0
+typer>=0.19.2
+universal-pathlib>=0.2.2
+uvicorn>=0.30.0

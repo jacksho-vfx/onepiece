@@ -6,7 +6,7 @@ OnePiece is a Typer-powered command line toolkit designed for ingesting, packagi
 >
 > **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
 >
-> **Recent merges** introduced an in-memory pipeline orchestrator with CLI and FastAPI front doors, configuration loaders that surface named pipelines alongside profile data, and a plugin discovery layer for third-party pipeline steps. Wrangler operators gained cost-driver explainers, deadline escalations, cache stability checks, telemetry freshness reporting, and render volatility spotlights so the Perona dashboard can triage production risk in minutes. 【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/apps/onepiece/config.py†L1-L120】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler/scripts/cost.py†L17-L216】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】
+> **Recent merges** introduced an in-memory pipeline orchestrator with CLI and FastAPI front doors, configuration loaders that surface named pipelines alongside profile data, and a plugin discovery layer for third-party pipeline steps. Wrangler operators gained cost-driver explainers, deadline escalations, cache stability checks, telemetry freshness reporting, and render volatility spotlights so the Perona dashboard can triage production risk in minutes. The new `tester` CLI bundles those surfaces into a one-command demo harness that spins up the Trafalgar, Perona, and Uta apps with seeded data for onboarding or documentation reviews. 【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/apps/onepiece/config.py†L1-L120】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler/scripts/cost.py†L17-L216】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】【F:src/apps/tester/app.py†L1-L220】
 
 ## Toolkit components
 
@@ -17,6 +17,7 @@ OnePiece is a Typer-powered command line toolkit designed for ingesting, packagi
 - **Chopper utility** – a lightweight CLI for exercising the render pipeline without DCC dependencies. The `chopper` entry point renders deterministic sample scenes for QA and demonstrations. 【F:src/apps/chopper/app.py†L1-L120】
 - **Uta Control Center** – a FastAPI surface that mirrors the OnePiece command tree in a browser, embedding the Trafalgar dashboard for supervisors. Launch it via `python -m apps.uta` or by importing `apps.uta.app`. 【F:src/apps/uta/app.py†L1-L140】
 - **Pipeline orchestrator** – a Trafalgar-hosted control plane that lists registered pipelines, triggers runs, and streams run events. Reach it from the `trafalgar pipeline` CLI or the `/pipeline` FastAPI application. 【F:src/apps/trafalgar/app.py†L1-L120】【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
+- **Tester demo runner** – a helper CLI that launches the bundled Trafalgar, Perona, and Uta demo applications together, pre-populating their datasets and opening the relevant browser tabs. Use it when you need a guided tour of the platform or want to capture screenshots without wiring real services. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
 
 ## Documentation map
 
@@ -53,11 +54,16 @@ source .venv/bin/activate  # On Windows use: .venv\\Scripts\\activate
 
 # Install the CLI and its core dependencies
 pip install -e .
+# Or install the published wheel and runtime dependencies
+# pip install onepiece && pip install -r requirements.txt
 
 # Explore the available commands
 onepiece --help
 perona --help
+tester --help
 ```
+
+`requirements.txt` mirrors the base dependency list from `pyproject.toml` so workstations that prefer `pip install -r requirements.txt` stay aligned with the packaged distribution. Install optional extras—such as the chopper demo image helpers or animation dependencies—via `pip install .[chopper-images]`, `pip install .[chopper-anim]`, or the other extras defined in `pyproject.toml`. 【F:pyproject.toml†L12-L46】【F:requirements.txt†L1-L17】
 
 Once installed, the CLI exposes a number of subcommands:
 
@@ -161,6 +167,23 @@ onepiece dcc animation playblast \
 ```
 
 The animation command group relies on pure-Python helpers and lazy Maya imports, so the CLI exits cleanly when PyMEL is unavailable instead of crashing mid-command. Detailed structured logging accompanies every run to feed dashboards and alerting. 【F:src/apps/onepiece/dcc/animation.py†L1-L220】【F:src/libraries/creative/dcc/maya/__init__.py†L1-L136】
+
+### Launch the bundled demos
+
+The `tester` CLI provides a fast way to spin up the Perona, Trafalgar, and Uta demo applications with seeded datasets and browser tabs. Use it for documentation reviews, onboarding sessions, or when you want to explore the dashboards without pointing at production services.
+
+```bash
+# Prepare presentation assets and launch every demo surface locally
+tester present
+
+# Launch demos without seeding new assets or opening a browser
+tester open --no-browser
+
+# Tear down lingering demo processes before starting a fresh session
+tester close
+```
+
+Under the hood the CLI seeds the demo state, ensures uvicorn is installed, terminates stale processes bound to each port, and opens the relevant URLs so you can interact with the dashboards immediately. Presentation mode runs the pipeline demo creation hooks before launching the services, while `tester open` skips the hooks for faster iteration. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
 
 ### Orchestrate pipelines and surface Wrangler insights
 
