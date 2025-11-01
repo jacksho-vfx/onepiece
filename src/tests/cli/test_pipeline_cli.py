@@ -958,7 +958,7 @@ def test_pipeline_prune_forwards_overrides(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_pipeline_prune_json(monkeypatch: MonkeyPatch) -> None:
-    payload = {
+    payload: dict[str, int | None | dict[Any, Any]] = {
         "removed_runs": 1,
         "removed_events": 0,
         "remaining_runs": 5,
