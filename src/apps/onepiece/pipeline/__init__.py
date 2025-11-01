@@ -8,7 +8,7 @@ import json
 import threading
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from queue import Queue
 from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
@@ -92,6 +92,14 @@ class PipelineClient(Protocol):
         ...
 
     def delete_definition(self, name: str) -> None:  # pragma: no cover - Protocol
+        ...
+
+    def prune_runs(
+        self,
+        *,
+        max_age_hours: float | None = None,
+        max_runs: int | None = None,
+    ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
         ...
 
     def close(self) -> None:  # pragma: no cover - Protocol
@@ -292,6 +300,18 @@ class LocalPipelineClient:
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
 
+    def prune_runs(
+        self,
+        *,
+        max_age_hours: float | None = None,
+        max_runs: int | None = None,
+    ) -> Mapping[str, Any]:
+        max_age: timedelta | None = None
+        if max_age_hours is not None:
+            max_age = timedelta(hours=max_age_hours)
+        result = self._orchestrator.prune_history(max_age=max_age, max_runs=max_runs)
+        return dict(result.serialise())
+
 
 class RemotePipelineClient:
     """Client that communicates with the Trafalgar pipeline API."""
@@ -449,6 +469,26 @@ class RemotePipelineClient:
 
     def delete_definition(self, name: str) -> None:
         self._request("DELETE", f"pipelines/{name}")
+
+    def prune_runs(
+        self,
+        *,
+        max_age_hours: float | None = None,
+        max_runs: int | None = None,
+    ) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {}
+        if max_age_hours is not None:
+            payload["max_age_hours"] = max_age_hours
+        if max_runs is not None:
+            payload["max_runs"] = max_runs
+        kwargs: dict[str, Any] = {}
+        if payload:
+            kwargs["json"] = payload
+        response = self._request("POST", "runs/prune", **kwargs)
+        body = response.json()
+        if not isinstance(body, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return body
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
@@ -702,6 +742,13 @@ def _coerce_display_text(value: Any) -> str:
     return ""
 
 
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _normalise_roles(value: Any) -> list[str]:
     if value is None:
         return []
@@ -757,6 +804,37 @@ def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
                         f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
                     )
             lines.append(line)
+    return lines
+
+
+def _format_pipeline_prune_summary(result: Mapping[str, Any]) -> Iterable[str]:
+    removed_runs = _coerce_int(result.get("removed_runs"))
+    removed_events = _coerce_int(result.get("removed_events"))
+    remaining_runs = _coerce_int(result.get("remaining_runs"))
+    lines = [
+        f"Removed {removed_runs} runs and {removed_events} events from the store.",
+        f"{remaining_runs} runs remain after pruning.",
+    ]
+
+    removed_by_pipeline = result.get("removed_runs_by_pipeline")
+    if isinstance(removed_by_pipeline, Mapping) and removed_by_pipeline:
+        details = ", ".join(
+            f"{pipeline}: {_coerce_int(count)}"
+            for pipeline, count in sorted(removed_by_pipeline.items())
+        )
+        lines.append(f"Per-pipeline removals: {details}.")
+
+    policy_parts: list[str] = []
+    max_age_seconds = result.get("max_age_seconds")
+    if isinstance(max_age_seconds, (int, float)):
+        hours = float(max_age_seconds) / 3600
+        policy_parts.append(f"max age {hours:.2f} hours")
+    max_runs = result.get("max_runs")
+    if isinstance(max_runs, (int, float)):
+        policy_parts.append(f"max runs {int(max_runs)}")
+    if policy_parts:
+        lines.append("Retention applied: " + ", ".join(policy_parts) + ".")
+
     return lines
 
 
@@ -1484,6 +1562,46 @@ def show_statistics(
         raise typer.Exit(code=0)
 
     for line in _format_pipeline_statistics(stats):
+        typer.echo(line)
+
+
+@app.command("prune")
+def prune_history(
+    max_age_hours: float | None = typer.Option(
+        None,
+        "--max-age-hours",
+        help="Prune runs created before the provided number of hours ago.",
+        min=0.0,
+    ),
+    max_runs: int | None = typer.Option(
+        None,
+        "--max-runs",
+        help="Retain at most this many recent runs when pruning.",
+        min=0,
+    ),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Apply pipeline run retention policies and report the outcome."""
+
+    output_format = _resolve_output_format(format)
+
+    with _using_client() as client:
+        try:
+            result = client.prune_runs(
+                max_age_hours=max_age_hours,
+                max_runs=max_runs,
+            )
+        except PipelineClientError as exc:
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(result, indent=2))
+        return
+
+    for line in _format_pipeline_prune_summary(result):
         typer.echo(line)
 
 
