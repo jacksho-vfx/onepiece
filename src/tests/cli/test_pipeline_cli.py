@@ -935,42 +935,42 @@ def test_pipeline_stats_json(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
-# def test_pipeline_workers_displays_metrics(monkeypatch: MonkeyPatch) -> None:
-#     client = StubPipelineClient(
-#         worker_metrics_payload={"max_workers": 6, "active_workers": 2}
-#     )
-#     _install_stub(monkeypatch, client)
-#
-#     result = runner.invoke(onepiece_app, ["pipeline", "workers"])
-#
-#     assert result.exit_code == 0
-#     assert "Active workers: 2 (limit: 6)." in result.output
-#     assert client.worker_metrics_requested is True
-#     assert client.closed is True
+def test_pipeline_workers_displays_metrics(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        worker_metrics_payload={"max_workers": 6, "active_workers": 2}
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "workers"])
+
+    assert result.exit_code == 0
+    assert "Active workers: 2 (limit: 6)." in result.output
+    assert client.worker_metrics_requested is True
+    assert client.closed is True
 
 
-# def test_pipeline_workers_supports_json(monkeypatch: MonkeyPatch) -> None:
-#     payload = {"max_workers": None, "active_workers": 1}
-#     client = StubPipelineClient(worker_metrics_payload=payload)
-#     _install_stub(monkeypatch, client)
-#
-#     result = runner.invoke(onepiece_app, ["pipeline", "workers", "--format", "json"])
-#
-#     assert result.exit_code == 0
-#     assert json.loads(result.output) == payload
-#     assert client.closed is True
+def test_pipeline_workers_supports_json(monkeypatch: MonkeyPatch) -> None:
+    payload = {"max_workers": None, "active_workers": 1}
+    client = StubPipelineClient(worker_metrics_payload=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "workers", "--format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.closed is True
 
 
-# def test_pipeline_workers_handles_errors(monkeypatch: MonkeyPatch) -> None:
-#     error = PipelineClientError("boom", status_code=500)
-#     client = StubPipelineClient(worker_metrics_error=error)
-#     _install_stub(monkeypatch, client)
-#
-#     result = runner.invoke(onepiece_app, ["pipeline", "workers"])
-#
-#     assert result.exit_code == 1
-#     assert "Pipeline request failed: boom" in result.output
-#     assert client.worker_metrics_requested is True
+def test_pipeline_workers_handles_errors(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("boom", status_code=500)
+    client = StubPipelineClient(worker_metrics_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "workers"])
+
+    assert result.exit_code == 1
+    assert "Pipeline request failed: boom" in result.output
+    assert client.worker_metrics_requested is True
 
 
 def test_pipeline_prune_forwards_overrides(monkeypatch: MonkeyPatch) -> None:

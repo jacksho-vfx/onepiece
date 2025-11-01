@@ -1601,13 +1601,28 @@ def show_statistics(
         typer.echo(line)
 
 
-# @app.command("workers")
-# def show_worker_metrics(client: str | None = None) -> None:
-#     """Display current worker pool utilisation."""
-#
-#     metrics = client.worker_pool_metrics()
-#     typer.echo(json.dumps(metrics, indent=2))
-#     return typer.echo(_format_worker_metrics(metrics))
+@app.command("workers")
+def show_worker_metrics(
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Display current worker pool utilisation."""
+
+    output_format = _resolve_output_format(format)
+
+    with _using_client() as client:
+        try:
+            metrics = client.worker_pool_metrics()
+        except PipelineClientError as exc:
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(metrics, indent=2))
+        return
+
+    typer.echo(_format_worker_metrics(metrics))
 
 
 @app.command("prune")
