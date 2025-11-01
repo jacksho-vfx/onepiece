@@ -50,6 +50,8 @@ class StubPipelineClient:
     create_error: PipelineClientError | None = None
     update_error: PipelineClientError | None = None
     delete_error: PipelineClientError | None = None
+    prune_result: Mapping[str, Any] | None = None
+    prune_error: PipelineClientError | None = None
 
     closed: bool = False
     requested_name: str | None = None
@@ -62,6 +64,7 @@ class StubPipelineClient:
     update_name: str | None = None
     delete_name: str | None = None
     worker_metrics_requested: bool = False
+    prune_kwargs: Mapping[str, Any] | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -177,6 +180,22 @@ class StubPipelineClient:
         self.delete_name = name
         if self.delete_error:
             raise self.delete_error
+
+    def prune_runs(
+        self,
+        *,
+        max_age_hours: float | None = None,
+        max_runs: int | None = None,
+    ) -> Mapping[str, Any]:
+        self.prune_kwargs = {
+            "max_age_hours": max_age_hours,
+            "max_runs": max_runs,
+        }
+        if self.prune_error:
+            raise self.prune_error
+        if self.prune_result is None:
+            raise AssertionError("prune result was not configured")
+        return dict(self.prune_result)
 
     def close(self) -> None:
         self.closed = True
@@ -952,6 +971,74 @@ def test_pipeline_workers_handles_errors(monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 1
     assert "Pipeline request failed: boom" in result.output
     assert client.worker_metrics_requested is True
+    
+    
+def test_pipeline_prune_forwards_overrides(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        prune_result={
+            "removed_runs": 3,
+            "removed_events": 12,
+            "remaining_runs": 7,
+            "max_age_seconds": 7200,
+            "max_runs": 100,
+            "removed_runs_by_pipeline": {"alpha": 2, "beta": 1},
+        }
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "prune",
+            "--max-age-hours",
+            "2",
+            "--max-runs",
+            "100",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert "Removed 3 runs and 12 events" in result.output
+    assert "7 runs remain after pruning." in result.output
+    assert "Per-pipeline removals: alpha: 2, beta: 1." in result.output
+    assert "Retention applied: max age 2.00 hours, max runs 100." in result.output
+    assert client.prune_kwargs == {"max_age_hours": 2.0, "max_runs": 100}
+    assert client.closed is True
+
+
+def test_pipeline_prune_json(monkeypatch: MonkeyPatch) -> None:
+    payload: dict[str, int | None | dict[Any, Any]] = {
+        "removed_runs": 1,
+        "removed_events": 0,
+        "remaining_runs": 5,
+        "max_age_seconds": None,
+        "max_runs": None,
+        "removed_runs_by_pipeline": {},
+    }
+    client = StubPipelineClient(prune_result=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "prune", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.prune_kwargs == {"max_age_hours": None, "max_runs": None}
+    assert client.closed is True
+
+
+def test_pipeline_prune_error(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("boom", status_code=500)
+    client = StubPipelineClient(prune_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "prune"])
+
+    assert result.exit_code == 1
+    assert "Pipeline request failed: boom" in result.output
     assert client.closed is True
 
 
