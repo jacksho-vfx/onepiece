@@ -221,13 +221,23 @@ class PipelineExecutor:
         event: StepTriggerEvent | None = None,
     ) -> Any:
         provider = step.provider
+        arg_options: tuple[tuple[Any, ...], ...]
+
         if event is None:
-            arg_options: tuple[tuple[Any, ...], ...] = (
-                (context, parameters),
-                (context,),
-                (parameters,),
-                (),
-            )
+            if self._prefers_context_first(provider):
+                arg_options = (
+                    (context, parameters),
+                    (context,),
+                    (parameters,),
+                    (),
+                )
+            else:
+                arg_options = (
+                    (parameters,),
+                    (context, parameters),
+                    (context,),
+                    (),
+                )
         else:
             if self._prefers_context_first(provider):
                 arg_options = (
