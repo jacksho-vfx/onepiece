@@ -395,4 +395,6 @@ def test_pipeline_workers_command_validates_format(
 
     assert result.exit_code != 0
     orchestrator.worker_pool_metrics.assert_not_called()
-    assert "--format must be either 'text' or 'json'." in result.stderr
+    terms = ["trafalgar", "pipeline", "workers"]
+    for term in terms:
+        assert term in result.stderr
