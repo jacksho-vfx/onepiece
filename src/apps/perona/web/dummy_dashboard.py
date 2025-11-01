@@ -87,6 +87,14 @@ def _get_demo_engine(refresh: bool = False) -> PeronaEngine:
 # it here before any scripts execute.
 live_dashboard.get_engine = _get_demo_engine
 
+# Tests and documentation snippets import the demo dashboard after registering
+# ad-hoc Wrangler scripts against the global registry.  Those registrations are
+# useful for live environments but they pollute the deterministic demo surface
+# by leaking extra scripts into the menu.  Reset the registry so the demo always
+# exposes the curated built-in catalogue and reruns the bootstrap to ensure the
+# patched ``get_engine`` resolver is respected.
+wrangler_module._reset_registry()
+
 
 def prepare_demo_state() -> None:
     """Eagerly instantiate engine-backed summaries for deterministic demos."""
