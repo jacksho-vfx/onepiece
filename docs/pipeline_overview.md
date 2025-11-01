@@ -36,6 +36,16 @@ should review the profile storage guidance in
 [`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamepipelinestorage)
 before rolling out Trafalgar's pipeline services.
 
+### Monitoring worker pool saturation
+
+Keep an eye on orchestrator utilisation once deployments move beyond pilots. The
+`onepiece pipeline workers` command surfaces the same `GET /workers/metrics`
+snapshot that Trafalgar exposes, making it trivial to check how many workers are
+active versus the configured ceiling. Wire the JSON output into your monitoring
+stack or add lightweight alerts when active workers consistently hit the limit;
+it is a strong signal that you should raise `pipeline.storage.max_workers` or
+scale out additional Trafalgar instances.
+
 ## Entry points mapped to pipeline stages
 
 Traditional pipelines emphasise linear stages (ingest → conform → review → publish), while modern approaches favour event-driven automation and control planes. The matrix below maps the primary OnePiece entry points to both views so teams can place them inside existing governance.

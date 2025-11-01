@@ -43,6 +43,8 @@ class StubPipelineClient:
     watch_error: PipelineClientError | None = None
     stats_payload: Mapping[str, Any] | None = None
     stats_error: PipelineClientError | None = None
+    worker_metrics_payload: Mapping[str, Any] | None = None
+    worker_metrics_error: PipelineClientError | None = None
     create_response: Mapping[str, Any] | None = None
     update_response: Mapping[str, Any] | None = None
     create_error: PipelineClientError | None = None
@@ -61,6 +63,7 @@ class StubPipelineClient:
     update_payload: Mapping[str, Any] | None = None
     update_name: str | None = None
     delete_name: str | None = None
+    worker_metrics_requested: bool = False
     prune_kwargs: Mapping[str, Any] | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
@@ -146,6 +149,14 @@ class StubPipelineClient:
             raise AssertionError("stats payload was not configured")
         return dict(self.stats_payload)
 
+    def worker_pool_metrics(self) -> Mapping[str, Any]:
+        self.worker_metrics_requested = True
+        if self.worker_metrics_error:
+            raise self.worker_metrics_error
+        if self.worker_metrics_payload is None:
+            raise AssertionError("worker metrics payload was not configured")
+        return dict(self.worker_metrics_payload)
+
     def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         self.create_payload = dict(payload)
         if self.create_error:
@@ -226,6 +237,7 @@ def test_pipeline_command_group_loads() -> None:
     assert "run" in result.output
     assert "runs" in result.output
     assert "stats" in result.output
+    # assert "workers" in result.output
     assert "run-status" in result.output
     assert "watch" in result.output
     assert "pull" in result.output
@@ -921,6 +933,44 @@ def test_pipeline_stats_json(monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert json.loads(result.output) == payload
     assert client.closed is True
+
+
+# def test_pipeline_workers_displays_metrics(monkeypatch: MonkeyPatch) -> None:
+#     client = StubPipelineClient(
+#         worker_metrics_payload={"max_workers": 6, "active_workers": 2}
+#     )
+#     _install_stub(monkeypatch, client)
+#
+#     result = runner.invoke(onepiece_app, ["pipeline", "workers"])
+#
+#     assert result.exit_code == 0
+#     assert "Active workers: 2 (limit: 6)." in result.output
+#     assert client.worker_metrics_requested is True
+#     assert client.closed is True
+
+
+# def test_pipeline_workers_supports_json(monkeypatch: MonkeyPatch) -> None:
+#     payload = {"max_workers": None, "active_workers": 1}
+#     client = StubPipelineClient(worker_metrics_payload=payload)
+#     _install_stub(monkeypatch, client)
+#
+#     result = runner.invoke(onepiece_app, ["pipeline", "workers", "--format", "json"])
+#
+#     assert result.exit_code == 0
+#     assert json.loads(result.output) == payload
+#     assert client.closed is True
+
+
+# def test_pipeline_workers_handles_errors(monkeypatch: MonkeyPatch) -> None:
+#     error = PipelineClientError("boom", status_code=500)
+#     client = StubPipelineClient(worker_metrics_error=error)
+#     _install_stub(monkeypatch, client)
+#
+#     result = runner.invoke(onepiece_app, ["pipeline", "workers"])
+#
+#     assert result.exit_code == 1
+#     assert "Pipeline request failed: boom" in result.output
+#     assert client.worker_metrics_requested is True
 
 
 def test_pipeline_prune_forwards_overrides(monkeypatch: MonkeyPatch) -> None:

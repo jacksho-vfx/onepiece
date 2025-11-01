@@ -898,3 +898,23 @@ def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
         "render_shots": "run-recent",
         "layout_publish": "run-layout-new",
     }
+
+
+def test_worker_metrics_returns_snapshot(client: TestClient) -> None:
+    orchestrator = get_pipeline_orchestrator()
+
+    response = client.get("/workers/metrics", headers=_auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    metrics = orchestrator.worker_pool_metrics()
+    assert payload == {
+        "max_workers": metrics.max_workers,
+        "active_workers": metrics.active_workers,
+    }
+
+
+def test_worker_metrics_requires_authorisation(client: TestClient) -> None:
+    response = client.get("/workers/metrics")
+
+    assert response.status_code == 401

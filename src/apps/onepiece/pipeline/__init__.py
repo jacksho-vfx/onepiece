@@ -81,6 +81,9 @@ class PipelineClient(Protocol):
     ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
         ...
 
+    def worker_pool_metrics(self) -> Mapping[str, Any]:  # pragma: no cover - Protocol
+        ...
+
     def create_definition(
         self, payload: Mapping[str, Any]
     ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
@@ -277,6 +280,13 @@ class LocalPipelineClient:
         )
         return {"pipelines": stats}
 
+    def worker_pool_metrics(self) -> Mapping[str, Any]:
+        metrics = self._orchestrator.worker_pool_metrics()
+        return {
+            "max_workers": metrics.max_workers,
+            "active_workers": metrics.active_workers,
+        }
+
     def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         definition = _definition_from_submission_payload(payload)
         try:
@@ -446,6 +456,13 @@ class RemotePipelineClient:
         if include_durations:
             params["include_durations"] = True
         response = self._request("GET", "runs/stats", params=params or None)
+        payload = response.json()
+        if not isinstance(payload, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return payload
+
+    def worker_pool_metrics(self) -> Mapping[str, Any]:
+        response = self._request("GET", "workers/metrics")
         payload = response.json()
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
@@ -805,6 +822,25 @@ def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
                     )
             lines.append(line)
     return lines
+
+
+def _format_worker_metrics(metrics: Mapping[str, Any]) -> str:
+    active = metrics.get("active_workers")
+    try:
+        active_workers = int(active)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        active_workers = 0
+
+    limit_value = metrics.get("max_workers")
+    if limit_value is None:
+        limit_display = "unbounded"
+    else:
+        try:
+            limit_display = str(int(limit_value))
+        except (TypeError, ValueError):
+            limit_display = str(limit_value)
+
+    return f"Active workers: {active_workers} (limit: {limit_display})."
 
 
 def _format_pipeline_prune_summary(result: Mapping[str, Any]) -> Iterable[str]:
@@ -1563,6 +1599,15 @@ def show_statistics(
 
     for line in _format_pipeline_statistics(stats):
         typer.echo(line)
+
+
+# @app.command("workers")
+# def show_worker_metrics(client: str | None = None) -> None:
+#     """Display current worker pool utilisation."""
+#
+#     metrics = client.worker_pool_metrics()
+#     typer.echo(json.dumps(metrics, indent=2))
+#     return typer.echo(_format_worker_metrics(metrics))
 
 
 @app.command("prune")
