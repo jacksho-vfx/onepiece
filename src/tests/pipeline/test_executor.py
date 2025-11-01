@@ -197,6 +197,27 @@ def test_sequential_provider_receives_context() -> None:
     assert context.metadata["step"] == {"label": "first"}
 
 
+def test_sequential_provider_accepts_context_only() -> None:
+    parameters: dict[str, Any] = {}
+    captured: list[StepExecutionContext] = []
+
+    def provider(context: StepExecutionContext) -> None:
+        captured.append(context)
+
+    pipeline = Pipeline(
+        name="context-only",
+        steps=[PipelineStep(name="alpha", provider=provider)],
+    )
+
+    contexts, emit = _make_contextual_emitter("run-context", pipeline, parameters)
+
+    executor = PipelineExecutor()
+    executor.execute(pipeline, parameters=parameters, emit=emit)
+
+    assert [ctx.step_name for ctx in captured] == ["alpha"]
+    assert captured[0] is contexts["alpha"]
+
+
 def _validate_sequential_context(
     context: StepExecutionContext,
     params: Mapping[str, Any],
@@ -262,3 +283,36 @@ def test_event_driven_provider_receives_context() -> None:
     assert [name for name, _ in events] == ["source", "listener"]
     assert contexts["source"].run_id == "run-event"
     assert contexts["listener"].metadata["step"] == {"label": "listener"}
+
+
+def test_event_provider_accepts_context_without_parameters() -> None:
+    parameters: dict[str, Any] = {}
+    recorded: list[tuple[str, StepTriggerEvent]] = []
+
+    def source_provider(_: Mapping[str, Any]) -> StepTriggerEvent:
+        return StepTriggerEvent(name="ready", payload={})
+
+    def listener_provider(
+        context: StepExecutionContext, event: StepTriggerEvent
+    ) -> None:
+        recorded.append((context.step_name, event))
+
+    pipeline = Pipeline(
+        name="event-context",
+        steps=[
+            PipelineStep(name="source", provider=source_provider),
+            PipelineStep(
+                name="listener",
+                provider=listener_provider,
+                trigger=TriggerPolicy(kind="event", event="ready"),
+            ),
+        ],
+    )
+
+    contexts, emit = _make_contextual_emitter("run-event-ctx", pipeline, parameters)
+    executor = PipelineExecutor()
+    executor.execute(pipeline, parameters=parameters, emit=emit)
+
+    assert [name for name, _ in recorded] == ["listener"]
+    assert recorded[0][1].name == "ready"
+    assert contexts["listener"].step_name == "listener"
