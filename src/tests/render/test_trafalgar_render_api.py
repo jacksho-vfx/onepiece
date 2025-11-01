@@ -396,7 +396,6 @@ def test_submit_job_unknown_farm_response(client: TestClient) -> None:
 def test_submit_job_surfaces_adapter_unavailability(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:
-
     def fail_with_unavailability(self, request):  # type: ignore[no-untyped-def]
         raise RenderAdapterUnavailableError(
             "Farm is temporarily offline.",

@@ -569,7 +569,7 @@ _MISSING = object()
 
 
 def _definition_from_submission_payload(
-    payload: Mapping[str, Any]
+    payload: Mapping[str, Any],
 ) -> "PipelineDefinition":
     name_value = payload.get("name")
     if not isinstance(name_value, str) or not name_value.strip():

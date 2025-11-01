@@ -50,7 +50,7 @@ def entry_points(
 
 
 def test_discovery_merges_builtin_and_plugins(
-    entry_points: Callable[[DummyEntryPoint], None]
+    entry_points: Callable[[DummyEntryPoint], None],
 ) -> None:
     builtin_called = False
 
@@ -77,7 +77,7 @@ def test_discovery_merges_builtin_and_plugins(
 
 
 def test_missing_dependency_raises_actionable_error(
-    entry_points: Callable[[DummyEntryPoint], None]
+    entry_points: Callable[[DummyEntryPoint], None],
 ) -> None:
     def loader() -> None:
         raise ModuleNotFoundError("cool-extra")
@@ -93,7 +93,7 @@ def test_missing_dependency_raises_actionable_error(
 
 
 def test_conflicting_entry_point_with_builtin_is_rejected(
-    entry_points: Callable[[DummyEntryPoint], None]
+    entry_points: Callable[[DummyEntryPoint], None],
 ) -> None:
     entry_points(
         DummyEntryPoint(
@@ -107,7 +107,7 @@ def test_conflicting_entry_point_with_builtin_is_rejected(
 
 
 def test_non_callable_factory_raises(
-    entry_points: Callable[[DummyEntryPoint], None]
+    entry_points: Callable[[DummyEntryPoint], None],
 ) -> None:
     entry_points(
         DummyEntryPoint(

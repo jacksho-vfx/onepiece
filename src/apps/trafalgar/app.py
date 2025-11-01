@@ -73,7 +73,7 @@ def _format_pipeline_definition(definition: PipelineDefinition) -> Any:
 
 
 def _format_pipeline_statistics(
-    stats: Mapping[str, Mapping[str, Mapping[str, Any]]]
+    stats: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> list[str]:
     lines: list[str] = []
     for pipeline in sorted(stats):
@@ -769,7 +769,7 @@ def auth_generate_token(
         None,
         "--write-to",
         help="Optional path to persist the generated token with 0600 permissions.",
-    )
+    ),
 ) -> None:
     """Generate a bearer token for the dashboard APIs."""
 

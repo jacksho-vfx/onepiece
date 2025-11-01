@@ -2393,7 +2393,7 @@ def pipeline_definition_from_profile_entry(
 
 
 def pipeline_definition_from_serialised(
-    payload: Mapping[str, Any]
+    payload: Mapping[str, Any],
 ) -> PipelineDefinition:
     """Recreate a :class:`PipelineDefinition` from persisted payload data."""
 
@@ -2408,7 +2408,7 @@ def pipeline_definition_from_serialised(
 
 
 def _retention_policy_from_storage(
-    storage_config: Mapping[str, Any]
+    storage_config: Mapping[str, Any],
 ) -> PipelineRetentionPolicy | None:
     retention_config = storage_config.get("retention")
     if retention_config is None:
