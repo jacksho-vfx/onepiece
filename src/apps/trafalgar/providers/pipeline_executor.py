@@ -222,17 +222,44 @@ class PipelineExecutor:
     ) -> Any:
         provider = step.provider
         if event is None:
-            if self._supports_arguments(provider, context, parameters):
-                result = provider(context, parameters)
-            else:
-                result = provider(parameters)
+            arg_options: tuple[tuple[Any, ...], ...] = (
+                (context, parameters),
+                (context,),
+                (parameters,),
+                (),
+            )
         else:
-            if self._supports_arguments(provider, context, event, parameters):
-                result = provider(context, event, parameters)
+            if self._prefers_context_first(provider):
+                arg_options = (
+                    (context, event, parameters),
+                    (context, event),
+                    (context,),
+                    (event, parameters),
+                    (event,),
+                    (parameters,),
+                    (),
+                )
             else:
-                result = provider(event, parameters)
+                arg_options = (
+                    (context, event, parameters),
+                    (event, parameters),
+                    (event,),
+                    (context, event),
+                    (context,),
+                    (parameters,),
+                    (),
+                )
 
-        return self._resolve_async_value(result)
+        for candidate_args in arg_options:
+            if self._supports_arguments(provider, *candidate_args):
+                result = provider(*candidate_args)
+                return self._resolve_async_value(result)
+
+        msg = (
+            f"pipeline step '{step.name}' provider does not accept a supported "
+            "signature"
+        )
+        raise TypeError(msg)
 
     def _normalise_events(self, result: Any) -> Iterable[StepTriggerEvent]:
         if result is None:
@@ -438,6 +465,30 @@ class PipelineExecutor:
         except TypeError:
             return False
         return True
+
+    def _prefers_context_first(self, provider: Any) -> bool:
+        try:
+            signature = inspect.signature(provider)
+        except (TypeError, ValueError):
+            return False
+
+        parameters = list(signature.parameters.values())
+        if not parameters:
+            return False
+
+        first = parameters[0]
+        annotation = first.annotation
+        if annotation is not inspect._empty:
+            if annotation is StepExecutionContext:
+                return True
+            if getattr(annotation, "__name__", None) == StepExecutionContext.__name__:
+                return True
+
+        name = first.name
+        if isinstance(name, str) and name.lower() in {"context", "ctx"}:
+            return True
+
+        return False
 
     def _resolve_async_value(self, value: Any) -> Any:
         if inspect.isawaitable(value):
