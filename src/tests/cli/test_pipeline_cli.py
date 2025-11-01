@@ -935,9 +935,7 @@ def test_pipeline_workers_supports_json(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(worker_metrics_payload=payload)
     _install_stub(monkeypatch, client)
 
-    result = runner.invoke(
-        onepiece_app, ["pipeline", "workers", "--format", "json"]
-    )
+    result = runner.invoke(onepiece_app, ["pipeline", "workers", "--format", "json"])
 
     assert result.exit_code == 0
     assert json.loads(result.output) == payload
