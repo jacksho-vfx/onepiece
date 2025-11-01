@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
@@ -761,7 +761,7 @@ class PeronaEngine:
 
         samples: list[RenderMetric] = list(self._render_log)
         samples.extend(self._load_persisted_render_metrics())
-        samples.sort(key=lambda metric: metric.timestamp)
+        samples.sort(key=lambda m: m.timestamp.astimezone(timezone.utc))
 
         metrics_by_shot: dict[tuple[str, str], list[RenderMetric]] = defaultdict(list)
         for sample in samples:
