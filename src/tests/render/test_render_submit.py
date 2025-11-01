@@ -74,7 +74,7 @@ class _StubRenderClient:
 
 
 def _capture_logger(
-    log_events: list[tuple[str, str, dict[str, Any]]]
+    log_events: list[tuple[str, str, dict[str, Any]]],
 ) -> SimpleNamespace:
     def _info(event: str, **kwargs: Any) -> None:
         log_events.append(("info", event, kwargs))

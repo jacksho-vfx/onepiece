@@ -82,7 +82,7 @@ class _StubSession:
 
 
 def _make_auth_session(
-    extra_responses: dict[tuple[str, str], list[_StubResponse]]
+    extra_responses: dict[tuple[str, str], list[_StubResponse]],
 ) -> _StubSession:
     base_url = "https://server"
     responses = {

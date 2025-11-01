@@ -34,7 +34,7 @@ def pipeline_factory() -> Callable[[str, int], Pipeline]:
 
 @pytest.fixture
 def pipeline_definition_factory(
-    pipeline_factory: Callable[[str, int], Pipeline]
+    pipeline_factory: Callable[[str, int], Pipeline],
 ) -> Callable[[str], PipelineDefinition]:
     """Build lightweight :class:`PipelineDefinition` instances."""
 

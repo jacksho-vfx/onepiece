@@ -48,10 +48,10 @@ def _wait_for_completion(
 
 def _register_test_factories(monkeypatch: pytest.MonkeyPatch) -> None:
     def sequential_factory(
-        config: dict[str, object]
+        config: dict[str, object],
     ) -> Callable[[dict[str, object]], list[tuple[str, dict[str, object]]]]:
         def provider(
-            parameters: dict[str, object]
+            parameters: dict[str, object],
         ) -> list[tuple[str, dict[str, object]]]:
             event_payload = {
                 "department": parameters.get("department", "lighting"),
@@ -62,7 +62,7 @@ def _register_test_factories(monkeypatch: pytest.MonkeyPatch) -> None:
         return provider
 
     def event_factory(
-        config: dict[str, object]
+        config: dict[str, object],
     ) -> Callable[[pipeline_executor.StepTriggerEvent, dict[str, object]], None]:
         def provider(
             event: pipeline_executor.StepTriggerEvent, parameters: dict[str, object]
