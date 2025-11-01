@@ -1,10 +1,11 @@
-.PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines
+.PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines tester-present
 
 VENV := .venv/bin
 PYTHON ?= $(VENV)/python
 PIP ?= .venv/bin/pip
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 PRE_COMMIT_CONFIG ?= .pre-commit-config.yaml
+TESTER_ARGS ?=
 
 .venv/bin/python:
 	python3 -m venv .venv
@@ -49,6 +50,13 @@ install-precommit:
 check: precommit test
 
 fixtures-pipelines:
-	mkdir -p .fixtures/pipelines
-	cp -R docs/examples/pipelines/. .fixtures/pipelines/
-	@echo "Copied docs/examples/pipelines into .fixtures/pipelines for local experimentation."
+        mkdir -p .fixtures/pipelines
+        cp -R docs/examples/pipelines/. .fixtures/pipelines/
+        @echo "Copied docs/examples/pipelines into .fixtures/pipelines for local experimentation."
+
+tester-present:
+        if command -v tester >/dev/null 2>&1; then \
+                tester present $(TESTER_ARGS); \
+        else \
+                $(PYTHON) -m apps.tester present $(TESTER_ARGS); \
+        fi
