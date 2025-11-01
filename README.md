@@ -248,6 +248,8 @@ If you are new to the toolkit, start with the dedicated onboarding material bund
 - [CLI walkthroughs](docs/cli_walkthroughs.md) – step-by-step command sequences that rely on the sample manifests under `docs/examples/`.
 - [Example assets](docs/examples/) – CSV manifests that you can plug into ingest, publish, and ShotGrid helpers while practising the CLI.
 
+> **Presentation mode:** Run `tester present` when you want every demo surface booted together. Supply `--skip-create` to reuse existing fixtures, and pair `--open-browser/--no-browser`, `--browser-path`, or `--browser-delay` to fine-tune how the dashboards open during a walkthrough.
+
 These resources provide a safe sandbox to explore the command surface before pointing the tooling at production data.
 
 > Tip: Run `make fixtures-pipelines` to copy the new pipeline manifests and `onepiece.toml` fragments into `.fixtures/pipelines/` for hands-on experiments without touching tracked files.

@@ -200,6 +200,10 @@ perona web demo
 perona web demo --host 0.0.0.0 --port 18065 --reload
 ```
 
+When you want the Perona demo, Trafalgar dashboards, and the Uta surface opened
+in one sweep, switch to `tester present` so the presentation helper prepares the
+fixtures and launches each browser tab together.
+
 The demo service reuses the bundled Perona defaults to generate repeatable
 responses and clearly labels itself as dummy data so dashboards can showcase
 expected behaviour even when render telemetry is unavailable.
