@@ -328,15 +328,16 @@ MediaShuttle-ready package.
 The Trafalgar v1.0.0 release focuses on keeping the web suite responsive: the
 dashboard auto-caches version lookups, gracefully handles sparse delivery
 manifests, and the render API now mirrors the CLI's job lifecycle so you can
-list, inspect, and cancel submissions via HTTP. Launch the services with the
-Typer commands described above (`trafalgar web dashboard`, `trafalgar web
-ingest`, `trafalgar web review`, and `trafalgar web render`). When you want to
-demo the interface without live data, add `--demo-port <port>` to `trafalgar web
-dashboard` to spin up a parallel instance loaded with studio-style sample
-metrics. Include `--open-browser` to automatically launch the dashboard in your
-default browser, or pair it with `--browser-path <alias>` when you need to
-target a specific browser profile while presenting the refreshed workflows to a
-team.
+list, inspect, and cancel submissions via HTTP. Launch every surface together
+with `tester present` so the Perona demo dashboard, Trafalgar demo dashboard,
+and Uta CLI web app open in one pass. The helper prepares the demo fixtures
+before booting uvicorn on the default presentation ports, and you can reuse
+existing assets with `--skip-create`. Pair the command with
+`--open-browser/--no-browser`, `--browser-path <alias>`, or `--browser-delay`
+when you need to fine-tune how tabs open during a live walkthrough. If you need
+a dedicated Trafalgar demo port for side-by-side comparisons, follow up with
+`trafalgar web dashboard --demo-port <port>` to launch the alternate instance
+once the presentation stack is running.
 
 Use the snippet
 below to export placeholder metadata with the existing DCC stubs while the web
