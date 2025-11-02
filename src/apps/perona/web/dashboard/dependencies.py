@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from threading import Lock
-from typing import Any, Mapping, NamedTuple, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence, TypeVar
 
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -100,6 +101,40 @@ class _EngineCacheEntry(NamedTuple):
 
 _engine_lock = Lock()
 _engine_cache: _EngineCacheEntry | None = None
+T = TypeVar("T")
+
+
+def _sync_engine_cache_from_module() -> _EngineCacheEntry | None:
+    """Return the latest engine cache, honoring overrides from the public module."""
+
+    global _engine_cache
+
+    module = sys.modules.get("apps.perona.web.dashboard")
+    if module is not None:
+        external_cache = module.__dict__.get("_engine_cache", _engine_cache)
+        if external_cache is not _engine_cache:
+            _engine_cache = external_cache
+    return _engine_cache
+
+
+def _update_module_engine_cache(value: _EngineCacheEntry | None) -> None:
+    """Keep the publicly exposed module cache in sync with internal state."""
+
+    module = sys.modules.get("apps.perona.web.dashboard")
+    if module is not None:
+        module.__dict__["_engine_cache"] = value
+
+
+def _resolve_override(name: str, current: T) -> Any:
+    """Return an attribute override registered on the public dashboard module."""
+
+    module = sys.modules.get("apps.perona.web.dashboard")
+    if module is not None:
+        override = module.__dict__.get(name, current)
+        if override is not current:
+            globals()[name] = override  # keep the internal module in sync
+            return override  # type: ignore[return-value]
+    return current
 
 
 def _resolved_settings_path() -> Path | None:
@@ -142,9 +177,10 @@ def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:
 
     global _engine_cache
 
-    signature = _settings_signature()
+    signature_fn = _resolve_override("_settings_signature", _settings_signature)
+    signature = signature_fn()
     with _engine_lock:
-        cache_entry = _engine_cache
+        cache_entry = _sync_engine_cache_from_module()
         if force_refresh or cache_entry is None or cache_entry.signature != signature:
             load_result = PeronaEngine.from_settings()
             cache_entry = _EngineCacheEntry(
@@ -155,6 +191,7 @@ def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:
                 insights=_CostInsightsMemo(),
             )
             _engine_cache = cache_entry
+            _update_module_engine_cache(cache_entry)
         return cache_entry
 
 
@@ -170,6 +207,7 @@ def invalidate_engine_cache() -> None:
     global _engine_cache
     with _engine_lock:
         _engine_cache = None
+        _update_module_engine_cache(None)
 
 
 def _resolve_cost_insights(
@@ -184,7 +222,7 @@ def _resolve_cost_insights(
     cached_recommendations: tuple[str, ...] | None = None
 
     with _engine_lock:
-        cache_entry = _engine_cache
+        cache_entry = _sync_engine_cache_from_module()
         if cache_entry is not None and cache_entry.engine is engine:
             if refresh_telemetry:
                 cache_entry.insights.clear()
@@ -197,7 +235,7 @@ def _resolve_cost_insights(
     statistics, recommendations = engine.cost_insights(top_n=top_n)
 
     with _engine_lock:
-        cache_entry = _engine_cache
+        cache_entry = _sync_engine_cache_from_module()
         if cache_entry is not None and cache_entry.engine is engine:
             memo = cache_entry.insights
             memo.statistics = statistics
@@ -227,7 +265,8 @@ def reload_settings() -> SettingsSummary:
 def get_engine(refresh: bool = Query(False, alias="refresh_engine")) -> PeronaEngine:
     """FastAPI dependency yielding the shared Perona engine instance."""
 
-    return _load_engine(refresh)
+    loader = _resolve_override("_load_engine", _load_engine)
+    return loader(refresh)
 
 
 def get_settings_summary() -> SettingsSummary:
