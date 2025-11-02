@@ -252,8 +252,10 @@ def _format_toml_table_header(*segments: str) -> str:
 
 def _format_toml_key(key: str) -> str:
     text = str(key)
-    if text and text[0].isalpha() and all(
-        char.isalnum() or char in {"-", "_"} for char in text
+    if (
+        text
+        and text[0].isalpha()
+        and all(char.isalnum() or char in {"-", "_"} for char in text)
     ):
         return text
     return json.dumps(text)
