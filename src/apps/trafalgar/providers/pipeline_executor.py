@@ -211,7 +211,7 @@ class PipelineExecutor:
         self,
         pipeline: Pipeline,
         *,
-        parameters: Mapping[str, Any] | None = None,
+        parameters: Mapping[str, Any],
         emit: StepEventEmitter,
     ) -> None:
         """Run *pipeline* and stream step lifecycle events via *emit*."""
@@ -613,7 +613,9 @@ class PipelineExecutor:
         if timeout is not None:
             timeout = max(timeout, 0.0)
 
-        done, _ = wait(tuple(inflight.keys()), return_when=FIRST_COMPLETED, timeout=timeout)
+        done, _ = wait(
+            tuple(inflight.keys()), return_when=FIRST_COMPLETED, timeout=timeout
+        )
         if done:
             return done, None, False
 
@@ -751,7 +753,9 @@ class PipelineExecutor:
                         matched = True
                         if step.name in queued_event.delivered_steps:
                             continue
-                        if not self._dependencies_satisfied(step.trigger, completed_steps):
+                        if not self._dependencies_satisfied(
+                            step.trigger, completed_steps
+                        ):
                             should_retry = True
                             continue
 

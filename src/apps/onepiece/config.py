@@ -394,9 +394,7 @@ def _extract_pipeline_executor_timeouts(
     step_timeout = _coerce_executor_timeout(
         profile_name, executor_config, "step_timeout"
     )
-    run_timeout = _coerce_executor_timeout(
-        profile_name, executor_config, "run_timeout"
-    )
+    run_timeout = _coerce_executor_timeout(profile_name, executor_config, "run_timeout")
     return step_timeout, run_timeout
 
 
