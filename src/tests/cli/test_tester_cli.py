@@ -198,6 +198,57 @@ def test_present_runs_prepare_hooks_once(
         assert calls == 1, f"expected prepare hook for {label!r} to run once"
 
 
+def test_present_restores_environment_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Environment overrides should apply during launch and be restored afterwards."""
+
+    processes: list[DummyProcess] = []
+    observed_environment: list[tuple[str | None, str | None]] = []
+
+    def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
+        observed_environment.append(
+            (
+                os.environ.get("TRAFALGAR_PIPELINE_API_URL"),
+                os.environ.get("TRAFALGAR_DASHBOARD_TOKEN"),
+            )
+        )
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
+        processes.append(process)
+        return process
+
+    demo_target = tester_app.DemoTarget(
+        label="Pipeline API",
+        import_path="demo.pipeline:app",
+        port=9100,
+        environment={
+            "TRAFALGAR_PIPELINE_API_URL": "http://{host}:9999/",
+            "TRAFALGAR_DASHBOARD_TOKEN": "demo-dashboard-token",
+        },
+    )
+
+    monkeypatch.setattr(tester_app, "DEMO_TARGETS", (demo_target,))
+    monkeypatch.setattr(tester_app, "Process", fake_process)
+    monkeypatch.setattr(tester_app, "_ensure_uvicorn", lambda: None)
+    monkeypatch.setattr(tester_app.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(tester_app.webbrowser, "get", lambda *_: None)
+
+    monkeypatch.setenv("TRAFALGAR_PIPELINE_API_URL", "https://existing.example/api/")
+    monkeypatch.setenv("TRAFALGAR_DASHBOARD_TOKEN", "existing-dashboard-token")
+
+    result = runner.invoke(
+        tester_app.app,
+        ["present", "--browser-delay", "0", "--no-browser", "--skip-create"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(processes) == 1
+    assert observed_environment == [("http://127.0.0.1:9999/", "demo-dashboard-token")]
+    assert os.environ["TRAFALGAR_PIPELINE_API_URL"] == "https://existing.example/api/"
+    assert os.environ["TRAFALGAR_DASHBOARD_TOKEN"] == "existing-dashboard-token"
+    assert processes[0].joined and processes[0].join_timeout == 5
+
+
 @pytest.mark.parametrize(
     ("options", "expected_calls", "expected_message"),
     [
