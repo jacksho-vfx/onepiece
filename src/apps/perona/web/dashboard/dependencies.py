@@ -125,7 +125,7 @@ def _update_module_engine_cache(value: _EngineCacheEntry | None) -> None:
         module.__dict__["_engine_cache"] = value
 
 
-def _resolve_override(name: str, current: T) -> T:
+def _resolve_override(name: str, current: T) -> Any:
     """Return an attribute override registered on the public dashboard module."""
 
     module = sys.modules.get("apps.perona.web.dashboard")
