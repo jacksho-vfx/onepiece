@@ -1,7 +1,8 @@
-"""Development CLI helpers for launching demo dashboards."""
+"""Development CLI helpers for launching demo dashboards and APIs."""
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import signal
@@ -35,12 +36,42 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_BROWSER_DELAY = 1.0
 TRAFALGAR_DEMO_PORT = TRAFALGAR_DEFAULT_PORT
+TRAFALGAR_PIPELINE_DEMO_PORT = 8100
+_DEMO_SUITE_ROLES = (
+    "render:read",
+    "render:submit",
+    "render:manage",
+    "ingest:read",
+    "review:read",
+    "pipeline:read",
+    "pipeline:run",
+    "pipeline:manage",
+)
+DEMO_PIPELINE_SERVICE_CREDENTIALS = json.dumps(
+    [
+        {
+            "id": "suite",
+            "key": "suite-key",
+            "secret": "suite-secret",
+            "roles": list(_DEMO_SUITE_ROLES),
+        },
+        {
+            "id": "demo-dashboard",
+            "token": DEMO_DASHBOARD_TOKEN,
+            "roles": [
+                "pipeline:read",
+                "pipeline:run",
+                "pipeline:manage",
+            ],
+        },
+    ]
+)
 
 app = typer.Typer(
     name="tester",
     help=(
-        "Launch bundled dummy dashboards and developer web apps for manual "
-        "testing sessions."
+        "Launch bundled dummy dashboards, the pipeline API, and developer web "
+        "apps for manual testing sessions."
     ),
 )
 
@@ -62,6 +93,19 @@ class DemoTarget:
         normalised = self.path if self.path.startswith("/") else f"/{self.path}"
         return f"http://{host}:{self.port}{normalised}"
 
+    def environment_for_host(self, host: str) -> dict[str, str]:
+        """Return environment variables formatted for the provided host."""
+
+        if not self.environment:
+            return {}
+        resolved: dict[str, str] = {}
+        for key, value in self.environment.items():
+            try:
+                resolved[key] = value.format(host=host, port=self.port)
+            except (IndexError, KeyError, ValueError):
+                resolved[key] = value
+        return resolved
+
 
 DEMO_TARGETS: tuple[DemoTarget, ...] = (
     DemoTarget(
@@ -78,9 +122,24 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
         prepare=prepare_trafalgar_demo_state,
     ),
     DemoTarget(
+        label="Trafalgar pipeline API",
+        import_path="apps.trafalgar.web.pipeline:app",
+        port=TRAFALGAR_PIPELINE_DEMO_PORT,
+        environment={
+            "TRAFALGAR_DASHBOARD_TOKEN": DEMO_DASHBOARD_TOKEN,
+            "TRAFALGAR_SERVICE_CREDENTIALS": DEMO_PIPELINE_SERVICE_CREDENTIALS,
+        },
+        prepare=None,
+    ),
+    DemoTarget(
         label="Uta CLI web app",
         import_path="apps.uta.web:app",
         port=UTA_DEFAULT_PORT,
+        environment={
+            "TRAFALGAR_PIPELINE_API_URL": (
+                f"http://{{host}}:{TRAFALGAR_PIPELINE_DEMO_PORT}/"
+            )
+        },
         prepare=None,
     ),
 )
@@ -246,8 +305,9 @@ def _launch_demo_targets(
                         err=True,
                     )
                     raise typer.Exit(code=1) from exc
-            if target.environment:
-                for key, value in target.environment.items():
+            environment = target.environment_for_host(host)
+            if environment:
+                for key, value in environment.items():
                     if key not in original_env:
                         if key in os.environ:
                             original_env[key] = (True, os.environ[key])
