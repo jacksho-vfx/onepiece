@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -294,3 +295,53 @@ def test_present_prepares_pipeline_demos(monkeypatch: pytest.MonkeyPatch) -> Non
     assert dummy_orchestrator.registered, "expected pipelines to be registered"
 
     tester_presentation.restore_pipeline_demo_environment()
+
+
+def test_restore_pipeline_demo_environment_clears_staged_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Restoring the environment should clear the staged project root."""
+
+    staged_root = tmp_path / "staged"
+    project_root = staged_root / "demo"
+    project_root.mkdir(parents=True)
+    (project_root / "pipeline.yaml").write_text("name: demo\n", encoding="utf-8")
+
+    monkeypatch.setattr(tester_presentation, "_stage_examples", lambda: staged_root)
+    monkeypatch.setattr(
+        tester_presentation, "translate_pipeline_manifest", lambda manifest: manifest
+    )
+    monkeypatch.setattr(
+        tester_presentation,
+        "pipeline_definition_from_profile_entry",
+        lambda name, data: object(),
+    )
+    monkeypatch.setattr(
+        tester_presentation,
+        "_definition_with_stubbed_providers",
+        lambda definition: definition,
+    )
+
+    class DummyOrchestrator:
+        def __init__(self) -> None:
+            self.registered: list[object] = []
+
+        def upsert(self, definition: object) -> bool:
+            self.registered.append(definition)
+            return True
+
+    orchestrator = DummyOrchestrator()
+    monkeypatch.setattr(
+        tester_presentation, "get_pipeline_orchestrator", lambda: orchestrator
+    )
+    monkeypatch.delenv("ONEPIECE_PROJECT_ROOT", raising=False)
+
+    tester_presentation.prepare_pipeline_demos()
+
+    assert tester_presentation.get_staged_pipeline_project_root() == project_root
+    assert os.environ.get("ONEPIECE_PROJECT_ROOT") == str(project_root)
+
+    tester_presentation.restore_pipeline_demo_environment()
+
+    assert tester_presentation.get_staged_pipeline_project_root() is None
+    assert os.environ.get("ONEPIECE_PROJECT_ROOT") is None
