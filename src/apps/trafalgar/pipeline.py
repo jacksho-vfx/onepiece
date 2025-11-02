@@ -1430,6 +1430,7 @@ class PipelineRunStore:
         *,
         since: datetime | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> dict[str, dict[str, dict[str, Any]]]:
         """Return aggregated run statistics grouped by pipeline and status."""
 
@@ -1562,6 +1563,9 @@ class PipelineRunStore:
         if since is not None:
             clauses.append("created_at >= ?")
             bindings.append(self._encode_datetime(since))
+        if pipeline is not None:
+            clauses.append("pipeline = ?")
+            bindings.append(str(pipeline))
 
         select_fields = ["pipeline", "status", "created_at", "updated_at"]
         if include_durations:
@@ -2260,9 +2264,12 @@ class PipelineOrchestrator:
         *,
         since: datetime | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> dict[str, dict[str, dict[str, Any]]]:
         return self._store.aggregate_runs(
-            since=since, include_durations=include_durations
+            since=since,
+            include_durations=include_durations,
+            pipeline=pipeline,
         )
 
     def iter_run_events(self, run_id: str) -> Iterator[PipelineRunEvent]:

@@ -252,6 +252,10 @@ def run_statistics(
             description="Include duration summaries for each pipeline/status grouping.",
         ),
     ] = False,
+    pipeline: Annotated[
+        str | None,
+        Query(description="Filter statistics to a specific pipeline"),
+    ] = None,
     since: Annotated[
         str | None,
         Query(
@@ -299,8 +303,17 @@ def run_statistics(
         else:
             parsed_since = parsed_since.astimezone(timezone.utc)
 
+    pipeline_filter: str | None = None
+    if pipeline is not None:
+        trimmed = pipeline.strip()
+        if not trimmed:
+            raise HTTPException(status_code=400, detail="Invalid 'pipeline' parameter")
+        pipeline_filter = trimmed
+
     stats = orchestrator.aggregate_runs(
-        include_durations=include_durations, since=parsed_since
+        include_durations=include_durations,
+        since=parsed_since,
+        pipeline=pipeline_filter,
     )
     return JSONResponse(content={"pipelines": stats})
 

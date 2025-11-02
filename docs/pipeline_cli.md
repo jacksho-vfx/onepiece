@@ -21,6 +21,13 @@ Pass `--format json` to any of these commands to emit prettified JSON payloads,
 which is useful when scripting against the CLI. The default `text` format
 retains the human-readable summaries shown throughout this guide.
 
+When inspecting run outcomes with `onepiece pipeline stats`, supply
+`--pipeline <name>` to focus on a single pipeline. The CLI validates the name
+locally and forwards it to either the in-process orchestrator or the Trafalgar
+API, so the aggregated counts (and optional duration metrics) only reflect runs
+for that pipeline. Omit the flag to keep the existing behaviour of reporting on
+every registered pipeline.
+
 ## Preparing a manifest
 
 Create a TOML or YAML manifest that matches the format consumed by the

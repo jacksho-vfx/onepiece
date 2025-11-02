@@ -295,6 +295,8 @@ def test_pipeline_stats_command_displays_results(
             "pipeline",
             "stats",
             "--include-durations",
+            "--pipeline",
+            "render",
             "--since",
             "2024-01-01T00:00:00+00:00",
         ],
@@ -305,6 +307,7 @@ def test_pipeline_stats_command_displays_results(
     kwargs = orchestrator.aggregate_runs.call_args.kwargs
     assert kwargs["include_durations"] is True
     assert kwargs["since"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert kwargs["pipeline"] == "render"
     assert "Pipeline: render" in result.stdout
     assert "queued: 2 runs [backlog: 2]" in result.stdout
     assert (
