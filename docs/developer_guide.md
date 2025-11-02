@@ -117,14 +117,15 @@ onepiece/
 
 ## Launching demo surfaces for manual QA
 
-The `tester` CLI bootstraps the Trafalgar, Perona, and Uta demo applications in
-one shot, preloading canned datasets and opening the matching browser tabs. Run
-`tester present` during documentation reviews, onboarding sessions, or UI
-regression tests when you need a predictable environment without hitting live
-services. The command seeds pipeline demos, verifies that `uvicorn` is
-available, cleans up stale processes bound to demo ports, and exposes teardown
-helpers such as `tester close` for a clean slate. Use `tester open --no-browser`
-to skip seeding and browser automation when iterating locally. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
+The `tester` CLI bootstraps the Trafalgar, Perona, and Uta demo applications
+alongside the pipeline API in one shot, preloading canned datasets and opening
+the matching browser tabs. Run `tester present` during documentation reviews,
+onboarding sessions, or UI regression tests when you need a predictable
+environment without hitting live services. The command seeds pipeline demos,
+verifies that `uvicorn` is available, cleans up stale processes bound to demo
+ports, and exposes teardown helpers such as `tester close` for a clean slate.
+Use `tester open --no-browser` to skip seeding and browser automation when
+iterating locally. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
 
 ## Extending delivery integrations
 
