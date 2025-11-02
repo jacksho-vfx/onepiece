@@ -313,7 +313,7 @@ def _launch_demo_targets(
                             original_env[key] = (True, os.environ[key])
                         else:
                             original_env[key] = (False, "")
-                    os.environ.setdefault(key, value)
+                    os.environ[key] = value
             typer.echo(f"Starting {target.label} on {target.url(host)}")
             process = Process(
                 target=_serve_uvicorn,
