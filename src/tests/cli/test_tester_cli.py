@@ -11,6 +11,16 @@ from typer.testing import CliRunner
 
 from apps.tester import app as tester_app
 import apps.tester.presentation as tester_presentation
+from apps.onepiece.config import load_profile
+from apps.trafalgar.pipeline import (
+    configure_orchestrator_from_profile,
+    set_pipeline_orchestrator,
+)
+
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes.
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 runner = CliRunner()
@@ -343,6 +353,7 @@ def test_present_prepares_pipeline_demos(monkeypatch: pytest.MonkeyPatch) -> Non
     staged_root = tester_presentation.get_staged_pipeline_project_root()
     assert staged_root is not None
     assert os.environ.get("ONEPIECE_PROJECT_ROOT") == str(staged_root)
+    assert (staged_root / "onepiece.toml").exists()
     assert dummy_orchestrator.registered, "expected pipelines to be registered"
 
     tester_presentation.restore_pipeline_demo_environment()
@@ -389,10 +400,50 @@ def test_restore_pipeline_demo_environment_clears_staged_root(
 
     tester_presentation.prepare_pipeline_demos()
 
-    assert tester_presentation.get_staged_pipeline_project_root() == project_root
-    assert os.environ.get("ONEPIECE_PROJECT_ROOT") == str(project_root)
+    observed_root = tester_presentation.get_staged_pipeline_project_root()
+    assert observed_root == staged_root
+    assert os.environ.get("ONEPIECE_PROJECT_ROOT") == str(staged_root)
+    assert (staged_root / "onepiece.toml").exists()
 
     tester_presentation.restore_pipeline_demo_environment()
 
     assert tester_presentation.get_staged_pipeline_project_root() is None
     assert os.environ.get("ONEPIECE_PROJECT_ROOT") is None
+
+
+def test_prepare_pipeline_demos_exposes_pipelines_via_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregated definitions should be discoverable via configuration loader."""
+
+    tester_presentation.prepare_pipeline_demos()
+    staged_root = tester_presentation.get_staged_pipeline_project_root()
+    assert staged_root is not None
+
+    config_path = staged_root / "onepiece.toml"
+    assert config_path.exists(), "expected aggregated configuration to exist"
+
+    document = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    pipelines = document.get("pipelines", {})
+    assert isinstance(pipelines, dict)
+    expected_names = sorted(str(name) for name in pipelines)
+    assert expected_names, "expected at least one pipeline definition"
+
+    monkeypatch.setenv("ONEPIECE_PROJECT_ROOT", str(staged_root))
+    monkeypatch.delenv("ONEPIECE_PROFILE", raising=False)
+
+    orchestrator = None
+    observed_names: list[str] = []
+    try:
+        profile = load_profile()
+        orchestrator = configure_orchestrator_from_profile(profile)
+        observed_names = [
+            definition.name for definition in orchestrator.list_pipelines()
+        ]
+    finally:
+        if orchestrator is not None:
+            orchestrator.shutdown()
+            set_pipeline_orchestrator(None)
+        tester_presentation.restore_pipeline_demo_environment()
+
+    assert observed_names == expected_names
