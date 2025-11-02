@@ -307,9 +307,7 @@ def run_statistics(
     if pipeline is not None:
         trimmed = pipeline.strip()
         if not trimmed:
-            raise HTTPException(
-                status_code=400, detail="Invalid 'pipeline' parameter"
-            )
+            raise HTTPException(status_code=400, detail="Invalid 'pipeline' parameter")
         pipeline_filter = trimmed
 
     stats = orchestrator.aggregate_runs(

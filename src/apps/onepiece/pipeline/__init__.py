@@ -78,6 +78,7 @@ class PipelineClient(Protocol):
         *,
         since: str | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> Mapping[str, Any]:  # pragma: no cover - Protocol
         ...
 
