@@ -83,3 +83,32 @@ def test_manifest_version_round_trip() -> None:
 
     retranslated = translate_pipeline_manifest(exported)
     assert retranslated["metadata"]["version"] == "2024.1"
+
+
+def test_manifest_parameter_translation_supports_type_metadata() -> None:
+    manifest = {
+        "name": "demo",
+        "steps": [
+            {
+                "id": "first",
+                "uses": "tests.pipeline:prepare",
+            }
+        ],
+        "parameters": {
+            "mode": {
+                "type": "String",
+                "enum": ["auto", "manual"],
+                "default": "auto",
+                "description": "Select execution mode.",
+            },
+            "profile": "episodic",
+        },
+    }
+
+    translated = translate_pipeline_manifest(manifest)
+    parameters = translated["parameters"]
+
+    assert parameters["mode"]["choices"] == ["auto", "manual"]
+    assert parameters["mode"]["default"] == "auto"
+    assert parameters["mode"]["type"] == "String"
+    assert parameters["profile"] == "episodic"

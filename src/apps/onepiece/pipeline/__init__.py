@@ -601,10 +601,12 @@ def _definition_from_submission_payload(
 
 def _normalise_parameter_definition(
     value: Any,
-) -> tuple[bool, Any, str | None]:
+) -> tuple[bool, Any, str | None, str | None, tuple[Any, ...] | None]:
     required = False
     default: Any = _MISSING
     description: str | None = None
+    param_type: str | None = None
+    choices: tuple[Any, ...] | None = None
     if isinstance(value, Mapping):
         if "required" in value:
             required = bool(value.get("required"))
@@ -615,9 +617,19 @@ def _normalise_parameter_definition(
             stripped = raw_description.strip()
             if stripped:
                 description = stripped
+        raw_type = value.get("type")
+        if isinstance(raw_type, str):
+            stripped_type = raw_type.strip()
+            if stripped_type:
+                param_type = stripped_type
+        raw_choices = value.get("choices")
+        if isinstance(raw_choices, Sequence) and not isinstance(
+            raw_choices, (str, bytes, bytearray)
+        ):
+            choices = tuple(raw_choices)
     else:
         default = value
-    return required, default, description
+    return required, default, description, param_type, choices
 
 
 def _format_parameter_default(value: Any) -> str:
@@ -627,6 +639,13 @@ def _format_parameter_default(value: Any) -> str:
         return json.dumps(value, sort_keys=True)
     except (TypeError, ValueError):
         return repr(value)
+
+
+def _format_parameter_choices(values: Sequence[Any] | None) -> str | None:
+    if not values:
+        return None
+    formatted = [_format_parameter_default(value) for value in values]
+    return "[" + ", ".join(formatted) + "]"
 
 
 def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
@@ -646,8 +665,16 @@ def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
     if isinstance(parameters, Mapping) and parameters:
         summaries: list[str] = []
         for key in sorted(parameters):
-            required, default, _ = _normalise_parameter_definition(parameters[key])
+            required, default, _, param_type, choices = _normalise_parameter_definition(
+                parameters[key]
+            )
             details: list[str] = []
+            if param_type:
+                details.append(f"type={param_type}")
+            if choices:
+                formatted_choices = _format_parameter_choices(choices)
+                if formatted_choices:
+                    details.append(f"choices={formatted_choices}")
             if required:
                 details.append("required")
             if default is not _MISSING:
@@ -677,10 +704,12 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
     if isinstance(parameters, Mapping) and parameters:
         typer.echo("Parameters:")
         for key in sorted(parameters):
-            required, default, description = _normalise_parameter_definition(
-                parameters[key]
+            required, default, description, param_type, choices = (
+                _normalise_parameter_definition(parameters[key])
             )
             details: list[str] = []
+            if param_type:
+                details.append(f"type={param_type}")
             if required:
                 details.append("required")
             if default is not _MISSING:
@@ -689,6 +718,9 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
             typer.echo(f"  - {key}{suffix}")
             if description:
                 typer.echo(f"      {description}")
+            formatted_choices = _format_parameter_choices(choices)
+            if formatted_choices:
+                typer.echo(f"      Choices: {formatted_choices}")
     else:
         typer.echo("Parameters: <none>")
 
