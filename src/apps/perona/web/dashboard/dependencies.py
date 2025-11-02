@@ -157,7 +157,8 @@ def _settings_signature() -> tuple[str | None, str, int | None]:
     """Return the cache signature for the current settings configuration."""
 
     env_path = os.getenv("PERONA_SETTINGS_PATH")
-    resolved_path = _resolved_settings_path()
+    resolved_path_fn = _resolve_override("_resolved_settings_path", _resolved_settings_path)
+    resolved_path = resolved_path_fn()
     signature_path = resolved_path or DEFAULT_SETTINGS_PATH.expanduser()
 
     mtime_ns: int | None = None
@@ -297,13 +298,15 @@ def get_engine_cache_entry() -> _EngineCacheEntry:
 def persist_metrics(records: Sequence[Mapping[str, Any]]) -> None:
     """Persist telemetry records using the shared metrics store."""
 
-    _metrics_store.persist(records)
+    store = _resolve_override("_metrics_store", _metrics_store)
+    store.persist(records)
 
 
 def metrics_store_path() -> Path:
     """Return the path backing the metrics store."""
 
-    return _metrics_store.path
+    store = _resolve_override("_metrics_store", _metrics_store)
+    return store.path
 
 
 def list_wrangler_scripts() -> list[wrangler.WranglerScriptMetadata]:

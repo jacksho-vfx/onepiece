@@ -4,8 +4,27 @@ from __future__ import annotations
 
 import sys
 import types
+from collections.abc import Generator
 
-from hypothesis import HealthCheck, settings
+try:  # pragma: no cover - exercised in tests when Hypothesis is installed
+    from hypothesis import HealthCheck, settings
+except ModuleNotFoundError:  # pragma: no cover - executed in CI without hypothesis
+    class _SettingsStub:
+        def register_profile(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def load_profile(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _HealthCheckStub:
+        too_slow = "too_slow"
+
+    settings = _SettingsStub()  # type: ignore[assignment]
+    HealthCheck = _HealthCheckStub()  # type: ignore[assignment]
+
+import pytest
+
+from pytest_mock import MockerFixture
 
 
 def _ensure_structlog_stub() -> None:
@@ -41,3 +60,12 @@ settings.register_profile(
     suppress_health_check=[HealthCheck.too_slow],
 )
 settings.load_profile("ci")
+
+
+@pytest.fixture
+def mocker() -> Generator[MockerFixture, None, None]:
+    fixture = MockerFixture()
+    try:
+        yield fixture
+    finally:
+        fixture.stopall()
