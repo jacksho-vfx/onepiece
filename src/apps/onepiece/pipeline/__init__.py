@@ -263,6 +263,7 @@ class LocalPipelineClient:
         *,
         since: str | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> Mapping[str, Any]:
         parsed_since: datetime | None = None
         if since is not None:
@@ -275,8 +276,16 @@ class LocalPipelineClient:
             else:
                 parsed_since = parsed_since.astimezone(timezone.utc)
 
+        pipeline_filter: str | None = None
+        if pipeline is not None:
+            pipeline_filter = pipeline.strip()
+            if not pipeline_filter:
+                raise PipelineClientError("Pipeline name must not be blank.")
+
         stats = self._orchestrator.aggregate_runs(
-            since=parsed_since, include_durations=include_durations
+            since=parsed_since,
+            include_durations=include_durations,
+            pipeline=pipeline_filter,
         )
         return {"pipelines": stats}
 
@@ -449,12 +458,15 @@ class RemotePipelineClient:
         *,
         since: str | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> Mapping[str, Any]:
         params: dict[str, Any] = {}
         if since is not None:
             params["since"] = since
         if include_durations:
             params["include_durations"] = True
+        if pipeline is not None:
+            params["pipeline"] = pipeline
         response = self._request("GET", "runs/stats", params=params or None)
         payload = response.json()
         if not isinstance(payload, Mapping):
@@ -1604,6 +1616,11 @@ def show_statistics(
         "-d",
         help="Display duration summaries for each status grouping.",
     ),
+    pipeline: str | None = typer.Option(
+        None,
+        "--pipeline",
+        help="Restrict statistics to the specified pipeline.",
+    ),
     since: str | None = typer.Option(
         None,
         "--since",
@@ -1617,9 +1634,19 @@ def show_statistics(
 
     output_format = _resolve_output_format(format)
 
+    pipeline_filter: str | None = None
+    if pipeline is not None:
+        pipeline_filter = pipeline.strip()
+        if not pipeline_filter:
+            raise typer.BadParameter("Pipeline name must not be blank.")
+
     with _using_client() as client:
         try:
-            stats = client.get_stats(since=since, include_durations=include_durations)
+            stats = client.get_stats(
+                since=since,
+                include_durations=include_durations,
+                pipeline=pipeline_filter,
+            )
         except PipelineClientError as exc:
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc

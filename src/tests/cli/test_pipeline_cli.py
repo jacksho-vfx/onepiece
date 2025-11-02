@@ -138,10 +138,12 @@ class StubPipelineClient:
         *,
         since: str | None = None,
         include_durations: bool = False,
+        pipeline: str | None = None,
     ) -> Mapping[str, Any]:
         self.stats_kwargs = {
             "since": since,
             "include_durations": include_durations,
+            "pipeline": pipeline,
         }
         if self.stats_error:
             raise self.stats_error
@@ -897,6 +899,8 @@ def test_pipeline_stats_displays_results(monkeypatch: MonkeyPatch) -> None:
             "pipeline",
             "stats",
             "--include-durations",
+            "--pipeline",
+            "render",
             "--since",
             "2024-01-01T00:00:00+00:00",
         ],
@@ -908,6 +912,7 @@ def test_pipeline_stats_displays_results(monkeypatch: MonkeyPatch) -> None:
     assert client.stats_kwargs == {
         "since": "2024-01-01T00:00:00+00:00",
         "include_durations": True,
+        "pipeline": "render",
     }
     assert client.closed is True
 

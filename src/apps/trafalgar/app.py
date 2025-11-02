@@ -320,6 +320,11 @@ def pipeline_stats(
         "-d",
         help="Display duration summaries for each status grouping.",
     ),
+    pipeline: str | None = typer.Option(
+        None,
+        "--pipeline",
+        help="Restrict statistics to the specified pipeline.",
+    ),
     since: str | None = typer.Option(
         None,
         "--since",
@@ -341,8 +346,16 @@ def pipeline_stats(
         else:
             parsed_since = parsed_since.astimezone(timezone.utc)
 
+    pipeline_filter: str | None = None
+    if pipeline is not None:
+        pipeline_filter = pipeline.strip()
+        if not pipeline_filter:
+            raise typer.BadParameter("Pipeline name must not be blank.")
+
     stats = orchestrator.aggregate_runs(
-        include_durations=include_durations, since=parsed_since
+        include_durations=include_durations,
+        since=parsed_since,
+        pipeline=pipeline_filter,
     )
 
     if not stats:

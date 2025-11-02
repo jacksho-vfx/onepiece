@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
 
@@ -322,25 +323,48 @@ def test_aggregate_runs_supports_since_filter() -> None:
     assert stats == {"render": {"failed": {"count": 1}}}
 
 
-def test_orchestrator_aggregate_runs_proxies_store() -> None:
+def test_aggregate_runs_supports_pipeline_filter() -> None:
     store = PipelineRunStore()
-    base = datetime(2024, 5, 1, 7, tzinfo=timezone.utc)
+    base = datetime(2024, 4, 1, 8, tzinfo=timezone.utc)
     _create_run(
         store,
         run_id="run-1",
         pipeline="render",
         status="succeeded",
         created_at=base,
-        updated_at=base + timedelta(minutes=2),
+        updated_at=base + timedelta(minutes=1),
     )
-    orchestrator = PipelineOrchestrator(store=store)
+    _create_run(
+        store,
+        run_id="run-2",
+        pipeline="publish",
+        status="failed",
+        created_at=base + timedelta(minutes=2),
+        updated_at=base + timedelta(minutes=3),
+    )
 
-    stats = orchestrator.aggregate_runs(include_durations=True)
+    stats = store.aggregate_runs(pipeline="render")
 
-    assert "render" in stats
-    succeeded = stats["render"]["succeeded"]
-    assert succeeded["count"] == 1
-    assert succeeded["durations"]["average_seconds"] == 120.0
+    assert stats == {"render": {"succeeded": {"count": 1}}}
+
+
+def test_orchestrator_aggregate_runs_proxies_store() -> None:
+    store = Mock(spec=PipelineRunStore)
+    store.aggregate_runs.return_value = {"render": {"succeeded": {"count": 1}}}
+    orchestrator = PipelineOrchestrator(store=store)  # type: ignore[arg-type]
+
+    stats = orchestrator.aggregate_runs(
+        include_durations=True,
+        since=datetime(2024, 5, 1, 7, tzinfo=timezone.utc),
+        pipeline="render",
+    )
+
+    assert stats == {"render": {"succeeded": {"count": 1}}}
+    store.aggregate_runs.assert_called_once_with(
+        since=datetime(2024, 5, 1, 7, tzinfo=timezone.utc),
+        include_durations=True,
+        pipeline="render",
+    )
 
 
 def test_append_event_records_queue_wait_metrics() -> None:

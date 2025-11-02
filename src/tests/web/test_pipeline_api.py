@@ -730,6 +730,34 @@ def test_run_stats_endpoint_returns_grouped_counts(client: TestClient) -> None:
     assert payload["pipelines"]["publish_assets"] == {"succeeded": {"count": 1}}
 
 
+def test_run_stats_endpoint_filters_by_pipeline(client: TestClient) -> None:
+    base = datetime(2024, 5, 1, 13, tzinfo=timezone.utc)
+    _seed_run(
+        run_id="run-1",
+        pipeline="render_shots",
+        status="succeeded",
+        created_at=base,
+        updated_at=base + timedelta(minutes=3),
+    )
+    _seed_run(
+        run_id="run-2",
+        pipeline="publish_assets",
+        status="failed",
+        created_at=base + timedelta(minutes=10),
+        updated_at=base + timedelta(minutes=12),
+    )
+
+    response = client.get(
+        "/runs/stats",
+        headers=_auth_headers(),
+        params={"pipeline": " render_shots "},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pipelines"] == {"render_shots": {"succeeded": {"count": 1}}}
+
+
 def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
     base = datetime(2024, 6, 1, 8, tzinfo=timezone.utc)
     orchestrator = get_pipeline_orchestrator()
@@ -843,6 +871,18 @@ def test_run_stats_endpoint_validates_since_parameter(client: TestClient) -> Non
     assert response.status_code == 400
     payload = response.json()
     assert payload["detail"] == "Invalid 'since' timestamp"
+
+
+def test_run_stats_endpoint_rejects_blank_pipeline(client: TestClient) -> None:
+    response = client.get(
+        "/runs/stats",
+        headers=_auth_headers(),
+        params={"pipeline": "   "},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["detail"] == "Invalid 'pipeline' parameter"
 
 
 def test_prune_runs_endpoint_applies_retention(client: TestClient) -> None:
