@@ -71,6 +71,7 @@ def restore_pipeline_demo_environment() -> None:
     """Restore environment variables overridden while staging demo pipelines."""
 
     global _PIPELINE_ENVIRONMENT_OVERRIDES
+    global _STAGED_PIPELINE_PROJECT_ROOT
 
     overrides = _PIPELINE_ENVIRONMENT_OVERRIDES
     _PIPELINE_ENVIRONMENT_OVERRIDES = {}
@@ -80,6 +81,8 @@ def restore_pipeline_demo_environment() -> None:
             os.environ[key] = previous_value
         else:
             os.environ.pop(key, None)
+
+    _STAGED_PIPELINE_PROJECT_ROOT = None
 
 
 def get_staged_pipeline_project_root() -> Path | None:
