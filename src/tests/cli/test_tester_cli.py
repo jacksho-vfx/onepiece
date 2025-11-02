@@ -198,7 +198,9 @@ def test_present_runs_prepare_hooks_once(
         assert calls == 1, f"expected prepare hook for {label!r} to run once"
 
 
-def test_present_restores_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_present_restores_environment_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Environment overrides should apply during launch and be restored afterwards."""
 
     processes: list[DummyProcess] = []
@@ -241,9 +243,7 @@ def test_present_restores_environment_overrides(monkeypatch: pytest.MonkeyPatch)
 
     assert result.exit_code == 0, result.output
     assert len(processes) == 1
-    assert observed_environment == [
-        ("http://127.0.0.1:9999/", "demo-dashboard-token")
-    ]
+    assert observed_environment == [("http://127.0.0.1:9999/", "demo-dashboard-token")]
     assert os.environ["TRAFALGAR_PIPELINE_API_URL"] == "https://existing.example/api/"
     assert os.environ["TRAFALGAR_DASHBOARD_TOKEN"] == "existing-dashboard-token"
     assert processes[0].joined and processes[0].join_timeout == 5
