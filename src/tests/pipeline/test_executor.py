@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any, Mapping
 
 import pytest
 
 from apps.trafalgar.providers.pipeline_executor import (
     PipelineExecutor,
+    PipelineStepTimeoutError,
     StepExecutionContext,
     StepTriggerEvent,
 )
@@ -316,3 +318,46 @@ def test_event_provider_accepts_context_without_parameters() -> None:
     assert [name for name, _ in recorded] == ["listener"]
     assert recorded[0][1].name == "ready"
     assert contexts["listener"].step_name == "listener"
+
+
+def test_step_timeout_aborts_stuck_provider() -> None:
+    pipeline = Pipeline(
+        name="timeout",
+        steps=[
+            PipelineStep(
+                name="slow",
+                provider=lambda _: time.sleep(0.2),
+            )
+        ],
+    )
+    contexts, base_emit = _make_contextual_emitter("run-timeout", pipeline, {})
+    events: list[tuple[str, str, Exception | None]] = []
+
+    def emit(
+        status: str,
+        *,
+        step: Any,
+        error: Exception | None = None,
+        context: StepExecutionContext | None = None,
+        **kwargs: object,
+    ) -> StepExecutionContext | None:
+        events.append((status, step.name, error))
+        return base_emit(
+            status,
+            step=step,
+            error=error,
+            context=context,
+            **kwargs,
+        )
+
+    executor = PipelineExecutor(step_timeout=0.05)
+    with pytest.raises(PipelineStepTimeoutError):
+        executor.execute(pipeline, parameters={}, emit=emit)
+
+    failures = [event for event in events if event[0] == "step_failed"]
+    assert failures, "expected timeout failure event"
+    failure_error = failures[0][2]
+    assert isinstance(failure_error, PipelineStepTimeoutError)
+    assert failure_error.step_name == "slow"
+    assert failure_error.scope == "step"
+    assert failure_error.timeout_seconds == pytest.approx(0.05, rel=0.2)

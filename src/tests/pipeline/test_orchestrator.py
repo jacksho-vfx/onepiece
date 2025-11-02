@@ -7,6 +7,8 @@ from threading import Barrier, BrokenBarrierError, Event
 import time
 from typing import Any
 
+import pytest
+
 from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
 from apps.trafalgar.providers.pipeline_executor import (
     PipelineExecutor,
@@ -116,6 +118,44 @@ def test_event_driven_steps_execute_in_parallel() -> None:
         first_finish = finishes.get(timeout=1.0)
         second_finish = finishes.get(timeout=1.0)
         assert {first_finish[0], second_finish[0]} == {"listener_a", "listener_b"}
+    finally:
+        orchestrator.shutdown()
+
+
+def test_orchestrator_records_timeout_metadata() -> None:
+    pipeline = Pipeline(
+        name="timeout",
+        steps=[
+            PipelineStep(
+                name="slow",
+                provider=lambda _: time.sleep(0.2),
+            )
+        ],
+    )
+    definition = PipelineDefinition(name="timeout", pipeline=pipeline)
+    executor = PipelineExecutor(step_timeout=0.05)
+    orchestrator = PipelineOrchestrator((definition,), executor=executor)
+
+    try:
+        run = orchestrator.trigger_run("timeout", parameters={})
+        _wait_for_completion(orchestrator, run.run_id)
+
+        run_record = orchestrator.get_run(run.run_id)
+        assert run_record.status == "failed"
+
+        events = list(orchestrator.iter_run_events(run.run_id))
+        failure_event = next(event for event in events if event.status == "failed")
+        step_failure = next(event for event in events if event.status == "step_failed")
+
+        assert (
+            failure_event.parameters.get("error_type")
+            == "PipelineStepTimeoutError"
+        )
+        timeout_info = step_failure.parameters.get("timeout")
+        assert timeout_info is not None
+        assert timeout_info["scope"] == "step"
+        assert timeout_info["step"] == "slow"
+        assert timeout_info["timeout_seconds"] == pytest.approx(0.05, rel=0.2)
     finally:
         orchestrator.shutdown()
 

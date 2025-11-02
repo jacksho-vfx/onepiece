@@ -45,6 +45,12 @@ class ProfileContext:
         Optional upper bound for concurrent event-driven pipeline step
         execution.  When unspecified, event-driven steps share the sequential
         executor pool.
+    pipeline_executor_step_timeout:
+        Optional maximum number of seconds a single pipeline step may run
+        before being considered failed.
+    pipeline_executor_run_timeout:
+        Optional maximum number of seconds a pipeline run may take before it
+        is aborted.
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
@@ -57,6 +63,8 @@ class ProfileContext:
     sources: tuple[Path, ...]
     pipeline_workers_max: int
     pipeline_executor_event_max_workers: int | None
+    pipeline_executor_step_timeout: float | None
+    pipeline_executor_run_timeout: float | None
 
 
 def load_profile(
@@ -126,6 +134,10 @@ def load_profile(
     pipeline_executor_event_max_workers = _extract_pipeline_executor_event_max_workers(
         selected_profile, profile_data
     )
+    (
+        pipeline_executor_step_timeout,
+        pipeline_executor_run_timeout,
+    ) = _extract_pipeline_executor_timeouts(selected_profile, profile_data)
 
     return ProfileContext(
         name=selected_profile,
@@ -135,6 +147,8 @@ def load_profile(
         sources=tuple(sources),
         pipeline_workers_max=pipeline_workers_max,
         pipeline_executor_event_max_workers=pipeline_executor_event_max_workers,
+        pipeline_executor_step_timeout=pipeline_executor_step_timeout,
+        pipeline_executor_run_timeout=pipeline_executor_run_timeout,
     )
 
 
@@ -363,3 +377,47 @@ def _extract_pipeline_executor_event_max_workers(
         )
 
     return max_workers
+
+
+def _extract_pipeline_executor_timeouts(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> tuple[float | None, float | None]:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
+    executor_config = pipeline_config.get("executor")
+    if executor_config is None:
+        return (None, None)
+    if not isinstance(executor_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor section must be a mapping"
+        )
+
+    step_timeout = _coerce_executor_timeout(
+        profile_name, executor_config, "step_timeout"
+    )
+    run_timeout = _coerce_executor_timeout(
+        profile_name, executor_config, "run_timeout"
+    )
+    return step_timeout, run_timeout
+
+
+def _coerce_executor_timeout(
+    profile_name: str, executor_config: Mapping[str, Any], key: str
+) -> float | None:
+    raw_value = executor_config.get(key)
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.{key} must be a positive number"
+        )
+    try:
+        timeout = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.{key} must be a positive number"
+        ) from exc
+    if timeout <= 0:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.executor.{key} must be greater than 0"
+        )
+    return timeout

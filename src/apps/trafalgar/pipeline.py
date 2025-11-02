@@ -2408,6 +2408,8 @@ class PipelineOrchestrator:
                     "payload": dict(event.payload),
                 }
             if error is not None:
+                if isinstance(error, pipeline_executor.PipelineTimeoutError):
+                    payload["timeout"] = error.describe_timeout()
                 payload.update(_serialise_exception(error))
             self._append_event(run_id, status, parameters=payload)
             return context
@@ -2725,7 +2727,9 @@ def configure_orchestrator_from_profile(
         max_workers = max(1, profile.pipeline_workers_max)
 
     executor = pipeline_executor.PipelineExecutor(
-        event_max_workers=profile.pipeline_executor_event_max_workers
+        event_max_workers=profile.pipeline_executor_event_max_workers,
+        step_timeout=profile.pipeline_executor_step_timeout,
+        run_timeout=profile.pipeline_executor_run_timeout,
     )
 
     orchestrator = orchestrator_factory(

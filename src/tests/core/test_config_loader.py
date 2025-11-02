@@ -45,6 +45,8 @@ default_profile = "default"
 
 [profiles.default.pipeline.executor]
 event_max_workers = 4
+step_timeout = 12.5
+run_timeout = 60
 """.strip()
         + "\n",
     )
@@ -52,6 +54,8 @@ event_max_workers = 4
     context = load_profile(workspace=workspace)
 
     assert context.pipeline_executor_event_max_workers == 4
+    assert context.pipeline_executor_step_timeout == pytest.approx(12.5)
+    assert context.pipeline_executor_run_timeout == pytest.approx(60.0)
 
 
 def test_load_profile_merges_precedence(
