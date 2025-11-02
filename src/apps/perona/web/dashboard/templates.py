@@ -106,6 +106,10 @@ def dashboard_index_html() -> str:
             z-index: 10;
         }
 
+        .wrangler-overlay[hidden] {
+            display: none;
+        }
+
         .wrangler-menu {
             background: rgba(30, 41, 59, 0.95);
             border-radius: 1rem;
