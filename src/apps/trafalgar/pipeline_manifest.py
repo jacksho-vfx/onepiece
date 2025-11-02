@@ -126,9 +126,7 @@ def _translate_parameters(parameters: Any) -> dict[str, Any]:
                     translated["choices"], parameter=name
                 )
             if "default" in translated:
-                translated["default"] = _normalise_manifest_value(
-                    translated["default"]
-                )
+                translated["default"] = _normalise_manifest_value(translated["default"])
             if "description" in translated and translated["description"] is not None:
                 translated["description"] = str(translated["description"])
             if "type" in translated and translated["type"] is not None:

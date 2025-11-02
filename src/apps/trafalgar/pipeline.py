@@ -237,9 +237,7 @@ def _parameter_definition_from_payload(
             try:
                 type_name = _normalise_parameter_type(value.get("type"))
             except ValueError as exc:
-                msg = (
-                    f"{location} parameter '{parameter}' has invalid type: {exc}"
-                )
+                msg = f"{location} parameter '{parameter}' has invalid type: {exc}"
                 raise ValueError(msg) from exc
         choices_value = value.get("choices")
         choices: tuple[Any, ...] | None = None
@@ -249,9 +247,7 @@ def _parameter_definition_from_payload(
             ):
                 raw_choices = list(choices_value)
             else:
-                msg = (
-                    f"{location} parameter '{parameter}' choices must be a sequence"
-                )
+                msg = f"{location} parameter '{parameter}' choices must be a sequence"
                 raise TypeError(msg)
             if type_name is not None:
                 try:

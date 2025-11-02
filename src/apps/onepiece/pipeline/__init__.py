@@ -704,8 +704,8 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
     if isinstance(parameters, Mapping) and parameters:
         typer.echo("Parameters:")
         for key in sorted(parameters):
-            required, default, description, param_type, choices = _normalise_parameter_definition(
-                parameters[key]
+            required, default, description, param_type, choices = (
+                _normalise_parameter_definition(parameters[key])
             )
             details: list[str] = []
             if param_type:
