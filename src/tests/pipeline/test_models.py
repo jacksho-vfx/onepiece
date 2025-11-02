@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from apps.trafalgar.pipeline import PipelineDefinition
+
 from libraries.pipeline import (
     Pipeline,
     pipeline_from_config,
@@ -146,3 +148,76 @@ def test_pipeline_validation_errors() -> None:
     step = PipelineStep(name="listen", provider="noop", trigger=trigger)
     pipeline = Pipeline(name="ok", steps=[step])
     assert pipeline.get_step("listen") is step
+
+
+def _build_single_step_pipeline() -> Pipeline:
+    return pipeline_from_config(
+        {
+            "name": "demo",
+            "steps": [
+                {
+                    "name": "single",
+                    "provider": "math:sqrt",
+                }
+            ],
+        }
+    )
+
+
+def test_pipeline_definition_resolve_parameters_coerces_and_defaults() -> None:
+    pipeline = _build_single_step_pipeline()
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "attempts": {"type": "integer", "default": "2"},
+            "urgent": {"type": "boolean", "default": "false"},
+            "mode": {
+                "type": "string",
+                "choices": ["auto", "manual"],
+                "default": "auto",
+            },
+        },
+    )
+
+    resolved = definition.resolve_parameters({"attempts": "5", "urgent": "yes"})
+
+    assert resolved == {"attempts": 5, "urgent": True, "mode": "auto"}
+
+
+def test_pipeline_definition_resolve_parameters_rejects_invalid_values() -> None:
+    pipeline = _build_single_step_pipeline()
+    definition = PipelineDefinition(
+        name="demo",
+        pipeline=pipeline,
+        parameters={
+            "attempts": {"type": "integer"},
+            "mode": {
+                "type": "string",
+                "choices": ["auto", "manual"],
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="invalid literal"):
+        definition.resolve_parameters({"attempts": "oops"})
+
+    with pytest.raises(ValueError, match="must be one of"):
+        definition.resolve_parameters({"attempts": 3, "mode": "invalid"})
+
+
+def test_pipeline_definition_validates_default_choices() -> None:
+    pipeline = _build_single_step_pipeline()
+
+    with pytest.raises(ValueError, match="default must be one of"):
+        PipelineDefinition(
+            name="demo",
+            pipeline=pipeline,
+            parameters={
+                "mode": {
+                    "type": "string",
+                    "choices": ["auto", "manual"],
+                    "default": "invalid",
+                }
+            },
+        )

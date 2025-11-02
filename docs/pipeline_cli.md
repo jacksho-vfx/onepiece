@@ -120,6 +120,37 @@ For persistence layouts and retention options, consult
 [`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamepipelinestorage)
 so CLI-driven deployments match the storage settings used in Trafalgar.
 
+### Declaring parameter metadata
+
+Pipeline manifests can expose strongly-typed run parameters. Add a
+`parameters` table to the manifest and annotate each entry with the expected
+metadata:
+
+```toml
+[parameters]
+# default value stored as string; CLI/API coerce to integer at runtime
+retries.type = "integer"
+retries.default = "3"
+
+[parameters.mode]
+type = "string"
+enum = ["auto", "manual"]
+description = "Select execution mode for automation calls."
+```
+
+Supported `type` values are `string`, `integer`, `number`, and `boolean`.
+Synonyms such as `str`, `int`, and `bool` are also accepted. The optional
+`choices` (or legacy `enum`/`options`) field constrains a parameter to a set of
+values and is validated after coercion. Defaults and run-time inputs are
+converted to the declared type, so "3" becomes the integer 3, "yes" turns into
+`True`, and invalid values raise actionable errors.
+
+`onepiece pipeline list` and `onepiece pipeline describe` now display the type
+and choice metadata alongside the usual default/required summaries. The
+`--format json` payloads (and Trafalgar's REST API) include the same `type` and
+`choices` fields so dashboards and automation jobs can surface friendly pickers
+or form validation.
+
 ### Monitoring worker capacity
 
 The worker pool metrics endpoint provides quick visibility into how busy the

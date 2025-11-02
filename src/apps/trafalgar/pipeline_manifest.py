@@ -36,6 +36,10 @@ def translate_pipeline_manifest(payload: Mapping[str, Any]) -> dict[str, Any]:
     if summary is not None and "description" not in config:
         config["description"] = str(summary)
 
+    parameters = config.get("parameters")
+    if parameters is not None:
+        config["parameters"] = _translate_parameters(parameters)
+
     triggers = config.get("triggers")
     if triggers:
         config["steps"] = _translate_trigger_blocks(triggers)
@@ -93,6 +97,66 @@ def _translate_steps(steps: Any) -> list[dict[str, Any]]:
         raise ValueError(msg)
 
     return [_translate_step(step) for step in steps]
+
+
+def _translate_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, Mapping):
+        msg = "pipeline parameters must be a mapping"
+        raise TypeError(msg)
+
+    converted: dict[str, Any] = {}
+    for raw_name, raw_definition in parameters.items():
+        name = str(raw_name).strip()
+        if not name:
+            msg = "pipeline parameter names must be non-empty"
+            raise ValueError(msg)
+        if isinstance(raw_definition, Mapping):
+            definition = {str(key): value for key, value in raw_definition.items()}
+            translated = dict(definition)
+            if "enum" in translated and "choices" not in translated:
+                translated["choices"] = _normalise_parameter_choices(
+                    translated.pop("enum"), parameter=name
+                )
+            if "options" in translated and "choices" not in translated:
+                translated["choices"] = _normalise_parameter_choices(
+                    translated.pop("options"), parameter=name
+                )
+            if "choices" in translated:
+                translated["choices"] = _normalise_parameter_choices(
+                    translated["choices"], parameter=name
+                )
+            if "default" in translated:
+                translated["default"] = _normalise_manifest_value(
+                    translated["default"]
+                )
+            if "description" in translated and translated["description"] is not None:
+                translated["description"] = str(translated["description"])
+            if "type" in translated and translated["type"] is not None:
+                translated["type"] = str(translated["type"]).strip()
+            converted[name] = translated
+        else:
+            converted[name] = _normalise_manifest_value(raw_definition)
+    return converted
+
+
+def _normalise_manifest_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _normalise_manifest_value(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalise_manifest_value(item) for item in value]
+    return value
+
+
+def _normalise_parameter_choices(value: Any, *, parameter: str) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        msg = f"pipeline parameter '{parameter}' choices must be a sequence"
+        raise TypeError(msg)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [item for item in value]
+    msg = f"pipeline parameter '{parameter}' choices must be a sequence"
+    raise TypeError(msg)
 
 
 def _translate_step(step: Any) -> dict[str, Any]:
