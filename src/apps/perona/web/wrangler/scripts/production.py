@@ -35,6 +35,9 @@ _STAGE_FOLLOW_UP = {
     "comp": "assign comp lead",
     "compositing": "assign comp lead",
     "fx": "assign fx supervisor",
+}
+
+
 def _derive_follow_up(drivers: Iterable[str]) -> str:
     """Suggest the next action based on risk drivers."""
 

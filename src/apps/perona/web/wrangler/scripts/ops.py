@@ -103,7 +103,9 @@ def _run_spin_down_idle_workers_script() -> WranglerScriptResult:
                 notes=_SPIN_DOWN_NOTES_PREFIX,
             )
             try:
-                baseline_breakdown, results = engine.run_optimization_backtest([scenario])
+                baseline_breakdown, results = engine.run_optimization_backtest(
+                    [scenario]
+                )
             except Exception as exc:  # pragma: no cover - defensive
                 notes.append(f"Cost optimisation backtest failed: {exc}")
             else:
