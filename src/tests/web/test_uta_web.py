@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from html import unescape
 from pathlib import Path
 
 import click
@@ -126,3 +127,26 @@ def test_dashboard_chart_builders() -> None:
     assert adapter_config["type"] == "bar"
     assert adapter_config["data"]["labels"] == ["mock", "deadline", "tractor"]
     assert adapter_config["data"]["datasets"][0]["data"] == [9, 5, 4]
+
+
+def test_render_index_embeds_default_credentials() -> None:
+    """Default dashboard credentials should be exposed via data attributes."""
+
+    html = web._render_index(
+        "/",
+        default_credentials={
+            "apiKey": "suite-key",
+            "bearerToken": "demo-token",
+        },
+    )
+    match = re.search(
+        r'data-dashboard-default-credentials="([^\"]+)"',
+        html,
+    )
+    assert match, "Expected default credential dataset to be present"
+
+    payload = json.loads(unescape(match.group(1)))
+
+    assert payload["bearerToken"] == "demo-token"
+    assert payload["apiKey"] == "suite-key"
+    assert "apiSecret" not in payload
