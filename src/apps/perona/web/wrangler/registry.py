@@ -116,7 +116,7 @@ def _reset_registry() -> None:
 
 
 def _register_builtin_scripts() -> None:
-    from .scripts import cost, production, telemetry
+    from .scripts import cost, ops, production, risk, telemetry
 
     builtins = [
         (
@@ -189,7 +189,7 @@ def _register_builtin_scripts() -> None:
                 ),
                 tags=("rendering", "capacity", "cost"),
             ),
-            production._run_spin_down_idle_workers_script,
+            ops._run_spin_down_idle_workers_script,
         ),
         (
             WranglerScriptMetadata(
@@ -231,7 +231,7 @@ def _register_builtin_scripts() -> None:
                 ),
                 tags=("rendering", "errors", "shots"),
             ),
-            production._run_flag_render_error_streaks_script,
+            risk._run_flag_render_error_streaks_script,
         ),
         (
             WranglerScriptMetadata(
@@ -240,7 +240,7 @@ def _register_builtin_scripts() -> None:
                 description="Target shots with low cache stability and propose remedial actions",
                 tags=("risk", "caches", "simulation"),
             ),
-            production._run_rebuild_unstable_caches_script,
+            risk._run_rebuild_unstable_caches_script,
         ),
         (
             WranglerScriptMetadata(
