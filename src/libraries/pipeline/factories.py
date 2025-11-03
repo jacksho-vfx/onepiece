@@ -55,9 +55,10 @@ def _import_provider_module(module_name: str) -> ModuleType:
     try:
         return import_module(module_name)
     except ModuleNotFoundError as exc:
-        if exc.name != module_name:
-            raise
         if not module_name.startswith("onepiece"):
+            raise
+        missing = exc.name or ""
+        if missing and not module_name.startswith(missing):
             raise
     fallback_name = f"apps.{module_name}"
     module = import_module(fallback_name)
@@ -100,10 +101,23 @@ def resolve_provider(
             raise ValueError(msg)
     module = _import_provider_module(module_name)
     try:
-        return getattr(module, attribute)
+        resolved = getattr(module, attribute)
     except AttributeError as exc:  # pragma: no cover - defensive guard
         msg = f"module '{module_name}' has no attribute '{attribute}'"
         raise AttributeError(msg) from exc
+
+    if isinstance(resolved, ModuleType):
+        for attribute_name in ("app", "reconcile", "handler", "main"):
+            candidate = getattr(resolved, attribute_name, None)
+            if callable(candidate):
+                return candidate
+        module_suffix = resolved.__name__.split(".")[-1]
+        notifier_name = f"send_{module_suffix}_notification"
+        candidate = getattr(resolved, notifier_name, None)
+        if callable(candidate):
+            return candidate
+
+    return resolved
 
 
 def with_resolved_providers(

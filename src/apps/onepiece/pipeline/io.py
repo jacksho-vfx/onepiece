@@ -99,11 +99,18 @@ def _serialised_definition_to_manifest(definition: Mapping[str, Any]) -> dict[st
 
     metadata_payload = definition.get("metadata")
     if isinstance(metadata_payload, Mapping):
+        metadata_version = metadata_payload.get("version")
+        cleaned_metadata = {
+            str(key): _normalise_manifest_value(value)
+            for key, value in metadata_payload.items()
+            if key != "version"
+        }
+        if cleaned_metadata:
+            manifest["metadata"] = cleaned_metadata
+        if "version" not in manifest and metadata_version is not None:
+            manifest["version"] = metadata_version
+    elif metadata_payload is not None:
         manifest["metadata"] = _normalise_manifest_value(metadata_payload)
-        if "version" not in manifest:
-            metadata_version = metadata_payload.get("version")
-            if metadata_version is not None:
-                manifest["version"] = metadata_version
 
     parameters = definition.get("parameters")
     if isinstance(parameters, Mapping) and parameters:

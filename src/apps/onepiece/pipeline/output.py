@@ -66,10 +66,10 @@ def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
     display_text = str(display).strip() if display is not None else ""
     description = definition.get("description")
 
-    yield f"{name}:"
-
     if display_text and display_text != name:
-        yield f"  Display name: {display_text}"
+        yield f"{name} ({display_text})"
+    else:
+        yield name
 
     if isinstance(description, str) and description.strip():
         yield f"  Description: {description.strip()}"

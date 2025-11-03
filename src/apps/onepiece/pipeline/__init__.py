@@ -10,8 +10,10 @@ from typing import Any, Mapping
 import typer
 
 from .clients import (
+    LocalPipelineClient,
     PipelineClient,
     PipelineClientError,
+    RemotePipelineClient,
     create_pipeline_client,
 )
 from .io import (
@@ -570,4 +572,11 @@ def watch_run(
             raise typer.Exit(code=1) from exc
 
 
-__all__ = ["app"]
+__all__ = [
+    "app",
+    "create_pipeline_client",
+    "LocalPipelineClient",
+    "RemotePipelineClient",
+    "PipelineClient",
+    "PipelineClientError",
+]

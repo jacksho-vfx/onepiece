@@ -5,7 +5,7 @@ import json
 import os
 from collections import Counter
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import structlog
 import typer
@@ -20,6 +20,8 @@ from libraries.automation.reconcile.comparator import (
 from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError
 
 log = structlog.get_logger(__name__)
+
+LAST_RECONCILE_DATA: dict[str, Any] | None = None
 
 PROJECT_ROOT_ENV = "ONEPIECE_PROJECTS_ROOT"
 DEFAULT_PROJECTS_ROOT = Path("/projects")
@@ -80,6 +82,8 @@ def reconcile(
 ) -> None:
     """Entry point executed by the Typer CLI."""
 
+    global LAST_RECONCILE_DATA
+
     if scope not in ("shots", "assets", "versions"):
         raise ValueError(f"Invalid scope: {scope}")
     log.info(
@@ -108,13 +112,21 @@ def reconcile(
         try:
             s3_versions = scan_s3_context(project, context, scope=scope)
         except Exception as exc:  # pragma: no cover - defensive guard
-            log.error(
-                "reconcile.s3_failed",
-                project=project,
-                context=context,
-                error=str(exc),
-            )
-            raise typer.Exit(code=2) from exc
+            message = str(exc)
+            if isinstance(exc, RuntimeError) and "ONEPIECE_S3_BUCKET" in message:
+                log.warning(
+                    "reconcile.s3_skipped_missing_bucket",
+                    project=project,
+                    context=context,
+                )
+            else:
+                log.error(
+                    "reconcile.s3_failed",
+                    project=project,
+                    context=context,
+                    error=message,
+                )
+                raise typer.Exit(code=2) from exc
 
     shots = collect_shots(sg_versions, fs_versions, s3_versions)
     total_shots = len(shots)
@@ -147,6 +159,17 @@ def reconcile(
         reconcile_progress.succeed(
             f"Compared {total_shots} shot(s) across ShotGrid, filesystem, and S3."
         )
+
+    LAST_RECONCILE_DATA = {
+        "project": project,
+        "scope": scope,
+        "context": context,
+        "shots": shots,
+        "shotgrid": sg_versions,
+        "filesystem": fs_versions,
+        "s3": s3_versions,
+        "mismatches": mismatches,
+    }
 
     totals = Counter(mismatch["type"] for mismatch in mismatches)
     typer.secho(f"Checked {len(shots)} shots", fg=typer.colors.CYAN)

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import sys
 import types
+from typing import Any
+from unittest import mock
+
+import pytest
 
 from hypothesis import HealthCheck, settings
 
@@ -35,6 +41,81 @@ def _ensure_structlog_stub() -> None:
 
 
 _ensure_structlog_stub()
+
+
+def _ensure_pytest_mock_stub() -> None:
+    if "pytest_mock" in sys.modules:
+        return
+
+    module = types.ModuleType("pytest_mock")
+
+    class MockerFixture:
+        def __init__(self) -> None:
+            self._patches: list[Any] = []
+
+        def patch(self, target: str, *args: object, **kwargs: object) -> object:
+            patcher = mock.patch(target, *args, **kwargs)
+            patched = patcher.start()
+            self._patches.append(patcher)
+            return patched
+
+        def patch_object(
+            self, target: object, attribute: str, *args: object, **kwargs: object
+        ) -> object:
+            patcher = mock.patch.object(target, attribute, *args, **kwargs)
+            patched = patcher.start()
+            self._patches.append(patcher)
+            return patched
+
+        def stopall(self) -> None:
+            for patcher in reversed(self._patches):
+                patcher.stop()
+            self._patches.clear()
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(mock, name)
+
+    module.MockerFixture = MockerFixture  # type: ignore[attr-defined]
+    module.Mock = mock.Mock  # type: ignore[attr-defined]
+    module.MagicMock = mock.MagicMock  # type: ignore[attr-defined]
+    module.patch = mock.patch  # type: ignore[attr-defined]
+    sys.modules["pytest_mock"] = module
+
+
+_ensure_pytest_mock_stub()
+
+
+@pytest.fixture
+def mocker() -> "pytest_mock.MockerFixture":
+    module = sys.modules["pytest_mock"]
+    fixture = module.MockerFixture()
+    try:
+        yield fixture
+    finally:
+        fixture.stopall()
+
+
+def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
+    if inspect.iscoroutinefunction(pyfuncitem.obj):
+        marker = pyfuncitem.get_closest_marker("asyncio")
+        if marker is None:
+            return None
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(pyfuncitem.obj(**pyfuncitem.funcargs))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+        return True
+    return None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "asyncio: mark test as requiring an event loop."
+    )
 
 settings.register_profile(
     "ci",

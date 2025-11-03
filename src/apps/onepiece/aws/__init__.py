@@ -5,12 +5,13 @@ from typing import List, Optional
 
 import typer
 
-from apps.onepiece.aws.ingest import app as ingest
+import apps.onepiece.aws.ingest as _ingest_module
 from apps.onepiece.aws.sync_from import sync_from as sync_from_command
 from apps.onepiece.aws.sync_to import sync_to as sync_to_command
 
 app = typer.Typer(name="aws", help="AWS and S3 integration commands")
-app.add_typer(ingest)
+ingest = _ingest_module
+app.add_typer(ingest.app)
 
 
 @app.command("sync-from")
