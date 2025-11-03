@@ -767,7 +767,7 @@ class PipelineRunEvent:
 @dataclass(slots=True)
 class _RunEventSubscriber:
     loop: asyncio.AbstractEventLoop
-    queue: asyncio.Queue[PipelineRunEvent]
+    queue: asyncio.Queue[PipelineRunEvent | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -961,14 +961,19 @@ class PipelineRunStore:
             if self._closed:
                 return
             self._closed = True
-            subscribers = self._subscribers
+            active_subscribers = tuple(
+                subscriber
+                for subscribers in self._subscribers.values()
+                for subscriber in subscribers
+            )
             self._subscribers = {}
             connection = self._connection
 
         try:
             connection.close()
         finally:
-            subscribers.clear()
+            if active_subscribers:
+                self._notify_subscribers(active_subscribers, None)
 
     @classmethod
     def _coerce_busy_timeout_ms(cls, value: float | int | None) -> int:
@@ -1871,6 +1876,8 @@ class PipelineRunStore:
 
         moment = now or datetime.now(timezone.utc)
 
+        removed_subscribers: list[_RunEventSubscriber] = []
+
         with self._lock:
             cursor = self._connection.execute(
                 """
@@ -1945,9 +1952,14 @@ class PipelineRunStore:
                 ).rowcount
 
             for run_id in removal_order:
-                self._subscribers.pop(run_id, None)
+                subscribers = self._subscribers.pop(run_id, None)
+                if subscribers:
+                    removed_subscribers.extend(subscribers)
 
             remaining = self._count_runs_locked()
+
+        if removed_subscribers:
+            self._notify_subscribers(removed_subscribers, None)
 
         return PipelinePruneResult(
             removed_runs=int(runs_deleted or 0),
@@ -1971,7 +1983,7 @@ class PipelineRunStore:
         seen_count = len(events)
 
         subscriber: _RunEventSubscriber | None = None
-        queue: asyncio.Queue[PipelineRunEvent] | None = None
+        queue: asyncio.Queue[PipelineRunEvent | None] | None = None
         registered = False
         delivered_initial = False
 
@@ -2012,7 +2024,10 @@ class PipelineRunStore:
                     delivered_initial = True
 
                 while True:
-                    yield await queue.get()
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    yield item
             finally:
                 with self._lock:
                     targets = self._subscribers.get(run_id)
@@ -2023,13 +2038,25 @@ class PipelineRunStore:
 
         return iterator()
 
+    def _notify_subscribers(
+        self,
+        subscribers: Iterable[_RunEventSubscriber],
+        payload: PipelineRunEvent | None,
+    ) -> None:
+        for subscriber in subscribers:
+            try:
+                subscriber.loop.call_soon_threadsafe(
+                    subscriber.queue.put_nowait, payload
+                )
+            except RuntimeError:
+                continue
+
     def _publish_event(
         self,
         subscribers: tuple[_RunEventSubscriber, ...],
         event: PipelineRunEvent,
     ) -> None:
-        for subscriber in subscribers:
-            subscriber.loop.call_soon_threadsafe(subscriber.queue.put_nowait, event)
+        self._notify_subscribers(subscribers, event)
 
     def _load_run_event_rows_locked(self, run_id: str) -> list[sqlite3.Row]:
         cursor = self._connection.execute(
