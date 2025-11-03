@@ -31,16 +31,17 @@ from apps.trafalgar.transport import (
 class PipelineClient(Protocol):
     """Protocol describing the pipeline operations used by the CLI."""
 
-    def list_definitions(self) -> list[Mapping[str, Any]]:
-        ...  # pragma: no cover - Protocol
+    def list_definitions(
+        self,
+    ) -> list[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
 
-    def get_definition(self, name: str) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    def get_definition(
+        self, name: str
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
     def trigger_run(
         self, name: str, parameters: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
     def list_runs(
         self,
@@ -53,14 +54,15 @@ class PipelineClient(Protocol):
         since: str | None = None,
         before_id: str | None = None,
         before_created_at: str | None = None,
-    ) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def get_run(self, run_id: str) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    def get_run(
+        self, run_id: str
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
-        ...  # pragma: no cover - Protocol
+    def stream_events(
+        self, run_id: str
+    ) -> Iterable[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
 
     def get_stats(
         self,
@@ -68,33 +70,30 @@ class PipelineClient(Protocol):
         since: str | None = None,
         include_durations: bool = False,
         pipeline: str | None = None,
-    ) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def worker_pool_metrics(self) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    def worker_pool_metrics(
+        self,
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def create_definition(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    def create_definition(
+        self, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
     def update_definition(
         self, name: str, payload: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def delete_definition(self, name: str) -> None:
-        ...  # pragma: no cover - Protocol
+    def delete_definition(self, name: str) -> None: ...  # pragma: no cover - Protocol
 
     def prune_runs(
         self,
         *,
         max_age_hours: float | None = None,
         max_runs: int | None = None,
-    ) -> Mapping[str, Any]:
-        ...  # pragma: no cover - Protocol
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
-    def close(self) -> None:
-        ...  # pragma: no cover - Protocol
+    def close(self) -> None: ...  # pragma: no cover - Protocol
 
 
 @dataclass(slots=True)

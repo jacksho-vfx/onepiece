@@ -309,8 +309,8 @@ def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
                     for value in (average, minimum, maximum)
                 ):
                     line += (
-                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "
-                        f"max {float(maximum):.2f}s)"
+                        f" (avg {float(average):.2f}s, min {float(minimum):.2f}s, "  # type: ignore[arg-type]
+                        f"max {float(maximum):.2f}s)"  # type: ignore[arg-type]
                     )
             lines.append(line)
     return lines
@@ -319,7 +319,7 @@ def _format_pipeline_statistics(stats: Mapping[str, Any]) -> Iterable[str]:
 def _format_worker_metrics(metrics: Mapping[str, Any]) -> str:
     active = metrics.get("active_workers")
     try:
-        active_workers = int(active)
+        active_workers = int(active)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         active_workers = 0
 

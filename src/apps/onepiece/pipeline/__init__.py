@@ -5,15 +5,13 @@ from __future__ import annotations
 import json
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 import typer
 
 from .clients import (
     PipelineClient,
     PipelineClientError,
-    LocalPipelineClient,
-    RemotePipelineClient,
     create_pipeline_client,
 )
 from .io import (
@@ -38,8 +36,6 @@ from .output import (
 
 def _create_pipeline_client() -> PipelineClient:
     return create_pipeline_client()
-
-
 
 
 app = typer.Typer(
