@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -357,6 +358,50 @@ def test_present_prepares_pipeline_demos(monkeypatch: pytest.MonkeyPatch) -> Non
     assert dummy_orchestrator.registered, "expected pipelines to be registered"
 
     tester_presentation.restore_pipeline_demo_environment()
+
+
+def test_present_removes_staged_pipeline_fixtures(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The staged pipeline fixtures directory should be removed after running."""
+
+    staged_root = tmp_path / "fixtures"
+    staged_root.mkdir()
+
+    real_rmtree = shutil.rmtree
+    removal_calls: list[Path] = []
+
+    tester_presentation._STAGED_PIPELINE_PROJECT_ROOT = None
+    tester_presentation._PIPELINE_ENVIRONMENT_OVERRIDES = {}
+
+    def fake_rmtree(path: Path) -> None:
+        removal_calls.append(Path(path))
+        real_rmtree(path)
+
+    monkeypatch.setattr(tester_presentation.shutil, "rmtree", fake_rmtree)
+
+    def fake_prepare() -> None:
+        tester_presentation._STAGED_PIPELINE_PROJECT_ROOT = staged_root
+        tester_presentation._PIPELINE_ENVIRONMENT_OVERRIDES = {
+            "ONEPIECE_PROJECT_ROOT": (False, "")
+        }
+        os.environ["ONEPIECE_PROJECT_ROOT"] = str(staged_root)
+
+    monkeypatch.setattr(tester_app, "DEMO_CREATION_HOOKS", (fake_prepare,))
+    monkeypatch.setattr(tester_app, "DEMO_TARGETS", ())
+    monkeypatch.setattr(tester_app, "_ensure_uvicorn", lambda: None)
+    monkeypatch.delenv("ONEPIECE_PROJECT_ROOT", raising=False)
+
+    result = runner.invoke(
+        tester_app.app,
+        ["present", "--browser-delay", "0", "--no-browser"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert removal_calls == [staged_root]
+    assert not staged_root.exists()
+    assert tester_presentation.get_staged_pipeline_project_root() is None
+    assert "ONEPIECE_PROJECT_ROOT" not in os.environ
 
 
 def test_restore_pipeline_demo_environment_clears_staged_root(
