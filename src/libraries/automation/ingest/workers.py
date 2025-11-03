@@ -83,7 +83,7 @@ def determine_worker_count(
     if target_by_bytes is not None:
         analysis["target_by_bytes"] = target_by_bytes
 
-    logger.info("ingest.worker_count_resolved", **analysis)
+    logger.info("ingest.worker_count_resolved", **analysis)  # type: ignore[arg-type]
 
     return resolved, analysis
 
@@ -110,7 +110,9 @@ def execute_uploads(
         return [service._process_job(job, checkpoint_store) for job in jobs]
 
     results: dict[Path, "_UploadResult"] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=service.max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=service.max_workers
+    ) as executor:
         future_to_job = {
             executor.submit(service._process_job, job, checkpoint_store): job
             for job in jobs

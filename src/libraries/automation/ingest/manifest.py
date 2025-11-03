@@ -44,7 +44,7 @@ def _normalise_manifest_entry(
         """Return a :class:`Path` that treats ``\\`` as directory separators."""
 
         text = str(value).strip()
-        normalised = text.replace("\", "/")
+        normalised = text.replace("\\", "/")
         return Path(normalised)
 
     normalised: dict[str, object] = {

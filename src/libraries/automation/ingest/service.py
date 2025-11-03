@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent
 import inspect
 import os
 import threading
@@ -44,7 +45,6 @@ from .models import IngestReport, IngestedMedia, MediaInfo
 
 from .manifest import (
     Delivery,
-    DeliveryManifestError,
     _build_manifest_index,
     load_delivery_manifest,
 )
@@ -430,7 +430,7 @@ class MediaIngestService:
         apply_worker_tuning(
             self,
             upload_jobs,
-            logger=log,
+            logger=log,  # type: ignore[arg-type]
             bytes_target=AUTO_WORKER_BYTES_TARGET,
             files_target=AUTO_WORKER_FILES_TARGET,
         )
