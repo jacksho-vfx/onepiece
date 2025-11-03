@@ -44,6 +44,8 @@ def _serialise_exception(error: BaseException) -> dict[str, str]:
         "error_message": error_message,
         "traceback": traceback_text,
     }
+
+
 class PipelineDefinitionStore:
     """Persist pipeline definitions to a JSON file on disk."""
 
@@ -160,7 +162,6 @@ class PipelineDefinitionStore:
             yield
 
 
-@dataclass(frozen=True, slots=True)
 @dataclass(frozen=True, slots=True)
 class PipelineRunCursor:
     """Opaque pagination cursor representing a point in the run history."""
