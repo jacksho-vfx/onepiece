@@ -18,7 +18,7 @@ import yaml
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app as onepiece_app
-from apps.onepiece.pipeline import PipelineClientError
+from apps.onepiece.pipeline.clients import PipelineClientError
 
 
 runner = CliRunner()
