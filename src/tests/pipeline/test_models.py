@@ -137,10 +137,7 @@ def test_resolve_provider_supports_onepiece_namespace(
     assert provider is ingest_module.app
     assert sys.modules["onepiece"] is sys.modules["apps.onepiece"]
     assert sys.modules["onepiece.aws"] is sys.modules["apps.onepiece.aws"]
-    assert (
-        sys.modules["onepiece.aws.ingest"]
-        is sys.modules["apps.onepiece.aws.ingest"]
-    )
+    assert sys.modules["onepiece.aws.ingest"] is sys.modules["apps.onepiece.aws.ingest"]
 
 
 def test_pipeline_validation_errors() -> None:
