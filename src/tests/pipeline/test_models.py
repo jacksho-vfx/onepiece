@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from apps.trafalgar.pipeline import PipelineDefinition
@@ -117,6 +119,28 @@ def test_pipelines_from_config_builds_multiple() -> None:
     pipelines = pipelines_from_config(configs)
     assert len(pipelines) == 2
     assert {pipeline.name for pipeline in pipelines} == {"a", "b"}
+
+
+def test_resolve_provider_supports_onepiece_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in list(sys.modules):
+        if name == "onepiece" or name.startswith("onepiece."):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+        if name == "apps.onepiece" or name.startswith("apps.onepiece."):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+
+    provider = resolve_provider("onepiece.aws.ingest:app")
+
+    from apps.onepiece.aws import ingest as ingest_module
+
+    assert provider is ingest_module.app
+    assert sys.modules["onepiece"] is sys.modules["apps.onepiece"]
+    assert sys.modules["onepiece.aws"] is sys.modules["apps.onepiece.aws"]
+    assert (
+        sys.modules["onepiece.aws.ingest"]
+        is sys.modules["apps.onepiece.aws.ingest"]
+    )
 
 
 def test_pipeline_validation_errors() -> None:
