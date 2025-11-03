@@ -7,13 +7,12 @@ from typing import Literal, cast, Any
 import structlog
 import typer
 
-from libraries.creative.dcc.dcc_client import (
+from libraries.creative.dcc.dcc_client import LinkStrategy, publish_scene
+from libraries.creative.dcc.models import (
     DCCAssetStatus,
     DCCDependencyReport,
     DCCPluginStatus,
     JSONValue,
-    LinkStrategy,
-    publish_scene,
 )
 from libraries.creative.dcc.maya.unreal_export_checker import UnrealExportReport
 from libraries.platform.validations.dcc import validate_dcc

@@ -13,22 +13,24 @@ from typer.testing import CliRunner
 
 from apps.onepiece.dcc.publish import app as publish_app
 from libraries.creative.dcc.dcc_client import (
-    DCC_ASSET_REQUIREMENTS,
-    DCCDependencyReport,
-    DCCAssetStatus,
-    DCCPluginStatus,
-    DCCGPUStatus,
-    SupportedDCC,
     _assemble_dependency_report,
     _build_launch_command,
     _format_dependency_error,
-    _prepare_package_contents,
     _sync_package_to_s3,
     _write_metadata_and_thumbnails,
     open_scene,
     publish_scene,
     verify_dcc_dependencies,
 )
+from libraries.creative.dcc.models import (
+    DCC_ASSET_REQUIREMENTS,
+    DCCDependencyReport,
+    DCCAssetStatus,
+    DCCGPUStatus,
+    DCCPluginStatus,
+    SupportedDCC,
+)
+from libraries.creative.dcc.packaging import _prepare_package_contents
 from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportIssue,
     UnrealExportReport,
@@ -609,7 +611,7 @@ def test_publish_scene_supports_direct_upload(
     assert json.loads(metadata_path.read_text()) == metadata
 
 
-@patch("libraries.creative.dcc.dcc_client._profile_s5cmd_overrides")
+@patch("libraries.creative.dcc.packaging._profile_s5cmd_overrides")
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_forwards_s5cmd_overrides(
     sync_mock: MagicMock,
@@ -645,7 +647,7 @@ def test_publish_scene_forwards_s5cmd_overrides(
     assert kwargs["part_size"] == "32MB"
 
 
-@patch("libraries.creative.dcc.dcc_client._profile_s5cmd_overrides")
+@patch("libraries.creative.dcc.packaging._profile_s5cmd_overrides")
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_uses_profile_s5cmd_overrides(
     sync_mock: MagicMock,
