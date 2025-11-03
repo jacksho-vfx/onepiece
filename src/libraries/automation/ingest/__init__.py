@@ -2,15 +2,13 @@
 
 from .checkpoint import ResumableUploaderProtocol, UploadCheckpoint, UploaderProtocol
 from .models import IngestReport, IngestedMedia, MediaInfo
+from .manifest import Delivery, DeliveryManifestError, load_delivery_manifest
 from .service import (
     Boto3Uploader,
-    Delivery,
-    DeliveryManifestError,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
     ShotgridSchemaError,
-    load_delivery_manifest,
 )
 
 __all__ = [
