@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from html import escape
+import json
+from typing import Mapping
 
 from .templates import (
     normalise_root_path as _normalise_root_path_impl,
@@ -24,7 +26,12 @@ _with_root_path = _with_root_path_impl
 _slugify = _slugify_impl
 
 
-def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
+def _render_index(
+    root_path: str,
+    *,
+    active_slug: str | None = None,
+    default_credentials: Mapping[str, str] | None = None,
+) -> str:
     nav_items: list[str] = []
     content_sections: list[str] = []
 
@@ -96,6 +103,22 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
     pages_html = "".join(content_sections)
     css_href = _with_root_path(root_path, "/static/control_center.css")
     js_src = _with_root_path(root_path, "/static/control_center.js")
+    credentials_attr = ""
+    if default_credentials:
+        cleaned: dict[str, str] = {}
+        for key, value in default_credentials.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            trimmed = value.strip()
+            if not trimmed:
+                continue
+            cleaned[key] = trimmed
+        if cleaned:
+            credentials_json = json.dumps(cleaned, sort_keys=True)
+            credentials_attr = (
+                f' data-dashboard-default-credentials="{escape(credentials_json)}"'
+            )
+
     return f"""
     <!DOCTYPE html>
     <html lang=\"en\">
@@ -106,7 +129,7 @@ def _render_index(root_path: str, *, active_slug: str | None = None) -> str:
         <link rel=\"stylesheet\" href=\"{css_href}\" />
         <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js\" id=\"uta-dashboard-chartjs\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"></script>
       </head>
-      <body data-root-path=\"{escape(root_path)}\" data-default-tab=\"{escape(default_slug or '')}\">
+      <body data-root-path=\"{escape(root_path)}\" data-default-tab=\"{escape(default_slug or '')}\"{credentials_attr}>
         <header class=\"app-header\">
           <h1>Uta Control Center</h1>
           <p>Trigger OnePiece CLI operations through a streamlined interface and explore the Trafalgar dashboard without leaving your browser.</p>

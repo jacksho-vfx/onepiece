@@ -138,7 +138,8 @@ DEMO_TARGETS: tuple[DemoTarget, ...] = (
         environment={
             "TRAFALGAR_PIPELINE_API_URL": (
                 f"http://{{host}}:{TRAFALGAR_PIPELINE_DEMO_PORT}/"
-            )
+            ),
+            "UTA_DEFAULT_DASHBOARD_BEARER": DEMO_DASHBOARD_TOKEN,
         },
         prepare=None,
     ),

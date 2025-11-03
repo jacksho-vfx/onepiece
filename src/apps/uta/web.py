@@ -36,6 +36,10 @@ get_pipeline_client = web_pipeline.get_pipeline_client
 
 STATIC_DIRECTORY = Path(__file__).with_name("static")
 
+DEFAULT_DASHBOARD_API_KEY_ENV = "UTA_DEFAULT_DASHBOARD_API_KEY"
+DEFAULT_DASHBOARD_API_SECRET_ENV = "UTA_DEFAULT_DASHBOARD_API_SECRET"
+DEFAULT_DASHBOARD_BEARER_ENV = "UTA_DEFAULT_DASHBOARD_BEARER"
+
 _render_parameters = web_templates._render_parameters
 _render_command = web_templates._render_command
 _render_page = web_templates._render_page
@@ -112,7 +116,33 @@ async def index(request: Request) -> HTMLResponse:
     active_slug = query_tab.lower() if isinstance(query_tab, str) else None
     if active_slug == "":
         active_slug = None
-    return HTMLResponse(content=_render_index(root_path, active_slug=active_slug))
+    default_credentials = _resolve_default_dashboard_credentials()
+    content = _render_index(
+        root_path,
+        active_slug=active_slug,
+        default_credentials=default_credentials or None,
+    )
+    return HTMLResponse(content=content)
+
+
+def _resolve_default_dashboard_credentials() -> dict[str, str]:
+    """Return default Trafalgar credentials exposed to the web UI."""
+
+    credentials: dict[str, str] = {}
+
+    api_key = os.getenv(DEFAULT_DASHBOARD_API_KEY_ENV, "").strip()
+    if api_key:
+        credentials["apiKey"] = api_key
+
+    api_secret = os.getenv(DEFAULT_DASHBOARD_API_SECRET_ENV, "").strip()
+    if api_secret:
+        credentials["apiSecret"] = api_secret
+
+    bearer = os.getenv(DEFAULT_DASHBOARD_BEARER_ENV, "").strip()
+    if bearer:
+        credentials["bearerToken"] = bearer
+
+    return credentials
 
 
 def _invoke_cli(arguments: Sequence[str]) -> RunCommandResponse:

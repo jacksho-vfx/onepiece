@@ -15,6 +15,20 @@ const toArray = (collection) => {
     const tabs = toArray(document.querySelectorAll('.tab-button'));
     const pages = toArray(document.querySelectorAll('.page'));
     const body = document.body || null;
+    let defaultDashboardCredentials = null;
+    if (body && typeof body.getAttribute === 'function') {
+      const encodedDefaults = body.getAttribute('data-dashboard-default-credentials') || '';
+      if (encodedDefaults) {
+        try {
+          const parsedDefaults = JSON.parse(encodedDefaults);
+          if (parsedDefaults && typeof parsedDefaults === 'object') {
+            defaultDashboardCredentials = parsedDefaults;
+          }
+        } catch (error) {
+          // Ignore malformed defaults; users can still input credentials manually.
+        }
+      }
+    }
     let defaultTabSlug = body && typeof body.getAttribute === 'function'
     ? body.getAttribute('data-default-tab') || ''
     : '';
@@ -380,6 +394,28 @@ const toArray = (collection) => {
     storage.set(DASHBOARD_API_SECRET_KEY, dashboardCredentials.apiSecret);
     storage.set(DASHBOARD_BEARER_KEY, dashboardCredentials.bearerToken);
     };
+    const applyDefaultDashboardCredentials = () => {
+    if (!defaultDashboardCredentials || typeof defaultDashboardCredentials !== 'object') {
+      return;
+    }
+    const maybeApply = (field, value) => {
+      if (typeof value !== 'string') {
+      return false;
+      }
+      const sanitised = sanitizeCredential(value);
+      if (!sanitised || dashboardCredentials[field]) {
+      return false;
+      }
+      dashboardCredentials[field] = sanitised;
+      return true;
+    };
+    let changed = maybeApply('bearerToken', defaultDashboardCredentials.bearerToken);
+    changed = maybeApply('apiKey', defaultDashboardCredentials.apiKey) || changed;
+    changed = maybeApply('apiSecret', defaultDashboardCredentials.apiSecret) || changed;
+    if (changed) {
+      persistDashboardCredentials();
+    }
+    };
     const updateAuthCardState = (stateOverride) => {
     if (!dashboardAuthCard) {
       return;
@@ -419,6 +455,7 @@ const toArray = (collection) => {
     }
     return null;
     };
+    applyDefaultDashboardCredentials();
     updateAuthCardState();
     if (apiKeyInput) {
     apiKeyInput.value = dashboardCredentials.apiKey;
