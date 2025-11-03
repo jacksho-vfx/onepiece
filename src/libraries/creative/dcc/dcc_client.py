@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import logging
 
@@ -308,7 +308,6 @@ def _write_metadata_and_thumbnails(
         shutil.copy2(thumbnail_candidate, thumbnail_path)
 
     return metadata_path, thumbnail_path
-
 
 
 def _assemble_dependency_report(
