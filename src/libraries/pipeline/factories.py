@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from importlib import import_module
+import sys
+from types import ModuleType
 from typing import Any, Iterable, Mapping, Sequence
 
 from .models import Pipeline, PipelineStep
@@ -47,6 +49,31 @@ def pipelines_from_config(configs: Iterable[Mapping[str, Any]]) -> tuple[Pipelin
     return tuple(pipeline_from_config(config) for config in configs)
 
 
+def _import_provider_module(module_name: str) -> ModuleType:
+    """Import *module_name* with compatibility fallbacks."""
+
+    try:
+        return import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name != module_name:
+            raise
+        if not module_name.startswith("onepiece"):
+            raise
+    fallback_name = f"apps.{module_name}"
+    module = import_module(fallback_name)
+    sys.modules[module_name] = module
+
+    parts = module_name.split(".")
+    for length in range(1, len(parts)):
+        alias = ".".join(parts[:length])
+        target = f"apps.{alias}"
+        parent = sys.modules.get(target)
+        if parent is not None and alias not in sys.modules:
+            sys.modules[alias] = parent
+
+    return module
+
+
 def resolve_provider(
     reference: Any,
     registry: Mapping[str, Any] | None = None,
@@ -71,7 +98,7 @@ def resolve_provider(
                 "or 'module.attribute'"
             )
             raise ValueError(msg)
-    module = import_module(module_name)
+    module = _import_provider_module(module_name)
     try:
         return getattr(module, attribute)
     except AttributeError as exc:  # pragma: no cover - defensive guard
