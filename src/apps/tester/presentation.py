@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 from collections.abc import Mapping
@@ -30,6 +31,9 @@ _PIPELINE_FIXTURES = _REPO_ROOT / ".fixtures" / "pipelines"
 
 _PIPELINE_ENVIRONMENT_OVERRIDES: dict[str, tuple[bool, str]] = {}
 _STAGED_PIPELINE_PROJECT_ROOT: Path | None = None
+
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_pipeline_demos() -> None:
@@ -73,7 +77,9 @@ def restore_pipeline_demo_environment() -> None:
     global _STAGED_PIPELINE_PROJECT_ROOT
 
     overrides = _PIPELINE_ENVIRONMENT_OVERRIDES
+    staged_root = _STAGED_PIPELINE_PROJECT_ROOT
     _PIPELINE_ENVIRONMENT_OVERRIDES = {}
+    _STAGED_PIPELINE_PROJECT_ROOT = None
 
     for key, (existed, previous_value) in overrides.items():
         if existed:
@@ -81,7 +87,7 @@ def restore_pipeline_demo_environment() -> None:
         else:
             os.environ.pop(key, None)
 
-    _STAGED_PIPELINE_PROJECT_ROOT = None
+    _cleanup_staged_pipeline_project_root(staged_root)
 
 
 def get_staged_pipeline_project_root() -> Path | None:
@@ -196,6 +202,23 @@ def _write_aggregated_pipeline_configs(
 
 def _iter_sorted_items(mapping: Mapping[str, Any]) -> list[tuple[str, Any]]:
     return sorted(mapping.items(), key=lambda item: str(item[0]))
+
+
+def _cleanup_staged_pipeline_project_root(staged_root: Path | None) -> None:
+    if staged_root is None:
+        return
+
+    try:
+        if staged_root.exists():
+            shutil.rmtree(staged_root)
+    except FileNotFoundError:
+        return
+    except Exception as exc:  # noqa: BLE001 - log and continue cleanup
+        logger.debug(
+            "Failed to remove staged pipeline fixtures at %s: %s",
+            staged_root,
+            exc,
+        )
 
 
 def _render_toml_assignment(key: str, value: Any) -> str | None:
