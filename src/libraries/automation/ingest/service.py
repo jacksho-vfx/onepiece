@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
-import csv
 import inspect
-import json
-import math
 import os
 import threading
 from dataclasses import dataclass
@@ -44,7 +40,15 @@ from .checkpoint import (
     UploaderProtocol,
 )
 from .logging_utils import get_logger
-from .models import IngestReport, IngestedMedia, MediaInfo, _format_shot_name
+from .models import IngestReport, IngestedMedia, MediaInfo
+
+from .manifest import (
+    Delivery,
+    DeliveryManifestError,
+    _build_manifest_index,
+    load_delivery_manifest,
+)
+from .workers import apply_worker_tuning, execute_uploads
 
 
 DEFAULT_UPLOAD_CHUNK_SIZE = 64 * 1024 * 1024
@@ -88,29 +92,6 @@ class ShotgridConnectivityError(RuntimeError):
     """Raised when ShotGrid cannot be reached after retries."""
 
 
-class DeliveryManifestError(ValueError):
-    """Raised when delivery manifest payloads cannot be parsed."""
-
-
-@dataclass(frozen=True)
-class Delivery:
-    """Structured metadata describing a delivery manifest entry."""
-
-    show: str
-    episode: str
-    scene: str
-    shot: str
-    asset: str
-    version: int
-    source_path: Path
-    delivery_path: Path
-    checksum: str | None = None
-
-    @property
-    def shot_name(self) -> str:
-        return _format_shot_name(self.episode, self.scene, self.shot)
-
-
 @dataclass(frozen=True)
 class _UploadJob:
     path: Path
@@ -126,145 +107,6 @@ class _UploadResult:
     media: IngestedMedia
     warnings: list[str]
     skipped: bool = False
-
-
-def _normalise_manifest_entry(
-    entry: Mapping[str, object],
-    *,
-    index: int,
-    manifest_path: Path,
-) -> Delivery:
-    def _normalise_manifest_path(value: object) -> Path:
-        """Return a :class:`Path` that treats ``\\`` as directory separators."""
-
-        text = str(value).strip()
-        # Delivery manifests may be authored on Windows which means relative
-        # paths are delimited by ``\\``.  ``Path`` on POSIX platforms treats
-        # those backslashes as literal characters, so convert them to forward
-        # slashes before constructing the path.  This keeps manifest lookups
-        # consistent regardless of the authoring platform.
-        normalised = text.replace("\\", "/")
-        return Path(normalised)
-
-    normalised: dict[str, object] = {
-        str(key).lower(): value for key, value in entry.items()
-    }
-
-    def _require(key: str) -> object:
-        lowered = key.lower()
-        if lowered not in normalised:
-            raise DeliveryManifestError(
-                f"Manifest entry {index} in '{manifest_path}' is missing '{key}'"
-            )
-        return normalised[lowered]
-
-    checksum_value = normalised.get("checksum")
-    checksum = None if checksum_value in (None, "") else str(checksum_value)
-
-    version_raw = _require("version")
-    try:
-        version = int(cast(str, version_raw))
-    except (TypeError, ValueError) as exc:
-        raise DeliveryManifestError(
-            f"Manifest entry {index} in '{manifest_path}' has an invalid version: {version_raw!r}"
-        ) from exc
-
-    delivery_path_raw = _require("delivery_path")
-    if not delivery_path_raw:
-        raise DeliveryManifestError(
-            f"Manifest entry {index} in '{manifest_path}' has an empty delivery_path"
-        )
-
-    source_path_raw = _require("source_path")
-    if not source_path_raw:
-        raise DeliveryManifestError(
-            f"Manifest entry {index} in '{manifest_path}' has an empty source_path"
-        )
-
-    return Delivery(
-        show=str(_require("show")),
-        episode=str(_require("episode")),
-        scene=str(_require("scene")),
-        shot=str(_require("shot")),
-        asset=str(_require("asset")),
-        version=version,
-        source_path=_normalise_manifest_path(source_path_raw),
-        delivery_path=_normalise_manifest_path(delivery_path_raw),
-        checksum=checksum,
-    )
-
-
-def _load_manifest_rows(manifest_path: Path) -> list[Mapping[str, object]]:
-    suffix = manifest_path.suffix.lower()
-    if suffix == ".csv":
-        with manifest_path.open("r", encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle)
-            return [
-                {key: value for key, value in row.items() if key is not None}
-                for row in reader
-                if any((value or "").strip() for value in row.values())
-            ]
-
-    if suffix == ".json":
-        with manifest_path.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        if isinstance(payload, list):
-            rows = payload
-        elif isinstance(payload, Mapping):
-            if "files" in payload:
-                rows = payload["files"]
-            elif "deliveries" in payload:
-                rows = payload["deliveries"]
-            else:
-                raise DeliveryManifestError(
-                    f"JSON manifest '{manifest_path}' must contain a 'files' or 'deliveries' array"
-                )
-        else:
-            raise DeliveryManifestError(
-                f"Unsupported JSON manifest payload in '{manifest_path}': {type(payload).__name__}"
-            )
-
-        if not isinstance(rows, list):
-            raise DeliveryManifestError(
-                f"JSON manifest '{manifest_path}' has an invalid entry collection"
-            )
-
-        entries: list[Mapping[str, object]] = []
-        for index, item in enumerate(rows):
-            if not isinstance(item, Mapping):
-                raise DeliveryManifestError(
-                    f"Manifest entry {index} in '{manifest_path}' is not an object"
-                )
-            entries.append(cast(Mapping[str, object], item))
-        return entries
-
-    raise DeliveryManifestError(
-        f"Unsupported manifest format for '{manifest_path}'. Provide a CSV or JSON manifest."
-    )
-
-
-def load_delivery_manifest(manifest_path: Path) -> list[Delivery]:
-    """Return :class:`Delivery` entries parsed from *manifest_path*."""
-
-    if not manifest_path.exists() or not manifest_path.is_file():
-        raise FileNotFoundError(f"Manifest file not found: {manifest_path}")
-
-    rows = _load_manifest_rows(manifest_path)
-    deliveries: list[Delivery] = []
-    for index, entry in enumerate(rows):
-        deliveries.append(
-            _normalise_manifest_entry(entry, index=index, manifest_path=manifest_path)
-        )
-    return deliveries
-
-
-def _build_manifest_index(deliveries: Sequence[Delivery]) -> dict[str, Delivery]:
-    index: dict[str, Delivery] = {}
-    for delivery in deliveries:
-        relative = delivery.delivery_path.as_posix()
-        index.setdefault(relative, delivery)
-        index.setdefault(delivery.delivery_path.name, delivery)
-    return index
 
 
 def parse_media_filename(filename: str) -> MediaInfo:
@@ -585,7 +427,13 @@ class MediaIngestService:
                 )
             )
 
-        self._apply_worker_tuning(upload_jobs)
+        apply_worker_tuning(
+            self,
+            upload_jobs,
+            logger=log,
+            bytes_target=AUTO_WORKER_BYTES_TARGET,
+            files_target=AUTO_WORKER_FILES_TARGET,
+        )
 
         if manifest_entries:
             unmatched_entries = [
@@ -643,7 +491,7 @@ class MediaIngestService:
         checkpoint_store = (
             self._build_checkpoint_store() if self.resume_enabled else None
         )
-        results = self._execute_uploads(upload_jobs, checkpoint_store)
+        results = execute_uploads(self, upload_jobs, checkpoint_store)
 
         return self._finalise_ingest(report, results, _notify)
 
@@ -660,57 +508,6 @@ class MediaIngestService:
             "largest_job": 0,
             "auto_tuned": False,
         }
-
-    def _apply_worker_tuning(self, jobs: Sequence[_UploadJob]) -> None:
-        """Analyse *jobs* and update the configured worker count."""
-
-        resolved, analysis = self._determine_worker_count(jobs)
-        self._worker_analysis = analysis
-        self._resolved_worker_count = resolved
-        self.max_workers = resolved
-
-    def _determine_worker_count(
-        self, jobs: Sequence[_UploadJob]
-    ) -> tuple[int, dict[str, object]]:
-        """Return the worker count and telemetry for the provided *jobs*."""
-
-        cap = self._configured_max_workers
-        total_jobs = len(jobs)
-        total_bytes = sum(job.size for job in jobs)
-        largest_job = max((job.size for job in jobs), default=0)
-        target_by_files: int | None = None
-        target_by_bytes: int | None = None
-        auto_tuned = False
-
-        if total_jobs == 0:
-            resolved = cap
-        elif cap <= 1:
-            resolved = 1
-        elif not self.auto_tune_workers:
-            resolved = cap
-        else:
-            target_by_files = max(1, math.ceil(total_jobs / AUTO_WORKER_FILES_TARGET))
-            target_by_bytes = max(1, math.ceil(total_bytes / AUTO_WORKER_BYTES_TARGET))
-            target = max(target_by_files, target_by_bytes)
-            resolved = max(1, min(cap, min(total_jobs, target)))
-            auto_tuned = True
-
-        analysis: dict[str, object] = {
-            "configured_cap": cap,
-            "resolved_workers": resolved,
-            "total_jobs": total_jobs,
-            "total_bytes": total_bytes,
-            "largest_job": largest_job,
-            "auto_tuned": auto_tuned,
-        }
-        if target_by_files is not None:
-            analysis["target_by_files"] = target_by_files
-        if target_by_bytes is not None:
-            analysis["target_by_bytes"] = target_by_bytes
-
-        log.info("ingest.worker_count_resolved", **analysis)
-
-        return resolved, analysis
 
     def _resolve_bucket(self) -> str:
         source_normalized = self.source.lower()
