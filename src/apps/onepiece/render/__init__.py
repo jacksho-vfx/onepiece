@@ -26,7 +26,7 @@ def publish(
     if profile is not None:
         payload["profile"] = profile
     if kwargs:
-        payload["metadata"] = dict(kwargs)
+        payload["metadata"] = dict(kwargs)  # type: ignore[assignment]
     return payload
 
 

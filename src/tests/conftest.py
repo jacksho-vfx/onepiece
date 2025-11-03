@@ -8,6 +8,7 @@ import sys
 import types
 from typing import Any
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -53,16 +54,14 @@ def _ensure_pytest_mock_stub() -> None:
         def __init__(self) -> None:
             self._patches: list[Any] = []
 
-        def patch(self, target: str, *args: object, **kwargs: object) -> object:
-            patcher = mock.patch(target, *args, **kwargs)
+        def patch(self, target: str) -> object:
+            patcher = mock.patch(target, new=MagicMock())
             patched = patcher.start()
             self._patches.append(patcher)
             return patched
 
-        def patch_object(
-            self, target: object, attribute: str, *args: object, **kwargs: object
-        ) -> object:
-            patcher = mock.patch.object(target, attribute, *args, **kwargs)
+        def patch_object(self, target: object, attribute: str) -> object:
+            patcher = mock.patch.object(target, attribute, new=MagicMock())
             patched = patcher.start()
             self._patches.append(patcher)
             return patched
@@ -86,7 +85,7 @@ _ensure_pytest_mock_stub()
 
 
 @pytest.fixture
-def mocker() -> "pytest_mock.MockerFixture":
+def mocker() -> Any:
     module = sys.modules["pytest_mock"]
     fixture = module.MockerFixture()
     try:
@@ -113,9 +112,8 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers", "asyncio: mark test as requiring an event loop."
-    )
+    config.addinivalue_line("markers", "asyncio: mark test as requiring an event loop.")
+
 
 settings.register_profile(
     "ci",
