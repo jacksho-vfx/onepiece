@@ -104,6 +104,19 @@ app = FastAPI(title="OnePiece Pipeline API", version=TRAFALGAR_VERSION)
 router = create_protected_router()
 
 
+def _service_status_payload() -> dict[str, str]:
+    """Return a consistent payload advertising the service status."""
+
+    return {"message": "OnePiece Pipeline API is running"}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> dict[str, str]:
+    """Return a public landing message confirming the API is reachable."""
+
+    return _service_status_payload()
+
+
 @app.on_event("startup")
 def _register_profile_pipelines() -> None:
     context = load_profile()
@@ -112,13 +125,13 @@ def _register_profile_pipelines() -> None:
     )
 
 
-@router.get("/")
-def root(
+@router.get("/status")
+def authenticated_status(
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
 ) -> dict[str, str]:
-    """Return a simple payload confirming the service is available."""
+    """Return the service status for authenticated callers."""
 
-    return {"message": "OnePiece Pipeline API is running"}
+    return _service_status_payload()
 
 
 def _definition_from_submission(

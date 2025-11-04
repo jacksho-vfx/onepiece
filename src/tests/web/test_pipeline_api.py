@@ -119,6 +119,21 @@ def _auth_headers() -> dict[str, str]:
     }
 
 
+def test_root_endpoint_is_public(client: TestClient) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "OnePiece Pipeline API is running"}
+
+
+def test_status_endpoint_requires_authentication(client: TestClient) -> None:
+    unauthenticated = client.get("/status")
+    assert unauthenticated.status_code == 401
+
+    authenticated = client.get("/status", headers=_auth_headers())
+    assert authenticated.status_code == 200
+    assert authenticated.json() == {"message": "OnePiece Pipeline API is running"}
+
+
 def _parse_stream_events(payload: str) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     for line in payload.splitlines():
