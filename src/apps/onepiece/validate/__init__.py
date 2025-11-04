@@ -1,5 +1,7 @@
 """Top-level Typer application exposing validation helpers."""
 
+import sys
+
 import typer
 
 from apps.onepiece.validate.asset_consistency import asset_consistency
@@ -18,5 +20,11 @@ app.command("asset-consistency")(asset_consistency)
 app.command("dcc-environment")(render_dcc_environment)
 app.command("reconcile")(reconcile_module.reconcile)
 
+reconcile = reconcile_module
 
-__all__ = ["app"]
+# Support imports via the legacy ``onepiece`` package namespace.
+sys.modules.setdefault("onepiece.validate", sys.modules[__name__])
+sys.modules.setdefault("onepiece.validate.reconcile", reconcile_module)
+
+
+__all__ = ["app", "reconcile"]

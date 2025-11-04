@@ -35,11 +35,8 @@ from .models import (
     DCC_GPU_REQUIREMENTS,
     DCC_PLUGIN_REQUIREMENTS,
 )
-from .packaging import (
-    _prepare_package_contents,
-    _profile_s5cmd_overrides,
-    _write_package_manifest,
-)
+from . import packaging as _packaging
+from .packaging import _prepare_package_contents, _write_package_manifest
 from .validation import (
     _format_unreal_export_error,
     _gather_maya_validation_kwargs,
@@ -77,7 +74,12 @@ def _build_launch_command(dcc: SupportedDCC, path: Path) -> list[str]:
     if not isinstance(dcc, SupportedDCC):  # pragma: no cover - defensive.
         raise TypeError("dcc must be an instance of SupportedDCC")
 
-    return [dcc.command, str(path)]
+    executable = dcc.command
+    if dcc in {SupportedDCC.MAYA, SupportedDCC.VRAY} and os.name == "nt":
+        if not executable.lower().endswith(".exe"):
+            executable = f"{executable}.exe"
+
+    return [executable, str(path)]
 
 
 def open_scene(dcc: SupportedDCC, file_path: Path | str) -> None:
@@ -226,7 +228,7 @@ def _resolve_s5cmd_settings(
 ) -> tuple[int | None, str | None]:
     """Return the s5cmd overrides honouring CLI and profile sources."""
 
-    profile_concurrency, profile_part_size = _profile_s5cmd_overrides()
+    profile_concurrency, profile_part_size = _packaging._profile_s5cmd_overrides()
 
     resolved_concurrency = (
         concurrency if concurrency is not None else profile_concurrency

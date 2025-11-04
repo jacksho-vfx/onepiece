@@ -1,5 +1,8 @@
 """Top-level Typer application exposing DCC utilities."""
 
+from typing import Any
+
+import structlog
 import typer
 
 from apps.onepiece.dcc.animation import app as animation
@@ -8,6 +11,8 @@ from apps.onepiece.dcc.publish import app as publish
 from apps.onepiece.dcc.unreal_import import app as unreal_import
 
 
+log = structlog.get_logger(__name__)
+
 app = typer.Typer(name="dcc", help="DCC integration commands")
 
 app.add_typer(animation)
@@ -15,10 +20,19 @@ app.add_typer(open_shot)
 app.add_typer(publish)
 app.add_typer(unreal_import)
 
+
+def conform(*, profile: str | None = None, **kwargs: Any) -> dict[str, Any]:
+    """Record conform operations initiated by pipeline automation."""
+
+    log.info("dcc.conform", profile=profile)
+    return {"profile": profile, "parameters": dict(kwargs)}
+
+
 __all__ = [
     "app",
     "animation",
     "open_shot",
     "publish",
     "unreal_import",
+    "conform",
 ]
