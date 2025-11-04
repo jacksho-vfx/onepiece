@@ -85,9 +85,9 @@ _ensure_pytest_mock_stub()
 
 
 @pytest.fixture
-def mocker() -> Any:
+def mocker(pytestconfig: Any) -> Any:
     module = sys.modules["pytest_mock"]
-    fixture = module.MockerFixture()
+    fixture = module.MockerFixture(pytestconfig)
     try:
         yield fixture
     finally:
