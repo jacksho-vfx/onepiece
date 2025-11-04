@@ -102,6 +102,32 @@ def demo_targets(
     return targets, prepare_calls
 
 
+@pytest.fixture
+def new_tab_tracker(monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], type]:
+    """Capture URLs sent to ``webbrowser.open_new_tab`` and supply a controller.
+
+    The returned list collects URLs passed to the patched ``open_new_tab`` helper,
+    while the accompanying controller type mimics the object produced by
+    :func:`webbrowser.get`.  Tests can install the controller to ensure the CLI
+    exercises the same flow as the real browser integration without launching a
+    genuine browser session.
+    """
+
+    opened_urls: list[str] = []
+
+    def fake_open_new_tab(url: str) -> bool:
+        opened_urls.append(url)
+        return True
+
+    monkeypatch.setattr(tester_app.webbrowser, "open_new_tab", fake_open_new_tab)
+
+    class _Controller:
+        def open(self, url: str, new: int) -> Any:
+            return tester_app.webbrowser.open_new_tab(url)
+
+    return opened_urls, _Controller
+
+
 @pytest.mark.parametrize(
     ("command", "additional_args"),
     [
@@ -207,6 +233,69 @@ def test_present_runs_prepare_hooks_once(
     assert len(processes) == len(targets)
     for label, calls in prepare_calls.items():
         assert calls == 1, f"expected prepare hook for {label!r} to run once"
+
+
+def test_present_opens_browser_tabs(
+    monkeypatch: pytest.MonkeyPatch,
+    demo_targets: tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]],
+    new_tab_tracker: Any,
+) -> None:
+    """The presentation command should open each demo surface when allowed."""
+
+    opened_urls, controller_cls = new_tab_tracker
+    processes: list[DummyProcess] = []
+    targets, _ = demo_targets
+
+    def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(tester_app, "Process", fake_process)
+    monkeypatch.setattr(tester_app, "_ensure_uvicorn", lambda: None)
+    monkeypatch.setattr(tester_app.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(tester_app.webbrowser, "get", lambda *_: controller_cls())
+
+    result = runner.invoke(
+        tester_app.app,
+        ["present", "--browser-delay", "0", "--skip-create"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(processes) == len(targets)
+    expected_urls = [target.url(tester_app.DEFAULT_HOST) for target in targets]
+    assert opened_urls == expected_urls
+
+
+def test_present_no_browser_flag_disables_tabs(
+    monkeypatch: pytest.MonkeyPatch,
+    demo_targets: tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]],
+    new_tab_tracker: Any,
+) -> None:
+    """The ``--no-browser`` flag should suppress attempts to open tabs."""
+
+    opened_urls, controller_cls = new_tab_tracker
+    processes: list[DummyProcess] = []
+    targets, _ = demo_targets
+
+    def fake_process(*args, **kwargs):  # type: ignore[no-untyped-def]
+        process = DummyProcess(*args, **kwargs)  # type: ignore[no-untyped-call]
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(tester_app, "Process", fake_process)
+    monkeypatch.setattr(tester_app, "_ensure_uvicorn", lambda: None)
+    monkeypatch.setattr(tester_app.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(tester_app.webbrowser, "get", lambda *_: controller_cls())
+
+    result = runner.invoke(
+        tester_app.app,
+        ["present", "--browser-delay", "0", "--skip-create", "--no-browser"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(processes) == len(targets)
+    assert opened_urls == []
 
 
 def test_present_restores_environment_overrides(
