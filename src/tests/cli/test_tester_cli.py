@@ -122,7 +122,7 @@ def new_tab_tracker(monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], type]:
     monkeypatch.setattr(tester_app.webbrowser, "open_new_tab", fake_open_new_tab)
 
     class _Controller:
-        def open(self, url: str, new: int) -> bool:
+        def open(self, url: str, new: int) -> Any:
             return tester_app.webbrowser.open_new_tab(url)
 
     return opened_urls, _Controller
@@ -238,7 +238,7 @@ def test_present_runs_prepare_hooks_once(
 def test_present_opens_browser_tabs(
     monkeypatch: pytest.MonkeyPatch,
     demo_targets: tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]],
-    new_tab_tracker,
+    new_tab_tracker: Any,
 ) -> None:
     """The presentation command should open each demo surface when allowed."""
 
@@ -270,7 +270,7 @@ def test_present_opens_browser_tabs(
 def test_present_no_browser_flag_disables_tabs(
     monkeypatch: pytest.MonkeyPatch,
     demo_targets: tuple[tuple[tester_app.DemoTarget, ...], dict[str, int]],
-    new_tab_tracker,
+    new_tab_tracker: Any,
 ) -> None:
     """The ``--no-browser`` flag should suppress attempts to open tabs."""
 
