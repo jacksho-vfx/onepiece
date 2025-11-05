@@ -35,11 +35,13 @@ class StubPipelineClient:
     runs_payload: Mapping[str, Any] | None = None
     run_metadata: Mapping[str, Any] | None = None
     run_events: list[Mapping[str, Any]] | None = None
+    run_events_history: list[Mapping[str, Any]] | None = None
     list_error: PipelineClientError | None = None
     describe_error: PipelineClientError | None = None
     run_error: PipelineClientError | None = None
     runs_error: PipelineClientError | None = None
     run_status_error: PipelineClientError | None = None
+    run_events_error: PipelineClientError | None = None
     watch_error: PipelineClientError | None = None
     stats_payload: Mapping[str, Any] | None = None
     stats_error: PipelineClientError | None = None
@@ -125,6 +127,14 @@ class StubPipelineClient:
         if self.run_metadata is None:
             raise AssertionError("run metadata was not configured")
         return dict(self.run_metadata)
+
+    def get_run_events(self, run_id: str) -> list[Mapping[str, Any]]:
+        self.requested_run_id = run_id
+        if self.run_events_error:
+            raise self.run_events_error
+        if self.run_events_history is None:
+            raise AssertionError("run events history was not configured")
+        return [dict(event) for event in self.run_events_history]
 
     def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
         self.requested_run_id = run_id
@@ -238,6 +248,7 @@ def test_pipeline_command_group_loads() -> None:
     assert "describe" in result.output
     assert "run" in result.output
     assert "runs" in result.output
+    assert "run-events" in result.output
     assert "stats" in result.output
     # assert "workers" in result.output
     assert "run-status" in result.output
@@ -1097,6 +1108,79 @@ def test_pipeline_run_status_missing(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 2
     assert "Run not found" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_run_events_displays_history(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_events_history=[
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "running",
+                "timestamp": "2024-01-01T10:05:00+00:00",
+            },
+            {
+                "id": "run-1",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+                "timestamp": "2024-01-01T10:10:00+00:00",
+            },
+        ]
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "run-events", "run-1"])
+
+    assert result.exit_code == 0
+    assert "[2024-01-01T10:05:00+00:00] orchestration.daily - running" in result.output
+    assert (
+        "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
+    )
+    assert client.requested_run_id == "run-1"
+    assert client.closed is True
+
+
+def test_pipeline_run_events_json(monkeypatch: MonkeyPatch) -> None:
+    payload = [
+        {"id": "run-1", "status": "running"},
+        {"id": "run-1", "status": "succeeded"},
+    ]
+    client = StubPipelineClient(run_events_history=payload)  # type: ignore[arg-type]
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run-events", "run-1", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.requested_run_id == "run-1"
+    assert client.closed is True
+
+
+def test_pipeline_run_events_missing(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError("Run not found", status_code=404)
+    client = StubPipelineClient(run_events_error=error)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "run-events", "run-1"])
+
+    assert result.exit_code == 2
+    assert "Run not found" in result.output
+    assert client.closed is True
+
+
+def test_pipeline_run_events_empty_history(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(run_events_history=[])
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(onepiece_app, ["pipeline", "run-events", "run-1"])
+
+    assert result.exit_code == 0
+    assert "No events recorded for run 'run-1'." in result.output
+    assert client.requested_run_id == "run-1"
     assert client.closed is True
 
 

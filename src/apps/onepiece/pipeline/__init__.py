@@ -553,6 +553,39 @@ def run_status(
         typer.echo(line)
 
 
+@app.command("run-events")
+def run_events(
+    run_id: str = typer.Argument(..., help="Run identifier."),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Display recorded events for a pipeline run."""
+
+    output_format = _resolve_output_format(format)
+
+    with _using_client() as client:
+        try:
+            events = client.get_run_events(run_id)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(events, indent=2))
+        return
+
+    if not events:
+        typer.echo(f"No events recorded for run '{run_id}'.")
+        return
+
+    for event in events:
+        for line in _format_run_event(event):
+            typer.echo(line)
+
+
 @app.command("watch")
 def watch_run(
     run_id: str = typer.Argument(..., help="Run identifier."),

@@ -359,6 +359,19 @@ def get_run(
     return JSONResponse(content=payload)
 
 
+@router.get("/runs/{run_id}/events/history")
+def get_run_event_history(
+    run_id: str,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        payload = orchestrator.serialise_run_events(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    return JSONResponse(content=payload)
+
+
 @router.get("/runs")
 def list_runs(
     pipeline: Annotated[

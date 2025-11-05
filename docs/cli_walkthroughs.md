@@ -1,6 +1,6 @@
 # CLI walkthroughs
 
-> **Documentation refresh (April 2024):** Use these walkthroughs as a checklist when rehearsing ingest, publish, and delivery flows. Each scenario now begins with linked prerequisites and troubleshooting tips so you can quickly confirm setup before following the steps.
+> **Documentation refresh (November 2025):** Use these walkthroughs as a checklist when rehearsing ingest, publish, and delivery flows. Each scenario now begins with linked prerequisites and troubleshooting tips so you can quickly confirm setup before following the steps.
 
 ## At a glance
 

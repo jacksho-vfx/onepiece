@@ -15,6 +15,7 @@ orchestrator or a remote Trafalgar deployment.
 | `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
 | `prune` | Apply run retention policies and report removals. | `text`, `json` |
 | `run-status` | Inspect metadata for a specific run. | `text`, `json` |
+| `run-events` | Show recorded events for a pipeline run. | `text`, `json` |
 | `workers` | Inspect current worker pool utilisation. | `text`, `json` |
 
 Pass `--format json` to any of these commands to emit prettified JSON payloads,
@@ -165,6 +166,20 @@ Supply `--format json` when feeding the metrics into monitoring dashboards or
 automation jobs. When targeting a remote Trafalgar deployment, the CLI proxies
 the `GET /workers/metrics` API with the same authentication headers that power
 other pipeline commands.
+
+### Inspecting run event history
+
+Historical run events are available from both the CLI and the Trafalgar API. Use
+`onepiece pipeline run-events <run-id>` to render the recorded events for a
+pipeline run. The default text output mirrors the formatting of
+`onepiece pipeline watch`, while `--format json` exposes the raw event payloads.
+
+When integrating with other services directly, call the REST endpoint
+`GET /runs/{run_id}/events/history`. The route shares the same authentication
+requirements as the live event stream (`GET /runs/{run_id}/events`) and responds
+with an array of serialised events. This makes it easy to fetch the final state
+of a run after it has completed or to replay granular step updates for audit
+purposes.
 
 ## Deleting pipelines
 
