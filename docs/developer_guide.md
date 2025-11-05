@@ -1,6 +1,6 @@
 # Developer guide
 
-> **Documentation refresh (April 2024):** Start here for an overview of the repository layout, bootstrap steps, and quality gates. The callouts below collect the topics teams search for most frequently so you can jump straight to the right section during onboarding or incident response.
+> **Documentation refresh (November 2025):** Start here for an overview of the repository layout, bootstrap steps, and quality gates. The callouts below collect the topics teams search for most frequently so you can jump straight to the right section during onboarding or incident response.
 
 ## At a glance
 

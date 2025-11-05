@@ -1134,7 +1134,9 @@ def test_pipeline_run_events_displays_history(monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 0
     assert "[2024-01-01T10:05:00+00:00] orchestration.daily - running" in result.output
-    assert "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
+    assert (
+        "[2024-01-01T10:10:00+00:00] orchestration.daily - succeeded" in result.output
+    )
     assert client.requested_run_id == "run-1"
     assert client.closed is True
 
@@ -1144,7 +1146,7 @@ def test_pipeline_run_events_json(monkeypatch: MonkeyPatch) -> None:
         {"id": "run-1", "status": "running"},
         {"id": "run-1", "status": "succeeded"},
     ]
-    client = StubPipelineClient(run_events_history=payload)
+    client = StubPipelineClient(run_events_history=payload)  # type: ignore[arg-type]
     _install_stub(monkeypatch, client)
 
     result = runner.invoke(

@@ -205,8 +205,7 @@ class LocalPipelineClient:
     def get_run_events(self, run_id: str) -> list[Mapping[str, Any]]:
         try:
             return [
-                dict(event)
-                for event in self._orchestrator.serialise_run_events(run_id)
+                dict(event) for event in self._orchestrator.serialise_run_events(run_id)
             ]
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
