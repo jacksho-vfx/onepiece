@@ -60,6 +60,10 @@ class PipelineClient(Protocol):
         self, run_id: str
     ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
+    def get_run_events(
+        self, run_id: str
+    ) -> list[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
+
     def stream_events(
         self, run_id: str
     ) -> Iterable[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
@@ -195,6 +199,15 @@ class LocalPipelineClient:
     def get_run(self, run_id: str) -> Any:
         try:
             return self._orchestrator.serialise_run(run_id)
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+
+    def get_run_events(self, run_id: str) -> list[Mapping[str, Any]]:
+        try:
+            return [
+                dict(event)
+                for event in self._orchestrator.serialise_run_events(run_id)
+            ]
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
 
@@ -411,6 +424,17 @@ class RemotePipelineClient:
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
         return payload
+
+    def get_run_events(self, run_id: str) -> list[Mapping[str, Any]]:
+        response = self._request("GET", f"runs/{run_id}/events/history")
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        events: list[Mapping[str, Any]] = []
+        for event in payload:
+            if isinstance(event, Mapping):
+                events.append(event)
+        return events
 
     def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
         def _generator() -> Iterator[Mapping[str, Any]]:
