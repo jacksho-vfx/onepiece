@@ -22,6 +22,7 @@ class SupportedDCC(Enum):
     HOUDINI = "houdini"
     MAX = "3dsmax"
     VRAY = "vray"
+    CINEMA4D = "cinema4d"
 
     @property
     def command(self) -> str:
@@ -49,6 +50,7 @@ DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
     SupportedDCC.HOUDINI: frozenset({"karma"}),
     SupportedDCC.MAX: frozenset({"vray"}),
     SupportedDCC.VRAY: frozenset({"vray"}),
+    SupportedDCC.CINEMA4D: frozenset(),
 }
 
 
@@ -68,6 +70,7 @@ DCC_ASSET_REQUIREMENTS: dict[SupportedDCC, tuple[str, ...]] = {
     SupportedDCC.HOUDINI: ("packages/onepiece.json",),
     SupportedDCC.MAX: ("plugins/onepiece.dlx",),
     SupportedDCC.VRAY: ("config/vray_settings.json",),
+    SupportedDCC.CINEMA4D: (),
 }
 
 

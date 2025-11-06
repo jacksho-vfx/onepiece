@@ -12,6 +12,7 @@ from libraries.creative.dcc import (
     BlenderClient,
     DCC,
     HoudiniClient,
+    Cinema4DClient,
     MaxClient,
     MayaClient,
     NukeClient,
@@ -26,6 +27,7 @@ CLIENT_CLASSES = {
     DCC.BLENDER: BlenderClient,
     DCC.MAX: MaxClient,
     DCC.VRAY: VrayClient,
+    DCC.CINEMA4D: Cinema4DClient,
 }
 
 

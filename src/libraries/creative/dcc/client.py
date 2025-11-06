@@ -3,7 +3,8 @@
 The functions provided here intentionally offer minimal behaviour so that the
 shared API surface can be exercised in tests without requiring an actual DCC
 application to be available.  Concrete implementations are expected to override
-these methods to integrate with Maya, Nuke, Houdini, Blender, or 3ds Max.  The
+these methods to integrate with Maya, Nuke, Houdini, Blender, 3ds Max, or
+Cinema 4D.  The
 stubs emit structured log messages to aid tracing and return placeholder values
 that communicate the absence of a real implementation.
 """
@@ -30,6 +31,7 @@ __all__ = [
     "BlenderClient",
     "MaxClient",
     "VrayClient",
+    "Cinema4DClient",
 ]
 
 
@@ -205,3 +207,10 @@ class VrayClient(BaseDCCClient):
 
     def __init__(self) -> None:
         super().__init__(dcc=DCC.VRAY)
+
+
+class Cinema4DClient(BaseDCCClient):
+    """Stub client for Maxon Cinema 4D."""
+
+    def __init__(self) -> None:
+        super().__init__(dcc=DCC.CINEMA4D)
