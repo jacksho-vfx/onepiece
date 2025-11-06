@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web.dashboard import app, invalidate_engine_cache
+from apps.perona.web.dashboard.templates import dashboard_index_html
 from libraries.analytics.perona.engine import (
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
@@ -17,6 +18,18 @@ from libraries.analytics.perona.engine import (
 )
 
 client = TestClient(app)
+
+
+def test_dashboard_index_html_substitutes_version() -> None:
+    html = dashboard_index_html()
+
+    assert isinstance(html, str)
+    assert "__PERONA_VERSION__" not in html
+    assert f'data-version="{PERONA_VERSION}"' in html
+    assert (
+        f'Perona platform version <strong id="perona-version">{PERONA_VERSION}</strong>'
+        in html
+    )
 
 
 def test_dashboard_ui_root_serves_html() -> None:
