@@ -219,6 +219,14 @@ Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip
 
    Successful runs echo a confirmation message in green. When issues are detected, the CLI prints a bullet list describing the missing textures or preset files so you can request a corrected package before publishing it to ShotGrid or synchronising to S3.
 
+3. Review the exported render metadata to confirm the active renderer, take, and frame range before delivery:
+
+   ```bash
+   onepiece dcc cinema4d show-summary /tmp/lookdev_turntable/metadata/summary.json
+   ```
+
+   When the path is omitted, the command resolves the `ONEPIECE_CINEMA4D_SUMMARY` environment variable set by render farm jobs. The CLI exits with a non-zero status when the summary is missing or empty so automated checks can fail fast.
+
    > **Note:** Cinema 4D metadata must reference textures and presets using paths that stay within the package directory. Absolute paths or values that resolve outside of the package (for example entries containing `..`) are rejected during validation so problems can be fixed before delivery.
 
 4. Generate a playblast with captured metadata:
