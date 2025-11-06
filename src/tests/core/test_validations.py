@@ -76,10 +76,21 @@ def test_validate_dcc_supports_vray() -> None:
     assert dcc_validations.validate_dcc("vray") is SupportedDCC.VRAY
 
 
+def test_validate_dcc_supports_cinema4d() -> None:
+    assert dcc_validations.validate_dcc("cinema4d") is SupportedDCC.CINEMA4D
+
+
 def test_detect_dcc_from_file_supports_vray() -> None:
     assert (
         dcc_validations.detect_dcc_from_file("/projects/shot/lighting.vrscene")
         is SupportedDCC.VRAY
+    )
+
+
+def test_detect_dcc_from_file_supports_cinema4d() -> None:
+    assert (
+        dcc_validations.detect_dcc_from_file("/projects/shot/lookdev.c4d")
+        is SupportedDCC.CINEMA4D
     )
 
 

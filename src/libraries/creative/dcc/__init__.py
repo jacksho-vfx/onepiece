@@ -4,6 +4,7 @@ from libraries.creative.dcc.client import (
     BaseDCCClient,
     BlenderClient,
     HoudiniClient,
+    Cinema4DClient,
     MaxClient,
     MayaClient,
     NukeClient,
@@ -23,4 +24,5 @@ __all__ = [
     "BlenderClient",
     "MaxClient",
     "VrayClient",
+    "Cinema4DClient",
 ]

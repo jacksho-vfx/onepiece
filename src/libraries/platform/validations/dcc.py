@@ -34,6 +34,7 @@ _EXTENSION_MAP: dict[str, SupportedDCC] = {
     ".blend": SupportedDCC.BLENDER,
     ".max": SupportedDCC.MAX,
     ".vrscene": SupportedDCC.VRAY,
+    ".c4d": SupportedDCC.CINEMA4D,
 }
 
 
