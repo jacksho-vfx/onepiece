@@ -211,7 +211,16 @@ Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip
    ls /tmp/lookdev_turntable
    ```
 
-2. Run the validator against the unpacked directory:
+2. If textures or presets are missing, gather them from the original source directory:
+
+   ```bash
+   onepiece dcc cinema4d gather-assets /tmp/lookdev_turntable ~/projects/lookdev_assets
+   ```
+
+   The command copies any referenced textures or presets that are absent in the package. When an optional source directory is
+   omitted, the tool still reports missing items so you can request them from the artist or render farm.
+
+3. Run the validator against the unpacked directory:
 
    ```bash
    onepiece dcc cinema4d validate /tmp/lookdev_turntable
@@ -219,7 +228,7 @@ Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip
 
    Successful runs echo a confirmation message in green. When issues are detected, the CLI prints a bullet list describing the missing textures or preset files so you can request a corrected package before publishing it to ShotGrid or synchronising to S3.
 
-3. Review the exported render metadata to confirm the active renderer, take, and frame range before delivery:
+4. Review the exported render metadata to confirm the active renderer, take, and frame range before delivery:
 
    ```bash
    onepiece dcc cinema4d show-summary /tmp/lookdev_turntable/metadata/summary.json
@@ -229,7 +238,7 @@ Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip
 
    > **Note:** Cinema 4D metadata must reference textures and presets using paths that stay within the package directory. Absolute paths or values that resolve outside of the package (for example entries containing `..`) are rejected during validation so problems can be fixed before delivery.
 
-4. Generate a playblast with captured metadata:
+5. Generate a playblast with captured metadata:
 
    ```bash
    onepiece dcc animation playblast \
