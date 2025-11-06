@@ -324,8 +324,11 @@ def _resolve_priority_and_chunk_size(
     chunk_min = resolved_capabilities.get("chunk_size_min")
     chunk_max = resolved_capabilities.get("chunk_size_max")
     adapter_default_chunk = (
-        resolved_capabilities.get("default_chunk_size") if chunk_enabled else None
+        cast(int | None, resolved_capabilities.get("default_chunk_size"))
+        if chunk_enabled
+        else None
     )
+    resolved_chunk: int | None
     if chunk_size is not None:
         resolved_chunk = chunk_size
     elif chunk_enabled:
