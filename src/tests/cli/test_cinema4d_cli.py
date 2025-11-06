@@ -196,3 +196,79 @@ def test_cinema4d_gather_assets_reports_missing(
     assert result.exit_code == 1
     assert "Missing assets" in result.output
     assert "Cinema 4D reference issues detected" in result.output
+
+
+def test_cinema4d_normalise_paths_success(tmp_path: Path) -> None:
+    """Paths are rebased relative to the package and written to disk."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    absolute_texture = (package_dir / "tex" / "mat.tx").resolve()
+    metadata_path = package_dir / "metadata.json"
+    metadata_path.write_text(
+        json.dumps({"cinema4d": {"textures": [str(absolute_texture)]}})
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cinema4d_module.app, ["normalise-paths", str(package_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert "asset paths normalised" in result.output
+
+    payload = json.loads(metadata_path.read_text())
+    assert payload["cinema4d"]["textures"] == ["tex/mat.tx"]
+
+
+def test_cinema4d_normalise_paths_reports_warnings(tmp_path: Path) -> None:
+    """Warnings are surfaced when paths cannot be rebased."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    metadata_path = package_dir / "metadata.json"
+    metadata_path.write_text(
+        json.dumps({"cinema4d": {"textures": [r"C:\\assets\\wood.tx"]}})
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cinema4d_module.app, ["normalise-paths", str(package_dir)])
+
+    assert result.exit_code == 1
+    assert "Some asset paths still need manual attention" in result.output
+    assert "Unable to rebase Windows absolute path" in result.output
+
+    payload = json.loads(metadata_path.read_text())
+    assert payload["cinema4d"]["textures"] == ["C:/assets/wood.tx"]
+
+
+def test_cinema4d_normalise_paths_already_relative(tmp_path: Path) -> None:
+    """Already normalised metadata exits successfully without modifications."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    metadata_path = package_dir / "metadata.json"
+    metadata_path.write_text(json.dumps({"cinema4d": {"textures": ["tex/mat.tx"]}}))
+
+    original = metadata_path.read_text()
+
+    runner = CliRunner()
+    result = runner.invoke(cinema4d_module.app, ["normalise-paths", str(package_dir)])
+
+    assert result.exit_code == 0
+    assert "already normalised" in result.output
+    assert metadata_path.read_text() == original
+
+
+def test_cinema4d_normalise_paths_missing_metadata(tmp_path: Path) -> None:
+    """Missing metadata surfaces a helpful error message."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    runner = CliRunner()
+    result = runner.invoke(cinema4d_module.app, ["normalise-paths", str(package_dir)])
+
+    assert result.exit_code == 1
+    assert "metadata.json is missing or unreadable" in result.output

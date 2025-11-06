@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,10 @@ from libraries.creative.dcc.cinema4d.metadata import (
     SUMMARY_ENV_VAR,
     load_cinema4d_summary,
 )
-from libraries.creative.dcc.cinema4d.validation import validate_package
+from libraries.creative.dcc.cinema4d.validation import (
+    normalise_asset_paths,
+    validate_package,
+)
 
 
 log = structlog.get_logger(__name__)
@@ -189,4 +193,81 @@ def gather_assets(
     log.info("cinema4d.gather_assets.success", **log_data)
 
 
-__all__ = ["app", "gather_assets", "validate", "show_summary"]
+@app.command("normalise-paths")
+def normalise_paths(
+    package_dir: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        help="Path to the Cinema 4D package directory",
+    ),
+) -> None:
+    """Rewrite Cinema 4D asset paths to be package relative."""
+
+    log.info("cinema4d.normalise_paths.start", package=str(package_dir))
+
+    result = normalise_asset_paths(package_dir)
+
+    if result.metadata is None:
+        message = (
+            result.warnings[0]
+            if result.warnings
+            else ("Cinema 4D metadata could not be normalised.")
+        )
+        typer.secho(message, fg=typer.colors.RED)
+        log.error(
+            "cinema4d.normalise_paths.unavailable",
+            package=str(package_dir),
+            warnings=result.warnings,
+        )
+        raise typer.Exit(code=1)
+
+    metadata_path = package_dir / "metadata.json"
+    if result.updated:
+        metadata_text = json.dumps(result.metadata, indent=2, sort_keys=True)
+        metadata_path.write_text(metadata_text + "\n")
+
+    if result.warnings:
+        warning_lines = "\n".join(f"- {warning}" for warning in result.warnings)
+        typer.secho(
+            "Some asset paths still need manual attention:\n" + warning_lines,
+            fg=typer.colors.YELLOW,
+        )
+        log.warning(
+            "cinema4d.normalise_paths.partial",
+            package=str(package_dir),
+            updated=result.updated,
+            warnings=result.warnings,
+        )
+        raise typer.Exit(code=1)
+
+    if result.updated:
+        typer.secho("Cinema 4D asset paths normalised.", fg=typer.colors.GREEN)
+        log.info(
+            "cinema4d.normalise_paths.success",
+            package=str(package_dir),
+            updated=True,
+        )
+        return
+
+    typer.secho(
+        "Cinema 4D asset paths were already normalised.",
+        fg=typer.colors.GREEN,
+    )
+    log.info(
+        "cinema4d.normalise_paths.noop",
+        package=str(package_dir),
+        updated=False,
+    )
+
+
+__all__ = [
+    "app",
+    "gather_assets",
+    "normalise_paths",
+    "show_summary",
+    "validate",
+]
