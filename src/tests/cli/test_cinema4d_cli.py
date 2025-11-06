@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from importlib import import_module
 from pathlib import Path
 
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
+
+from libraries.creative.dcc.cinema4d.metadata import SUMMARY_ENV_VAR
 
 cinema4d_module = import_module("apps.onepiece.dcc.cinema4d")
 
@@ -27,6 +30,7 @@ def test_cinema4d_validate_success(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     result = runner.invoke(
         cinema4d_module.app,
         [
+            "validate",
             str(package_dir),
         ],
     )
@@ -56,6 +60,7 @@ def test_cinema4d_validate_failure(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     result = runner.invoke(
         cinema4d_module.app,
         [
+            "validate",
             str(package_dir),
         ],
     )
@@ -64,3 +69,68 @@ def test_cinema4d_validate_failure(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     assert "Cinema 4D package validation detected issues:" in result.output
     assert "- Missing Cinema4D texture files: tex/mat.png" in result.output
     assert "- Missing Cinema4D preset files: presets/lighting.c4d" in result.output
+
+
+def test_cinema4d_show_summary_success(tmp_path: Path) -> None:
+    """The summary command prints key metadata and exits cleanly."""
+
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "frame_range": [101, 124],
+                "renderer": "Redshift",
+                "take": "Final",
+                "fps": 24,
+            }
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["show-summary", str(summary_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Cinema 4D Summary" in result.output
+    assert "Frame range: 101 - 124" in result.output
+    assert "Renderer: Redshift" in result.output
+    assert "Take: Final" in result.output
+    assert "fps: 24" in result.output
+
+
+def test_cinema4d_show_summary_missing_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """Missing summary files surface an actionable error message."""
+
+    missing_path = tmp_path / "missing.json"
+    monkeypatch.setenv(SUMMARY_ENV_VAR, str(missing_path))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["show-summary"],
+    )
+
+    assert result.exit_code == 1
+    assert "No Cinema 4D summary metadata is available." in result.output
+
+
+def test_cinema4d_show_summary_empty(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    """Empty payloads are treated as missing summaries."""
+
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text("{}")
+
+    monkeypatch.setenv(SUMMARY_ENV_VAR, str(summary_path))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["show-summary"],
+    )
+
+    assert result.exit_code == 1
+    assert "No Cinema 4D summary metadata is available." in result.output
