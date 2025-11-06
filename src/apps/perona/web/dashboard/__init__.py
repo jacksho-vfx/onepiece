@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from apps.perona.version import PERONA_VERSION
 
@@ -28,6 +30,13 @@ app = FastAPI(
         "backtests that power the interactive UI."
     ),
     version=PERONA_VERSION,
+)
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount(
+    "/dashboard/static",
+    StaticFiles(directory=_STATIC_DIR),
+    name="perona-dashboard-static",
 )
 
 app.include_router(system.router)
