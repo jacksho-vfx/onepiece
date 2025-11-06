@@ -124,6 +124,7 @@ def test_cinema4d_export_metadata_merges_summary(
         "renderer": "  Redshift  ",
         "take": " Beauty ",
         "additional": {"passes": 3},
+        "resolution": [3840, 2160],
     }
     summary_path = tmp_path / "c4d_summary.json"
     summary_path.write_text(json.dumps(summary))
@@ -134,10 +135,13 @@ def test_cinema4d_export_metadata_merges_summary(
     metadata = client.export_metadata(str(output))
 
     assert metadata["dcc"] == "cinema4d"
+    assert metadata["frame_range"] == [101, 201]
+    assert metadata["resolution"] == [3840, 2160]
     assert metadata["cinema4d"]["frame_range"] == [101, 201]
     assert metadata["cinema4d"]["renderer"] == "Redshift"
     assert metadata["cinema4d"]["take"] == "Beauty"
     assert metadata["cinema4d"]["additional"] == {"passes": 3}
+    assert metadata["cinema4d"]["resolution"] == [3840, 2160]
 
     written = json.loads(output.read_text())
     assert written == metadata
@@ -154,3 +158,5 @@ def test_cinema4d_export_metadata_without_summary(
 
     assert metadata["dcc"] == "cinema4d"
     assert "cinema4d" not in metadata
+    assert metadata["frame_range"] is None
+    assert metadata["resolution"] is None

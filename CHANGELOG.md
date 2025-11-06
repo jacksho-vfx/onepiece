@@ -22,6 +22,9 @@ All notable changes to the OnePiece pipeline toolkit.
 - Refreshed the Perona dashboard landing page with a responsive HTML UI that
   streams live telemetry, surfaces risk/cost summaries, and exposes a reusable
   `/dashboard/summary` JSON snapshot for automation.
+- Cinema 4D metadata exports now promote summary frame ranges, resolutions, and
+  similar high-level values to the root payload while preserving the nested
+  `cinema4d` namespace for rich context.
 
 ---
 
