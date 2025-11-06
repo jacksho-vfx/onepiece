@@ -8,8 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.perona.web import dashboard as dashboard_module
-from apps.perona.web import wrangler as wrangler_module
-from apps.perona.web.dashboard import app
 from libraries.analytics.perona.engine import (
     CostBreakdown,
     DEFAULT_BASELINE_COST_INPUT,
@@ -19,189 +17,13 @@ from libraries.analytics.perona.engine import (
     RenderMetric as EngineRenderMetric,
     ShotLifecycle,
     ShotLifecycleStage,
-    ShotTelemetry,
 )
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
-client = TestClient(app)
 
-
-def test_wrangler_scripts_listing_returns_metadata() -> None:
-    wrangler_module.register_script(
-        wrangler_module.WranglerScriptMetadata(
-            script_id="cache.refresh",
-            name="Refresh cache",
-            description="Rebuild cached analytics",
-        ),
-        lambda: {"status": "success", "message": "ok"},
-    )
-
-    response = client.get("/wrangler/scripts")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert isinstance(payload, list)
-    scripts = {item["script_id"]: item for item in payload}
-    assert scripts["analyse_cost_drivers"]["name"] == "Analyse cost drivers"
-    assert "cost inputs" in scripts["analyse_cost_drivers"]["description"].lower()
-    assert scripts["analyse_cost_drivers"]["tags"] == [
-        "cost",
-        "insights",
-        "telemetry",
-    ]
-    assert "boost_gpu_utilisation" in scripts
-    assert scripts["boost_gpu_utilisation"]["name"] == "Boost GPU utilisation"
-    assert scripts["boost_gpu_utilisation"]["description"]
-    assert scripts["boost_gpu_utilisation"]["tags"] == ["rendering", "utilisation"]
-
-    assert scripts["audit_telemetry_coverage"]["name"] == "Audit telemetry coverage"
-    assert "telemetry" in scripts["audit_telemetry_coverage"]["description"].lower()
-    assert scripts["audit_telemetry_coverage"]["tags"] == [
-        "telemetry",
-        "coverage",
-        "health",
-    ]
-
-    assert scripts["check_telemetry_freshness"]["name"] == "Check telemetry freshness"
-    assert "telemetry" in scripts["check_telemetry_freshness"]["description"].lower()
-    assert scripts["check_telemetry_freshness"]["tags"] == ["telemetry", "health"]
-
-    assert scripts["spin_down_idle_workers"]["name"] == "Spin down idle GPU workers"
-    assert "GPU nodes" in scripts["spin_down_idle_workers"]["description"]
-    assert scripts["spin_down_idle_workers"]["tags"] == [
-        "rendering",
-        "capacity",
-        "cost",
-    ]
-
-    assert scripts["list_failing_jobs"]["name"] == "List failing jobs"
-    assert "critical shots" in scripts["list_failing_jobs"]["description"]
-    assert scripts["list_failing_jobs"]["tags"] == ["risk", "shots"]
-
-    assert (
-        scripts["flag_frame_time_regressions"]["name"] == "Flag frame time regressions"
-    )
-    assert "frame time" in scripts["flag_frame_time_regressions"]["description"].lower()
-    assert scripts["flag_frame_time_regressions"]["tags"] == [
-        "rendering",
-        "performance",
-    ]
-
-    assert (
-        scripts["flag_render_volatility"]["name"] == "Flag render volatility hotspots"
-    )
-    assert "volatile" in scripts["flag_render_volatility"]["description"].lower()
-    assert scripts["flag_render_volatility"]["tags"] == [
-        "rendering",
-        "utilisation",
-    ]
-
-    assert scripts["rebuild_unstable_caches"]["name"] == "Rebuild unstable caches"
-    assert (
-        "cache stability" in scripts["rebuild_unstable_caches"]["description"].lower()
-    )
-    assert scripts["rebuild_unstable_caches"]["tags"] == [
-        "risk",
-        "caches",
-        "simulation",
-    ]
-
-    assert scripts["flag_render_error_streaks"]["name"] == "Flag render error streaks"
-    assert "consecutive" in scripts["flag_render_error_streaks"]["description"].lower()
-    assert scripts["flag_render_error_streaks"]["tags"] == [
-        "rendering",
-        "errors",
-        "shots",
-    ]
-
-    assert scripts["explain_pnl_delta"]["name"] == "Explain P&L delta"
-    assert "render spend" in scripts["explain_pnl_delta"]["description"].lower()
-    assert scripts["explain_pnl_delta"]["tags"] == [
-        "finance",
-        "pnl",
-        "insights",
-    ]
-
-    assert (
-        scripts["evaluate_optimisation_playbook"]["name"]
-        == "Evaluate optimisation playbook"
-    )
-    assert (
-        "optimisation"
-        in scripts["evaluate_optimisation_playbook"]["description"].lower()
-    )
-    assert scripts["evaluate_optimisation_playbook"]["tags"] == [
-        "cost",
-        "optimisation",
-        "playbook",
-    ]
-
-    assert (
-        scripts["escalate_deadline_shots"]["name"]
-        == "Escalate deadline-sensitive shots"
-    )
-    assert "deadline" in scripts["escalate_deadline_shots"]["description"].lower()
-    assert scripts["escalate_deadline_shots"]["tags"] == [
-        "risk",
-        "shots",
-        "deadline",
-    ]
-
-    assert (
-        scripts["highlight_stage_bottlenecks"]["name"] == "Highlight stage bottlenecks"
-    )
-    assert (
-        "busiest stage" in scripts["highlight_stage_bottlenecks"]["description"].lower()
-    )
-    assert scripts["highlight_stage_bottlenecks"]["tags"] == [
-        "production",
-        "shots",
-    ]
-
-    assert scripts["cache.refresh"] == {
-        "script_id": "cache.refresh",
-        "name": "Refresh cache",
-        "description": "Rebuild cached analytics",
-        "tags": [],
-    }
-
-
-def test_wrangler_execute_missing_script_returns_404() -> None:
-    response = client.post("/wrangler/scripts/unknown-task")
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Unknown Wrangler script."}
-
-
-def test_wrangler_execute_script_returns_payload() -> None:
-    async def runner() -> wrangler_module.WranglerScriptResult:
-        return wrangler_module.WranglerScriptResult(
-            script_id="reindex",
-            status="success",
-            message="Completed",
-            payload={"refreshed": 12},
-        )
-
-    wrangler_module.register_script(
-        wrangler_module.WranglerScriptMetadata(
-            script_id="reindex",
-            name="Reindex sequences",
-            description="Refreshes downstream search indices",
-        ),
-        runner,
-    )
-
-    response = client.post("/wrangler/scripts/reindex")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["script_id"] == "reindex"
-    assert payload["status"] == "success"
-    assert payload["message"] == "Completed"
-    assert payload["payload"] == {"refreshed": 12}
-
-
-def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None:
+def test_wrangler_boost_gpu_utilisation_script_reports_recommendations(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/boost_gpu_utilisation")
 
     assert response.status_code == 200
@@ -227,7 +49,7 @@ def test_wrangler_boost_gpu_utilisation_script_reports_recommendations() -> None
 
 
 def test_wrangler_evaluate_optimisation_playbook_returns_ranked_scenarios(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     baseline_breakdown = CostBreakdown(
         frame_count=DEFAULT_BASELINE_COST_INPUT.frame_count,
@@ -320,263 +142,8 @@ def test_wrangler_evaluate_optimisation_playbook_returns_ranked_scenarios(
     assert formatted_amount in payload["message"]
 
 
-def test_wrangler_check_telemetry_freshness_reports_age(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    timestamp = (datetime.utcnow() - timedelta(minutes=10)).replace(microsecond=0)
-    summary = {
-        "total_samples": 12,
-        "averages": {},
-        "sequences": [],
-        "latest_sample": {
-            "sequence": "SQ99",
-            "shot_id": "SQ99_SH001",
-            "timestamp": timestamp.isoformat(),
-        },
-    }
-
-    dummy_engine = object()
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
-    monkeypatch.setattr(
-        dashboard_module,
-        "metrics_summary",
-        lambda engine: summary,
-    )
-
-    response = client.post("/wrangler/scripts/check_telemetry_freshness")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["script_id"] == "check_telemetry_freshness"
-    assert payload["status"] == "success"
-    assert "minute" in payload["message"].lower()
-
-    body = payload["payload"]
-    assert body["latest_sequence"] == "SQ99"
-    assert body["latest_shot"] == "SQ99_SH001"
-    assert body["latest_timestamp"] == timestamp.isoformat()
-    assert body["status"] == "healthy"
-    assert body["age_minutes"] is not None
-    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
-
-
-def test_wrangler_check_telemetry_freshness_handles_missing_samples(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    summary = {
-        "total_samples": 0,
-        "averages": {},
-        "sequences": [],
-        "latest_sample": None,
-    }
-
-    dummy_engine = object()
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: dummy_engine)
-    monkeypatch.setattr(
-        dashboard_module,
-        "metrics_summary",
-        lambda engine: summary,
-    )
-
-    response = client.post("/wrangler/scripts/check_telemetry_freshness")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["script_id"] == "check_telemetry_freshness"
-    assert payload["status"] == "error"
-    assert "telemetry" in payload["message"].lower()
-
-    body = payload["payload"]
-    assert body["latest_sequence"] is None
-    assert body["latest_shot"] is None
-    assert body["latest_timestamp"] is None
-    assert body["age_minutes"] is None
-    assert body["status"] is None
-    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
-
-
-def test_wrangler_audit_telemetry_coverage_classifies_buckets(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-
-    telemetry = (
-        ShotTelemetry(
-            sequence="SQ10",
-            shot_id="SH010",
-            average_frame_time_ms=150.0,
-            fps=24.0,
-            error_rate=0.02,
-            cache_stability=0.85,
-            frames_rendered=480,
-            deadline=now + timedelta(days=1),
-        ),
-        ShotTelemetry(
-            sequence="SQ20",
-            shot_id="SH020",
-            average_frame_time_ms=162.0,
-            fps=24.0,
-            error_rate=0.04,
-            cache_stability=0.7,
-            frames_rendered=512,
-            deadline=now + timedelta(days=2),
-        ),
-        ShotTelemetry(
-            sequence="SQ30",
-            shot_id="SH030",
-            average_frame_time_ms=175.0,
-            fps=24.0,
-            error_rate=0.03,
-            cache_stability=0.6,
-            frames_rendered=450,
-            deadline=now + timedelta(days=3),
-        ),
-        ShotTelemetry(
-            sequence="SQ40",
-            shot_id="SH040",
-            average_frame_time_ms=140.0,
-            fps=24.0,
-            error_rate=0.01,
-            cache_stability=0.9,
-            frames_rendered=400,
-            deadline=now + timedelta(days=4),
-        ),
-    )
-
-    healthy_last = now - timedelta(minutes=5)
-    warning_last = now - timedelta(minutes=75)
-    stale_last = now - timedelta(minutes=240)
-
-    metrics = (
-        EngineRenderMetric(
-            sequence="SQ10",
-            shot_id="SH010",
-            timestamp=healthy_last - timedelta(minutes=10),
-            fps=24.0,
-            frame_time_ms=150.0,
-            error_count=0,
-            gpu_utilisation=0.72,
-            cache_health=0.9,
-        ),
-        EngineRenderMetric(
-            sequence="SQ10",
-            shot_id="SH010",
-            timestamp=healthy_last,
-            fps=24.0,
-            frame_time_ms=148.0,
-            error_count=0,
-            gpu_utilisation=0.74,
-            cache_health=0.9,
-        ),
-        EngineRenderMetric(
-            sequence="SQ20",
-            shot_id="SH020",
-            timestamp=warning_last,
-            fps=24.0,
-            frame_time_ms=160.0,
-            error_count=1,
-            gpu_utilisation=0.65,
-            cache_health=0.8,
-        ),
-        EngineRenderMetric(
-            sequence="SQ30",
-            shot_id="SH030",
-            timestamp=stale_last,
-            fps=24.0,
-            frame_time_ms=172.0,
-            error_count=2,
-            gpu_utilisation=0.6,
-            cache_health=0.7,
-        ),
-    )
-
-    class DummyEngine:
-        _telemetry = telemetry
-
-        def stream_render_metrics(self) -> tuple[EngineRenderMetric, ...]:
-            return metrics
-
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: DummyEngine())
-
-    response = client.post("/wrangler/scripts/audit_telemetry_coverage")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["script_id"] == "audit_telemetry_coverage"
-    assert payload["status"] == "success"
-    assert "telemetry attention" in payload["message"].lower()
-
-    body = payload["payload"]
-    assert body["summary"] == payload["message"]
-    assert body["attention_total"] == 3
-    assert body["counts"] == {"healthy": 1, "warning": 1, "stale": 1, "missing": 1}
-    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
-
-    shots = {
-        (
-            entry["sequence"],
-            entry["shot"],
-        ): entry
-        for entry in body["shots"]
-    }
-
-    healthy = shots[("SQ10", "SH010")]
-    warning = shots[("SQ20", "SH020")]
-    stale = shots[("SQ30", "SH030")]
-    missing = shots[("SQ40", "SH040")]
-
-    assert healthy["status"] == "healthy"
-    assert healthy["samples"] == 2
-    assert healthy["telemetry_present"] is True
-    assert healthy["last_seen"] == healthy_last.isoformat()
-    assert healthy["age_minutes"] == pytest.approx(5.0, abs=1.0)
-
-    assert warning["status"] == "warning"
-    assert warning["samples"] == 1
-    assert warning["last_seen"] == warning_last.isoformat()
-    assert warning["age_minutes"] == pytest.approx(75.0, abs=1.0)
-
-    assert stale["status"] == "stale"
-    assert stale["samples"] == 1
-    assert stale["last_seen"] == stale_last.isoformat()
-    assert stale["age_minutes"] == pytest.approx(240.0, abs=1.5)
-
-    assert missing["status"] == "missing"
-    assert missing["samples"] == 0
-    assert missing["telemetry_present"] is True
-    assert missing["last_seen"] is None
-    assert missing["age_minutes"] is None
-
-
-def test_wrangler_audit_telemetry_coverage_handles_empty_telemetry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class DummyEngine:
-        _telemetry: tuple[Any, ...] = ()
-
-        def stream_render_metrics(self) -> tuple[EngineRenderMetric, ...]:
-            return ()
-
-    monkeypatch.setattr(dashboard_module, "get_engine", lambda: DummyEngine())
-
-    response = client.post("/wrangler/scripts/audit_telemetry_coverage")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["script_id"] == "audit_telemetry_coverage"
-    assert payload["status"] == "success"
-    assert "no telemetry" in payload["message"].lower()
-
-    body = payload["payload"]
-    assert body["summary"] == payload["message"]
-    assert body["shots"] == []
-    assert body["counts"] == {"healthy": 0, "warning": 0, "stale": 0, "missing": 0}
-    assert body["attention_total"] == 0
-    assert body["thresholds"] == {"healthy_minutes": 30.0, "stale_minutes": 120.0}
-
-
 def test_wrangler_analyse_cost_drivers_script_returns_summary(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     statistics = (
         FeatureStatistics(
@@ -634,7 +201,7 @@ def test_wrangler_analyse_cost_drivers_script_returns_summary(
 
 
 def test_wrangler_analyse_cost_drivers_script_handles_missing_statistics(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     recommendations = ("Capture additional telemetry to build cost insights.",)
 
@@ -657,7 +224,7 @@ def test_wrangler_analyse_cost_drivers_script_handles_missing_statistics(
 
 
 def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _DummyBaseline:
         def __init__(self, gpu_count: int) -> None:
@@ -727,7 +294,9 @@ def test_wrangler_spin_down_script_recommends_smaller_worker_pool(
     assert any("Projected utilisation" in note for note in body["notes"])
 
 
-def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
+def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/escalate_deadline_shots")
 
     assert response.status_code == 200
@@ -746,7 +315,7 @@ def test_wrangler_escalate_deadline_shots_script_flags_deadline_risk() -> None:
 
 
 def test_wrangler_flag_frame_time_regressions_reports_sequences(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _Baseline:
         average_frame_time_ms = 40.0
@@ -811,7 +380,7 @@ def test_wrangler_flag_frame_time_regressions_reports_sequences(
 
 
 def test_wrangler_flag_frame_time_regressions_reports_healthy_message(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _Baseline:
         average_frame_time_ms = 40.0
@@ -862,7 +431,9 @@ def test_wrangler_flag_frame_time_regressions_reports_healthy_message(
     assert body["threshold_percentage"] == pytest.approx(10.0, rel=0, abs=0.01)
 
 
-def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
+def test_wrangler_flag_render_volatility_script_surfaces_hotspots(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/flag_render_volatility")
 
     assert response.status_code == 200
@@ -888,7 +459,7 @@ def test_wrangler_flag_render_volatility_script_surfaces_hotspots() -> None:
 
 
 def test_wrangler_flag_render_error_streaks_script_ranks_streaks(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = datetime(2024, 5, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -979,7 +550,9 @@ def test_wrangler_flag_render_error_streaks_script_ranks_streaks(
     clear_engine.stream_render_metrics.assert_called_once_with()
 
 
-def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
+def test_wrangler_explain_pnl_delta_script_returns_summary(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/explain_pnl_delta")
 
     assert response.status_code == 200
@@ -1012,7 +585,7 @@ def test_wrangler_explain_pnl_delta_script_returns_summary() -> None:
 
 
 def test_wrangler_explain_pnl_delta_handles_missing_contributions(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     baseline_breakdown = CostBreakdown(
         frame_count=DEFAULT_BASELINE_COST_INPUT.frame_count,
@@ -1063,7 +636,9 @@ def test_wrangler_explain_pnl_delta_handles_missing_contributions(
     mock_engine.estimate_cost.assert_called_once_with(DEFAULT_BASELINE_COST_INPUT)
 
 
-def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None:
+def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/rebuild_unstable_caches")
 
     assert response.status_code == 200
@@ -1094,7 +669,9 @@ def test_wrangler_rebuild_unstable_caches_script_highlights_cache_risk() -> None
         assert metrics["avg_cache_gb"] > 0
 
 
-def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
+def test_wrangler_list_failing_jobs_script_surfaces_critical_shots(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/list_failing_jobs")
 
     assert response.status_code == 200
@@ -1126,7 +703,9 @@ def test_wrangler_list_failing_jobs_script_surfaces_critical_shots() -> None:
         assert entry["recommended_follow_up"]
 
 
-def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> None:
+def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load(
+    client: TestClient,
+) -> None:
     response = client.post("/wrangler/scripts/highlight_stage_bottlenecks")
 
     assert response.status_code == 200
@@ -1159,7 +738,7 @@ def test_wrangler_highlight_stage_bottlenecks_script_reports_active_load() -> No
 
 
 def test_wrangler_identify_unowned_shots_flags_missing_assignments(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = datetime(2024, 5, 21, 9, 0, tzinfo=timezone.utc)
 
@@ -1236,7 +815,7 @@ def test_wrangler_identify_unowned_shots_flags_missing_assignments(
 
 
 def test_wrangler_identify_unowned_shots_handles_fully_assigned(
-    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = datetime(2024, 5, 22, 10, 0, tzinfo=timezone.utc)
 
