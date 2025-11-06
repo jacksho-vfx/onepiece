@@ -273,8 +273,21 @@ def run_pipeline(
         "--wait/--no-wait",
         help="Follow run events until the pipeline finishes.",
     ),
+    format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: 'text' (default) or 'json'.",
+    ),
 ) -> None:
     """Trigger a pipeline execution."""
+
+    output_format = _resolve_output_format(format)
+
+    if wait and output_format == "json":
+        raise typer.BadParameter(
+            "--wait cannot be combined with '--format json'.",
+            param_hint="--wait",
+        )
 
     try:
         parsed_parameters = _parse_pipeline_parameters(parameters)
@@ -294,6 +307,11 @@ def run_pipeline(
         raw_run_id = run.get("id")
         run_id = str(raw_run_id) if raw_run_id is not None else "<unknown>"
         status = run.get("status", "unknown")
+
+        if output_format == "json":
+            typer.echo(json.dumps(run, indent=2))
+            return
+
         typer.echo(f"Triggered pipeline '{pipeline_name}' (run id: {run_id}).")
         typer.echo(f"Current status: {status}")
         initiator = _coerce_display_text(run.get("submitted_by"))
