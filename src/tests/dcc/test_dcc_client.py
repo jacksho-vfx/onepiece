@@ -167,6 +167,49 @@ def test_verify_dcc_dependencies_detects_gpu_failure(tmp_path: Path) -> None:
     assert report.is_valid is False
 
 
+def test_verify_dcc_dependencies_cinema4d_missing_assets(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.CINEMA4D,
+        package,
+        plugin_inventory=["redshift"],
+    )
+
+    assert report.plugins.missing == frozenset()
+    missing_assets = {path.relative_to(package) for path in report.assets.missing}
+    expected_assets = {
+        Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.CINEMA4D]
+    }
+    assert missing_assets == expected_assets
+    assert report.is_valid is False
+
+
+def test_verify_dcc_dependencies_cinema4d_succeeds(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.CINEMA4D]:
+        target = package / asset
+        if target.suffix:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("payload")
+        else:
+            target.mkdir(parents=True, exist_ok=True)
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.CINEMA4D,
+        package,
+        plugin_inventory=["redshift"],
+        env={"ONEPIECE_CINEMA4D_GPU": "Maxon Certified OpenGL 4.5"},
+    )
+
+    assert report.plugins.missing == frozenset()
+    assert report.assets.missing == tuple()
+    assert report.is_valid is True
+
+
 def test_format_dependency_error_includes_gpu_details(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.mkdir()

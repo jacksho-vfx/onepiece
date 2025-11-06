@@ -178,6 +178,44 @@ def test_check_dcc_environment_missing_gpu(mock_which: MagicMock) -> None:
     assert report.gpu.meets_requirement is False
 
 
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/Applications/Maxon Cinema 4D/Cinema 4D",
+)
+def test_check_dcc_environment_reports_missing_cinema4d_dependencies(
+    mock_which: MagicMock,
+) -> None:
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.CINEMA4D,
+        env={},
+    )
+
+    assert report.installed is True
+    assert report.plugins.missing == frozenset({"redshift"})
+    assert report.gpu.meets_requirement is False
+
+
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/Applications/Maxon Cinema 4D/Cinema 4D",
+)
+def test_check_dcc_environment_cinema4d_succeeds(
+    mock_which: MagicMock,
+) -> None:
+    plugin_inventory = {SupportedDCC.CINEMA4D: frozenset({"redshift"})}
+    gpu_info = {SupportedDCC.CINEMA4D: "NVIDIA RTX / OpenGL 4.5"}
+
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.CINEMA4D,
+        env={},
+        plugin_inventory=plugin_inventory,
+        gpu_info=gpu_info,
+    )
+
+    assert report.plugins.missing == frozenset()
+    assert report.gpu.meets_requirement is True
+
+
 # ---------- CLI extensions ----------
 
 

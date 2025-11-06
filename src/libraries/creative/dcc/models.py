@@ -50,7 +50,7 @@ DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
     SupportedDCC.HOUDINI: frozenset({"karma"}),
     SupportedDCC.MAX: frozenset({"vray"}),
     SupportedDCC.VRAY: frozenset({"vray"}),
-    SupportedDCC.CINEMA4D: frozenset(),
+    SupportedDCC.CINEMA4D: frozenset({"redshift"}),
 }
 
 
@@ -60,6 +60,7 @@ DCC_GPU_REQUIREMENTS: dict[SupportedDCC, str] = {
     SupportedDCC.BLENDER: "OpenGL 4.3",
     SupportedDCC.HOUDINI: "Vulkan",
     SupportedDCC.MAX: "DirectX 12",
+    SupportedDCC.CINEMA4D: "OpenGL 4.5",
 }
 
 
@@ -70,7 +71,10 @@ DCC_ASSET_REQUIREMENTS: dict[SupportedDCC, tuple[str, ...]] = {
     SupportedDCC.HOUDINI: ("packages/onepiece.json",),
     SupportedDCC.MAX: ("plugins/onepiece.dlx",),
     SupportedDCC.VRAY: ("config/vray_settings.json",),
-    SupportedDCC.CINEMA4D: (),
+    SupportedDCC.CINEMA4D: (
+        "plugins/redshift",
+        "prefs/cinema4d/shared_prefs.json",
+    ),
 }
 
 
