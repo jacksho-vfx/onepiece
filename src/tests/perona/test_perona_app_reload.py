@@ -8,10 +8,10 @@ from urllib.request import Request
 import pytest
 import pytest_mock
 
-from apps.perona.app import (
+from apps.perona.app import _post_settings_reload
+from apps.perona.cli.web import (
     DEFAULT_SETTINGS_RELOAD_TIMEOUT,
     SETTINGS_RELOAD_TIMEOUT_ENV,
-    _post_settings_reload,
 )
 from libraries.analytics.perona.models import BaselineCostInput, SettingsSummary
 
