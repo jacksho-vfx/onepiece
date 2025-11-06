@@ -43,6 +43,10 @@ class PipelineClient(Protocol):
         self, name: str, parameters: Mapping[str, Any]
     ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
+    def rerun(
+        self, run_id: str, overrides: Mapping[str, Any] | None = None
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
+
     def list_runs(
         self,
         *,
@@ -143,6 +147,19 @@ class LocalPipelineClient:
         except ValueError as exc:
             raise PipelineClientError(str(exc), status_code=400) from exc
         return run.serialise()
+
+    def rerun(
+        self, run_id: str, overrides: Mapping[str, Any] | None = None
+    ) -> Mapping[str, Any]:
+        try:
+            run = self._orchestrator.rerun(
+                run_id, overrides=overrides, submitted_by=None, roles=None
+            )
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+        except ValueError as exc:
+            raise PipelineClientError(str(exc), status_code=400) from exc
+        return dict(run.serialise())
 
     def list_runs(
         self,
@@ -386,6 +403,21 @@ class RemotePipelineClient:
         if not isinstance(payload, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")
         return payload
+
+    def rerun(
+        self, run_id: str, overrides: Mapping[str, Any] | None = None
+    ) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {}
+        if overrides:
+            payload["parameters"] = dict(overrides)
+        kwargs: dict[str, Any] = {}
+        if payload:
+            kwargs["json"] = payload
+        response = self._request("POST", f"runs/{run_id}/rerun", **kwargs)
+        body = response.json()
+        if not isinstance(body, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return body
 
     def list_runs(
         self,

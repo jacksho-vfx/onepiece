@@ -379,6 +379,114 @@ def run_pipeline(
             if role_list:
                 typer.echo("Roles: " + ", ".join(role_list))
 
+    if wait:
+        if raw_run_id is None:
+            typer.echo("Cannot wait for completion: run identifier was not provided.")
+            return
+
+        typer.echo("Waiting for run to complete...")
+        final_status: str | None = None
+        try:
+            for event in client.stream_events(str(raw_run_id)):
+                for line in _format_run_event(event):
+                    typer.echo(line)
+                event_status = str(event.get("status", "")).lower()
+                if event_status in {"succeeded", "failed"}:
+                    final_status = str(event.get("status", ""))
+                    break
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+        if final_status is None:
+            typer.echo("Run stream ended without a terminal status.")
+            return
+
+        typer.echo(f"Run completed with status: {final_status}")
+
+
+@app.command("rerun")
+def rerun_pipeline(
+    run_id: str = typer.Argument(..., help="Existing pipeline run identifier."),
+    *,
+    params_file: Path | None = typer.Option(
+        None,
+        "--params-file",
+        help="Path to a JSON or TOML document with parameter overrides.",
+    ),
+    parameters: list[str] | None = typer.Option(
+        None,
+        "--param",
+        "-p",
+        help="Key=value overrides forwarded to the orchestrator.",
+    ),
+    wait: bool = typer.Option(
+        False,
+        "--wait/--no-wait",
+        help="Follow run events until the rerun completes.",
+    ),
+    format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: 'text' (default) or 'json'.",
+    ),
+) -> None:
+    """Trigger a new execution using a previous run's definition snapshot."""
+
+    output_format = _resolve_output_format(format)
+
+    if wait and output_format == "json":
+        raise typer.BadParameter(
+            "--wait cannot be combined with '--format json'.",
+            param_hint="--wait",
+        )
+
+    file_parameters: Mapping[str, Any] | None = None
+    if params_file is not None:
+        try:
+            file_parameters = _load_pipeline_parameters_file(params_file)
+        except PipelineClientError as exc:
+            raise typer.BadParameter(exc.message, param_hint="--params-file") from exc
+
+    try:
+        parsed_parameters = _parse_pipeline_parameters(parameters, base=file_parameters)
+    except PipelineClientError as exc:
+        raise typer.BadParameter(exc.message) from exc
+
+    overrides = parsed_parameters or {}
+
+    with _using_client() as client:
+        try:
+            run = client.rerun(run_id, overrides or None)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+        pipeline_name = run.get("pipeline", "<unknown>")
+        raw_run_id = run.get("id")
+        new_run_id = str(raw_run_id) if raw_run_id is not None else "<unknown>"
+        status = run.get("status", "unknown")
+
+        if output_format == "json":
+            typer.echo(json.dumps(run, indent=2))
+            return
+
+        typer.echo(
+            f"Triggered rerun for pipeline '{pipeline_name}' (run id: {new_run_id})"
+            f" from '{run_id}'."
+        )
+        typer.echo(f"Current status: {status}")
+        initiator = _coerce_display_text(run.get("submitted_by"))
+        if initiator:
+            typer.echo(f"Initiated by: {initiator}")
+            role_list = _normalise_roles(run.get("roles"))
+            if role_list:
+                typer.echo("Roles: " + ", ".join(role_list))
+
         if wait:
             if raw_run_id is None:
                 typer.echo(
@@ -386,7 +494,7 @@ def run_pipeline(
                 )
                 return
 
-            typer.echo("Waiting for run to complete...")
+            typer.echo("Waiting for rerun to complete...")
             final_status: str | None = None
             try:
                 for event in client.stream_events(str(raw_run_id)):
@@ -398,12 +506,16 @@ def run_pipeline(
                         break
             except PipelineClientError as exc:
                 if exc.status_code == 404:
-                    raise typer.BadParameter(exc.message) from exc
+                    typer.echo("Unable to stream events: rerun was not found.")
+                    raise typer.Exit(code=1) from exc
                 typer.echo(f"Pipeline request failed: {exc.message}")
                 raise typer.Exit(code=1) from exc
 
-            if final_status is not None:
-                typer.echo(f"Run completed with status: {final_status}")
+            if final_status is None:
+                typer.echo("Run stream ended without a terminal status.")
+                return
+
+            typer.echo(f"Run completed with status: {final_status}")
 
 
 @app.command("runs")
