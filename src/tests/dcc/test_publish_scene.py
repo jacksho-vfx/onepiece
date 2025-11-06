@@ -1,10 +1,9 @@
-"""Tests for the DCC client helpers."""
+from __future__ import annotations
 
 import json
 import logging
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -12,338 +11,29 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.dcc.publish import app as publish_app
-from libraries.creative.dcc.cinema4d.validation import validate_package
 from libraries.creative.dcc.dcc_client import (
-    _assemble_dependency_report,
-    _build_launch_command,
-    _format_dependency_error,
+    _prepare_package_contents,
     _sync_package_to_s3,
     _write_metadata_and_thumbnails,
-    open_scene,
     publish_scene,
-    verify_dcc_dependencies,
 )
 from libraries.creative.dcc.models import (
-    DCC_ASSET_REQUIREMENTS,
     DCCDependencyReport,
     DCCAssetStatus,
     DCCGPUStatus,
     DCCPluginStatus,
     SupportedDCC,
 )
-from libraries.creative.dcc.packaging import _prepare_package_contents
 from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportIssue,
     UnrealExportReport,
 )
 
+PublishInputs = tuple[Path, Path, Path, dict[str, Any], Path]
 
-@patch("subprocess.run")
-def test_open_nuke_scene(mock_run: MagicMock) -> None:
-    file_path = Path("/tmp/test_scene.nk")
 
-    open_scene(SupportedDCC.NUKE, file_path)
-
-    mock_run.assert_called_once_with(["Nuke", str(file_path)], check=True)
-
-
-@patch("subprocess.run")
-def test_open_maya_scene(mock_run: MagicMock) -> None:
-    file_path = Path("/tmp/test_scene.mb")
-
-    open_scene(SupportedDCC.MAYA, file_path)
-
-    mock_run.assert_called_once_with(
-        [
-            SupportedDCC.MAYA.command,
-            str(file_path),
-        ],
-        check=True,
-    )
-
-
-@pytest.mark.parametrize(
-    ("os_name", "expected"),
-    (("posix", "maya"), ("nt", "maya.exe")),
-)
-def test_build_launch_command_maya_binary(
-    monkeypatch: pytest.MonkeyPatch, os_name: str, expected: str
-) -> None:
-    monkeypatch.setattr(
-        "libraries.creative.dcc.dcc_client.os", SimpleNamespace(name=os_name)
-    )
-
-    scene_path = Path("/tmp/test_scene.mb")
-    command = _build_launch_command(SupportedDCC.MAYA, scene_path)
-
-    assert command == [expected, str(scene_path)]
-
-
-def test_verify_dcc_dependencies_detects_missing(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.NUKE,
-        package,
-        plugin_inventory=["CaraVR"],
-    )
-
-    assert report.plugins.missing == frozenset({"ocio"})
-    missing_assets = {path.relative_to(package) for path in report.assets.missing}
-    expected_assets = {
-        Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]
-    }
-    assert missing_assets == expected_assets
-    assert report.is_valid is False
-
-
-def test_verify_dcc_dependencies_succeeds(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]:
-        target = package / asset
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("payload")
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.NUKE,
-        package,
-        plugin_inventory=["CaraVR", "OCIO"],
-        env={"ONEPIECE_NUKE_GPU": "OpenGL 4.1"},
-    )
-
-    assert report.plugins.missing == frozenset()
-    assert report.assets.missing == tuple()
-    assert report.gpu == DCCGPUStatus(
-        required="OpenGL 4.1",
-        detected="OpenGL 4.1",
-        meets_requirement=True,
-    )
-    assert report.is_valid is True
-
-
-def test_verify_dcc_dependencies_handles_mixed_case_plugin_inventory(
-    tmp_path: Path,
-) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.NUKE,
-        package,
-        plugin_inventory=["CaraVR", "OCIO", "CustomPlugin"],
-        required_plugins=["CustomPlugin"],
-        env={"ONEPIECE_NUKE_GPU": "OpenGL 4.1"},
-    )
-
-    expected = frozenset({"caravr", "ocio", "customplugin"})
-    assert report.plugins.available == expected
-    assert report.plugins.required == expected
-    assert report.plugins.missing == frozenset()
-
-
-def test_verify_dcc_dependencies_detects_gpu_failure(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.NUKE]:
-        target = package / asset
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("payload")
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.NUKE,
-        package,
-        plugin_inventory=["CaraVR", "OCIO"],
-        env={"ONEPIECE_NUKE_GPU": "Integrated Graphics 6000"},
-    )
-
-    assert report.gpu == DCCGPUStatus(
-        required="OpenGL 4.1",
-        detected="Integrated Graphics 6000",
-        meets_requirement=False,
-    )
-    assert report.is_valid is False
-
-
-def test_verify_dcc_dependencies_cinema4d_missing_assets(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.CINEMA4D,
-        package,
-        plugin_inventory=["redshift"],
-    )
-
-    assert report.plugins.missing == frozenset()
-    missing_assets = {path.relative_to(package) for path in report.assets.missing}
-    expected_assets = {
-        Path(asset) for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.CINEMA4D]
-    }
-    assert missing_assets == expected_assets
-    assert report.is_valid is False
-
-
-def test_verify_dcc_dependencies_cinema4d_succeeds(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    for asset in DCC_ASSET_REQUIREMENTS[SupportedDCC.CINEMA4D]:
-        target = package / asset
-        if target.suffix:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("payload")
-        else:
-            target.mkdir(parents=True, exist_ok=True)
-
-    report = verify_dcc_dependencies(
-        SupportedDCC.CINEMA4D,
-        package,
-        plugin_inventory=["redshift"],
-        env={"ONEPIECE_CINEMA4D_GPU": "Maxon Certified OpenGL 4.5"},
-    )
-
-    assert report.plugins.missing == frozenset()
-    assert report.assets.missing == tuple()
-    assert report.is_valid is True
-
-
-def _write_cinema4d_metadata(package: Path, payload: dict[str, Any]) -> None:
-    metadata_path = package / "metadata.json"
-    metadata_path.write_text(json.dumps(payload))
-
-
-def test_validate_cinema4d_rejects_absolute_reference(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    absolute_path = "/outside/textures/wood.tx"
-    _write_cinema4d_metadata(
-        package,
-        {"cinema4d": {"textures": [absolute_path]}},
-    )
-
-    issues = validate_package(package)
-
-    assert issues == [
-        f"Cinema4D references must be relative to the package: {absolute_path}"
-    ]
-
-
-def test_validate_cinema4d_rejects_windows_absolute_reference(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    windows_path = r"C:\assets\textures\hero.tx"
-    _write_cinema4d_metadata(
-        package,
-        {"cinema4d": {"textures": [windows_path]}},
-    )
-
-    issues = validate_package(package)
-
-    assert len(issues) == 1
-    assert "Cinema4D references must be relative to the package" in issues[0]
-    assert windows_path in issues[0]
-
-
-def test_validate_cinema4d_rejects_traversal_reference(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    traversal_path = "../presets/outside.c4d"
-    _write_cinema4d_metadata(
-        package,
-        {"cinema4d": {"presets": [traversal_path]}},
-    )
-
-    issues = validate_package(package)
-
-    assert issues == [
-        f"Cinema4D references must stay within the package: {traversal_path}"
-    ]
-
-
-def test_validate_cinema4d_accepts_relative_references(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    texture_path = package / "tex" / "mat.tx"
-    texture_path.parent.mkdir(parents=True, exist_ok=True)
-    texture_path.write_text("payload")
-
-    preset_path = package / "presets" / "lighting.c4d"
-    preset_path.parent.mkdir(parents=True, exist_ok=True)
-    preset_path.write_text("payload")
-
-    _write_cinema4d_metadata(
-        package,
-        {
-            "cinema4d": {
-                "textures": ["tex/mat.tx"],
-                "presets": ["presets/lighting.c4d"],
-            }
-        },
-    )
-
-    issues = validate_package(package)
-
-    assert issues == []
-
-
-def test_format_dependency_error_includes_gpu_details(tmp_path: Path) -> None:
-    package = tmp_path / "package"
-    package.mkdir()
-
-    report = DCCDependencyReport(
-        dcc=SupportedDCC.NUKE,
-        plugins=DCCPluginStatus(
-            required=frozenset(),
-            available=frozenset(),
-            missing=frozenset(),
-        ),
-        assets=DCCAssetStatus(required=(), present=(), missing=()),
-        gpu=DCCGPUStatus(
-            required="OpenGL 4.1",
-            detected="Integrated Graphics 6000",
-            meets_requirement=False,
-        ),
-    )
-
-    message = _format_dependency_error(report, package)
-
-    assert "GPU requirement not met" in message
-    assert "Integrated Graphics 6000" in message
-
-
-def _create_publish_inputs(
-    tmp_path: Path,
-) -> tuple[Path, Path, Path, dict[str, Any], Path]:
-    renders = tmp_path / "renders"
-    renders.mkdir()
-    render_file = renders / "beauty.exr"
-    render_file.write_text("beauty")
-
-    previews = tmp_path / "previews"
-    previews.mkdir()
-    preview_file = previews / "preview.jpg"
-    preview_file.write_text("preview")
-
-    otio = tmp_path / "edit.otio"
-    otio.write_text("otio data")
-
-    metadata: dict[str, Any] = {"shot": "010"}
-
-    destination = tmp_path / "published"
-
-    return renders, previews, otio, metadata, destination
-
-
-def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+def test_prepare_package_contents_copies_outputs(publish_inputs: PublishInputs) -> None:
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099", renders, previews, otio, destination
@@ -356,8 +46,10 @@ def test_prepare_package_contents_copies_outputs(tmp_path: Path) -> None:
     assert (expected_package / "otio" / "edit.otio").exists()
 
 
-def test_prepare_package_contents_hardlinks_outputs(tmp_path: Path) -> None:
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+def test_prepare_package_contents_hardlinks_outputs(
+    publish_inputs: PublishInputs,
+) -> None:
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
@@ -380,8 +72,10 @@ def test_prepare_package_contents_hardlinks_outputs(tmp_path: Path) -> None:
     assert os.stat(otio_target).st_ino == os.stat(otio).st_ino
 
 
-def test_prepare_package_contents_symlinks_outputs(tmp_path: Path) -> None:
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+def test_prepare_package_contents_symlinks_outputs(
+    publish_inputs: PublishInputs,
+) -> None:
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
@@ -400,9 +94,11 @@ def test_prepare_package_contents_symlinks_outputs(tmp_path: Path) -> None:
 
 
 def test_prepare_package_contents_downgrades_linking_on_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    publish_inputs: PublishInputs,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     def failing_link(src: str, dst: str) -> None:
         raise OSError("link not supported")
@@ -428,11 +124,12 @@ def test_prepare_package_contents_downgrades_linking_on_failure(
 
 
 def test_prepare_package_contents_parallel_copy_creates_expected_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    publish_inputs: PublishInputs,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ONEPIECE_DCC_COPY_WORKERS", "2")
 
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     extra_render = renders / "deep" / "shadow.exr"
     extra_render.parent.mkdir(parents=True, exist_ok=True)
@@ -469,13 +166,13 @@ def test_prepare_package_contents_parallel_copy_creates_expected_files(
 
 
 def test_prepare_package_contents_parallel_copy_downgrades_once(
-    tmp_path: Path,
+    publish_inputs: PublishInputs,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setenv("ONEPIECE_DCC_COPY_WORKERS", "4")
 
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, _metadata, destination = publish_inputs
     (renders / "plate.exr").write_text("plate")
     (previews / "alt_preview.jpg").write_text("preview alt")
 
@@ -516,8 +213,10 @@ def test_prepare_package_contents_parallel_copy_downgrades_once(
     assert len(_targets_for("otio")) == 1
 
 
-def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+def test_metadata_and_thumbnails_are_real_files_when_linking(
+    publish_inputs: PublishInputs,
+) -> None:
+    renders, previews, otio, metadata, destination = publish_inputs
 
     package_dir, render_files, preview_files, _manifest = _prepare_package_contents(
         "ep01_sh099",
@@ -545,9 +244,9 @@ def test_metadata_and_thumbnails_are_real_files_when_linking(tmp_path: Path) -> 
     ["../evil", "/tmp/hack", "shot/../evil", "shot\\evil", "..", "."],
 )
 def test_prepare_package_contents_rejects_dangerous_scene_names(
-    tmp_path: Path, scene_name: str
+    publish_inputs: PublishInputs, scene_name: str
 ) -> None:
-    renders, previews, otio, _metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, _metadata, destination = publish_inputs
 
     with pytest.raises(ValueError) as excinfo:
         _prepare_package_contents(scene_name, renders, previews, otio, destination)
@@ -604,52 +303,6 @@ def test_write_metadata_and_thumbnails_falls_back_to_renders(
     assert expected_thumbnail.exists()
 
 
-def test_assemble_dependency_report_invokes_callback(
-    tmp_path: Path,
-) -> None:
-    package_dir = tmp_path / "package"
-    package_dir.mkdir()
-
-    report = DCCDependencyReport(
-        dcc=SupportedDCC.NUKE,
-        plugins=DCCPluginStatus(
-            required=frozenset({"CaraVR"}),
-            available=frozenset({"CaraVR"}),
-            missing=frozenset(),
-        ),
-        assets=DCCAssetStatus(
-            required=(),
-            present=(),
-            missing=(),
-        ),
-    )
-
-    callback = MagicMock()
-
-    with patch(
-        "libraries.creative.dcc.dcc_client.verify_dcc_dependencies",
-        return_value=report,
-    ) as verify_mock:
-        result = _assemble_dependency_report(
-            SupportedDCC.NUKE,
-            package_dir,
-            dependency_callback=callback,
-        )
-
-    assert result is report
-    callback.assert_called_once_with(report)
-    verify_mock.assert_called_once_with(
-        SupportedDCC.NUKE,
-        package_dir,
-        plugin_inventory=None,
-        env=None,
-        required_plugins=None,
-        required_assets=None,
-        gpu_description=None,
-        required_gpu=None,
-    )
-
-
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_sync_package_to_s3_uses_expected_destination(
     sync_mock: MagicMock, caplog: pytest.LogCaptureFixture, tmp_path: Path
@@ -658,7 +311,7 @@ def test_sync_package_to_s3_uses_expected_destination(
     package_dir.mkdir()
 
     with caplog.at_level(logging.INFO):
-        destination = _sync_package_to_s3(
+        destination_path = _sync_package_to_s3(
             package_dir,
             dcc=SupportedDCC.NUKE,
             scene_name="ep01_sh030",
@@ -673,7 +326,7 @@ def test_sync_package_to_s3_uses_expected_destination(
         )
 
     expected_destination = "s3://libraries-bucket/vfx/OP/ep01_sh030"
-    assert destination == expected_destination
+    assert destination_path == expected_destination
     sync_mock.assert_called_once_with(
         source=package_dir,
         destination=expected_destination,
@@ -689,9 +342,9 @@ def test_sync_package_to_s3_uses_expected_destination(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_supports_direct_upload(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     callbacks: list[DCCDependencyReport] = []
 
@@ -743,11 +396,11 @@ def test_publish_scene_supports_direct_upload(
 def test_publish_scene_forwards_s5cmd_overrides(
     sync_mock: MagicMock,
     profile_override: MagicMock,
-    tmp_path: Path,
+    publish_inputs: PublishInputs,
 ) -> None:
     profile_override.return_value = (None, None)
 
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     publish_scene(
         SupportedDCC.NUKE,
@@ -779,11 +432,11 @@ def test_publish_scene_forwards_s5cmd_overrides(
 def test_publish_scene_uses_profile_s5cmd_overrides(
     sync_mock: MagicMock,
     profile_override: MagicMock,
-    tmp_path: Path,
+    publish_inputs: PublishInputs,
 ) -> None:
     profile_override.return_value = (6, "64MB")
 
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     publish_scene(
         SupportedDCC.NUKE,
@@ -813,9 +466,10 @@ def test_publish_scene_uses_profile_s5cmd_overrides(
 def test_publish_scene_runs_maya_validation(
     sync_mock: MagicMock,
     validate_mock: MagicMock,
-    tmp_path: Path,
+    publish_inputs: PublishInputs,
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
+    metadata = metadata.copy()
     metadata["maya"] = {
         "unreal_export": {
             "asset_name": "SK_Hero",
@@ -875,9 +529,10 @@ def test_publish_scene_runs_maya_validation(
 def test_publish_scene_maya_validation_failure(
     sync_mock: MagicMock,
     validate_mock: MagicMock,
-    tmp_path: Path,
+    publish_inputs: PublishInputs,
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
+    metadata = metadata.copy()
     metadata["maya"] = {
         "unreal_export": {
             "asset_name": "SK_Villain",
@@ -930,9 +585,10 @@ def test_publish_scene_maya_validation_failure(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_cinema4d_validation_failure(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
+    metadata = metadata.copy()
     metadata["cinema4d"] = {
         "textures": ["renders/textures/diffuse.tx"],
         "presets": ["renders/presets/hero.rsp"],
@@ -963,9 +619,11 @@ def test_publish_scene_cinema4d_validation_failure(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_cinema4d_validation_success(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
+    metadata = metadata.copy()
+
     texture_file = renders / "textures" / "diffuse.tx"
     texture_file.parent.mkdir(parents=True, exist_ok=True)
     texture_file.write_text("texture data")
@@ -1000,8 +658,10 @@ def test_publish_scene_cinema4d_validation_success(
 
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
-def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+def test_publish_scene_honours_dry_run(
+    sync_mock: MagicMock, publish_inputs: PublishInputs
+) -> None:
+    renders, previews, otio, metadata, destination = publish_inputs
 
     result = publish_scene(
         SupportedDCC.NUKE,
@@ -1040,9 +700,9 @@ def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> 
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_replaces_existing_file_targets(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     existing_package = destination / "ep01_sh012"
     existing_package.mkdir(parents=True, exist_ok=True)
@@ -1078,9 +738,9 @@ def test_publish_scene_replaces_existing_file_targets(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_skips_unchanged_files(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     scene_name = "ep01_sh050"
     publish_scene(
@@ -1137,9 +797,12 @@ def test_publish_scene_skips_unchanged_files(
 @patch("libraries.creative.dcc.dcc_client.verify_dcc_dependencies")
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_force_package_rebuilds_outputs(
-    sync_mock: MagicMock, verify_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock,
+    verify_mock: MagicMock,
+    publish_inputs: PublishInputs,
+    tmp_path: Path,
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
     scene_name = "ep01_sh051"
 
     verify_mock.return_value = DCCDependencyReport(
@@ -1211,9 +874,9 @@ def test_publish_scene_force_package_rebuilds_outputs(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_dependency_failure_blocks_upload(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     with pytest.raises(RuntimeError) as excinfo:
         publish_scene(
@@ -1241,9 +904,9 @@ def test_publish_scene_dependency_failure_blocks_upload(
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_gpu_failure_blocks_upload(
-    sync_mock: MagicMock, tmp_path: Path
+    sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:
-    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    renders, previews, otio, metadata, destination = publish_inputs
 
     with pytest.raises(RuntimeError) as excinfo:
         publish_scene(
