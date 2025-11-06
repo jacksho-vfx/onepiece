@@ -326,6 +326,7 @@ class PipelineRun:
 class PipelineRunEvent:
     """A single status update emitted for a pipeline run."""
 
+    event_id: int | None
     run_id: str
     pipeline: str
     status: str
@@ -336,13 +337,16 @@ class PipelineRunEvent:
         object.__setattr__(self, "parameters", dict(self.parameters))
 
     def serialise(self) -> Mapping[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "id": self.run_id,
             "pipeline": self.pipeline,
             "status": self.status,
             "timestamp": self.timestamp.isoformat(),
             "parameters": dict(self.parameters),
         }
+        if self.event_id is not None:
+            payload["event_id"] = self.event_id
+        return payload
 
 
 @dataclass(slots=True)
@@ -1018,7 +1022,7 @@ class PipelineRunStore:
             encoded_finished_at = self._encode_optional_datetime(finished_at)
 
             with self._connection:
-                self._connection.execute(
+                cursor = self._connection.execute(
                     """
                     INSERT INTO pipeline_run_events (
                         run_id, pipeline, status, timestamp, parameters
@@ -1069,7 +1073,9 @@ class PipelineRunStore:
                     )
             subscribers = tuple(self._subscribers.get(run_id, ()))
 
+        inserted_event_id = int(cursor.lastrowid or 0)
         event = PipelineRunEvent(
+            event_id=inserted_event_id if inserted_event_id > 0 else None,
             run_id=run_id,
             pipeline=pipeline,
             status=status,
@@ -1559,12 +1565,33 @@ class PipelineRunStore:
         row = cursor.fetchone()
         return int(row[0]) if row is not None else 0
 
-    def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
+    def watch_run_events(
+        self,
+        run_id: str,
+        *,
+        after_event_id: int | None = None,
+        since_timestamp: datetime | None = None,
+    ) -> AsyncIterator[PipelineRunEvent]:
+        if since_timestamp is not None:
+            if since_timestamp.tzinfo is None:
+                since_timestamp = since_timestamp.replace(tzinfo=timezone.utc)
+            else:
+                since_timestamp = since_timestamp.astimezone(timezone.utc)
+
+        last_event_id = after_event_id
+        pending_since = since_timestamp if last_event_id is None else None
+
         with self._lock:
-            rows = self._load_run_event_rows_locked(run_id)
+            rows = self._load_run_event_rows_locked(
+                run_id,
+                after_event_id=last_event_id,
+                since_timestamp=pending_since,
+            )
 
         events = [self._row_to_run_event(row) for row in rows]
-        seen_count = len(events)
+        if events:
+            last_event_id = events[-1].event_id
+            pending_since = None
 
         subscriber: _RunEventSubscriber | None = None
         queue: asyncio.Queue[PipelineRunEvent | None] | None = None
@@ -1572,7 +1599,8 @@ class PipelineRunStore:
         delivered_initial = False
 
         async def iterator() -> AsyncIterator[PipelineRunEvent]:
-            nonlocal subscriber, queue, registered, delivered_initial, seen_count, events
+            nonlocal subscriber, queue, registered, delivered_initial, events
+            nonlocal last_event_id, pending_since
 
             if not registered:
                 try:
@@ -1584,17 +1612,21 @@ class PipelineRunStore:
                 subscriber = _RunEventSubscriber(loop=loop, queue=queue)
 
                 with self._lock:
-                    rows_after_subscribe = self._load_run_event_rows_locked(run_id)
+                    rows_after_subscribe = self._load_run_event_rows_locked(
+                        run_id,
+                        after_event_id=last_event_id,
+                        since_timestamp=pending_since,
+                    )
                     subscribers = self._subscribers.setdefault(run_id, [])
                     subscribers.append(subscriber)
 
                 additional = [
-                    self._row_to_run_event(row)
-                    for row in rows_after_subscribe[seen_count:]
+                    self._row_to_run_event(row) for row in rows_after_subscribe
                 ]
                 if additional:
                     events.extend(additional)
-                    seen_count = len(events)
+                    last_event_id = additional[-1].event_id
+                    pending_since = None
 
                 registered = True
 
@@ -1604,6 +1636,8 @@ class PipelineRunStore:
             try:
                 if not delivered_initial:
                     for event in events:
+                        last_event_id = event.event_id
+                        pending_since = None
                         yield event
                     delivered_initial = True
 
@@ -1611,6 +1645,11 @@ class PipelineRunStore:
                     item = await queue.get()
                     if item is None:
                         break
+                    if item.event_id is not None:
+                        if last_event_id is not None and item.event_id <= last_event_id:
+                            continue
+                        last_event_id = item.event_id
+                        pending_since = None
                     yield item
             finally:
                 with self._lock:
@@ -1642,15 +1681,31 @@ class PipelineRunStore:
     ) -> None:
         self._notify_subscribers(subscribers, event)
 
-    def _load_run_event_rows_locked(self, run_id: str) -> list[sqlite3.Row]:
+    def _load_run_event_rows_locked(
+        self,
+        run_id: str,
+        *,
+        after_event_id: int | None = None,
+        since_timestamp: datetime | None = None,
+    ) -> list[sqlite3.Row]:
+        clauses = ["run_id = ?"]
+        bindings: list[object] = [run_id]
+        if after_event_id is not None:
+            clauses.append("id > ?")
+            bindings.append(int(after_event_id))
+        if since_timestamp is not None:
+            clauses.append("timestamp > ?")
+            bindings.append(self._encode_datetime(since_timestamp))
+
+        where_clause = " AND ".join(clauses)
         cursor = self._connection.execute(
-            """
-            SELECT run_id, pipeline, status, timestamp, parameters
+            f"""
+            SELECT id, run_id, pipeline, status, timestamp, parameters
             FROM pipeline_run_events
-            WHERE run_id = ?
+            WHERE {where_clause}
             ORDER BY id ASC
             """,
-            (run_id,),
+            tuple(bindings),
         )
         rows = cursor.fetchall()
         if rows:
@@ -1666,6 +1721,7 @@ class PipelineRunStore:
 
     def _row_to_run_event(self, row: sqlite3.Row) -> PipelineRunEvent:
         return PipelineRunEvent(
+            event_id=int(row["id"]),
             run_id=row["run_id"],
             pipeline=row["pipeline"],
             status=row["status"],

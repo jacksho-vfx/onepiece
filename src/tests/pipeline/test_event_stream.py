@@ -40,3 +40,36 @@ def test_local_client_stream_events_without_running_loop() -> None:
     finally:
         client.close()
         set_pipeline_orchestrator(None)
+
+
+def test_local_client_stream_events_resume_from_cursor() -> None:
+    set_pipeline_orchestrator(None)
+    store = PipelineRunStore()
+    orchestrator = PipelineOrchestrator(store=store)
+    orchestrator.register(_build_pipeline())
+    set_pipeline_orchestrator(orchestrator)
+
+    client = LocalPipelineClient()
+    try:
+        run = client.trigger_run("demo", parameters={})
+        initial_events = list(client.stream_events(run["id"]))
+        assert initial_events
+        first_event = initial_events[0]
+        assert "event_id" in first_event
+
+        resumed_from_id = list(
+            client.stream_events(run["id"], resume_from=str(first_event["event_id"]))
+        )
+        assert [event["status"] for event in resumed_from_id] == [
+            payload["status"] for payload in initial_events[1:]
+        ]
+
+        resumed_from_time = list(
+            client.stream_events(run["id"], resume_from=first_event["timestamp"])
+        )
+        assert [event["status"] for event in resumed_from_time] == [
+            payload["status"] for payload in initial_events[1:]
+        ]
+    finally:
+        client.close()
+        set_pipeline_orchestrator(None)

@@ -65,6 +65,7 @@ class StubPipelineClient:
     worker_metrics_requested: bool = False
     prune_kwargs: Mapping[str, Any] | None = None
     stream_requested: bool = False
+    stream_resume_cursor: str | None = None
     enabled_name: str | None = None
     enabled_state: bool | None = None
 
@@ -147,9 +148,12 @@ class StubPipelineClient:
             raise AssertionError("run events history was not configured")
         return [dict(event) for event in self.run_events_history]
 
-    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+    def stream_events(
+        self, run_id: str, *, resume_from: str | None = None
+    ) -> Iterable[Mapping[str, Any]]:
         self.requested_run_id = run_id
         self.stream_requested = True
+        self.stream_resume_cursor = resume_from
         if self.watch_error:
             raise self.watch_error
         for event in self.run_events or []:

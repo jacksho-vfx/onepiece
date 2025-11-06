@@ -344,6 +344,7 @@ class PipelineOrchestrator:
             roles=role_values,
         )
         initial_event = PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline=definition.name,
             status="queued",
@@ -407,6 +408,7 @@ class PipelineOrchestrator:
             roles=role_values,
         )
         initial_event = PipelineRunEvent(
+            event_id=None,
             run_id=new_run_id,
             pipeline=definition.name,
             status="queued",
@@ -702,9 +704,19 @@ class PipelineOrchestrator:
         except KeyError as exc:  # pragma: no cover - defensive guard
             raise KeyError(str(exc)) from exc
 
-    def watch_run_events(self, run_id: str) -> AsyncIterator[PipelineRunEvent]:
+    def watch_run_events(
+        self,
+        run_id: str,
+        *,
+        after_event_id: int | None = None,
+        since_timestamp: datetime | None = None,
+    ) -> AsyncIterator[PipelineRunEvent]:
         try:
-            return self._store.watch_run_events(run_id)
+            return self._store.watch_run_events(
+                run_id,
+                after_event_id=after_event_id,
+                since_timestamp=since_timestamp,
+            )
         except KeyError as exc:  # pragma: no cover - defensive guard
             raise KeyError(str(exc)) from exc
 

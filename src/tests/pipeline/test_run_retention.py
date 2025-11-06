@@ -34,6 +34,7 @@ def _create_run(
             definition_snapshot={"name": pipeline, "steps": []},
         ),
         PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline=pipeline,
             status=status,

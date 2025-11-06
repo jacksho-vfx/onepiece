@@ -165,6 +165,7 @@ def _seed_run(
             definition_snapshot={"name": pipeline, "steps": []},
         ),
         PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline=pipeline,
             status=status,
@@ -509,6 +510,7 @@ def test_stream_run_events_delivers_live_updates(client: TestClient) -> None:
             definition_snapshot={"name": "render_shots", "steps": []},
         ),
         PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline="render_shots",
             status="queued",
@@ -872,6 +874,7 @@ def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
         store.create_run(
             run,
             PipelineRunEvent(
+                event_id=None,
                 run_id=run_id,
                 pipeline="render_shots",
                 status="queued",
@@ -919,6 +922,7 @@ def test_run_stats_endpoint_includes_durations(client: TestClient) -> None:
             definition_snapshot={"name": "render_shots", "steps": []},
         ),
         PipelineRunEvent(
+            event_id=None,
             run_id="run-backlog",
             pipeline="render_shots",
             status="queued",
