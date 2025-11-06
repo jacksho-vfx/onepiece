@@ -268,6 +268,11 @@ def run_pipeline(
         "-p",
         help="Key=value parameters forwarded to the orchestrator.",
     ),
+    wait: bool = typer.Option(
+        False,
+        "--wait/--no-wait",
+        help="Follow run events until the pipeline finishes.",
+    ),
 ) -> None:
     """Trigger a pipeline execution."""
 
@@ -285,17 +290,44 @@ def run_pipeline(
             typer.echo(f"Pipeline request failed: {exc.message}")
             raise typer.Exit(code=1) from exc
 
-    pipeline_name = run.get("pipeline", name)
-    run_id = run.get("id", "<unknown>")
-    status = run.get("status", "unknown")
-    typer.echo(f"Triggered pipeline '{pipeline_name}' (run id: {run_id}).")
-    typer.echo(f"Current status: {status}")
-    initiator = _coerce_display_text(run.get("submitted_by"))
-    if initiator:
-        typer.echo(f"Initiated by: {initiator}")
-        role_list = _normalise_roles(run.get("roles"))
-        if role_list:
-            typer.echo("Roles: " + ", ".join(role_list))
+        pipeline_name = run.get("pipeline", name)
+        raw_run_id = run.get("id")
+        run_id = str(raw_run_id) if raw_run_id is not None else "<unknown>"
+        status = run.get("status", "unknown")
+        typer.echo(f"Triggered pipeline '{pipeline_name}' (run id: {run_id}).")
+        typer.echo(f"Current status: {status}")
+        initiator = _coerce_display_text(run.get("submitted_by"))
+        if initiator:
+            typer.echo(f"Initiated by: {initiator}")
+            role_list = _normalise_roles(run.get("roles"))
+            if role_list:
+                typer.echo("Roles: " + ", ".join(role_list))
+
+        if wait:
+            if raw_run_id is None:
+                typer.echo(
+                    "Cannot wait for completion: run identifier was not provided."
+                )
+                return
+
+            typer.echo("Waiting for run to complete...")
+            final_status: str | None = None
+            try:
+                for event in client.stream_events(str(raw_run_id)):
+                    for line in _format_run_event(event):
+                        typer.echo(line)
+                    event_status = str(event.get("status", "")).lower()
+                    if event_status in {"succeeded", "failed"}:
+                        final_status = str(event.get("status", ""))
+                        break
+            except PipelineClientError as exc:
+                if exc.status_code == 404:
+                    raise typer.BadParameter(exc.message) from exc
+                typer.echo(f"Pipeline request failed: {exc.message}")
+                raise typer.Exit(code=1) from exc
+
+            if final_status is not None:
+                typer.echo(f"Run completed with status: {final_status}")
 
 
 @app.command("runs")

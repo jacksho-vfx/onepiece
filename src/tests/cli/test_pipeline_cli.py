@@ -67,6 +67,7 @@ class StubPipelineClient:
     delete_name: str | None = None
     worker_metrics_requested: bool = False
     prune_kwargs: Mapping[str, Any] | None = None
+    stream_requested: bool = False
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -138,6 +139,7 @@ class StubPipelineClient:
 
     def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
         self.requested_run_id = run_id
+        self.stream_requested = True
         if self.watch_error:
             raise self.watch_error
         for event in self.run_events or []:
@@ -642,6 +644,47 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     assert "Roles: pipeline:manage, pipeline:run" in result.output
     assert client.requested_name == "orchestration.daily"
     assert client.run_parameters == {"ingest_profile": "episodic"}
+    assert client.stream_requested is False
+    assert client.closed is True
+
+
+def test_pipeline_run_waits_for_completion(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_payload={
+            "id": "abc123",
+            "pipeline": "orchestration.daily",
+            "status": "queued",
+        },
+        run_events=[
+            {
+                "timestamp": "2024-01-01T10:00:00+00:00",
+                "pipeline": "orchestration.daily",
+                "status": "running",
+            },
+            {
+                "timestamp": "2024-01-01T10:05:00+00:00",
+                "pipeline": "orchestration.daily",
+                "status": "succeeded",
+            },
+        ],
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run", "orchestration.daily", "--wait"],
+    )
+
+    assert result.exit_code == 0
+    assert "Triggered pipeline 'orchestration.daily' (run id: abc123)." in result.output
+    assert "Waiting for run to complete..." in result.output
+    assert "[2024-01-01T10:00:00+00:00] orchestration.daily - running" in result.output
+    assert (
+        "[2024-01-01T10:05:00+00:00] orchestration.daily - succeeded" in result.output
+    )
+    assert "Run completed with status: succeeded" in result.output
+    assert client.stream_requested is True
+    assert client.requested_run_id == "abc123"
     assert client.closed is True
 
 
