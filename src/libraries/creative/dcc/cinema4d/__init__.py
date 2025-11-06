@@ -1,3 +1,5 @@
 """Cinema 4D specific helpers for OnePiece."""
 
-__all__ = []
+from typing import Any
+
+__all__: Any = []
