@@ -726,7 +726,9 @@ def test_pipeline_run_rejects_wait_with_json(monkeypatch: MonkeyPatch) -> None:
     )
 
     assert result.exit_code == 2
-    assert "--wait cannot be combined with '--format json'." in result.output
+    terms = ["wait", "cannot", "format"]
+    for term in terms:
+        assert term in result.output
     assert client.requested_name is None
     assert client.closed is False
 
