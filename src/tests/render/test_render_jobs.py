@@ -10,13 +10,16 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.trafalgar.web.job_store import JobStore, JobStoreStats
-
 import fastapi.security
 import fastapi.security.api_key
 import apps.trafalgar.web.security as security
 from fastapi.security.http import HTTPAuthorizationCredentials
+
 from apps.trafalgar.web import render
+from apps.trafalgar.web.job_store import JobStore, JobStoreStats
+from apps.trafalgar.web.render.models import _JobRecord
+from apps.trafalgar.web.render.schemas import RenderJobRequest
+from apps.trafalgar.web.render.services import RenderSubmissionService
 
 
 class StubJobAdapter:
@@ -83,10 +86,10 @@ class RecordingJobStore:
         self.saved_batches: list[list[str]] = []
         self.stats = JobStoreStats(retention=None)
 
-    def load(self) -> list[render._JobRecord]:
+    def load(self) -> list[_JobRecord]:
         return []
 
-    def save(self, records: Iterable[render._JobRecord]) -> None:
+    def save(self, records: Iterable[_JobRecord]) -> None:
         self.saved_batches.append([record.job_id for record in records])
 
 
@@ -118,13 +121,13 @@ def _job_payload(farm: str = "mock") -> dict[str, Any]:
 async def test_background_poller_refreshes_jobs_without_requests() -> None:
     adapter = StubJobAdapter()
     store = RecordingJobStore()
-    service = render.RenderSubmissionService(
+    service = RenderSubmissionService(
         {"mock": adapter},
         job_store=store,
         status_poll_interval=0.01,
         store_persist_interval=0.2,
     )
-    request = render.RenderJobRequest(
+    request = RenderJobRequest(
         dcc="maya",
         scene="/projects/demo/scene.ma",
         frames="1-10",
@@ -155,13 +158,13 @@ async def test_background_poller_refreshes_jobs_without_requests() -> None:
 async def test_background_poller_throttles_persist_operations() -> None:
     adapter = StubJobAdapter()
     store = RecordingJobStore()
-    service = render.RenderSubmissionService(
+    service = RenderSubmissionService(
         {"mock": adapter},
         job_store=store,
         status_poll_interval=0.01,
         store_persist_interval=0.3,
     )
-    request = render.RenderJobRequest(
+    request = RenderJobRequest(
         dcc="maya",
         scene="/projects/demo/scene.ma",
         frames="1-10",
@@ -230,7 +233,7 @@ async def test_list_jobs_reflects_latest_status(
     )
 
     adapter = StubJobAdapter()
-    service = render.RenderSubmissionService({"mock": adapter})
+    service = RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -288,7 +291,7 @@ async def test_list_jobs_supports_limit_and_filters(
     )
 
     adapter = StubJobAdapter()
-    service = render.RenderSubmissionService({"mock": adapter, "tractor": adapter})
+    service = RenderSubmissionService({"mock": adapter, "tractor": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -366,7 +369,7 @@ async def test_list_jobs_limit_prioritises_recent_jobs(
     )
 
     adapter = StubJobAdapter()
-    service = render.RenderSubmissionService({"mock": adapter})
+    service = RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -430,7 +433,7 @@ async def test_get_job_returns_detail_payload(monkeypatch: pytest.MonkeyPatch) -
     )
 
     adapter = StubJobAdapter()
-    service = render.RenderSubmissionService({"mock": adapter})
+    service = RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -488,7 +491,7 @@ async def test_get_job_missing_returns_404(monkeypatch: pytest.MonkeyPatch) -> N
         security, "get_credential_store", lambda *a, **kw: DummyCredentialStore()
     )
 
-    service = render.RenderSubmissionService({})
+    service = RenderSubmissionService({})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -555,7 +558,7 @@ async def test_cancel_job_reports_adapter_errors(
     )
 
     adapter = StubStatusOnlyAdapter()
-    service = render.RenderSubmissionService({"mock": adapter})
+    service = RenderSubmissionService({"mock": adapter})
     render.app.dependency_overrides[render.get_render_service] = lambda: service
 
     transport = ASGITransport(app=render.app)
@@ -623,7 +626,7 @@ async def test_job_store_persists_records_between_services(
     payload = _job_payload()
     adapter_name = payload.get("adapter", "mock")
 
-    service = render.RenderSubmissionService(
+    service = RenderSubmissionService(
         {adapter_name: adapter}, job_store=JobStore(store_path)
     )
     render.app.dependency_overrides[render.get_render_service] = lambda: service
@@ -634,7 +637,7 @@ async def test_job_store_persists_records_between_services(
         assert submit_response.status_code == 201, submit_response.text
         job_id = submit_response.json()["job_id"]
 
-    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
+    new_service = RenderSubmissionService({}, job_store=JobStore(store_path))
     render.app.dependency_overrides[render.get_render_service] = lambda: new_service
 
     transport = ASGITransport(app=render.app)
@@ -656,16 +659,16 @@ def test_reload_jobs_with_unregistered_adapter(
     store_path = tmp_path / "jobs.json"
 
     monkeypatch.setattr(
-        render.RenderJobRequest,
+        RenderJobRequest,
         "_farm_registry_provider",
         lambda: (legacy_farm,),
     )
 
-    service = render.RenderSubmissionService(
+    service = RenderSubmissionService(
         {legacy_farm: adapter}, job_store=JobStore(store_path)
     )
 
-    request = render.RenderJobRequest.model_validate(
+    request = RenderJobRequest.model_validate(
         _job_payload("Retired"), context={"farm_registry": (legacy_farm,)}
     )
     result = service.submit_job(request)
@@ -673,12 +676,12 @@ def test_reload_jobs_with_unregistered_adapter(
     assert job_id
 
     monkeypatch.setattr(
-        render.RenderJobRequest,
+        RenderJobRequest,
         "_farm_registry_provider",
         lambda: (),
     )
 
-    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
+    new_service = RenderSubmissionService({}, job_store=JobStore(store_path))
     jobs = new_service.list_jobs()
 
     assert [job.job_id for job in jobs] == [job_id]
@@ -700,8 +703,8 @@ def test_submit_job_normalises_integer_job_id() -> None:
     ) -> dict[str, object]:
         return {"job_id": 0, "status": "queued", "farm_type": "mock"}
 
-    service = render.RenderSubmissionService({"mock": adapter}, job_store=store)
-    request = render.RenderJobRequest(**_job_payload())
+    service = RenderSubmissionService({"mock": adapter}, job_store=store)
+    request = RenderJobRequest(**_job_payload())
 
     result = service.submit_job(request)
 
@@ -729,8 +732,8 @@ def test_submit_job_normalises_bytes_job_id() -> None:
     ) -> dict[str, object]:
         return {"job_id": b"mock-007", "status": "queued", "farm_type": "mock"}
 
-    service = render.RenderSubmissionService({"mock": adapter}, job_store=store)
-    request = render.RenderJobRequest(**_job_payload())
+    service = RenderSubmissionService({"mock": adapter}, job_store=store)
+    request = RenderJobRequest(**_job_payload())
 
     result = service.submit_job(request)
 
@@ -794,7 +797,7 @@ async def test_history_limit_removes_old_jobs(
     payload = _job_payload()
     adapter_name = payload.get("adapter", "mock")
 
-    service = render.RenderSubmissionService(
+    service = RenderSubmissionService(
         {adapter_name: adapter},
         job_store=JobStore(store_path),
         history_limit=1,
@@ -809,6 +812,6 @@ async def test_history_limit_removes_old_jobs(
         assert second.status_code == 201, second.text
         latest_job_id = second.json()["job_id"]
 
-    new_service = render.RenderSubmissionService({}, job_store=JobStore(store_path))
+    new_service = RenderSubmissionService({}, job_store=JobStore(store_path))
     jobs = new_service.list_jobs()
     assert [job.job_id for job in jobs] == [latest_job_id]

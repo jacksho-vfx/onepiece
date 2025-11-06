@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from apps.trafalgar.web.job_store import JobStore
-from apps.trafalgar.web.render import RenderJobRequest, _JobRecord
+from apps.trafalgar.web.render.models import _JobRecord
+from apps.trafalgar.web.render.schemas import RenderJobRequest
 
 
 @pytest.fixture()

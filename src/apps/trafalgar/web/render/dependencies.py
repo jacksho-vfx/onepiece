@@ -15,7 +15,7 @@ from apps.trafalgar.web.job_store import JobStore
 from .schemas import RenderJobRequest
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
-    from . import RenderSubmissionService
+    from .services import RenderSubmissionService
 
 
 JOB_STORE_PATH_ENV = "TRAFALGAR_RENDER_JOBS_PATH"
@@ -26,7 +26,7 @@ JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
 
 
 def _initialise_render_service() -> "RenderSubmissionService":
-    from . import JOB_EVENTS, RenderSubmissionService, logger
+    from .services import JOB_EVENTS, RenderSubmissionService, logger
 
     store_path = os.environ.get(JOB_STORE_PATH_ENV)
     history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)

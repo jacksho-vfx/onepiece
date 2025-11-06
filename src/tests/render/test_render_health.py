@@ -5,10 +5,10 @@ from pathlib import Path
 from _pytest.monkeypatch import MonkeyPatch
 from fastapi.testclient import TestClient
 
-from apps.trafalgar.web.render import (
+from apps.trafalgar.web.render import app
+from apps.trafalgar.web.render.dependencies import (
     JOB_RETENTION_HOURS_ENV,
     JOB_STORE_PATH_ENV,
-    app,
     get_render_service,
 )
 from apps.trafalgar.web import security
