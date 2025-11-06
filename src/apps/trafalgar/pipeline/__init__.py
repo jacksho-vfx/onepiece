@@ -358,6 +358,70 @@ class PipelineOrchestrator:
 
         return self._store.get_run(run_id)
 
+    def rerun(
+        self,
+        run_id: str,
+        *,
+        overrides: Mapping[str, Any] | None = None,
+        submitted_by: str | None = None,
+        roles: Iterable[str] | None = None,
+    ) -> PipelineRun:
+        original = self.get_run(run_id)
+        snapshot = original.definition_snapshot
+        if not snapshot:
+            msg = f"pipeline run '{run_id}' is missing a definition snapshot"
+            raise ValueError(msg)
+        try:
+            definition = pipeline_definition_from_serialised(snapshot)
+        except (TypeError, ValueError) as exc:
+            msg = f"pipeline run '{run_id}' has an invalid definition snapshot"
+            raise ValueError(msg) from exc
+
+        definition = self._prepare_definition(definition)
+
+        merged_parameters: dict[str, Any] = dict(original.parameters)
+        if overrides:
+            merged_parameters.update(overrides)
+        parameters = definition.resolve_parameters(merged_parameters)
+
+        new_run_id = uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        role_values: tuple[str, ...]
+        if roles is None:
+            role_values = original.roles
+        else:
+            role_values = tuple(str(role) for role in roles)
+        submitted_by_value = (
+            submitted_by if submitted_by is not None else original.submitted_by
+        )
+
+        run = PipelineRun(
+            run_id=new_run_id,
+            pipeline=definition.name,
+            status="queued",
+            created_at=now,
+            updated_at=now,
+            parameters=parameters,
+            definition_snapshot=definition.serialise(),
+            submitted_by=submitted_by_value,
+            roles=role_values,
+        )
+        initial_event = PipelineRunEvent(
+            run_id=new_run_id,
+            pipeline=definition.name,
+            status="queued",
+            timestamp=run.created_at,
+            parameters=parameters,
+        )
+
+        self._store.create_run(run, initial_event)
+        future = self._submit_run(
+            definition=definition, run_id=new_run_id, parameters=parameters
+        )
+        self._register_future(future)
+
+        return self._store.get_run(new_run_id)
+
     def set_enabled(self, name: str, enabled: bool) -> PipelineDefinition:
         updated_definition: PipelineDefinition
         with self._lock:

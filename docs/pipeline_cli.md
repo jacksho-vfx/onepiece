@@ -14,6 +14,7 @@ orchestrator or a remote Trafalgar deployment.
 | `enable` | Re-enable a disabled pipeline. | `text`, `json` |
 | `disable` | Prevent a pipeline from running. | `text`, `json` |
 | `runs` | List recorded pipeline runs. | `text`, `json` |
+| `rerun` | Trigger a new run from stored parameters. | `text`, `json` |
 | `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
 | `prune` | Apply run retention policies and report removals. | `text`, `json` |
 | `run-status` | Inspect metadata for a specific run. | `text`, `json` |
@@ -54,6 +55,24 @@ locally and forwards it to either the in-process orchestrator or the Trafalgar
 API, so the aggregated counts (and optional duration metrics) only reflect runs
 for that pipeline. Omit the flag to keep the existing behaviour of reporting on
 every registered pipeline.
+
+## Rerunning pipeline executions
+
+The `rerun` command triggers a fresh execution from a stored definition
+snapshot. Provide the original run identifier and optional parameter overrides:
+
+```bash
+onepiece pipeline rerun abc123 \
+  --param shot=SQ02 \
+  --param quality=ultra
+```
+
+Overrides replace values from the original run while retaining defaults defined
+on the pipeline. The CLI also accepts `--params-file` and `--wait` flags with
+the same behaviour as `onepiece pipeline run`, allowing operators to stream
+events until the rerun succeeds or fails. When targeting a remote Trafalgar API
+the command issues a `POST /runs/{run_id}/rerun` request using the caller's
+credentials, ensuring audit trails reflect who initiated the new execution.
 
 ## Preparing a manifest
 

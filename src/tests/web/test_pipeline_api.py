@@ -402,6 +402,46 @@ def test_trigger_pipeline_run_rejects_unknown_parameter(client: TestClient) -> N
     assert "does not define parameters" in response.json()["detail"]
 
 
+def test_rerun_pipeline_run_returns_run_payload(client: TestClient) -> None:
+    initial = client.post(
+        "/pipelines/render_shots/runs",
+        headers=_auth_headers(),
+        json={"parameters": {"shot": "SQ01"}},
+    )
+
+    assert initial.status_code == 201
+    first_payload = initial.json()
+    original_id = first_payload["id"]
+
+    response = client.post(
+        f"/runs/{original_id}/rerun",
+        headers=_auth_headers(),
+        json={"parameters": {"quality": "ultra"}},
+    )
+
+    assert response.status_code == 201
+    rerun_payload = response.json()
+    assert rerun_payload["pipeline"] == "render_shots"
+    assert rerun_payload["id"] != original_id
+    assert rerun_payload["parameters"] == {
+        "shot": "SQ01",
+        "quality": "ultra",
+        "priority": "int",
+    }
+    assert rerun_payload["submitted_by"] == "suite"
+    assert "pipeline:run" in rerun_payload.get("roles", [])
+
+
+def test_rerun_pipeline_run_rejects_missing_run(client: TestClient) -> None:
+    response = client.post(
+        "/runs/unknown/rerun",
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Run not found"
+
+
 def test_pipeline_run_rejected_when_disabled_until_reenabled(
     client: TestClient,
 ) -> None:

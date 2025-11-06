@@ -22,6 +22,7 @@ class StubPipelineClient:
     definitions: list[Mapping[str, Any]] | None = None
     definition: Mapping[str, Any] | None = None
     run_payload: Mapping[str, Any] | None = None
+    rerun_payload: Mapping[str, Any] | None = None
     runs: list[Mapping[str, Any]] | None = None
     runs_payload: Mapping[str, Any] | None = None
     run_metadata: Mapping[str, Any] | None = None
@@ -30,6 +31,7 @@ class StubPipelineClient:
     list_error: PipelineClientError | None = None
     describe_error: PipelineClientError | None = None
     run_error: PipelineClientError | None = None
+    rerun_error: PipelineClientError | None = None
     runs_error: PipelineClientError | None = None
     run_status_error: PipelineClientError | None = None
     run_events_error: PipelineClientError | None = None
@@ -51,6 +53,8 @@ class StubPipelineClient:
     closed: bool = False
     requested_name: str | None = None
     run_parameters: Mapping[str, Any] | None = None
+    rerun_parameters: Mapping[str, Any] | None = None
+    rerun_run_id: str | None = None
     list_runs_kwargs: Mapping[str, Any] | None = None
     requested_run_id: str | None = None
     stats_kwargs: Mapping[str, Any] | None = None
@@ -87,6 +91,17 @@ class StubPipelineClient:
         if self.run_payload is None:
             raise AssertionError("run payload was not configured")
         return dict(self.run_payload)
+
+    def rerun(
+        self, run_id: str, overrides: Mapping[str, Any] | None = None
+    ) -> Mapping[str, Any]:
+        self.rerun_run_id = run_id
+        self.rerun_parameters = dict(overrides or {})
+        if self.rerun_error:
+            raise self.rerun_error
+        if self.rerun_payload is None:
+            raise AssertionError("rerun payload was not configured")
+        return dict(self.rerun_payload)
 
     def list_runs(
         self,

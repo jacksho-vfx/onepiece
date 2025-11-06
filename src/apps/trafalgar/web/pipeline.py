@@ -269,6 +269,28 @@ def trigger_pipeline_run(
     return JSONResponse(status_code=201, content=run.serialise())
 
 
+@router.post("/runs/{run_id}/rerun", status_code=201)
+def rerun_pipeline_run(
+    run_id: str,
+    submission: PipelineRunSubmission | None = None,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_RUN)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    overrides = submission.parameters if submission is not None else {}
+    try:
+        run = orchestrator.rerun(
+            run_id,
+            overrides=overrides or None,
+            submitted_by=_principal.identifier,
+            roles=_principal.roles,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(status_code=201, content=run.serialise())
+
+
 @router.post("/runs/prune")
 def prune_runs(
     submission: PipelinePruneRequest | None = None,

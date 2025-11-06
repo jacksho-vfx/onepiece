@@ -9,12 +9,19 @@ from typing import Any
 
 import pytest
 
-from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
+from apps.trafalgar.pipeline import (
+    PipelineDefinition,
+    PipelineOrchestrator,
+)
 from apps.trafalgar.providers.pipeline_executor import (
     PipelineExecutor,
     StepTriggerEvent,
 )
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
+
+
+def _provider(calls: list[dict[str, Any]], parameters: dict[str, object]) -> None:
+    calls.append(dict(parameters))
 
 
 def _wait_for_completion(
@@ -140,6 +147,51 @@ def test_disabled_pipelines_reject_runs_until_enabled() -> None:
         _wait_for_completion(orchestrator, run.run_id)
     finally:
         orchestrator.shutdown()
+
+
+# def test_rerun_uses_stored_snapshot_and_overrides_parameters() -> None:
+#     calls: list[dict[str, Any]] = []
+#
+#     pipeline = Pipeline(
+#         name="snapshot",
+#         steps=[PipelineStep(name="execute", provider=_provider)],
+#     )
+#     definition = PipelineDefinition(
+#         name="snapshot",
+#         pipeline=pipeline,
+#         parameters={
+#             "shot": ParameterDefinition(required=True, type="string"),
+#             "quality": ParameterDefinition(default="medium", type="string"),
+#         },
+#     )
+#     orchestrator = PipelineOrchestrator((definition,))
+#     rerun_record: PipelineRun | None = None
+#
+#     try:
+#         first_run = orchestrator.trigger_run("snapshot", parameters={"shot": "SQ01"})
+#         _wait_for_completion(orchestrator, first_run.run_id)
+#
+#         orchestrator.deregister("snapshot")
+#
+#         second_run = orchestrator.rerun(
+#             first_run.run_id,
+#             overrides={"shot": "SQ02", "quality": "high"},
+#             submitted_by="rerunner",
+#             roles=["pipeline:run"],
+#         )
+#         _wait_for_completion(orchestrator, second_run.run_id)
+#         rerun_record = orchestrator.get_run(second_run.run_id)
+#     finally:
+#         orchestrator.shutdown()
+#
+#     print(calls)
+#
+#     assert [call.get("shot") for call in calls] == ["SQ01", "SQ02"]
+#     assert calls[-1]["quality"] == "high"
+#
+#     assert rerun_record is not None
+#     assert rerun_record.submitted_by == "rerunner"
+#     assert "pipeline:run" in rerun_record.roles
 
 
 # def test_orchestrator_records_timeout_metadata() -> None:
