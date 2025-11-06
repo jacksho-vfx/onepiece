@@ -775,14 +775,10 @@ class RenderSubmissionService:
         self._events.publish(payload)
 
 
-JOB_EVENTS = EventBroadcaster(max_buffer=64)
-
-
 __all__ = [
     "DEFAULT_STATUS_POLL_INTERVAL",
     "DEFAULT_STORE_PERSIST_INTERVAL",
     "FARM_DESCRIPTIONS",
-    "JOB_EVENTS",
     "RenderSubmissionService",
     "logger",
 ]

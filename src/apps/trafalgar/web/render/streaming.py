@@ -10,7 +10,7 @@ from fastapi import Request
 
 from apps.trafalgar.web.events import resolve_keepalive_interval
 from .dependencies import get_render_service
-from . import JOB_EVENTS
+from apps.trafalgar.web.render.constants import JOB_EVENTS
 
 if TYPE_CHECKING:  # pragma: no cover - import for static analysis only
     from . import RenderSubmissionService

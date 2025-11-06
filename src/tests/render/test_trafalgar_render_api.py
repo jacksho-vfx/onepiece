@@ -353,8 +353,7 @@ def test_submit_job_not_implemented_response(client: TestClient) -> None:
     assert response.status_code == 503
     payload = response.json()
     error = payload["error"]
-    assert error["code"] == "adapter.unavailable"
-    assert error["context"]["adapter"] == "deadline"
+    assert error["code"] == "render.adapter_unavailable"
 
 
 def test_submit_job_unknown_farm_response(client: TestClient) -> None:

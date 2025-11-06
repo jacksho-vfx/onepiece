@@ -19,7 +19,8 @@ from apps.trafalgar.web.security import (
 from libraries.automation.render.base import RenderSubmissionError
 
 from .api import render_submission_error_handler
-from .services import JOB_EVENTS, RenderSubmissionService, logger
+from .constants import JOB_EVENTS
+from .services import RenderSubmissionService, logger
 from .dependencies import get_render_service, parse_render_job_request
 from .schemas import (
     FarmsResponse,

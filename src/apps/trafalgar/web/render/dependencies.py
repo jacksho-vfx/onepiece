@@ -26,7 +26,8 @@ JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
 
 
 def _initialise_render_service() -> "RenderSubmissionService":
-    from .services import JOB_EVENTS, RenderSubmissionService, logger
+    from .services import RenderSubmissionService, logger
+    from .constants import JOB_EVENTS
 
     store_path = os.environ.get(JOB_STORE_PATH_ENV)
     history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)

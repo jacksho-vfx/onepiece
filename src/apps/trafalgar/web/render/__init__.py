@@ -9,6 +9,7 @@ from libraries.automation.render.base import RenderSubmissionError
 
 from . import routes
 from .api import log_requests, render_submission_error_handler
+from .constants import JOB_EVENTS
 from .dependencies import (
     JOB_HISTORY_LIMIT_ENV,
     JOB_RETENTION_HOURS_ENV,
@@ -41,17 +42,17 @@ from .schemas import (
     RenderWindowAnalytics,
 )
 from .services import (
-    JOB_EVENTS,
     RenderSubmissionService,
     logger,
 )
-from .streaming import RENDER_SSE_KEEPALIVE_INTERVAL_ENV
-from .security import (
+from ..security import (
     AuthenticatedPrincipal,
     ROLE_RENDER_MANAGE,
     ROLE_RENDER_READ,
     ROLE_RENDER_SUBMIT,
 )
+from .streaming import RENDER_SSE_KEEPALIVE_INTERVAL_ENV
+from apps.onepiece.render.submit import FARM_ADAPTERS
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 
@@ -107,4 +108,5 @@ __all__ = [
     "router",
     "start_render_status_poller",
     "stop_render_status_poller",
+    "FARM_ADAPTERS",
 ]
