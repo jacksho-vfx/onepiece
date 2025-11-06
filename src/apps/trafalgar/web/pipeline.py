@@ -33,7 +33,7 @@ from .security import (
 class PipelineDefinitionSubmission(BaseModel):
     """Request payload describing a pipeline definition."""
 
-    _ALLOWED_EXTRA_FIELDS = frozenset({"summary", "version"})
+    _ALLOWED_EXTRA_FIELDS = frozenset({"summary", "version", "enabled"})
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -75,6 +75,19 @@ class PipelineDefinitionSubmission(BaseModel):
             for key, value in self.model_extra.items()
             if key in self._ALLOWED_EXTRA_FIELDS and value is not None
         }
+
+
+class PipelineDefinitionPatch(BaseModel):
+    """Request payload for partial pipeline definition updates."""
+
+    enabled: bool | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _ensure_update(self) -> "PipelineDefinitionPatch":
+        if self.enabled is None:
+            msg = "Request must specify at least one field to update"
+            raise ValueError(msg)
+        return self
 
 
 class PipelineRunSubmission(BaseModel):
@@ -181,6 +194,22 @@ def update_pipeline(
     orchestrator = get_pipeline_orchestrator()
     definition = _definition_from_submission(submission)
     orchestrator.upsert(definition)
+    return JSONResponse(content=definition.serialise())
+
+
+@router.patch("/pipelines/{pipeline}")
+def patch_pipeline(
+    pipeline: str,
+    patch: PipelineDefinitionPatch,
+    _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_MANAGE)),
+) -> JSONResponse:
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        definition = orchestrator.set_enabled(pipeline, patch.enabled)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown pipeline") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse(content=definition.serialise())
 
 

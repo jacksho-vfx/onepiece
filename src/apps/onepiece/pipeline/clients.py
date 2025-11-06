@@ -97,6 +97,10 @@ class PipelineClient(Protocol):
         max_runs: int | None = None,
     ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
+    def set_definition_enabled(
+        self, name: str, enabled: bool
+    ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
+
     def close(self) -> None: ...  # pragma: no cover - Protocol
 
 
@@ -136,6 +140,8 @@ class LocalPipelineClient:
             run = self._orchestrator.trigger_run(name, parameters=parameters)
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
+        except ValueError as exc:
+            raise PipelineClientError(str(exc), status_code=400) from exc
         return run.serialise()
 
     def list_runs(
@@ -329,6 +335,13 @@ class LocalPipelineClient:
             max_age = timedelta(hours=max_age_hours)
         result = self._orchestrator.prune_history(max_age=max_age, max_runs=max_runs)
         return dict(result.serialise())
+
+    def set_definition_enabled(self, name: str, enabled: bool) -> Mapping[str, Any]:
+        try:
+            definition = self._orchestrator.set_enabled(name, enabled)
+        except KeyError as exc:
+            raise PipelineClientError(str(exc), status_code=404) from exc
+        return dict(definition.serialise())
 
 
 class RemotePipelineClient:
@@ -524,6 +537,15 @@ class RemotePipelineClient:
         if payload:
             kwargs["json"] = payload
         response = self._request("POST", "runs/prune", **kwargs)
+        body = response.json()
+        if not isinstance(body, Mapping):
+            raise PipelineClientError("Pipeline API returned an unexpected payload.")
+        return body
+
+    def set_definition_enabled(self, name: str, enabled: bool) -> Mapping[str, Any]:
+        response = self._request(
+            "PATCH", f"pipelines/{name}", json={"enabled": bool(enabled)}
+        )
         body = response.json()
         if not isinstance(body, Mapping):
             raise PipelineClientError("Pipeline API returned an unexpected payload.")

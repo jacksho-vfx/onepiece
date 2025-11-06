@@ -11,6 +11,8 @@ orchestrator or a remote Trafalgar deployment.
 | --- | --- | --- |
 | `list` | Show registered pipeline definitions. | `text` (default), `json` via `--format`. |
 | `describe` | Display a single pipeline definition. | `text`, `json` |
+| `enable` | Re-enable a disabled pipeline. | `text`, `json` |
+| `disable` | Prevent a pipeline from running. | `text`, `json` |
 | `runs` | List recorded pipeline runs. | `text`, `json` |
 | `stats` | Summarise run outcomes across pipelines. | `text`, `json` |
 | `prune` | Apply run retention policies and report removals. | `text`, `json` |
@@ -39,6 +41,12 @@ onepiece pipeline run orchestration.daily \
 
 The parameters file must contain a mapping at the top level. Nested objects and
 arrays are preserved so that downstream providers receive the full structure.
+
+Disabled pipelines are rejected before they enter the run queue. If `run`
+returns a message like "pipeline 'render_shots' is disabled", administrators can
+re-enable the definition with `onepiece pipeline enable render_shots`. The
+updated definition is written back to the orchestrator immediately and the
+pipeline can accept new runs again.
 
 When inspecting run outcomes with `onepiece pipeline stats`, supply
 `--pipeline <name>` to focus on a single pipeline. The CLI validates the name
@@ -116,6 +124,22 @@ onepiece pipeline update manifests/render.toml
 
 Both commands provide clear error messages when the manifest is invalid or when
 API responses indicate a conflict.
+
+### Enabling and disabling pipelines
+
+Operational teams can pause orchestration work without deleting definitions by
+disabling the pipeline:
+
+```bash
+onepiece pipeline disable render_shots
+```
+
+The CLI confirms the change and subsequent `run` commands (or API requests) will
+fail with a clear "pipeline is disabled" message. When it's time to resume, call
+`onepiece pipeline enable render_shots` or target the REST API with a
+`PATCH /pipelines/{name}` request containing `{ "enabled": true }`. The
+`describe` and `list` commands annotate disabled definitions so operators can see
+the status at a glance.
 
 ### Concurrent updates
 

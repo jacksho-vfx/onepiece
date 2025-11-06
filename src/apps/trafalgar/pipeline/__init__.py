@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 PROVIDER_REFERENCE_METADATA_KEY = pipeline_executor.PROVIDER_REFERENCE_METADATA_KEY
 
 
+def _coerce_enabled_flag(pipeline_name: str, value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if not text:
+            return True
+        if text in {"true", "1", "yes", "on"}:
+            return True
+        if text in {"false", "0", "no", "off"}:
+            return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    msg = f"pipeline '{pipeline_name}' has invalid 'enabled' value"
+    raise ValueError(msg)
+
+
 @dataclass(slots=True)
 class PipelineDefinition:
     """A lightweight description of a runnable pipeline."""
@@ -42,6 +59,7 @@ class PipelineDefinition:
     description: str | None = None
     parameters: Mapping[str, ParameterDefinition] = field(default_factory=dict)
     version: str | None = None
+    enabled: bool = True
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass hook
         if not self.name:
@@ -70,6 +88,13 @@ class PipelineDefinition:
                 self, "pipeline", replace(self.pipeline, metadata=metadata)
             )
 
+        enabled_flag = self.enabled
+        if isinstance(enabled_flag, bool):
+            enabled = enabled_flag
+        else:
+            enabled = _coerce_enabled_flag(self.name, enabled_flag)
+        object.__setattr__(self, "enabled", enabled)
+
     def serialise(self) -> Mapping[str, Any]:
         steps = [self._serialise_step(step) for step in self.pipeline.steps]
         providers = {step["name"]: step["provider"] for step in steps}
@@ -89,6 +114,7 @@ class PipelineDefinition:
             "steps": steps,
             "providers": providers,
             "dependency_graph": dependency_graph,
+            "enabled": self.enabled,
         }
         if self.version is not None:
             payload["version"] = self.version
@@ -294,6 +320,9 @@ class PipelineOrchestrator:
         roles: Iterable[str] | None = None,
     ) -> PipelineRun:
         definition = self.get_pipeline(pipeline_name)
+        if not definition.enabled:
+            msg = f"pipeline '{pipeline_name}' is disabled"
+            raise ValueError(msg)
         parameters = definition.resolve_parameters(parameters)
         definition_snapshot = definition.serialise()
         run_id = uuid.uuid4().hex
@@ -328,6 +357,23 @@ class PipelineOrchestrator:
         self._register_future(future)
 
         return self._store.get_run(run_id)
+
+    def set_enabled(self, name: str, enabled: bool) -> PipelineDefinition:
+        updated_definition: PipelineDefinition
+        with self._lock:
+            try:
+                current = self._definitions[name]
+            except KeyError as exc:
+                msg = f"pipeline '{name}' is not registered"
+                raise KeyError(msg) from exc
+            if current.enabled == enabled:
+                return current
+            updated_definition = replace(current, enabled=bool(enabled))
+            self._definitions[name] = updated_definition
+            definition_store = self._definition_store
+        if definition_store is not None:
+            definition_store.save(updated_definition)
+        return updated_definition
 
     def _submit_run(
         self,
@@ -721,6 +767,9 @@ def pipeline_definition_from_profile_entry(
 
     version = _coerce_optional_str(config.get("version", metadata.get("version")))
 
+    enabled = config.get("enabled")
+    is_enabled = _coerce_enabled_flag(name, enabled) if enabled is not None else True
+
     return PipelineDefinition(
         name=pipeline.name,
         pipeline=pipeline,
@@ -728,6 +777,7 @@ def pipeline_definition_from_profile_entry(
         description=description,
         parameters=parameters,
         version=version,
+        enabled=is_enabled,
     )
 
 
