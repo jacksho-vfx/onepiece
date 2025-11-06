@@ -51,6 +51,23 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
+def test_pipeline_run_reports_disabled_pipeline(monkeypatch: MonkeyPatch) -> None:
+    error = PipelineClientError(
+        "pipeline 'orchestration.daily' is disabled", status_code=400
+    )
+    client = StubPipelineClient(run_error=error)
+    install_stub_pipeline_client(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run", "orchestration.daily"],
+    )
+
+    assert result.exit_code == 1
+    assert "pipeline 'orchestration.daily' is disabled" in result.output
+    assert client.closed is True
+
+
 def test_pipeline_run_parameters_from_file(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:

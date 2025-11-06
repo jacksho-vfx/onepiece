@@ -7,7 +7,7 @@ from threading import Barrier, BrokenBarrierError, Event
 import time
 from typing import Any
 
-# import pytest
+import pytest
 
 from apps.trafalgar.pipeline import PipelineDefinition, PipelineOrchestrator
 from apps.trafalgar.providers.pipeline_executor import (
@@ -118,6 +118,26 @@ def test_event_driven_steps_execute_in_parallel() -> None:
         first_finish = finishes.get(timeout=1.0)
         second_finish = finishes.get(timeout=1.0)
         assert {first_finish[0], second_finish[0]} == {"listener_a", "listener_b"}
+    finally:
+        orchestrator.shutdown()
+
+
+def test_disabled_pipelines_reject_runs_until_enabled() -> None:
+    pipeline = Pipeline(
+        name="disabled",
+        steps=[PipelineStep(name="noop", provider=lambda _: None)],
+    )
+    definition = PipelineDefinition(name="disabled", pipeline=pipeline, enabled=False)
+    orchestrator = PipelineOrchestrator((definition,))
+
+    try:
+        with pytest.raises(ValueError, match="pipeline 'disabled' is disabled"):
+            orchestrator.trigger_run("disabled", parameters={})
+
+        orchestrator.set_enabled("disabled", True)
+
+        run = orchestrator.trigger_run("disabled", parameters={})
+        _wait_for_completion(orchestrator, run.run_id)
     finally:
         orchestrator.shutdown()
 

@@ -208,6 +208,7 @@ def test_list_pipelines_returns_registered_definitions(
     assert render["parameters"]["quality"]["default"] == "string"
     assert render["parameters"]["quality"]["description"] == "Quality preset"
     assert render["parameters"]["shot"]["required"] is True
+    assert render["enabled"] is True
     assert set(names) == set(profile_context.pipelines)
 
 
@@ -401,6 +402,39 @@ def test_trigger_pipeline_run_rejects_unknown_parameter(client: TestClient) -> N
     assert "does not define parameters" in response.json()["detail"]
 
 
+def test_pipeline_run_rejected_when_disabled_until_reenabled(
+    client: TestClient,
+) -> None:
+    orchestrator = get_pipeline_orchestrator()
+    orchestrator.set_enabled("render_shots", False)
+
+    disabled_response = client.post(
+        "/pipelines/render_shots/runs",
+        headers=_auth_headers(),
+        json={"parameters": {"shot": "SQ01"}},
+    )
+
+    assert disabled_response.status_code == 400
+    assert "disabled" in disabled_response.json()["detail"]
+
+    patch = client.patch(
+        "/pipelines/render_shots",
+        headers=_auth_headers(),
+        json={"enabled": True},
+    )
+
+    assert patch.status_code == 200
+    assert patch.json()["enabled"] is True
+
+    success = client.post(
+        "/pipelines/render_shots/runs",
+        headers=_auth_headers(),
+        json={"parameters": {"shot": "SQ01"}},
+    )
+
+    assert success.status_code == 201
+
+
 def test_stream_run_events_returns_status_sequence(client: TestClient) -> None:
     creation = client.post(
         "/pipelines/render_shots/runs",
@@ -566,6 +600,7 @@ def test_describe_pipeline_returns_enriched_metadata(client: TestClient) -> None
     assert payload["name"] == "render_shots"
     assert payload["providers"]["notify"] == "tests.pipeline:notify"
     assert payload["dependency_graph"]["render"] == ["prepare"]
+    assert payload["enabled"] is True
 
     notify_trigger = next(
         step["trigger"] for step in payload["steps"] if step["name"] == "notify"

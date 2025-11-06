@@ -134,6 +134,51 @@ def describe_pipeline(
     _render_pipeline_details(definition)
 
 
+def _toggle_pipeline_state(name: str, *, enabled: bool, output_format: str) -> None:
+    with _using_client() as client:
+        try:
+            definition = client.set_definition_enabled(name, enabled)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    if output_format == "json":
+        typer.echo(json.dumps(definition, indent=2))
+        return
+
+    state = "enabled" if enabled else "disabled"
+    pipeline_name = definition.get("name") or name
+    typer.echo(f"Pipeline '{pipeline_name}' {state}.")
+
+
+@app.command("enable")
+def enable_pipeline(
+    name: str = typer.Argument(..., help="Pipeline identifier."),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Enable a pipeline definition."""
+
+    output_format = _resolve_output_format(format)
+    _toggle_pipeline_state(name, enabled=True, output_format=output_format)
+
+
+@app.command("disable")
+def disable_pipeline(
+    name: str = typer.Argument(..., help="Pipeline identifier."),
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """Disable a pipeline definition."""
+
+    output_format = _resolve_output_format(format)
+    _toggle_pipeline_state(name, enabled=False, output_format=output_format)
+
+
 @app.command("pull")
 def pull_pipeline_definition(
     name: str = typer.Argument(..., help="Pipeline identifier."),

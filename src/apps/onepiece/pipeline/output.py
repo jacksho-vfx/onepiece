@@ -65,11 +65,17 @@ def _format_pipeline_definition(definition: Mapping[str, Any]) -> Iterable[str]:
     display = definition.get("display_name")
     display_text = str(display).strip() if display is not None else ""
     description = definition.get("description")
+    enabled = bool(definition.get("enabled", True))
 
     if display_text and display_text != name:
-        yield f"{name} ({display_text})"
+        header = f"{name} ({display_text})"
     else:
-        yield name
+        header = name
+
+    if not enabled:
+        header += " [disabled]"
+
+    yield header
 
     if isinstance(description, str) and description.strip():
         yield f"  Description: {description.strip()}"
@@ -112,6 +118,8 @@ def _render_pipeline_details(definition: Mapping[str, Any]) -> None:
     description = definition.get("description")
     if isinstance(description, str) and description.strip():
         typer.echo(f"Description: {description.strip()}")
+
+    typer.echo("Enabled: " + ("yes" if bool(definition.get("enabled", True)) else "no"))
 
     parameters = definition.get("parameters")
     if isinstance(parameters, Mapping) and parameters:

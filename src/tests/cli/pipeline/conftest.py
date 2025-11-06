@@ -45,6 +45,8 @@ class StubPipelineClient:
     delete_error: PipelineClientError | None = None
     prune_result: Mapping[str, Any] | None = None
     prune_error: PipelineClientError | None = None
+    enable_error: PipelineClientError | None = None
+    enabled_response: Mapping[str, Any] | None = None
 
     closed: bool = False
     requested_name: str | None = None
@@ -59,6 +61,8 @@ class StubPipelineClient:
     worker_metrics_requested: bool = False
     prune_kwargs: Mapping[str, Any] | None = None
     stream_requested: bool = False
+    enabled_name: str | None = None
+    enabled_state: bool | None = None
 
     def list_definitions(self) -> list[Mapping[str, Any]]:
         if self.list_error:
@@ -201,6 +205,15 @@ class StubPipelineClient:
         if self.prune_result is None:
             raise AssertionError("prune result was not configured")
         return dict(self.prune_result)
+
+    def set_definition_enabled(self, name: str, enabled: bool) -> Mapping[str, Any]:
+        self.enabled_name = name
+        self.enabled_state = enabled
+        if self.enable_error:
+            raise self.enable_error
+        if self.enabled_response is None:
+            raise AssertionError("enabled response was not configured")
+        return dict(self.enabled_response)
 
     def close(self) -> None:
         self.closed = True
