@@ -6,12 +6,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from libraries.automation.render.analytics import cost_per_frame
-from apps.trafalgar.web import render as render_module
-from apps.trafalgar.web.render import (
-    RenderJobRequest,
-    RenderSubmissionService,
-    _JobRecord,
-)
+from apps.trafalgar.web.render import services as services_module
+from apps.trafalgar.web.render.models import _JobRecord
+from apps.trafalgar.web.render.schemas import RenderJobRequest
+from apps.trafalgar.web.render.services import RenderSubmissionService
 
 
 def _request() -> RenderJobRequest:
@@ -115,7 +113,7 @@ def test_update_record_tracks_status_history_and_completion(
     service = RenderSubmissionService(adapters={})
 
     running_time = base_time + timedelta(minutes=5)
-    monkeypatch.setattr(render_module, "_utcnow", lambda: running_time)
+    monkeypatch.setattr(services_module, "_utcnow", lambda: running_time)
 
     changed = service._update_record_from_result(record, {"status": "running"})
     assert changed is True
@@ -125,7 +123,7 @@ def test_update_record_tracks_status_history_and_completion(
     assert record.status_history[-1] == ("running", running_time)
 
     completion_time = base_time + timedelta(minutes=15)
-    monkeypatch.setattr(render_module, "_utcnow", lambda: completion_time)
+    monkeypatch.setattr(services_module, "_utcnow", lambda: completion_time)
 
     changed = service._update_record_from_result(
         record, {"status": "completed", "message": "done"}

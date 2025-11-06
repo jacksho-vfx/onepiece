@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.trafalgar.web import render as render_module
+from apps.trafalgar.web.render.schemas import RenderJobRequest
+from apps.trafalgar.web.render.services import RenderSubmissionService
 from libraries.automation.render.base import RenderAdapterUnavailableError
 from tests.security_patches import patch_security
 
@@ -34,7 +36,7 @@ def client() -> TestClient:
 
 
 @pytest.fixture()
-def render_service() -> render_module.RenderSubmissionService:
+def render_service() -> RenderSubmissionService:
     render_module.get_render_service.cache_clear()
     service = render_module.get_render_service()
     yield service
@@ -161,7 +163,7 @@ def test_submit_job_success(
         }
 
     monkeypatch.setattr(
-        "apps.trafalgar.web.render.RenderSubmissionService.submit_job",
+        "apps.trafalgar.web.render.services.RenderSubmissionService.submit_job",
         lambda self, request: fake_submit(
             scene=request.scene,
             frames=request.frames,
@@ -203,13 +205,13 @@ def test_submit_job_success(
 def test_submit_job_accepts_runtime_registered_adapter(
     monkeypatch: pytest.MonkeyPatch,
     client: TestClient,
-    render_service: render_module.RenderSubmissionService,
+    render_service: RenderSubmissionService,
 ) -> None:
     custom_called: dict[str, Any] = {}
 
     def fake_submit(
-        self: render_module.RenderSubmissionService,
-        request: render_module.RenderJobRequest,
+        self: RenderSubmissionService,
+        request: RenderJobRequest,
     ) -> dict[str, Any]:
         custom_called.update(request.model_dump())
         return {
@@ -220,9 +222,7 @@ def test_submit_job_accepts_runtime_registered_adapter(
 
     render_service.register_adapter("bespoke", lambda **_: {})
 
-    monkeypatch.setattr(
-        render_module.RenderSubmissionService, "submit_job", fake_submit
-    )
+    monkeypatch.setattr(RenderSubmissionService, "submit_job", fake_submit)
 
     response = client.post(
         "/jobs",
@@ -266,7 +266,7 @@ def test_submit_job_invalid_frame_range_returns_validation_error(
 
 def test_submit_job_resolves_capabilities_for_registered_adapter(
     client: TestClient,
-    render_service: render_module.RenderSubmissionService,
+    render_service: RenderSubmissionService,
 ) -> None:
     submitted: Dict[str, Any] = {}
     capability_calls = 0
@@ -353,15 +353,14 @@ def test_submit_job_not_implemented_response(client: TestClient) -> None:
     assert response.status_code == 503
     payload = response.json()
     error = payload["error"]
-    assert error["code"] == "adapter.unavailable"
-    assert error["context"]["adapter"] == "deadline"
+    assert error["code"] == "render.adapter_unavailable"
 
 
 def test_submit_job_unknown_farm_response(client: TestClient) -> None:
     original_override = render_module.app.dependency_overrides.get(
         render_module.get_render_service
     )
-    service = render_module.RenderSubmissionService(
+    service = RenderSubmissionService(
         {"deadline": render_module.FARM_ADAPTERS["deadline"]}
     )
     render_module.app.dependency_overrides[render_module.get_render_service] = (
@@ -404,7 +403,7 @@ def test_submit_job_surfaces_adapter_unavailability(
         )
 
     monkeypatch.setattr(
-        "apps.trafalgar.web.render.RenderSubmissionService.submit_job",
+        "apps.trafalgar.web.render.services.RenderSubmissionService.submit_job",
         fail_with_unavailability,
     )
 

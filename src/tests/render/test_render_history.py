@@ -8,11 +8,9 @@ from pathlib import Path
 import pytest
 
 from apps.trafalgar.web.job_store import JobStore
-from apps.trafalgar.web.render import (
-    RenderJobRequest,
-    RenderSubmissionService,
-    _JobRecord,
-)
+from apps.trafalgar.web.render.models import _JobRecord
+from apps.trafalgar.web.render.schemas import RenderJobRequest
+from apps.trafalgar.web.render.services import RenderSubmissionService
 
 
 @pytest.fixture

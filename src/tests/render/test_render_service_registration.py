@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.trafalgar.web.render import RenderSubmissionService
+from apps.trafalgar.web.render.services import RenderSubmissionService
 from libraries.automation.render.base import SubmissionResult
 from libraries.automation.render.models import RenderAdapter
 

@@ -16,13 +16,11 @@ from apps.trafalgar.web.security import (
     create_protected_router,
     require_roles,
 )
-from . import (
-    JOB_EVENTS,
-    RenderSubmissionError,
-    RenderSubmissionService,
-    logger,
-    render_submission_error_handler,
-)
+from libraries.automation.render.base import RenderSubmissionError
+
+from .api import render_submission_error_handler
+from .constants import JOB_EVENTS
+from .services import RenderSubmissionService, logger
 from .dependencies import get_render_service, parse_render_job_request
 from .schemas import (
     FarmsResponse,

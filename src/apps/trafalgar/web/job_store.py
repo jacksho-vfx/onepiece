@@ -12,7 +12,7 @@ from typing import Iterable, TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:  # pragma: no cover - import only used for typing
-    from .render import _JobRecord
+    from .render.models import _JobRecord
 
 
 logger = structlog.get_logger(__name__)
@@ -151,7 +151,9 @@ class JobStore:
     def load(self) -> list[_JobRecord]:
         """Load job records from disk."""
 
-        from .render import _JobRecord  # Local import to avoid circular dependency
+        from .render.models import (
+            _JobRecord,
+        )  # Local import to avoid circular dependency
 
         self._stats.last_load_at = _utcnow()
         if not self._path.exists():
