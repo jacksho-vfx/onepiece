@@ -648,6 +648,28 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     assert client.closed is True
 
 
+def test_pipeline_run_json_format(monkeypatch: MonkeyPatch) -> None:
+    payload = {
+        "id": "abc123",
+        "pipeline": "orchestration.daily",
+        "status": "queued",
+        "submitted_by": "suite",
+        "roles": ["pipeline:run"],
+    }
+    client = StubPipelineClient(run_payload=payload)
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run", "orchestration.daily", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == payload
+    assert client.stream_requested is False
+    assert client.closed is True
+
+
 def test_pipeline_run_waits_for_completion(monkeypatch: MonkeyPatch) -> None:
     client = StubPipelineClient(
         run_payload={
@@ -686,6 +708,27 @@ def test_pipeline_run_waits_for_completion(monkeypatch: MonkeyPatch) -> None:
     assert client.stream_requested is True
     assert client.requested_run_id == "abc123"
     assert client.closed is True
+
+
+def test_pipeline_run_rejects_wait_with_json(monkeypatch: MonkeyPatch) -> None:
+    client = StubPipelineClient(
+        run_payload={
+            "id": "abc123",
+            "pipeline": "orchestration.daily",
+            "status": "queued",
+        }
+    )
+    _install_stub(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        ["pipeline", "run", "orchestration.daily", "--wait", "--format", "json"],
+    )
+
+    assert result.exit_code == 2
+    assert "--wait cannot be combined with '--format json'." in result.output
+    assert client.requested_name is None
+    assert client.closed is False
 
 
 def test_pipeline_run_rejects_invalid_parameters(monkeypatch: MonkeyPatch) -> None:
