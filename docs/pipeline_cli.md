@@ -22,6 +22,24 @@ Pass `--format json` to any of these commands to emit prettified JSON payloads,
 which is useful when scripting against the CLI. The default `text` format
 retains the human-readable summaries shown throughout this guide.
 
+## Triggering pipeline runs
+
+Trigger executions with `onepiece pipeline run <pipeline-name>`. Supply
+`--param key=value` pairs to forward ad-hoc parameters to the orchestrator.
+When runs require complex payloads, provide `--params-file <path>` with a JSON
+or TOML document instead. The CLI merges file-sourced parameters with any
+`--param` overrides, allowing simple strings to replace nested structures from
+the document when necessary.
+
+```bash
+onepiece pipeline run orchestration.daily \
+  --params-file params/daily.json \
+  --param ingest_profile=override
+```
+
+The parameters file must contain a mapping at the top level. Nested objects and
+arrays are preserved so that downstream providers receive the full structure.
+
 When inspecting run outcomes with `onepiece pipeline stats`, supply
 `--pipeline <name>` to focus on a single pipeline. The CLI validates the name
 locally and forwards it to either the in-process orchestrator or the Trafalgar

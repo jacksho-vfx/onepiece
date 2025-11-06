@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pytest import MonkeyPatch
 
 from apps.onepiece.app import app as onepiece_app
@@ -46,6 +49,49 @@ def test_pipeline_run_success(monkeypatch: MonkeyPatch) -> None:
     assert client.run_parameters == {"ingest_profile": "episodic"}
     assert client.stream_requested is False
     assert client.closed is True
+
+
+def test_pipeline_run_parameters_from_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    params_path = tmp_path / "params.json"
+    params_path.write_text(
+        json.dumps(
+            {
+                "ingest_profile": "episodic",
+                "notifications": {"email": True, "slack": ["alerts", "ops"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    client = StubPipelineClient(
+        run_payload={
+            "id": "abc123",
+            "pipeline": "orchestration.daily",
+            "status": "queued",
+        }
+    )
+    install_stub_pipeline_client(monkeypatch, client)
+
+    result = runner.invoke(
+        onepiece_app,
+        [
+            "pipeline",
+            "run",
+            "orchestration.daily",
+            "--params-file",
+            str(params_path),
+            "--param",
+            "ingest_profile=override",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert client.run_parameters == {
+        "ingest_profile": "override",
+        "notifications": {"email": True, "slack": ["alerts", "ops"]},
+    }
 
 
 def test_pipeline_run_waits_for_completion(monkeypatch: MonkeyPatch) -> None:

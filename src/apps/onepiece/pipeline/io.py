@@ -14,8 +14,16 @@ from apps.trafalgar.app import _load_pipeline_manifest
 from .clients import PipelineClientError
 
 
-def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
-    parameters: dict[str, str] = {}
+try:  # pragma: no cover - Python 3.11+ ships tomllib
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - python<3.11 compatibility
+    import tomli as tomllib  # type: ignore[no-redef]
+
+
+def _parse_pipeline_parameters(
+    raw: list[str] | None, *, base: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    parameters: dict[str, Any] = dict(base or {})
     if not raw:
         return parameters
     for item in raw:
@@ -29,6 +37,37 @@ def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
             raise PipelineClientError("Parameter keys cannot be empty.")
         parameters[key] = value.strip()
     return parameters
+
+
+def _load_pipeline_parameters_file(path: Path) -> Mapping[str, Any]:
+    if not path.exists():
+        raise PipelineClientError(f"Parameter file '{path}' does not exist.")
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - depends on filesystem errors
+        raise PipelineClientError(f"Failed to read parameter file: {exc}") from exc
+
+    suffix = path.suffix.lower()
+
+    try:
+        if suffix == ".json":
+            data = json.loads(text)
+        elif suffix == ".toml":
+            data = tomllib.loads(text)
+        else:
+            raise PipelineClientError("Parameter files must use JSON or TOML formats.")
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise PipelineClientError(
+            f"Parameter file '{path}' is not valid {suffix.lstrip('.') or 'JSON/TOML'}."
+        ) from exc
+
+    if not isinstance(data, Mapping):
+        raise PipelineClientError(
+            "Parameter files must contain a mapping at the top level."
+        )
+
+    return dict(data)
 
 
 def _load_pipeline_submission(
@@ -337,6 +376,7 @@ def _format_toml_scalar(value: Any) -> str:
 __all__ = [
     "_format_toml_scalar",
     "_is_array_of_tables",
+    "_load_pipeline_parameters_file",
     "_load_pipeline_submission",
     "_normalise_dependencies",
     "_normalise_manifest_value",

@@ -17,6 +17,7 @@ from .clients import (
     create_pipeline_client,
 )
 from .io import (
+    _load_pipeline_parameters_file,
     _load_pipeline_submission,
     _parse_pipeline_parameters,
     _resolve_manifest_format,
@@ -262,6 +263,11 @@ def delete_pipeline_definition(
 def run_pipeline(
     name: str = typer.Argument(..., help="Pipeline identifier."),
     *,
+    params_file: Path | None = typer.Option(
+        None,
+        "--params-file",
+        help="Path to a JSON or TOML document with pipeline parameters.",
+    ),
     parameters: list[str] | None = typer.Option(
         None,
         "--param",
@@ -289,8 +295,15 @@ def run_pipeline(
             param_hint="--wait",
         )
 
+    file_parameters: Mapping[str, Any] | None = None
+    if params_file is not None:
+        try:
+            file_parameters = _load_pipeline_parameters_file(params_file)
+        except PipelineClientError as exc:
+            raise typer.BadParameter(exc.message, param_hint="--params-file") from exc
+
     try:
-        parsed_parameters = _parse_pipeline_parameters(parameters)
+        parsed_parameters = _parse_pipeline_parameters(parameters, base=file_parameters)
     except PipelineClientError as exc:
         raise typer.BadParameter(exc.message) from exc
 
