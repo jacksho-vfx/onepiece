@@ -7,6 +7,7 @@ from pathlib import Path
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner
 
+from libraries.creative.dcc.cinema4d.gather import GatherResult
 from libraries.creative.dcc.cinema4d.metadata import SUMMARY_ENV_VAR
 
 cinema4d_module = import_module("apps.onepiece.dcc.cinema4d")
@@ -134,3 +135,64 @@ def test_cinema4d_show_summary_empty(monkeypatch: MonkeyPatch, tmp_path: Path) -
 
     assert result.exit_code == 1
     assert "No Cinema 4D summary metadata is available." in result.output
+
+
+def test_cinema4d_gather_assets_success(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """Gathering with no missing assets exits successfully."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    runner = CliRunner()
+
+    def fake_gather_references(
+        package_dir: Path, source_root: Path | None = None
+    ) -> GatherResult:
+        assert source_root is None
+        return GatherResult(copied=("tex/diffuse.png",), missing=(), issues=())
+
+    monkeypatch.setattr(cinema4d_module, "gather_references", fake_gather_references)
+
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["gather-assets", str(package_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Copied assets" in result.output
+
+
+def test_cinema4d_gather_assets_reports_missing(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """Missing references surface in the CLI output and exit code."""
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    runner = CliRunner()
+
+    def fake_gather_references(
+        package_dir: Path, source_root: Path | None = None
+    ) -> GatherResult:
+        assert source_root == source_dir
+        return GatherResult(
+            copied=(),
+            missing=("tex/specular.png",),
+            issues=("Cinema4D references must stay within the package: ..",),
+        )
+
+    monkeypatch.setattr(cinema4d_module, "gather_references", fake_gather_references)
+
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["gather-assets", str(package_dir), str(source_dir)],
+    )
+
+    assert result.exit_code == 1
+    assert "Missing assets" in result.output
+    assert "Cinema 4D reference issues detected" in result.output

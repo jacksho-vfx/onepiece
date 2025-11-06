@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 import typer
 
+from libraries.creative.dcc.cinema4d.gather import gather_references
 from libraries.creative.dcc.cinema4d.metadata import (
     SUMMARY_ENV_VAR,
     load_cinema4d_summary,
@@ -121,4 +122,71 @@ def show_summary(
     log.info("cinema4d.show_summary.success", summary_keys=sorted(summary))
 
 
-__all__ = ["app", "validate", "show_summary"]
+def _format_asset_list(title: str, entries: tuple[str, ...]) -> str:
+    bullet_list = "\n".join(f"  - {item}" for item in entries)
+    return f"{title}:\n{bullet_list}"
+
+
+@app.command("gather-assets")
+def gather_assets(
+    package_dir: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        help="Path to the Cinema 4D package directory",
+    ),
+    source_dir: Path | None = typer.Argument(
+        None,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        help="Optional source directory containing referenced assets",
+    ),
+) -> None:
+    """Copy referenced textures and presets into the package directory."""
+
+    log.info(
+        "cinema4d.gather_assets.start",
+        package=str(package_dir),
+        source=str(source_dir) if source_dir is not None else None,
+    )
+
+    result = gather_references(package_dir, source_root=source_dir)
+
+    if result.copied:
+        typer.secho(_format_asset_list("Copied assets", result.copied))
+
+    if result.missing:
+        typer.secho(
+            _format_asset_list("Missing assets", result.missing),
+            fg=typer.colors.RED,
+        )
+
+    if result.issues:
+        typer.secho(
+            "Cinema 4D reference issues detected:\n"
+            + "\n".join(f"- {issue}" for issue in result.issues),
+            fg=typer.colors.RED,
+        )
+
+    log_data = {
+        "package": str(package_dir),
+        "source": str(source_dir) if source_dir is not None else None,
+        "copied": result.copied,
+        "missing": result.missing,
+        "issues": result.issues,
+    }
+
+    if result.missing or result.issues:
+        log.warning("cinema4d.gather_assets.incomplete", **log_data)
+        raise typer.Exit(code=1)
+
+    log.info("cinema4d.gather_assets.success", **log_data)
+
+
+__all__ = ["app", "gather_assets", "validate", "show_summary"]

@@ -1,5 +1,5 @@
 """Cinema 4D specific helpers for OnePiece."""
 
-from typing import Any
+from .gather import GatherResult, gather_references
 
-__all__: Any = []
+__all__ = ["GatherResult", "gather_references"]
