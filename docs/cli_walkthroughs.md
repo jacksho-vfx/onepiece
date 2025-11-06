@@ -219,6 +219,8 @@ Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip
 
    Successful runs echo a confirmation message in green. When issues are detected, the CLI prints a bullet list describing the missing textures or preset files so you can request a corrected package before publishing it to ShotGrid or synchronising to S3.
 
+   > **Note:** Cinema 4D metadata must reference textures and presets using paths that stay within the package directory. Absolute paths or values that resolve outside of the package (for example entries containing `..`) are rejected during validation so problems can be fixed before delivery.
+
 4. Generate a playblast with captured metadata:
 
    ```bash

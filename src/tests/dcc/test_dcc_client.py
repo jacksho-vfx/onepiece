@@ -12,6 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.dcc.publish import app as publish_app
+from libraries.creative.dcc.cinema4d.validation import validate_package
 from libraries.creative.dcc.dcc_client import (
     _assemble_dependency_report,
     _build_launch_command,
@@ -208,6 +209,89 @@ def test_verify_dcc_dependencies_cinema4d_succeeds(tmp_path: Path) -> None:
     assert report.plugins.missing == frozenset()
     assert report.assets.missing == tuple()
     assert report.is_valid is True
+
+
+def _write_cinema4d_metadata(package: Path, payload: dict[str, Any]) -> None:
+    metadata_path = package / "metadata.json"
+    metadata_path.write_text(json.dumps(payload))
+
+
+def test_validate_cinema4d_rejects_absolute_reference(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    absolute_path = "/outside/textures/wood.tx"
+    _write_cinema4d_metadata(
+        package,
+        {"cinema4d": {"textures": [absolute_path]}},
+    )
+
+    issues = validate_package(package)
+
+    assert issues == [
+        f"Cinema4D references must be relative to the package: {absolute_path}"
+    ]
+
+
+def test_validate_cinema4d_rejects_windows_absolute_reference(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    windows_path = r"C:\assets\textures\hero.tx"
+    _write_cinema4d_metadata(
+        package,
+        {"cinema4d": {"textures": [windows_path]}},
+    )
+
+    issues = validate_package(package)
+
+    assert len(issues) == 1
+    assert "Cinema4D references must be relative to the package" in issues[0]
+    assert windows_path in issues[0]
+
+
+def test_validate_cinema4d_rejects_traversal_reference(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    traversal_path = "../presets/outside.c4d"
+    _write_cinema4d_metadata(
+        package,
+        {"cinema4d": {"presets": [traversal_path]}},
+    )
+
+    issues = validate_package(package)
+
+    assert issues == [
+        f"Cinema4D references must stay within the package: {traversal_path}"
+    ]
+
+
+def test_validate_cinema4d_accepts_relative_references(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    texture_path = package / "tex" / "mat.tx"
+    texture_path.parent.mkdir(parents=True, exist_ok=True)
+    texture_path.write_text("payload")
+
+    preset_path = package / "presets" / "lighting.c4d"
+    preset_path.parent.mkdir(parents=True, exist_ok=True)
+    preset_path.write_text("payload")
+
+    _write_cinema4d_metadata(
+        package,
+        {
+            "cinema4d": {
+                "textures": ["tex/mat.tx"],
+                "presets": ["presets/lighting.c4d"],
+            }
+        },
+    )
+
+    issues = validate_package(package)
+
+    assert issues == []
 
 
 def test_format_dependency_error_includes_gpu_details(tmp_path: Path) -> None:
