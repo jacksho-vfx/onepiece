@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     CostModelInput,
-    PeronaEngine,
     RenderMetric,
     ShotTelemetry,
 )

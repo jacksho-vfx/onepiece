@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     DEFAULT_CURRENCY,
-    PeronaEngine,
     RenderMetric,
     ShotLifecycleStage,
     ShotTelemetry,

@@ -8,15 +8,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.perona.web import dashboard as dashboard_module
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.models import (
     CostBreakdown,
-    DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
-    DEFAULT_PNL_BASELINE_COST,
     OptimizationResult,
     RenderMetric as EngineRenderMetric,
     ShotLifecycle,
     ShotLifecycleStage,
+)
+from libraries.analytics.perona.engine.settings import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
 )
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 

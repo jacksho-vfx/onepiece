@@ -9,15 +9,17 @@ from textwrap import dedent
 import pytest
 from _pytest.logging import LogCaptureFixture
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     CostModelInput,
-    DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
-    DEFAULT_SETTINGS_PATH,
-    DEFAULT_PNL_BASELINE_COST,
-    DEFAULT_TARGET_ERROR_RATE,
     OptimizationScenario,
-    PeronaEngine,
+)
+from libraries.analytics.perona.engine.settings import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_SETTINGS_PATH,
+    DEFAULT_TARGET_ERROR_RATE,
     _load_settings,
 )
 

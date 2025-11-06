@@ -9,9 +9,9 @@ from fastapi.testclient import TestClient
 from apps.perona.version import PERONA_VERSION
 from apps.perona.web.dashboard import app, invalidate_engine_cache
 from apps.perona.web.dashboard.templates import dashboard_index_html
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.models import DEFAULT_CURRENCY
+from libraries.analytics.perona.engine.settings import (
     DEFAULT_BASELINE_COST_INPUT,
-    DEFAULT_CURRENCY,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_SETTINGS_PATH,
     DEFAULT_TARGET_ERROR_RATE,

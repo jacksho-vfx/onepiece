@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.perona.web.dashboard import dependencies
-from libraries.analytics.perona.engine import PeronaEngine
+from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,

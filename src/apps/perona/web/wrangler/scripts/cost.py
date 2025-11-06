@@ -6,7 +6,7 @@ import math
 from typing import Any
 
 from apps.perona.web import dashboard as dashboard_module
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.models import (
     OptimizationScenario,
     get_currency_symbol,
 )

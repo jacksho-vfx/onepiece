@@ -6,11 +6,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Mapping, NotRequired, Sequence, TypedDict
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.models import get_currency_symbol
+from libraries.analytics.perona.engine.settings import (
     DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_PNL_BASELINE_COST,
     DEFAULT_TARGET_ERROR_RATE,
-    get_currency_symbol,
 )
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from libraries.analytics.perona.models import (

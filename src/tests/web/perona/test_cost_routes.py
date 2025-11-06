@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web.dashboard import app, invalidate_engine_cache
-from libraries.analytics.perona.engine import DEFAULT_CURRENCY, DEFAULT_SETTINGS_PATH
+from libraries.analytics.perona.engine.models import DEFAULT_CURRENCY
+from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
 
 client = TestClient(app)
 

@@ -13,7 +13,8 @@ from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.web import wrangler
-from libraries.analytics.perona.engine import DEFAULT_SETTINGS_PATH, PeronaEngine
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
 from libraries.analytics.perona.models import RenderMetric, SettingsSummary
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 

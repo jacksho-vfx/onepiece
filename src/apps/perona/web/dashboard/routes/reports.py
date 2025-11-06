@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from apps.perona.web.dashboard import dependencies
 from apps.perona.web.dashboard import reports as report_utils
-from libraries.analytics.perona.engine import PeronaEngine
+from libraries.analytics.perona.engine.engine import PeronaEngine
 
 router = APIRouter(tags=["reports"])
 

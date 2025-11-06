@@ -20,7 +20,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from apps.perona.web.dashboard import dependencies
-from libraries.analytics.perona.engine import PeronaEngine
+from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import RenderMetric
 
 router = APIRouter(tags=["metrics"])
