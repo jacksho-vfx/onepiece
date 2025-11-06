@@ -18,7 +18,7 @@ from typing import Iterable, Mapping
 
 import typer
 
-from apps.perona.app import DEFAULT_DEMO_PORT as PERONA_DEMO_PORT
+from apps.perona.cli.web import DEFAULT_DEMO_PORT as PERONA_DEMO_PORT
 from apps.perona.web.dummy_dashboard import prepare_demo_state
 from apps.trafalgar.app import (
     DEFAULT_PORT as TRAFALGAR_DEFAULT_PORT,
