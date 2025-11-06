@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from apps.trafalgar.web import dashboard
+from apps.trafalgar.web.dashboard import facades as dashboard_facades
 
 
 @pytest.mark.anyio("asyncio")
@@ -88,7 +89,7 @@ def test_delivery_service_prefers_provider_manifest_data(
         calls.append(list(entries))
         return {"files": []}
 
-    monkeypatch.setattr(dashboard, "get_manifest_data", fake_get_manifest_data)
+    monkeypatch.setattr(dashboard_facades, "get_manifest_data", fake_get_manifest_data)
 
     manifest_items = [
         {
@@ -160,7 +161,7 @@ def test_delivery_service_caches_recomputed_manifest(
             ]
         }
 
-    monkeypatch.setattr(dashboard, "get_manifest_data", fake_get_manifest_data)
+    monkeypatch.setattr(dashboard_facades, "get_manifest_data", fake_get_manifest_data)
 
     deliveries = [
         {
