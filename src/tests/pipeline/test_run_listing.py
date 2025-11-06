@@ -37,6 +37,7 @@ def _seed_runs(store: PipelineRunStore) -> list[PipelineRun]:
         store.create_run(
             run,
             PipelineRunEvent(
+                event_id=None,
                 run_id=run_id,
                 pipeline=pipeline,
                 status=status,
@@ -73,6 +74,7 @@ def _create_run(
     store.create_run(
         run,
         PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline=pipeline,
             status=status,
@@ -105,6 +107,7 @@ def _create_queued_run(
     store.create_run(
         run,
         PipelineRunEvent(
+            event_id=None,
             run_id=run_id,
             pipeline=pipeline,
             status="queued",

@@ -809,12 +809,17 @@ def run_events(
 @app.command("watch")
 def watch_run(
     run_id: str = typer.Argument(..., help="Run identifier."),
+    resume_from: str | None = typer.Option(
+        None,
+        "--resume-from",
+        help=("Resume streaming after the specified event id or ISO timestamp."),
+    ),
 ) -> None:
     """Stream live status events for a pipeline run."""
 
     with _using_client() as client:
         try:
-            events = client.stream_events(run_id)
+            events = client.stream_events(run_id, resume_from=resume_from)
             for event in events:
                 for line in _format_run_event(event):
                     typer.echo(line)

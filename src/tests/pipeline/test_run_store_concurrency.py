@@ -42,6 +42,7 @@ def test_run_store_uses_wal_and_busy_timeout(tmp_path: Path) -> None:
         definition_snapshot={},
     )
     event = PipelineRunEvent(
+        event_id=None,
         run_id="wal-demo",
         pipeline="demo",
         status="queued",

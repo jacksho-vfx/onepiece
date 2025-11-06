@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from queue import Queue
@@ -69,7 +70,7 @@ class PipelineClient(Protocol):
     ) -> list[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
 
     def stream_events(
-        self, run_id: str
+        self, run_id: str, *, resume_from: str | None = None
     ) -> Iterable[Mapping[str, Any]]: ...  # pragma: no cover - Protocol
 
     def get_stats(
@@ -106,6 +107,36 @@ class PipelineClient(Protocol):
     ) -> Mapping[str, Any]: ...  # pragma: no cover - Protocol
 
     def close(self) -> None: ...  # pragma: no cover - Protocol
+
+
+def _parse_resume_cursor(value: str | None) -> tuple[int | None, datetime | None]:
+    """Parse a cursor string into resume parameters."""
+
+    if value is None:
+        return None, None
+
+    text = value.strip()
+    if not text:
+        raise PipelineClientError("Resume cursor must not be blank.")
+
+    try:
+        return int(text), None
+    except ValueError:
+        pass
+
+    try:
+        timestamp = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise PipelineClientError(
+            "Resume cursor must be an integer id or ISO timestamp."
+        ) from exc
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    else:
+        timestamp = timestamp.astimezone(timezone.utc)
+
+    return None, timestamp
 
 
 @dataclass(slots=True)
@@ -233,7 +264,10 @@ class LocalPipelineClient:
         except KeyError as exc:
             raise PipelineClientError(str(exc), status_code=404) from exc
 
-    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+    def stream_events(
+        self, run_id: str, *, resume_from: str | None = None
+    ) -> Iterable[Mapping[str, Any]]:
+        after_event_id, since_timestamp = _parse_resume_cursor(resume_from)
         sentinel = object()
         queue: "Queue[object]" = Queue()
 
@@ -243,7 +277,11 @@ class LocalPipelineClient:
                 asyncio.set_event_loop(loop)
 
                 try:
-                    events = self._orchestrator.watch_run_events(run_id)
+                    events = self._orchestrator.watch_run_events(
+                        run_id,
+                        after_event_id=after_event_id,
+                        since_timestamp=since_timestamp,
+                    )
                 except KeyError as exc:
                     queue.put(PipelineClientError(str(exc), status_code=404))
                     queue.put(sentinel)
@@ -480,31 +518,72 @@ class RemotePipelineClient:
                 events.append(event)
         return events
 
-    def stream_events(self, run_id: str) -> Iterable[Mapping[str, Any]]:
+    def stream_events(
+        self, run_id: str, *, resume_from: str | None = None
+    ) -> Iterable[Mapping[str, Any]]:
+        after_event_id, since_timestamp = _parse_resume_cursor(resume_from)
+        since_cursor = (
+            since_timestamp.isoformat() if since_timestamp is not None else None
+        )
+
         def _generator() -> Iterator[Mapping[str, Any]]:
-            try:
-                with self._client.stream("GET", f"runs/{run_id}/events") as response:
-                    if not response.is_success:
-                        detail = _extract_response_detail(response)
+            nonlocal after_event_id, since_cursor
+            attempts = 0
+            while True:
+                params: dict[str, Any] = {}
+                if after_event_id is not None:
+                    params["after_event_id"] = after_event_id
+                elif since_cursor is not None:
+                    params["since"] = since_cursor
+                try:
+                    with self._client.stream(
+                        "GET",
+                        f"runs/{run_id}/events",
+                        params=params or None,
+                    ) as response:
+                        if not response.is_success:
+                            detail = _extract_response_detail(response)
+                            raise PipelineClientError(
+                                detail, status_code=response.status_code
+                            )
+                        attempts = 0
+                        for line in response.iter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("id:"):
+                                try:
+                                    after_event_id = int(line[3:].strip())
+                                except (TypeError, ValueError):
+                                    continue
+                                since_cursor = None
+                                continue
+                            if not line.startswith("data:"):
+                                continue
+                            raw = line[5:].strip()
+                            if not raw:
+                                continue
+                            try:
+                                payload = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+                            if isinstance(payload, Mapping):
+                                event_id = payload.get("event_id")
+                                if event_id is not None:
+                                    try:
+                                        after_event_id = int(event_id)
+                                        since_cursor = None
+                                    except (TypeError, ValueError):
+                                        pass
+                                yield dict(payload)
+                        return
+                except httpx.RequestError as exc:
+                    attempts += 1
+                    if attempts > 3:
                         raise PipelineClientError(
-                            detail, status_code=response.status_code
-                        )
-                    for line in response.iter_lines():
-                        if not line:
-                            continue
-                        if not line.startswith("data:"):
-                            continue
-                        raw = line[5:].strip()
-                        if not raw:
-                            continue
-                        try:
-                            payload = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-                        if isinstance(payload, Mapping):
-                            yield dict(payload)
-            except httpx.RequestError as exc:
-                raise PipelineClientError("Unable to reach pipeline API.") from exc
+                            "Unable to reach pipeline API."
+                        ) from exc
+                    time.sleep(min(2**attempts, 5.0))
+                    continue
 
         return _generator()
 

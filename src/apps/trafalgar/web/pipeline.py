@@ -518,7 +518,12 @@ def list_runs(
 
 def _encode_event(payload: dict[str, Any]) -> bytes:
     data = json.dumps(payload).encode("utf-8")
-    return b"data: " + data + b"\n\n"
+    parts: list[bytes] = []
+    event_id = payload.get("event_id")
+    if event_id is not None:
+        parts.append(f"id: {event_id}\n".encode("utf-8"))
+    parts.append(b"data: " + data + b"\n\n")
+    return b"".join(parts)
 
 
 _TERMINAL_STATUSES = {"succeeded", "failed"}
@@ -537,9 +542,12 @@ async def _cancel_task(task: asyncio.Task[Any] | None) -> None:
 
 async def _live_event_stream(
     events: AsyncIterator[Any],
+    *,
+    start_after: int | None = None,
 ) -> AsyncIterator[bytes]:
     heartbeat_task: asyncio.Task[None] | None = None
     event_task: asyncio.Task[Any] | None = None
+    last_streamed_id = start_after
 
     try:
         while True:
@@ -562,13 +570,33 @@ async def _live_event_stream(
                     event_task = None
 
                 payload = event.serialise()
+                raw_event_id = payload.get("event_id")
+                numeric_event_id: int | None = None
+                if raw_event_id is not None:
+                    try:
+                        numeric_event_id = int(raw_event_id)
+                    except (TypeError, ValueError):
+                        numeric_event_id = None
+
+                if (
+                    numeric_event_id is not None
+                    and last_streamed_id is not None
+                    and numeric_event_id <= last_streamed_id
+                ):
+                    await asyncio.sleep(0)
+                    continue
+
                 await _cancel_task(heartbeat_task)
                 heartbeat_task = None
 
                 if _should_stream_event(payload):
+                    if numeric_event_id is not None:
+                        last_streamed_id = numeric_event_id
                     yield _encode_event(payload)
                     if payload.get("status") in _TERMINAL_STATUSES:
                         return
+                elif numeric_event_id is not None:
+                    last_streamed_id = numeric_event_id
                 await asyncio.sleep(0)
 
             if heartbeat_task in done:
@@ -583,16 +611,48 @@ async def _live_event_stream(
 @router.get("/runs/{run_id}/events")
 async def stream_run_events(
     run_id: str,
+    after_event_id: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description="Resume the stream after the specified event id.",
+            alias="after_event_id",
+        ),
+    ] = None,
+    since: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Only deliver events recorded after the supplied ISO timestamp."
+            ),
+        ),
+    ] = None,
     _principal: AuthenticatedPrincipal = Depends(require_roles(ROLE_PIPELINE_READ)),
 ) -> StreamingResponse:
     orchestrator = get_pipeline_orchestrator()
+    parsed_since: datetime | None = None
+    if since is not None:
+        try:
+            parsed_since = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid 'since' cursor"
+            ) from exc
+        if parsed_since.tzinfo is None:
+            parsed_since = parsed_since.replace(tzinfo=timezone.utc)
+        else:
+            parsed_since = parsed_since.astimezone(timezone.utc)
     try:
-        live_events = orchestrator.watch_run_events(run_id)
+        live_events = orchestrator.watch_run_events(
+            run_id,
+            after_event_id=after_event_id,
+            since_timestamp=parsed_since,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
     return StreamingResponse(
-        _live_event_stream(live_events),
+        _live_event_stream(live_events, start_after=after_event_id),
         media_type="text/event-stream",
     )
 
