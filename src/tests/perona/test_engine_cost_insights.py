@@ -8,6 +8,10 @@ from typing import Any
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
+from libraries.analytics.perona.engine.datasets import (
+    group_frame_times,
+    build_cost_training_dataset,
+)
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import (
     CostModelInput,
@@ -69,7 +73,7 @@ def engine_with_stubbed_data(tmp_path: Path, monkeypatch: MonkeyPatch) -> Any:
         ),
     )
     engine._render_log = render_log
-    engine._frame_times_by_shot = engine._group_frame_times(render_log)
+    engine._frame_times_by_shot = group_frame_times(render_log)
 
     metrics_path = tmp_path / "metrics.ndjson"
     persisted_metric = {
@@ -96,7 +100,12 @@ def engine_with_stubbed_data(tmp_path: Path, monkeypatch: MonkeyPatch) -> Any:
 def test_cost_training_dataset_includes_live_and_persisted_metrics(
     engine_with_stubbed_data: PeronaEngine,
 ) -> None:
-    dataset = engine_with_stubbed_data._build_cost_training_dataset()
+    dataset = build_cost_training_dataset(
+        telemetry=engine_with_stubbed_data._telemetry,
+        render_log=engine_with_stubbed_data._render_log,
+        baseline_cost_input=engine_with_stubbed_data.baseline_cost_input,
+        estimate_cost=engine_with_stubbed_data.estimate_cost,
+    )
 
     assert len(dataset) == 2
 

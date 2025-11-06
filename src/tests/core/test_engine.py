@@ -154,7 +154,7 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
     baseline = engine.baseline_cost_input
     assert baseline.frame_count == 1440
     assert baseline.gpu_hourly_rate == pytest.approx(12.5)
-    assert baseline.currency == "USD"
+    assert baseline.currency == "GBP"
     assert engine.target_error_rate == pytest.approx(0.02)
     assert engine.pnl_explainer().baseline_cost == pytest.approx(9876.5)
     assert result.settings_path == config_path
