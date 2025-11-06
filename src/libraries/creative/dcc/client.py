@@ -217,11 +217,20 @@ class Cinema4DClient(BaseDCCClient):
         super().__init__(dcc=DCC.CINEMA4D)
 
     def export_metadata(self, output_path: str) -> dict[str, object]:
-        metadata = super().export_metadata(output_path)
+        self._log.info("dcc.export_metadata", output_path=output_path)
+        try:
+            scene_path = self.get_current_scene()
+        except NotImplementedError:
+            scene_path = None
+        metadata = self._build_metadata_template(scene_path)
         summary = load_cinema4d_summary()
         if summary:
             metadata["cinema4d"] = summary
+            for key, value in summary.items():
+                if key in metadata and metadata[key] is None:
+                    metadata[key] = value
         metadata.setdefault("dcc", "cinema4d")
         destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(metadata, indent=2, sort_keys=True))
         return metadata
