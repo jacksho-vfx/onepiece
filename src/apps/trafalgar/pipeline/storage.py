@@ -1494,15 +1494,18 @@ class PipelineRunStore:
                     _mark_for_removal(str(row["run_id"]), pipeline)
 
             for pipeline, pipeline_rows in rows_by_pipeline.items():
-                limit = per_pipeline_limits.get(pipeline, max_runs)  # type: ignore[arg-type]
-                if limit is None:
+                if pipeline in per_pipeline_limits:
+                    limit_value: int | None = per_pipeline_limits[pipeline]
+                else:
+                    limit_value = max_runs
+                if limit_value is None:
                     continue
                 retained_rows = [
                     row
                     for row in pipeline_rows
                     if str(row["run_id"]) not in removal_set
                 ]
-                overflow = len(retained_rows) - limit
+                overflow = len(retained_rows) - limit_value
                 if overflow <= 0:
                     continue
                 for row in retained_rows[:overflow]:

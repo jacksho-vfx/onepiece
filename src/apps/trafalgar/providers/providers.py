@@ -259,9 +259,10 @@ class S3DeliveryProvider(DeliveryProvider):
     @staticmethod
     def _format_timestamp(value: Any) -> str | None:
         if isinstance(value, datetime):
-            if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
-            return value.isoformat()
+            timestamp: datetime = value
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            return timestamp.isoformat()
         if value is None:
             return None
         return str(value)

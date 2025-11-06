@@ -21,6 +21,7 @@ from typing import Iterable
 import structlog
 
 from libraries.creative.dcc.enums import DCC
+from libraries.creative.dcc.cinema4d.metadata import load_cinema4d_summary
 from libraries.platform.validations import naming
 
 __all__ = [
@@ -214,3 +215,13 @@ class Cinema4DClient(BaseDCCClient):
 
     def __init__(self) -> None:
         super().__init__(dcc=DCC.CINEMA4D)
+
+    def export_metadata(self, output_path: str) -> dict[str, object]:
+        metadata = super().export_metadata(output_path)
+        summary = load_cinema4d_summary()
+        if summary:
+            metadata["cinema4d"] = summary
+        metadata.setdefault("dcc", "cinema4d")
+        destination = Path(output_path)
+        destination.write_text(json.dumps(metadata, indent=2, sort_keys=True))
+        return metadata

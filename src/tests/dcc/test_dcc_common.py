@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -113,3 +114,43 @@ def test_validate_scene_returns_placeholder(
     client = client_cls()
     issues = client.validate_scene()
     assert issues == [f"{dcc.value} validation not implemented"]
+
+
+def test_cinema4d_export_metadata_merges_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary: dict[str, Any] = {
+        "frame_range": [101.2, 200.6],
+        "renderer": "  Redshift  ",
+        "take": " Beauty ",
+        "additional": {"passes": 3},
+    }
+    summary_path = tmp_path / "c4d_summary.json"
+    summary_path.write_text(json.dumps(summary))
+    monkeypatch.setenv("ONEPIECE_CINEMA4D_SUMMARY", str(summary_path))
+
+    client = Cinema4DClient()
+    output = tmp_path / "metadata.json"
+    metadata = client.export_metadata(str(output))
+
+    assert metadata["dcc"] == "cinema4d"
+    assert metadata["cinema4d"]["frame_range"] == [101, 201]
+    assert metadata["cinema4d"]["renderer"] == "Redshift"
+    assert metadata["cinema4d"]["take"] == "Beauty"
+    assert metadata["cinema4d"]["additional"] == {"passes": 3}
+
+    written = json.loads(output.read_text())
+    assert written == metadata
+
+
+def test_cinema4d_export_metadata_without_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ONEPIECE_CINEMA4D_SUMMARY", raising=False)
+
+    client = Cinema4DClient()
+    output = tmp_path / "metadata.json"
+    metadata = client.export_metadata(str(output))
+
+    assert metadata["dcc"] == "cinema4d"
+    assert "cinema4d" not in metadata
