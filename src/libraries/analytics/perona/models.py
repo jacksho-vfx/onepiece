@@ -10,12 +10,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     CostBreakdown,
     CostModelInput,
     DEFAULT_CURRENCY,
-    PeronaEngine,
-    SettingsLoadResult,
     OptimizationResult as EngineOptimizationResult,
     OptimizationScenario,
     PnLBreakdown as EnginePnLBreakdown,
@@ -26,6 +25,7 @@ from libraries.analytics.perona.engine import (
     ShotLifecycle,
     ShotLifecycleStage,
 )
+from libraries.analytics.perona.engine.settings import SettingsLoadResult
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 

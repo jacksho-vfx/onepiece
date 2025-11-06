@@ -7,9 +7,10 @@ import time
 
 import pytest
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.datasets import group_frame_times
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     DEFAULT_CURRENCY,
-    PeronaEngine,
     RenderMetric,
     ShotLifecycleStage,
     ShotTelemetry,
@@ -144,7 +145,7 @@ def test_risk_heatmap_large_log_benefits_from_caching(engine: PeronaEngine) -> N
 
     engine._telemetry = tuple(expanded_telemetry)
     engine._render_log = tuple(expanded_log)
-    engine._frame_times_by_shot = engine._group_frame_times(engine._render_log)
+    engine._frame_times_by_shot = group_frame_times(engine._render_log)
 
     start = time.perf_counter()
     naive_grouping = [

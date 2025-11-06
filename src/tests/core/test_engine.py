@@ -9,15 +9,17 @@ from textwrap import dedent
 import pytest
 from _pytest.logging import LogCaptureFixture
 
-from libraries.analytics.perona.engine import (
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import (
     CostModelInput,
-    DEFAULT_BASELINE_COST_INPUT,
     DEFAULT_CURRENCY,
-    DEFAULT_SETTINGS_PATH,
-    DEFAULT_PNL_BASELINE_COST,
-    DEFAULT_TARGET_ERROR_RATE,
     OptimizationScenario,
-    PeronaEngine,
+)
+from libraries.analytics.perona.engine.settings import (
+    DEFAULT_BASELINE_COST_INPUT,
+    DEFAULT_PNL_BASELINE_COST,
+    DEFAULT_SETTINGS_PATH,
+    DEFAULT_TARGET_ERROR_RATE,
     _load_settings,
 )
 
@@ -152,7 +154,7 @@ def test_from_settings_applies_custom_overrides(tmp_path: Path) -> None:
     baseline = engine.baseline_cost_input
     assert baseline.frame_count == 1440
     assert baseline.gpu_hourly_rate == pytest.approx(12.5)
-    assert baseline.currency == "USD"
+    assert baseline.currency == "GBP"
     assert engine.target_error_rate == pytest.approx(0.02)
     assert engine.pnl_explainer().baseline_cost == pytest.approx(9876.5)
     assert result.settings_path == config_path

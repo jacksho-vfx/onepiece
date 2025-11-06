@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from apps.perona.web import dashboard as dashboard_module
-from libraries.analytics.perona.engine import OptimizationScenario
+from libraries.analytics.perona.engine.models import OptimizationScenario
 
 from ..registry import WranglerScriptResult
 from .telemetry import (

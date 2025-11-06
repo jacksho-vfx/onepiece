@@ -27,7 +27,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from apps.perona.web import dashboard as live_dashboard
 from apps.perona.web import wrangler as wrangler_module
-from libraries.analytics.perona.engine import PeronaEngine
+from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,

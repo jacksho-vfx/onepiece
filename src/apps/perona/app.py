@@ -31,11 +31,9 @@ from apps.perona.cli.web import (
     _resolve_dashboard_url,
     _resolve_settings_reload_timeout,
 )
-from libraries.analytics.perona.engine import (
-    DEFAULT_SETTINGS_PATH,
-    SUPPORTED_CURRENCIES,
-    PeronaEngine,
-)
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import SUPPORTED_CURRENCIES
+from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
 from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,

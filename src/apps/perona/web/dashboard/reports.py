@@ -9,7 +9,8 @@ from typing import Any, Mapping, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
-from libraries.analytics.perona.engine import PeronaEngine, get_currency_symbol
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import get_currency_symbol
 
 from .routes.analytics import compute_costs_summary, compute_risk_summary
 from .routes.metrics import compute_metrics_summary
