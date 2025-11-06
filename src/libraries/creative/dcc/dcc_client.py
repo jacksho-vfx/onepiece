@@ -22,6 +22,9 @@ from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportReport,
     validate_unreal_export,
 )
+from libraries.creative.dcc.cinema4d.validation import (
+    validate_package as validate_cinema4d_package,
+)
 
 from .models import (
     JSONValue,
@@ -473,6 +476,17 @@ def publish_scene(
                 "Maya validation skipped; insufficient data",
                 extra={"package": str(package_dir)},
             )
+    elif dcc is SupportedDCC.CINEMA4D:
+        cinema4d_issues = validate_cinema4d_package(package_dir)
+        if cinema4d_issues:
+            message = "Cinema4D validation failed; " + "; ".join(
+                sorted(cinema4d_issues)
+            )
+            log.error(
+                "publish_scene_cinema4d_validation_failed",
+                extra={"package": str(package_dir), "details": cinema4d_issues},
+            )
+            raise RuntimeError(message)
 
     report = _assemble_dependency_report(
         dcc,

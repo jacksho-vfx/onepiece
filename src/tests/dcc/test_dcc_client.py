@@ -845,6 +845,77 @@ def test_publish_scene_maya_validation_failure(
 
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_cinema4d_validation_failure(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    metadata["cinema4d"] = {
+        "textures": ["renders/textures/diffuse.tx"],
+        "presets": ["renders/presets/hero.rsp"],
+    }
+
+    with pytest.raises(RuntimeError) as excinfo:
+        publish_scene(
+            SupportedDCC.CINEMA4D,
+            scene_name="ep01_sh040",
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata,
+            destination=destination,
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            plugin_inventory=["redshift"],
+            required_assets=(),
+            gpu_description="OpenGL 4.5",
+        )
+
+    message = str(excinfo.value)
+    assert "Cinema4D validation failed" in message
+    assert "renders/textures/diffuse.tx" in message
+    sync_mock.assert_not_called()
+
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_cinema4d_validation_success(
+    sync_mock: MagicMock, tmp_path: Path
+) -> None:
+    renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
+    texture_file = renders / "textures" / "diffuse.tx"
+    texture_file.parent.mkdir(parents=True, exist_ok=True)
+    texture_file.write_text("texture data")
+    preset_file = renders / "presets" / "hero.rsp"
+    preset_file.parent.mkdir(parents=True, exist_ok=True)
+    preset_file.write_text("preset data")
+    metadata["cinema4d"] = {
+        "textures": [{"path": f"renders/textures/{texture_file.name}"}],
+        "presets": [f"renders/presets/{preset_file.name}"],
+    }
+
+    result = publish_scene(
+        SupportedDCC.CINEMA4D,
+        scene_name="ep01_sh041",
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["redshift"],
+        required_assets=(),
+        gpu_description="OpenGL 4.5",
+    )
+
+    expected_package = destination / "ep01_sh041"
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://libraries-bucket/vfx/OP/ep01_sh041"
+    sync_mock.assert_called_once()
+
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_honours_dry_run(sync_mock: MagicMock, tmp_path: Path) -> None:
     renders, previews, otio, metadata, destination = _create_publish_inputs(tmp_path)
 
