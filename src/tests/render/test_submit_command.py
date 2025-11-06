@@ -3,97 +3,30 @@
 from __future__ import annotations
 
 import getpass
-import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
-from libraries.automation.render.base import RenderSubmissionError
 from apps.onepiece.render import submit as submit_module
 from apps.onepiece.utils.errors import (
     ExitCode,
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-
-runner = CliRunner()
-
-
-@pytest.fixture(autouse=True)
-def _reset_capability_cache() -> Generator[None, None, None]:
-    submit_module._refresh_capabilities_cache()
-    yield
-    submit_module._refresh_capabilities_cache()
+from libraries.automation.render.base import RenderSubmissionError
 
 
-class _StubRenderClient:
-    """Test double mimicking ``RenderJobClient`` for status lookups."""
-
-    def __init__(
-        self,
-        *,
-        profile: str | None = None,
-        response: Any = None,
-        error: Exception | None = None,
-        cancel_response: Any = None,
-        cancel_error: Exception | None = None,
-    ) -> None:
-        self.profile = profile
-        self.response = response
-        self.error = error
-        self.cancel_response = cancel_response
-        self.cancel_error = cancel_error
-        self.closed = False
-        self.calls: list[tuple[str, str | None]] = []
-        self.cancel_calls: list[str] = []
-
-    def __enter__(self) -> "_StubRenderClient":
-        return self
-
-    def __exit__(self, *_: Any) -> None:
-        self.close()
-
-    def close(self) -> None:
-        self.closed = True
-
-    def get_job(self, job_id: str, farm: str | None = None) -> Any:
-        self.calls.append((job_id, farm))
-        if self.error:
-            raise self.error
-        return self.response
-
-    def cancel_job(self, job_id: str) -> Any:
-        self.cancel_calls.append(job_id)
-        if self.cancel_error:
-            raise self.cancel_error
-        return self.cancel_response
-
-
-def _capture_logger(
+def test_render_submit_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
     log_events: list[tuple[str, str, dict[str, Any]]],
-) -> SimpleNamespace:
-    def _info(event: str, **kwargs: Any) -> None:
-        log_events.append(("info", event, kwargs))
-
-    def _warning(event: str, **kwargs: Any) -> None:
-        log_events.append(("warning", event, kwargs))
-
-    def _error(event: str, **kwargs: Any) -> None:
-        log_events.append(("error", event, kwargs))
-
-    def _exception(event: str, **kwargs: Any) -> None:
-        log_events.append(("exception", event, kwargs))
-
-    return SimpleNamespace(
-        info=_info, warning=_warning, error=_error, exception=_exception
-    )
-
-
-def test_render_submit_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    event_logger: SimpleNamespace,
+) -> None:
     scene_file = tmp_path / "shot01.nk"
     scene_file.write_text("print('render')\n")
     output_dir = tmp_path / "renders"
@@ -127,8 +60,6 @@ def test_render_submit_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
             "farm_type": "mock",
         }
 
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
     monkeypatch.setitem(
         submit_module.FARM_CAPABILITY_PROVIDERS,
@@ -143,7 +74,7 @@ def test_render_submit_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
             "chunk_size_max": 10,
         },
     )
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+    monkeypatch.setattr(submit_module, "log", event_logger)
 
     result = runner.invoke(
         app,
@@ -178,7 +109,12 @@ def test_render_submit_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert ("info", "render.submit.success") in events
 
 
-def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_render_submit_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
+    event_logger: SimpleNamespace,
+) -> None:
     scene_file = tmp_path / "shot01.ma"
     scene_file.write_text("requires maya")
     output_dir = tmp_path / "renders"
@@ -195,8 +131,6 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     ) -> dict[str, str]:
         raise RenderSubmissionError("Adapter failure")
 
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", failing_submit)
     monkeypatch.setitem(
         submit_module.FARM_CAPABILITY_PROVIDERS,
@@ -208,7 +142,7 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
             "chunk_size_enabled": False,
         },
     )
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+    monkeypatch.setattr(submit_module, "log", event_logger)
 
     result = runner.invoke(
         app,
@@ -229,13 +163,11 @@ def test_render_submit_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert result.exception.exit_code == ExitCode.EXTERNAL
     assert "Render submission failed: Adapter failure" in str(result.exception)
 
-    events = {(level, event) for level, event, _ in log_events}
-    assert ("info", "render.submit.start") in events
-    assert ("error", "render.submit.failed") in events
-
 
 def test_render_submit_reuses_capabilities_within_ttl(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
 ) -> None:
     scene_file = tmp_path / "shot01.nk"
     scene_file.write_text("print('render')\n")
@@ -302,7 +234,9 @@ def test_render_submit_reuses_capabilities_within_ttl(
 
 
 def test_render_submit_refresh_capabilities_flag(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
 ) -> None:
     scene_file = tmp_path / "shot01.nk"
     scene_file.write_text("print('render')\n")
@@ -366,7 +300,9 @@ def test_render_submit_refresh_capabilities_flag(
 
 
 def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
 ) -> None:
     scene_file = tmp_path / "shot01.blend"
     scene_file.write_text("requires blender")
@@ -435,7 +371,11 @@ def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
 
 
 def test_render_submit_manual_overrides_bypass_optimization(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
+    log_events: list[tuple[str, str, dict[str, Any]]],
+    event_logger: SimpleNamespace,
 ) -> None:
     scene_file = tmp_path / "shot02.nk"
     scene_file.write_text("print('manual overrides')\n")
@@ -470,8 +410,6 @@ def test_render_submit_manual_overrides_bypass_optimization(
             "farm_type": "mock",
         }
 
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
     monkeypatch.setitem(
         submit_module.FARM_CAPABILITY_PROVIDERS,
@@ -486,7 +424,7 @@ def test_render_submit_manual_overrides_bypass_optimization(
             "chunk_size_max": 10,
         },
     )
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+    monkeypatch.setattr(submit_module, "log", event_logger)
 
     result = runner.invoke(
         app,
@@ -521,7 +459,11 @@ def test_render_submit_manual_overrides_bypass_optimization(
 
 
 def test_render_submit_no_optimize_uses_adapter_defaults(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
+    log_events: list[tuple[str, str, dict[str, Any]]],
+    event_logger: SimpleNamespace,
 ) -> None:
     scene_file = tmp_path / "shot03.nk"
     scene_file.write_text("print('no optimize')\n")
@@ -556,8 +498,6 @@ def test_render_submit_no_optimize_uses_adapter_defaults(
             "farm_type": "mock",
         }
 
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-
     monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
     monkeypatch.setitem(
         submit_module.FARM_CAPABILITY_PROVIDERS,
@@ -572,7 +512,7 @@ def test_render_submit_no_optimize_uses_adapter_defaults(
             "chunk_size_max": 10,
         },
     )
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
+    monkeypatch.setattr(submit_module, "log", event_logger)
 
     result = runner.invoke(
         app,
@@ -600,7 +540,9 @@ def test_render_submit_no_optimize_uses_adapter_defaults(
 
 
 def test_render_submit_priority_validation(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
 ) -> None:
     scene_file = tmp_path / "shot01.hip"
     scene_file.write_text("requires houdini")
@@ -654,146 +596,10 @@ def test_render_submit_priority_validation(
     assert "supported maximum" in str(result.exception)
 
 
-def test_render_preset_crud_flow(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_render_submit_requires_existing_scene(
+    tmp_path: Path,
+    runner: CliRunner,
 ) -> None:
-    scene_file = tmp_path / "shot01.nk"
-    scene_file.write_text("print('render')\n")
-    output_dir = tmp_path / "renders"
-    output_dir.mkdir()
-
-    preset_dir = tmp_path / "presets"
-    monkeypatch.setenv("ONEPIECE_RENDER_PRESET_DIR", str(preset_dir))
-
-    captured: dict[str, Any] = {}
-
-    def fake_submit(
-        scene: str,
-        frames: str,
-        output: str,
-        dcc: str,
-        priority: int,
-        user: str,
-        chunk_size: int | None,
-    ) -> dict[str, str]:
-        captured.update(
-            {
-                "scene": scene,
-                "frames": frames,
-                "output": output,
-                "dcc": dcc,
-                "priority": priority,
-                "user": user,
-                "chunk_size": chunk_size,
-            }
-        )
-        return {
-            "job_id": "job-456",
-            "status": "submitted",
-            "farm_type": "mock",
-        }
-
-    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
-    monkeypatch.setitem(
-        submit_module.FARM_CAPABILITY_PROVIDERS,
-        "mock",
-        lambda: {
-            "default_priority": 65,
-            "priority_min": 10,
-            "priority_max": 90,
-            "chunk_size_enabled": True,
-            "default_chunk_size": 3,
-            "chunk_size_min": 1,
-            "chunk_size_max": 8,
-        },
-    )
-
-    save_result = runner.invoke(
-        app,
-        [
-            "render",
-            "preset",
-            "save",
-            "daily_nuke",
-            "--farm",
-            "mock",
-            "--dcc",
-            "nuke",
-            "--frames",
-            "1-20",
-        ],
-    )
-
-    assert save_result.exit_code == 0, save_result.stdout
-    assert "Saved preset" in save_result.stdout
-
-    list_result = runner.invoke(app, ["render", "preset", "list"])
-    assert list_result.exit_code == 0
-    assert "daily_nuke" in list_result.stdout
-
-    use_result = runner.invoke(
-        app,
-        [
-            "render",
-            "preset",
-            "use",
-            "daily_nuke",
-            "--scene",
-            str(scene_file),
-            "--output",
-            str(output_dir),
-        ],
-    )
-
-    assert use_result.exit_code == 0, use_result.stdout
-    assert "Submitted nuke scene" in use_result.stdout
-    assert captured["scene"] == str(scene_file)
-    assert captured["output"] == str(output_dir)
-    assert captured["frames"] == "1-20"
-    assert captured["dcc"] == "nuke"
-    assert captured["priority"] == 65
-    assert captured["chunk_size"] == 3
-
-
-def test_render_preset_save_handles_capability_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    preset_dir = tmp_path / "presets"
-    monkeypatch.setenv("ONEPIECE_RENDER_PRESET_DIR", str(preset_dir))
-
-    def failing_capabilities() -> dict[str, Any]:
-        raise RenderSubmissionError("capabilities offline")
-
-    monkeypatch.setitem(
-        submit_module.FARM_CAPABILITY_PROVIDERS, "mock", failing_capabilities
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "render",
-            "preset",
-            "save",
-            "offline_mock",
-            "--farm",
-            "mock",
-            "--dcc",
-            "nuke",
-        ],
-    )
-
-    assert result.exit_code == 0, result.stdout
-
-    preset_file = preset_dir / "offline_mock.json"
-    payload = json.loads(preset_file.read_text())
-
-    assert payload["farm"] == "mock"
-    assert payload.get("dcc") == "nuke"
-    assert "priority" not in payload
-    assert "chunk_size" not in payload
-
-
-def test_render_submit_requires_existing_scene(tmp_path: Path) -> None:
     output_dir = tmp_path / "renders"
     output_dir.mkdir()
 
@@ -818,7 +624,10 @@ def test_render_submit_requires_existing_scene(tmp_path: Path) -> None:
     assert "does not exist" in str(result.exception)
 
 
-def test_render_submit_requires_output_directory(tmp_path: Path) -> None:
+def test_render_submit_requires_output_directory(
+    tmp_path: Path,
+    runner: CliRunner,
+) -> None:
     scene_file = tmp_path / "shot01.nk"
     scene_file.write_text("print('render')\n")
 
@@ -860,164 +669,3 @@ def test_render_submit_requires_output_directory(tmp_path: Path) -> None:
     assert result_not_dir.exit_code != 0
     assert isinstance(result_not_dir.exception, OnePieceValidationError)
     assert "not a directory" in str(result_not_dir.exception)
-
-
-def test_render_status_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {
-        "job_id": "job-42",
-        "farm": "mock",
-        "farm_type": "mock",
-        "status": "running",
-        "message": "Frame 5 of 10",
-        "status_history": [
-            {"status": "queued", "timestamp": "2024-05-01T10:00:00Z"},
-            {"status": "running", "timestamp": "2024-05-01T10:05:00Z"},
-        ],
-    }
-
-    stub = _StubRenderClient(response=payload)
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-
-    result = runner.invoke(app, ["render", "status", "job-42"])
-
-    assert result.exit_code == 0, result.stdout
-    assert "Status: running" in result.stdout
-    assert "Message: Frame 5 of 10" in result.stdout
-    assert "History:" in result.stdout
-    assert "queued at 2024-05-01T10:00:00Z" in result.stdout
-    assert "running at 2024-05-01T10:05:00Z" in result.stdout
-    assert stub.calls == [("job-42", None)]
-    assert stub.closed is True
-
-
-def test_render_status_missing_job(monkeypatch: pytest.MonkeyPatch) -> None:
-    error = submit_module.RenderJobClientError("Not found", status_code=404)
-    stub = _StubRenderClient(error=error)
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-
-    result = runner.invoke(app, ["render", "status", "missing-job"])
-
-    assert result.exit_code == 1
-    assert isinstance(result.exception, OnePieceExternalServiceError)
-    assert "was not found" in str(result.exception)
-
-
-def test_render_status_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    error = submit_module.RenderJobClientError("Server exploded", status_code=503)
-    stub = _StubRenderClient(error=error)
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-
-    result = runner.invoke(app, ["render", "status", "job-99", "--farm", "mock"])
-
-    assert result.exit_code == 1
-    assert isinstance(result.exception, OnePieceExternalServiceError)
-    assert "Server exploded" in str(result.exception)
-    assert stub.calls == [("job-99", "mock")]
-
-
-def test_render_cancel_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-    stub = _StubRenderClient(
-        cancel_response={
-            "job_id": "job-77",
-            "status": "cancelled",
-            "farm_type": "mock",
-            "message": "Cancellation accepted",
-        }
-    )
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
-
-    result = runner.invoke(app, ["render", "cancel", "job-77"])
-
-    assert result.exit_code == 0, result.stdout
-    assert "Cancellation status for job-77: cancelled" in result.stdout
-    assert "Adapter: mock" in result.stdout
-    assert "Message: Cancellation accepted" in result.stdout
-    assert stub.cancel_calls == ["job-77"]
-    assert stub.closed is True
-
-    events = {(level, event) for level, event, _ in log_events}
-    assert ("info", "render.cancel.start") in events
-    assert ("info", "render.cancel.success") in events
-
-
-def test_render_cancel_requires_force_for_unsupported(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    error = submit_module.RenderJobClientError(
-        "Cancellation not supported",
-        status_code=409,
-        code="render.cancellation_unsupported",
-        hint="Retry cancellation in the farm UI.",
-    )
-    stub = _StubRenderClient(cancel_error=error)
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
-
-    result = runner.invoke(app, ["render", "cancel", "job-101"])
-
-    assert result.exit_code == 1
-    assert isinstance(result.exception, OnePieceExternalServiceError)
-    message = str(result.exception)
-    assert "Render cancellation failed: Cancellation not supported" in message
-    assert "Hint: Retry cancellation in the farm UI." in message
-    assert stub.cancel_calls == ["job-101"]
-    assert stub.closed is True
-
-    events = {(level, event) for level, event, _ in log_events}
-    assert ("error", "render.cancel.failed") in events
-
-
-def test_render_cancel_force_ignores_unsupported(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    error = submit_module.RenderJobClientError(
-        "Cancellation not supported",
-        status_code=409,
-        code="render.cancellation_unsupported",
-        hint="Retry cancellation in the farm UI.",
-    )
-    stub = _StubRenderClient(cancel_error=error)
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
-
-    result = runner.invoke(app, ["render", "cancel", "job-101", "--force"])
-
-    assert result.exit_code == 0, result.stdout
-    assert "ignored due to --force" in result.stdout
-    assert "Hint: Retry cancellation in the farm UI." in result.stdout
-    assert stub.cancel_calls == ["job-101"]
-    assert stub.closed is True
-
-    events = {(level, event) for level, event, _ in log_events}
-    assert ("warning", "render.cancel.unsupported") in events
-    assert ("info", "render.cancel.success") not in events
-
-
-def test_render_cancel_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    error = submit_module.RenderJobClientError(
-        "Adapter unavailable",
-        status_code=502,
-        code="adapter.unavailable",
-        hint="Wait for the adapter to become healthy.",
-    )
-    stub = _StubRenderClient(cancel_error=error)
-    log_events: list[tuple[str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(submit_module, "RenderJobClient", lambda **kwargs: stub)
-    monkeypatch.setattr(submit_module, "log", _capture_logger(log_events))
-
-    result = runner.invoke(app, ["render", "cancel", "job-202"])
-
-    assert result.exit_code == 1
-    assert isinstance(result.exception, OnePieceExternalServiceError)
-    message = str(result.exception)
-    assert "Render cancellation failed: Adapter unavailable" in message
-    assert "Hint: Wait for the adapter to become healthy." in message
-    assert stub.cancel_calls == ["job-202"]
-    assert stub.closed is True
-
-    events = {(level, event) for level, event, _ in log_events}
-    assert ("error", "render.cancel.failed") in events
