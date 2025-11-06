@@ -7,6 +7,7 @@
 - [Validate a workstation environment](#1-validate-a-workstation-environment) — Confirm credentials and environment variables before touching production systems.
 - [Dry-run an S3 ingest](#2-dry-run-an-s3-ingest) — Practise resumable vendor deliveries with analytics reports.
 - [Package a DCC publish for QA](#4-package-a-dcc-publish-for-qa) — Rehearse the end-to-end publishing and validation workflow.
+- [Validate a Cinema 4D package](#6-validate-a-cinema-4d-package) — Confirm textures and presets resolve before hand-off.
 
 These walkthroughs demonstrate common end-to-end flows using the OnePiece CLI. They rely on the sample assets in `docs/examples/` so that you can rehearse the workflows without connecting to production infrastructure.
 
@@ -198,6 +199,25 @@ notes,"QA dry run for onboarding"
    ```
 
    Selectively disable operations when you need to preserve specific references or namespaces. Every run emits a structured summary to the log so pipeline dashboards can track cleanup activity. 【F:src/apps/onepiece/dcc/animation.py†L1-L149】
+
+## 6. Validate a Cinema 4D package
+
+Use the Cinema 4D validator when you receive a packaged scene (typically a `.zip` unpacked into a review directory) and want to confirm all of the referenced assets are present.
+
+1. Unpack the package into a working directory and locate the folder containing the `manifest.json` metadata. For example:
+
+   ```bash
+   unzip ~/Downloads/lookdev_turntable.zip -d /tmp/lookdev_turntable
+   ls /tmp/lookdev_turntable
+   ```
+
+2. Run the validator against the unpacked directory:
+
+   ```bash
+   onepiece dcc cinema4d validate /tmp/lookdev_turntable
+   ```
+
+   Successful runs echo a confirmation message in green. When issues are detected, the CLI prints a bullet list describing the missing textures or preset files so you can request a corrected package before publishing it to ShotGrid or synchronising to S3.
 
 4. Generate a playblast with captured metadata:
 
