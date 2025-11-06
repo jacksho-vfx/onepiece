@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -33,16 +34,60 @@ def _iter_reference_paths(value: Any) -> Iterable[str]:
             yield from _iter_reference_paths(item)
 
 
-def _normalise_references(value: Any) -> tuple[str, ...]:
-    """Return the deduplicated reference paths extracted from ``value``."""
+def _normalise_reference(entry: str) -> str | None:
+    """Return ``entry`` stripped, normalised, and using forward slashes."""
+
+    raw = entry.strip()
+    if not raw:
+        return None
+    cleaned = raw.replace("\\", "/")
+    normalised = posixpath.normpath(cleaned)
+    return normalised
+
+
+def _looks_like_windows_absolute(path: str) -> bool:
+    """Return ``True`` when ``path`` matches a Windows absolute path pattern."""
+
+    if len(path) >= 2 and path[1] == ":" and path[0].isalpha():
+        return True
+    if path.startswith("//"):
+        return True
+    return False
+
+
+def _classify_references(
+    package_dir: Path, value: Any
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return valid references and validation issues extracted from ``value``."""
 
     seen: dict[str, None] = {}
+    issues: list[str] = []
+    package_root = package_dir.resolve()
+
     for entry in _iter_reference_paths(value):
-        path = entry.strip()
-        if not path:
+        normalised = _normalise_reference(entry)
+        if normalised is None:
             continue
-        seen.setdefault(path)
-    return tuple(seen.keys())
+        if normalised in seen:
+            continue
+
+        reference_path = Path(normalised)
+        if reference_path.is_absolute() or _looks_like_windows_absolute(normalised):
+            issues.append(
+                f"Cinema4D references must be relative to the package: {entry}"
+            )
+            continue
+
+        candidate = (package_root / reference_path).resolve(strict=False)
+        try:
+            candidate.relative_to(package_root)
+        except ValueError:
+            issues.append(f"Cinema4D references must stay within the package: {entry}")
+            continue
+
+        seen[normalised] = None
+
+    return tuple(seen.keys()), tuple(issues)
 
 
 def _collect_missing_assets(
@@ -71,13 +116,19 @@ def validate_package(package_dir: Path) -> list[str]:
 
     issues: list[str] = []
 
-    textures = _normalise_references(cinema4d_metadata.get("textures"))
+    textures, texture_issues = _classify_references(
+        package_dir, cinema4d_metadata.get("textures")
+    )
+    issues.extend(texture_issues)
     missing_textures = _collect_missing_assets(package_dir, textures)
     if missing_textures:
         formatted = ", ".join(sorted(missing_textures))
         issues.append(f"Missing Cinema4D texture files: {formatted}")
 
-    presets = _normalise_references(cinema4d_metadata.get("presets"))
+    presets, preset_issues = _classify_references(
+        package_dir, cinema4d_metadata.get("presets")
+    )
+    issues.extend(preset_issues)
     missing_presets = _collect_missing_assets(package_dir, presets)
     if missing_presets:
         formatted = ", ".join(sorted(missing_presets))
