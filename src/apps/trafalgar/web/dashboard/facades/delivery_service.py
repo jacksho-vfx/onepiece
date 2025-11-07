@@ -178,7 +178,9 @@ class DeliveryService:
 
         return result
 
-    def get_delivery_manifest(self, project_name: str, identifier: str) -> dict[str, Any]:
+    def get_delivery_manifest(
+        self, project_name: str, identifier: str
+    ) -> dict[str, Any]:
         lookup = identifier.strip()
         if not lookup:
             raise KeyError("Empty delivery identifier")

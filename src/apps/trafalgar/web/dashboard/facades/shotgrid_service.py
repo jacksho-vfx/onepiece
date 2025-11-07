@@ -70,18 +70,22 @@ class ShotGridService:
         self._client = client
         self._configured_projects = set(known_projects or [])
         self._fetcher = version_fetcher
-        default_ttl, default_max_records, default_max_projects = _load_cache_configuration(
-            state=state
+        default_ttl, default_max_records, default_max_projects = (
+            _load_cache_configuration(state=state)
         )
         ttl_source = cache_ttl if cache_ttl is not None else default_ttl
         max_records_source = (
             cache_max_records if cache_max_records is not None else default_max_records
         )
         max_projects_source = (
-            cache_max_projects if cache_max_projects is not None else default_max_projects
+            cache_max_projects
+            if cache_max_projects is not None
+            else default_max_projects
         )
         self._cache_ttl: float = _parse_float(ttl_source, default_ttl)
-        self._cache_max_records: int = _parse_int(max_records_source, default_max_records)
+        self._cache_max_records: int = _parse_int(
+            max_records_source, default_max_records
+        )
         self._cache_max_projects: int = _parse_int(
             max_projects_source, default_max_projects
         )
@@ -114,7 +118,9 @@ class ShotGridService:
         if max_records is not None:
             self._cache_max_records = _parse_int(max_records, self._cache_max_records)
         if max_projects is not None:
-            self._cache_max_projects = _parse_int(max_projects, self._cache_max_projects)
+            self._cache_max_projects = _parse_int(
+                max_projects, self._cache_max_projects
+            )
 
     def invalidate_cache(self) -> None:
         """Clear cached ShotGrid responses."""
