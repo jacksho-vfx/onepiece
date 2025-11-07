@@ -7,7 +7,7 @@ from typing import Any, Iterable, Mapping, Sequence, Type
 import pytest
 
 from apps.trafalgar.web import dashboard
-from apps.trafalgar.web.dashboard import facades as dashboard_facades
+from apps.trafalgar.web.dashboard.facades import shotgrid_service
 
 
 def test_shotgrid_service_accepts_generator_versions() -> None:
@@ -129,7 +129,7 @@ def test_shotgrid_service_discover_projects_handles_non_iterable_listing(
         def warning(self, event: str, **context: Any) -> None:
             captured_events.append((event, context))
 
-    monkeypatch.setattr(dashboard_facades, "logger", DummyLogger())
+    monkeypatch.setattr(shotgrid_service, "logger", DummyLogger())
 
     client = UnexpectedProjectClient(
         [
