@@ -14,7 +14,7 @@ import structlog
 from apps.onepiece.render.submit import (
     FARM_ADAPTERS,
     FARM_CAPABILITY_PROVIDERS,
-    _resolve_priority_and_chunk_size,
+    resolve_priority_and_chunk_size,
 )
 from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
@@ -220,7 +220,7 @@ class RenderSubmissionService:
         if capability_data is None and capability_provider is None:
             capability_data = {}
         try:
-            resolved_priority, resolved_chunk, _, _ = _resolve_priority_and_chunk_size(
+            resolved_priority, resolved_chunk, _, _ = resolve_priority_and_chunk_size(
                 farm=request.farm,
                 priority=request.priority,
                 chunk_size=request.chunk_size,

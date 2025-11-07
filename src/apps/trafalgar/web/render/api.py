@@ -9,7 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from apps.onepiece.render.submit import _get_adapter_capabilities
+from apps.onepiece.render.submit import get_adapter_capabilities
 from libraries.automation.render.base import (
     AdapterCapabilities,
     RenderSubmissionError,
@@ -35,7 +35,7 @@ def build_farm_capabilities(
 
     if capabilities is None:
         try:
-            raw_capabilities: AdapterCapabilities = _get_adapter_capabilities(farm)
+            raw_capabilities: AdapterCapabilities = get_adapter_capabilities(farm)
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.warning(
                 "render.farm.capabilities.unavailable",
