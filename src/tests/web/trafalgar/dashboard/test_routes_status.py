@@ -379,12 +379,11 @@ async def test_project_detail_returns_summary(
     assert response.status_code == 200
     data = response.json()
     assert data["project"] == "AlPhA"
-    assert data["episodes"] == 2
+    assert len(data["episodes"]) == 2
     assert data["shots"] == 2
     assert data["versions"] == 3
-    assert data["approved_versions"] == 1
     assert data["status_totals"] == {"approved": 1, "published": 2}
-    assert [item["version"] for item in data["latest_published"]] == ["v003", "v002"]
+    assert [item["version"] for item in data["latest_versions"]] == ["v003", "v002"]
 
 
 @pytest.mark.anyio("asyncio")
