@@ -175,9 +175,7 @@ def _is_hidden(obj: object, module: object) -> bool:
     get_render_mode = getattr(obj, "GetRenderMode", None)
     if callable(get_editor_mode) and callable(get_render_mode) and mode_off is not None:
         try:
-            return bool(
-                get_editor_mode() == mode_off and get_render_mode() == mode_off
-            )
+            return bool(get_editor_mode() == mode_off and get_render_mode() == mode_off)
         except TypeError:
             return False
     hidden_flag = getattr(obj, "is_hidden", None)
