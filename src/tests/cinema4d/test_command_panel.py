@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from libraries.creative.dcc.cinema4d.panel import CommandPanel
+from libraries.creative.dcc.cinema4d.panel import CommandPanel, register_cleanup_command
 
 
 class FakeGeDialog:
@@ -50,6 +50,11 @@ class FakeGeDialog:
 
 class FakeGuiModule:
     GeDialog = FakeGeDialog
+    messages: list[str] = []
+
+    @staticmethod
+    def MessageDialog(message: str) -> None:
+        FakeGuiModule.messages.append(message)
 
 
 class FakeCinema4DModule:
@@ -123,3 +128,34 @@ def test_panel_supports_modal_open() -> None:
         "defaultw": 320,
         "defaulth": 200,
     }
+
+
+def test_register_cleanup_command_runs_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from libraries.creative.dcc.cinema4d import panel as panel_module
+
+    FakeGuiModule.messages = []
+    panel = CommandPanel(module=FakeCinema4DModule)
+
+    expected_stats = {
+        "removed_materials": 3,
+        "removed_empty_nulls": 2,
+        "removed_hidden_singletons": 1,
+        "removed_layers": 4,
+    }
+
+    def fake_cleanup_scene(**kwargs: object) -> dict[str, int]:
+        assert kwargs == {"module": FakeCinema4DModule}
+        return expected_stats
+
+    monkeypatch.setattr(panel_module, "cleanup_scene", fake_cleanup_scene)
+    register_cleanup_command(panel, module=FakeCinema4DModule)
+
+    dialog = panel.show()
+    button_id, *_ = dialog.buttons[-1]
+    dialog.Command(button_id, None)
+
+    assert FakeGuiModule.messages == [
+        "Removed 3 materials, 2 nulls, 1 hidden objects, 4 layers."
+    ]

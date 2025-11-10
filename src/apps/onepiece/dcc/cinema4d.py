@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 import typer
 
+from libraries.creative.dcc.cinema4d.cleanup import cleanup_scene
 from libraries.creative.dcc.cinema4d.gather import gather_references
 from libraries.creative.dcc.cinema4d.metadata import (
     SUMMARY_ENV_VAR,
@@ -124,6 +125,58 @@ def show_summary(
 
     typer.echo("\n".join(lines))
     log.info("cinema4d.show_summary.success", summary_keys=sorted(summary))
+
+
+def _format_cleanup_summary(stats: dict[str, int]) -> str:
+    return (
+        "Removed "
+        f"{stats.get('removed_materials', 0)} materials, "
+        f"{stats.get('removed_empty_nulls', 0)} nulls, "
+        f"{stats.get('removed_hidden_singletons', 0)} hidden objects, "
+        f"{stats.get('removed_layers', 0)} layers."
+    )
+
+
+@app.command("cleanup-scene")
+def run_cleanup_scene(
+    remove_unused_materials: bool = typer.Option(
+        True,
+        "--remove-unused-materials/--keep-unused-materials",
+        help="Remove materials that are no longer assigned to any objects.",
+    ),
+    remove_empty_nulls: bool = typer.Option(
+        True,
+        "--remove-empty-nulls/--keep-empty-nulls",
+        help="Delete null objects that do not contain children.",
+    ),
+    remove_hidden_singletons: bool = typer.Option(
+        True,
+        "--remove-hidden-singletons/--keep-hidden-singletons",
+        help="Delete hidden objects that do not contain children.",
+    ),
+    remove_unused_layers: bool = typer.Option(
+        True,
+        "--remove-unused-layers/--keep-unused-layers",
+        help="Remove unused layer entries that no longer have assignments.",
+    ),
+) -> None:
+    """Run Cinema 4D scene cleanup helpers."""
+
+    operations = {
+        "remove_unused_materials": remove_unused_materials,
+        "remove_empty_nulls": remove_empty_nulls,
+        "remove_hidden_singletons": remove_hidden_singletons,
+        "remove_unused_layers": remove_unused_layers,
+    }
+
+    if not any(operations.values()):
+        raise typer.BadParameter("At least one cleanup operation must be enabled")
+
+    log.info("cinema4d.cleanup_scene.start", operations=operations)
+    stats = cleanup_scene(**operations)
+    summary = _format_cleanup_summary(stats)
+    typer.echo(f"Cinema 4D cleanup complete. {summary}")
+    log.info("cinema4d.cleanup_scene.summary", **stats)
 
 
 def _format_asset_list(title: str, entries: tuple[str, ...]) -> str:
@@ -268,6 +321,7 @@ __all__ = [
     "app",
     "gather_assets",
     "normalise_paths",
+    "run_cleanup_scene",
     "show_summary",
     "validate",
 ]

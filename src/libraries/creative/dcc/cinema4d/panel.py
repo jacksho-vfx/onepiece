@@ -5,11 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Protocol, Sequence, cast
 
+import structlog
+
 try:  # pragma: no cover - Cinema 4D is not available in CI
     import c4d  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - replaced by tests stubs
     c4d = None  # type: ignore
 
+from .cleanup import cleanup_scene
+
+
+log = structlog.get_logger(__name__)
 
 CommandCallback = Callable[[], None]
 
@@ -172,4 +178,57 @@ class CommandPanel:
         return PanelDialog
 
 
-__all__ = ["CommandDefinition", "CommandPanel"]
+def _format_cleanup_summary(stats: dict[str, int]) -> str:
+    return (
+        "Removed "
+        f"{stats.get('removed_materials', 0)} materials, "
+        f"{stats.get('removed_empty_nulls', 0)} nulls, "
+        f"{stats.get('removed_hidden_singletons', 0)} hidden objects, "
+        f"{stats.get('removed_layers', 0)} layers."
+    )
+
+
+def _show_message(module: object | None, message: str) -> None:
+    gui_module = getattr(module, "gui", None) if module is not None else None
+    message_dialog = getattr(gui_module, "MessageDialog", None)
+    if callable(message_dialog):
+        message_dialog(message)
+    else:  # pragma: no cover - fall back to stdout when GUI is unavailable
+        print(message)
+
+
+def register_cleanup_command(
+    panel: CommandPanel,
+    *,
+    module: object | None = None,
+    description: str | None = None,
+) -> CommandDefinition:
+    """Register a scene cleanup command on the given panel."""
+
+    resolved_module = module or panel._module
+    command_description = (
+        description
+        or "Remove unused materials, empty nulls, hidden singletons, and unused layers."
+    )
+
+    def _run_cleanup() -> None:
+        try:
+            stats = cleanup_scene(module=resolved_module)
+        except RuntimeError as exc:  # pragma: no cover - depends on runtime API
+            message = f"Cinema 4D cleanup failed: {exc}"
+            log.error("cinema4d_cleanup_panel_error", error=str(exc))
+            _show_message(resolved_module, message)
+            return
+
+        summary = _format_cleanup_summary(stats)
+        log.info("cinema4d_cleanup_panel_summary", **stats)
+        _show_message(resolved_module, summary)
+
+    return panel.register_command(
+        "Clean Scene",
+        _run_cleanup,
+        description=command_description,
+    )
+
+
+__all__ = ["CommandDefinition", "CommandPanel", "register_cleanup_command"]

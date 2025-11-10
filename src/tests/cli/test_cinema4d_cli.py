@@ -272,3 +272,58 @@ def test_cinema4d_normalise_paths_missing_metadata(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "metadata.json is missing or unreadable" in result.output
+
+
+def test_cinema4d_cleanup_scene_reports_summary(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Cleanup summary prints and logs aggregated statistics."""
+
+    runner = CliRunner()
+
+    def fake_cleanup_scene(**kwargs: object) -> dict[str, int]:
+        assert kwargs == {
+            "remove_unused_materials": True,
+            "remove_empty_nulls": False,
+            "remove_hidden_singletons": True,
+            "remove_unused_layers": True,
+        }
+        return {
+            "removed_materials": 5,
+            "removed_empty_nulls": 0,
+            "removed_hidden_singletons": 2,
+            "removed_layers": 4,
+        }
+
+    monkeypatch.setattr(cinema4d_module, "cleanup_scene", fake_cleanup_scene)
+
+    result = runner.invoke(
+        cinema4d_module.app,
+        ["cleanup-scene", "--keep-empty-nulls"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "Cinema 4D cleanup complete. Removed 5 materials, 0 nulls, 2 hidden objects, 4 layers."
+        in result.output
+    )
+
+
+def test_cinema4d_cleanup_scene_requires_enabled_operation() -> None:
+    """At least one cleanup operation must run to avoid a misfire."""
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cinema4d_module.app,
+        [
+            "cleanup-scene",
+            "--keep-unused-materials",
+            "--keep-empty-nulls",
+            "--keep-hidden-singletons",
+            "--keep-unused-layers",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "At least one cleanup operation must be enabled" in result.output
