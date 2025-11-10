@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from libraries.creative.dcc.cinema4d.panel import CommandPanel, register_cleanup_command
+from libraries.creative.dcc.cinema4d.panel import (
+    CommandPanel,
+    register_cleanup_command,
+    register_scene_validator_publisher_command,
+)
+from libraries.creative.dcc.cinema4d.publish_pipeline import (
+    ExportSummary,
+    PipelineResult,
+    SceneContext,
+    ValidationIssue,
+    ValidationReport,
+)
 
 
 class FakeGeDialog:
@@ -159,3 +172,121 @@ def test_register_cleanup_command_runs_cleanup(
     assert FakeGuiModule.messages == [
         "Removed 3 materials, 2 nulls, 1 hidden objects, 4 layers."
     ]
+
+
+def _build_pipeline_result(tmp_path: Path, *, success: bool) -> PipelineResult:
+    context = SceneContext(
+        show="SHOW",
+        shot="SHOT",
+        task="lookdev",
+        scene_path=tmp_path / "scene.c4d",
+        version=1,
+    )
+    if success:
+        report = ValidationReport(())
+        exports: tuple[ExportSummary, ...] = (
+            ExportSummary("geometry", (tmp_path / "geo.abc",)),
+            ExportSummary("redshift_proxies", (tmp_path / "proxy.rs",)),
+        )
+        metadata_path = tmp_path / "metadata.json"
+    else:
+        report = ValidationReport(
+            (ValidationIssue("missing_assets", "Missing texture: wood.tx"),)
+        )
+        exports = ()
+        metadata_path = None
+
+    log_file = tmp_path / "pipeline.log"
+
+    return PipelineResult(
+        context=context,
+        report=report,
+        exports=exports,
+        metadata_path=metadata_path,
+        log_file=log_file,
+        version=2,
+    )
+
+
+def test_scene_validator_publisher_reports_failures(tmp_path: Path) -> None:
+    FakeGuiModule.messages = []
+    panel = CommandPanel(module=FakeCinema4DModule)
+    result = _build_pipeline_result(tmp_path, success=False)
+
+    class DummyPipeline:
+        def __init__(self) -> None:
+            self.ran = False
+
+        def run(self) -> PipelineResult:
+            self.ran = True
+            return result
+
+    pipeline = DummyPipeline()
+
+    def builder() -> DummyPipeline:
+        return pipeline
+
+    register_scene_validator_publisher_command(
+        panel,
+        module=FakeCinema4DModule,
+        pipeline_builder=builder,
+    )
+
+    dialog = panel.show()
+    button_id, *_ = dialog.buttons[-1]
+    dialog.Command(button_id, None)
+
+    assert pipeline.ran is True
+    message = FakeGuiModule.messages[-1]
+    assert "FAILED" in message
+    assert "Missing texture" in message
+
+
+def test_scene_validator_publisher_reports_success(tmp_path: Path) -> None:
+    FakeGuiModule.messages = []
+    panel = CommandPanel(module=FakeCinema4DModule)
+    result = _build_pipeline_result(tmp_path, success=True)
+
+    def builder() -> object:
+        class Pipeline:
+            def run(self) -> PipelineResult:
+                return result
+
+        return Pipeline()
+
+    register_scene_validator_publisher_command(
+        panel,
+        module=FakeCinema4DModule,
+        pipeline_builder=builder,
+    )
+
+    dialog = panel.show()
+    button_id, *_ = dialog.buttons[-1]
+    dialog.Command(button_id, None)
+
+    message = FakeGuiModule.messages[-1]
+    assert "SUCCESS" in message
+    assert "geometry" in message
+    assert str(result.metadata_path) in message
+
+
+def test_scene_validator_publisher_handles_exceptions() -> None:
+    FakeGuiModule.messages = []
+    panel = CommandPanel(module=FakeCinema4DModule)
+
+    class BrokenPipeline:
+        def run(self) -> PipelineResult:
+            raise RuntimeError("boom")
+
+    register_scene_validator_publisher_command(
+        panel,
+        module=FakeCinema4DModule,
+        pipeline_builder=lambda: BrokenPipeline(),
+    )
+
+    dialog = panel.show()
+    button_id, *_ = dialog.buttons[-1]
+    dialog.Command(button_id, None)
+
+    message = FakeGuiModule.messages[-1]
+    assert "failed" in message.lower()
