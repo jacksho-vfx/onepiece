@@ -13,6 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - replaced by tests stubs
     c4d = None  # type: ignore
 
 from .cleanup import cleanup_scene
+from .publish_pipeline import PipelineResult, build_pipeline
 
 
 log = structlog.get_logger(__name__)
@@ -197,6 +198,40 @@ def _show_message(module: object | None, message: str) -> None:
         print(message)
 
 
+def _format_pipeline_result(result: PipelineResult) -> str:
+    title = "Scene Validator & Publisher"
+    lines = [title, "=" * len(title)]
+
+    status = "SUCCESS" if result.success else "FAILED"
+    lines.append(f"Status: {status}")
+    lines.append(f"Show: {result.context.show}")
+    lines.append(f"Shot: {result.context.shot}")
+    if result.context.task:
+        lines.append(f"Task: {result.context.task}")
+    lines.append(f"Scene: {result.context.scene_path}")
+    lines.append(f"Version: {result.version}")
+
+    if not result.success:
+        lines.append("")
+        lines.append("Validation Issues:")
+        for issue in result.report.issues:
+            lines.append(f"  - [{issue.validator}] {issue.message}")
+    else:
+        if result.exports:
+            lines.append("")
+            lines.append("Exports:")
+            for export in result.exports:
+                formatted_outputs = ", ".join(str(path) for path in export.outputs)
+                lines.append(f"  - {export.name}: {formatted_outputs}")
+        if result.metadata_path is not None:
+            lines.append(f"Metadata: {result.metadata_path}")
+
+    if result.log_file is not None:
+        lines.append(f"Log: {result.log_file}")
+
+    return "\n".join(lines)
+
+
 def register_cleanup_command(
     panel: CommandPanel,
     *,
@@ -231,4 +266,76 @@ def register_cleanup_command(
     )
 
 
-__all__ = ["CommandDefinition", "CommandPanel", "register_cleanup_command"]
+def register_scene_validator_publisher_command(
+    panel: CommandPanel,
+    *,
+    module: object | None = None,
+    description: str | None = None,
+    pipeline_builder: Callable[[], Any] | None = None,
+) -> CommandDefinition:
+    """Register a validation and publishing command on the given panel."""
+
+    resolved_module = module or panel._module
+    command_description = (
+        description
+        or "Validate, package, and publish the active Cinema 4D scene before hand-off."
+    )
+
+    def _execute_pipeline() -> None:
+        builder = pipeline_builder or (lambda: build_pipeline(resolved_module))
+        try:
+            pipeline = builder()
+            if not hasattr(pipeline, "run"):
+                raise RuntimeError("Scene publish pipeline is not callable")
+            result = pipeline.run()
+        except Exception as exc:  # pragma: no cover - surfaced to the panel
+            log.error(
+                "cinema4d_scene_validator.pipeline_error",
+                error=str(exc),
+            )
+            _show_message(
+                resolved_module,
+                f"Scene Validator & Publisher failed: {exc}",
+            )
+            return
+
+        message = _format_pipeline_result(result)
+        if result.success:
+            export_summary = [
+                {
+                    "name": summary.name,
+                    "outputs": [str(path) for path in summary.outputs],
+                }
+                for summary in result.exports
+            ]
+            log.info(
+                "cinema4d_scene_validator.completed",
+                show=result.context.show,
+                shot=result.context.shot,
+                version=result.version,
+                exports=export_summary,
+                metadata=str(result.metadata_path) if result.metadata_path else None,
+                log_file=str(result.log_file) if result.log_file else None,
+            )
+        else:
+            log.info(
+                "cinema4d_scene_validator.reported_issues",
+                show=result.context.show,
+                shot=result.context.shot,
+                issues=[issue.message for issue in result.report.issues],
+            )
+        _show_message(resolved_module, message)
+
+    return panel.register_command(
+        "Scene Validator & Publisher",
+        _execute_pipeline,
+        description=command_description,
+    )
+
+
+__all__ = [
+    "CommandDefinition",
+    "CommandPanel",
+    "register_cleanup_command",
+    "register_scene_validator_publisher_command",
+]
