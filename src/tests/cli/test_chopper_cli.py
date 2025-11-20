@@ -100,7 +100,23 @@ def _write_scene(path: Path) -> None:
                 "color": "#ff0000",
                 "position": [0, 0],
                 "size": [2, 2],
-            }
+            },
+            {
+                "id": "path",
+                "type": "line",
+                "color": "#00ff00",
+                "position": [0, 0],
+                "points": [[0, 3], [3, 3]],
+                "stroke_width": 1,
+            },
+            {
+                "id": "triangle",
+                "type": "polygon",
+                "color": "#0000ff",
+                "stroke_color": "#ffffff",
+                "position": [0, 0],
+                "points": [[0, 0], [3, 1], [1, 3]],
+            },
         ],
     }
     path.write_text(json.dumps(payload), encoding="utf-8")

@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 try:  # pragma: no cover - dependency optional for basic functionality
     from PIL import Image as PILImage
@@ -106,7 +106,10 @@ class Animation:
         return end.x, end.y
 
 
-def pairwise(values: Iterable[Keyframe]) -> Iterator[tuple[Keyframe, Keyframe]]:
+T = TypeVar("T")
+
+
+def pairwise(values: Iterable[T]) -> Iterator[tuple[T, T]]:
     """Yield the values in ``values`` two at a time."""
 
     it = iter(values)
@@ -116,7 +119,7 @@ def pairwise(values: Iterable[Keyframe]) -> Iterator[tuple[Keyframe, Keyframe]]:
         prev = current
 
 
-SUPPORTED_OBJECT_TYPES: tuple[str, ...] = ("rectangle", "circle")
+SUPPORTED_OBJECT_TYPES: tuple[str, ...] = ("rectangle", "circle", "line", "polygon")
 
 
 @dataclass(slots=True)
@@ -128,6 +131,9 @@ class SceneObject:
     color: Color
     position: tuple[float, float]
     size: tuple[float, float]
+    points: tuple[tuple[float, float], ...] = ()
+    stroke_color: Color | None = None
+    stroke_width: float | None = None
     animation: Animation | None = None
 
     @classmethod
@@ -165,26 +171,99 @@ class SceneObject:
 
         position = position_x, position_y
 
-        size_data = payload.get("size", (0, 0))
-        if not isinstance(size_data, Sequence) or len(size_data) != 2:
-            raise SceneError("Object size must be a length two sequence")
-        try:
-            width = float(size_data[0])
-            height = float(size_data[1])
-        except (TypeError, ValueError) as exc:
-            raise SceneError(
-                "Object size must contain numeric width and height values"
-            ) from exc
+        size: tuple[float, float] = (0.0, 0.0)
+        size_data = payload.get("size")
+        if kind in {"rectangle", "circle"}:
+            if size_data is None:
+                raise SceneError("Rectangle and circle objects must define a size")
+            if not isinstance(size_data, Sequence) or len(size_data) != 2:
+                raise SceneError("Object size must be a length two sequence")
+            try:
+                width = float(size_data[0])
+                height = float(size_data[1])
+            except (TypeError, ValueError) as exc:
+                raise SceneError(
+                    "Object size must contain numeric width and height values"
+                ) from exc
 
-        if not math.isfinite(width) or not math.isfinite(height):
-            raise SceneError("Object size width and height must be finite numbers")
+            if not math.isfinite(width) or not math.isfinite(height):
+                raise SceneError("Object size width and height must be finite numbers")
 
-        if width <= 0 or height <= 0:
-            raise SceneError(
-                f"Object size must have positive width and height (got {width}x{height})"
-            )
+            if width <= 0 or height <= 0:
+                raise SceneError(
+                    f"Object size must have positive width and height (got {width}x{height})"
+                )
 
-        size = width, height
+            size = width, height
+        elif size_data is not None:
+            if not isinstance(size_data, Sequence) or len(size_data) != 2:
+                raise SceneError("Object size must be a length two sequence")
+            try:
+                size = float(size_data[0]), float(size_data[1])
+            except (TypeError, ValueError) as exc:
+                raise SceneError(
+                    "Object size must contain numeric width and height values"
+                ) from exc
+
+        points: tuple[tuple[float, float], ...] = ()
+        if kind in {"line", "polygon"}:
+            if "points" not in payload:
+                raise SceneError(f"{kind.title()} objects must define a set of points")
+
+            points_data = payload["points"]
+            if not isinstance(points_data, Sequence):
+                raise SceneError("Object points must be supplied as a sequence")
+
+            parsed_points: list[tuple[float, float]] = []
+            for index, entry in enumerate(points_data):
+                if not isinstance(entry, Sequence) or len(entry) != 2:
+                    raise SceneError(
+                        f"Object point at index {index} must be a length two sequence"
+                    )
+                try:
+                    x = float(entry[0])
+                    y = float(entry[1])
+                except (TypeError, ValueError) as exc:
+                    raise SceneError(
+                        f"Object point at index {index} must contain numeric coordinates"
+                    ) from exc
+                if not math.isfinite(x) or not math.isfinite(y):
+                    raise SceneError(
+                        f"Object point at index {index} must be finite numbers"
+                    )
+                parsed_points.append((x, y))
+
+            minimum_points = 2 if kind == "line" else 3
+            if len(parsed_points) < minimum_points:
+                raise SceneError(
+                    f"{kind.title()} objects must contain at least {minimum_points} point(s)"
+                )
+            if len(parsed_points) > 1000:
+                raise SceneError(
+                    "Object points exceeds maximum supported length (1000)"
+                )
+
+            points = tuple(parsed_points)
+
+        stroke_color: Color | None = None
+        stroke_width: float | None = None
+        stroke_width_raw = payload.get("stroke_width")
+        stroke_width_value = cast(float | int | str | None, stroke_width_raw)
+        if stroke_width_value is not None:
+            try:
+                parsed_stroke_width = float(stroke_width_value)
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Object stroke width must be numeric") from exc
+            if not math.isfinite(parsed_stroke_width) or parsed_stroke_width < 0:
+                raise SceneError("Object stroke width must be a non-negative number")
+            stroke_width = parsed_stroke_width
+        elif kind in {"line", "polygon"}:
+            stroke_width = 1.0
+        if stroke_width is not None and kind == "line" and stroke_width <= 0:
+            raise SceneError("Line stroke width must be greater than zero")
+
+        if payload.get("stroke_color") is not None:
+            stroke_color = parse_color(payload["stroke_color"])
 
         animation_data = payload.get("animation")
         animation = None
@@ -240,6 +319,9 @@ class SceneObject:
             color=color,
             position=position,
             size=size,
+            points=points,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
             animation=animation,
         )
 
@@ -257,6 +339,10 @@ class SceneObject:
             self._render_rectangle(target, frame_index)
         elif self.kind == "circle":
             self._render_circle(target, frame_index)
+        elif self.kind == "line":
+            self._render_line(target, frame_index)
+        elif self.kind == "polygon":
+            self._render_polygon(target, frame_index)
         else:  # pragma: no cover - defensive
             supported = ", ".join(SUPPORTED_OBJECT_TYPES)
             raise SceneError(
@@ -302,6 +388,93 @@ class SceneObject:
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
                     row[x] = self.color
+
+    def _stroke_details(self) -> tuple[Color, int]:
+        stroke_color = self.stroke_color or self.color
+        stroke_width_value = 1.0 if self.stroke_width is None else self.stroke_width
+        stroke_width = max(0, int(round(stroke_width_value)))
+        return stroke_color, stroke_width
+
+    def _translated_points(self, frame_index: int) -> list[tuple[float, float]]:
+        offset_x, offset_y = self.position_at(frame_index)
+        return [(x + offset_x, y + offset_y) for x, y in self.points]
+
+    def _draw_point(
+        self, target: "Frame", x: float, y: float, stroke_width: int, color: Color
+    ) -> None:
+        half = max(0.0, (stroke_width - 1) / 2)
+        min_x = max(0, int(math.floor(x - half)))
+        max_x = min(target.width - 1, int(math.ceil(x + half)))
+        min_y = max(0, int(math.floor(y - half)))
+        max_y = min(target.height - 1, int(math.ceil(y + half)))
+
+        for yy in range(min_y, max_y + 1):
+            row = target.pixels[yy]
+            for xx in range(min_x, max_x + 1):
+                row[xx] = color
+
+    def _draw_line(
+        self, target: "Frame", start: tuple[float, float], end: tuple[float, float]
+    ) -> None:
+        stroke_color, stroke_width = self._stroke_details()
+        if stroke_width <= 0:
+            return
+        x0, y0 = start
+        x1, y1 = end
+
+        dx = x1 - x0
+        dy = y1 - y0
+        steps = max(int(round(max(abs(dx), abs(dy)))), 1)
+
+        for step in range(steps + 1):
+            t = step / steps
+            x = x0 + dx * t
+            y = y0 + dy * t
+            self._draw_point(target, x, y, stroke_width, stroke_color)
+
+    def _render_line(self, target: "Frame", frame_index: int) -> None:
+        points = self._translated_points(frame_index)
+        self._draw_line(target, points[0], points[1])
+
+    def _render_polygon(self, target: "Frame", frame_index: int) -> None:
+        points = self._translated_points(frame_index)
+        if len(points) < 3:
+            raise SceneError("Polygon must contain at least three points")
+
+        xs = [x for x, _ in points]
+        ys = [y for _, y in points]
+        min_x = max(0, int(math.floor(min(xs))))
+        max_x = min(target.width - 1, int(math.ceil(max(xs))))
+        min_y = max(0, int(math.floor(min(ys))))
+        max_y = min(target.height - 1, int(math.ceil(max(ys))))
+
+        # Fill polygon using an even-odd rule scanline approach.
+        for y in range(min_y, max_y + 1):
+            intersections: list[float] = []
+            for i, (x1, y1) in enumerate(points):
+                x2, y2 = points[(i + 1) % len(points)]
+                if y1 == y2:
+                    continue
+                if (y1 <= y < y2) or (y2 <= y < y1):
+                    x_int = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+                    intersections.append(x_int)
+
+            intersections.sort()
+            for index in range(0, len(intersections), 2):
+                if index + 1 >= len(intersections):
+                    break
+                left = intersections[index]
+                right = intersections[index + 1]
+                start_x = int(math.ceil(left))
+                end_x = int(math.floor(right))
+                for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
+                    target.pixels[y][x] = self.color
+
+        stroke_color, stroke_width = self._stroke_details()
+        if stroke_width > 0:
+            for i, start in enumerate(points):
+                end = points[(i + 1) % len(points)]
+                self._draw_line(target, start, end)
 
 
 @dataclass(slots=True)
