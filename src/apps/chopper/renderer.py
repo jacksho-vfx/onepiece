@@ -32,6 +32,39 @@ else:
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
 
+def _blend_colors(destination: Color, source: Color) -> Color:
+    """Return the result of alpha blending ``source`` over ``destination``."""
+
+    src_r, src_g, src_b = source[:3]
+    dst_r, dst_g, dst_b = destination[:3]
+
+    src_a = source[3] if len(source) >= 4 else 255
+    dst_a = destination[3] if len(destination) >= 4 else 255
+
+    src_alpha = src_a / 255.0
+    dst_alpha = dst_a / 255.0
+
+    out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
+    if out_alpha == 0:
+        return (0, 0, 0, 0)
+
+    out_r = int(
+        round((src_r * src_alpha + dst_r * dst_alpha * (1.0 - src_alpha)) / out_alpha)
+    )
+    out_g = int(
+        round((src_g * src_alpha + dst_g * dst_alpha * (1.0 - src_alpha)) / out_alpha)
+    )
+    out_b = int(
+        round((src_b * src_alpha + dst_b * dst_alpha * (1.0 - src_alpha)) / out_alpha)
+    )
+    out_a = int(round(out_alpha * 255.0))
+
+    if out_a >= 255:
+        return (out_r, out_g, out_b)
+
+    return (out_r, out_g, out_b, out_a)
+
+
 def _require_pillow() -> Any:
     """Return :mod:`PIL.Image` or raise a helpful error if unavailable."""
 
@@ -471,7 +504,7 @@ class SceneObject:
         for y in range(max(0, top), min(target.height, bottom)):
             row = target.pixels[y]
             for x in range(max(0, left), min(target.width, right)):
-                row[x] = self.color
+                row[x] = _blend_colors(row[x], self.color)
 
         _, stroke_width = self._stroke_details()
         if stroke_width > 0:
@@ -510,7 +543,7 @@ class SceneObject:
                 dx = x - cx
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
-                    row[x] = self.color
+                    row[x] = _blend_colors(row[x], self.color)
 
         _, stroke_width = self._stroke_details()
         if stroke_width > 0:
@@ -549,7 +582,7 @@ class SceneObject:
         for yy in range(min_y, max_y + 1):
             row = target.pixels[yy]
             for xx in range(min_x, max_x + 1):
-                row[xx] = color
+                row[xx] = _blend_colors(row[xx], color)
 
     def _draw_line(
         self, target: "Frame", start: tuple[float, float], end: tuple[float, float]
@@ -606,7 +639,7 @@ class SceneObject:
                 start_x = int(math.ceil(left))
                 end_x = int(math.floor(right))
                 for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
-                    target.pixels[y][x] = self.color
+                    target.pixels[y][x] = _blend_colors(target.pixels[y][x], self.color)
 
         stroke_color, stroke_width = self._stroke_details()
         if stroke_width > 0:
