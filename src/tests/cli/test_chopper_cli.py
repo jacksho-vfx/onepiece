@@ -119,6 +119,74 @@ def test_inspect_rejects_invalid_scene(tmp_path: Path) -> None:
     assert "frame count must be greater than zero" in clean_text
 
 
+def test_inspect_rejects_unsorted_animation_keyframes(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps(
+            {
+                "width": 4,
+                "height": 4,
+                "frames": 2,
+                "objects": [
+                    {
+                        "id": "traveller",
+                        "type": "rectangle",
+                        "color": "#00ff00",
+                        "position": [0, 0],
+                        "size": [2, 2],
+                        "animation": [
+                            {"frame": 2, "x": 1, "y": 1},
+                            {"frame": 1, "x": 0, "y": 0},
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["inspect", str(scene_path)])
+
+    assert result.exit_code == 2
+    clean_text = " ".join(strip_ansi(result.stderr).split())
+    assert "ordered by increasing frame" in clean_text
+
+
+def test_inspect_rejects_duplicate_animation_keyframes(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps(
+            {
+                "width": 4,
+                "height": 4,
+                "frames": 2,
+                "objects": [
+                    {
+                        "id": "traveller",
+                        "type": "rectangle",
+                        "color": "#00ff00",
+                        "position": [0, 0],
+                        "size": [2, 2],
+                        "animation": [
+                            {"frame": 1, "x": 1, "y": 1},
+                            {"frame": 1, "x": 2, "y": 2},
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["inspect", str(scene_path)])
+
+    assert result.exit_code == 2
+    clean_text = " ".join(strip_ansi(result.stderr).split())
+    assert "unique frame numbers" in clean_text
+
+
 def test_inspect_rejects_duplicate_object_ids(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     scene_path.write_text(

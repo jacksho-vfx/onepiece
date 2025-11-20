@@ -215,6 +215,32 @@ def test_scene_object_animation_requires_keyframes() -> None:
         Scene.from_dict(payload)
 
 
+def test_scene_object_animation_rejects_unsorted_keyframes() -> None:
+    payload = build_scene_dict()
+    objects = cast(list[dict[str, object]], payload["objects"])
+    hero = objects[1]
+    hero["animation"] = [
+        {"frame": 3, "x": 12, "y": 8},
+        {"frame": 0, "x": 2, "y": 6},
+    ]
+
+    with pytest.raises(SceneError, match="ordered by increasing frame"):
+        Scene.from_dict(payload)
+
+
+def test_scene_object_animation_rejects_duplicate_keyframes() -> None:
+    payload = build_scene_dict()
+    objects = cast(list[dict[str, object]], payload["objects"])
+    hero = objects[1]
+    hero["animation"] = [
+        {"frame": 0, "x": 2, "y": 6},
+        {"frame": 0, "x": 4, "y": 8},
+    ]
+
+    with pytest.raises(SceneError, match="unique frame numbers"):
+        Scene.from_dict(payload)
+
+
 def test_scene_object_rejects_unsupported_type(
     unsupported_scene_payload: dict[str, object],
 ) -> None:

@@ -463,8 +463,22 @@ class SceneObject:
                     "Object's animation must contain at least one keyframe"
                 )
 
-            keyframes.sort(key=lambda keyframe: keyframe.frame)
-            animation = Animation(keyframes=keyframes, default_easing=default_easing)
+            sorted_keyframes = sorted(keyframes, key=lambda keyframe: keyframe.frame)
+
+            if keyframes != sorted_keyframes:
+                raise SceneError(
+                    "Object animation keyframes must be ordered by increasing frame"
+                )
+
+            for earlier, later in pairwise(sorted_keyframes):
+                if later.frame == earlier.frame:
+                    raise SceneError(
+                        "Object animation keyframes must use unique frame numbers"
+                    )
+
+            animation = Animation(
+                keyframes=sorted_keyframes, default_easing=default_easing
+            )
 
         return cls(
             id=str(payload["id"]),
