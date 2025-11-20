@@ -42,6 +42,7 @@ If the ingest command exits early, review the CLI heading and take the suggested
 - **Empty delivery folder** – The ingest command will exit early with a validation warning pointing to the dry-run report. Run the same command with `--dry-run`, share the generated report with the vendor to request the missing files, then rerun ingest once the delivery is complete.
 
 ### DCC integration
+> **DCC names and aliases:** Use these case-insensitive identifiers with `--dcc` flags or validation helpers so Typer choices and manual validation stay in sync: Maya (`maya`), Nuke (`nuke`), Blender (`blender`), Houdini (`houdini`), 3ds Max (`3dsmax`/`max`), Cinema 4D (`cinema4d`/`c4d`), and V-Ray (`vray`).
 - `python -m apps.onepiece dcc open-shot --shot <scene_file> [--dcc <maya|nuke|…>]` — open the scene in the inferred or specified DCC, surfacing external errors cleanly.
 - `python -m apps.onepiece dcc publish --dcc <dcc> --scene-name <name> --renders <path> --previews <path> --otio <file> --metadata <file> --destination <dir> --bucket <bucket> --show-code <code> [--show-type vfx|prod --profile <aws_profile> --direct-upload-path s3://… --dependency-summary]` — package and publish a scene, optionally summarising dependency validation.
 - `python -m apps.onepiece dcc animation debug-animation [--scene-name current] [--fail-on-warnings]` — analyse animation metadata and report muted constraints, channel mismatches, and frame range issues before shots leave Maya.
