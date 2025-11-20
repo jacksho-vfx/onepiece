@@ -473,6 +473,18 @@ class SceneObject:
             for x in range(max(0, left), min(target.width, right)):
                 row[x] = self.color
 
+        _, stroke_width = self._stroke_details()
+        if stroke_width > 0:
+            top_left = (left, top)
+            top_right = (right - 1, top)
+            bottom_right = (right - 1, bottom - 1)
+            bottom_left = (left, bottom - 1)
+
+            self._draw_line(target, top_left, top_right)
+            self._draw_line(target, top_right, bottom_right)
+            self._draw_line(target, bottom_right, bottom_left)
+            self._draw_line(target, bottom_left, top_left)
+
     def _render_circle(self, target: "Frame", frame_index: int) -> None:
         position = self.position_at(frame_index)
         width, height = self.size
@@ -499,6 +511,21 @@ class SceneObject:
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
                     row[x] = self.color
+
+        _, stroke_width = self._stroke_details()
+        if stroke_width > 0:
+            segments = max(12, int(math.ceil(radius * 6)))
+            points = [
+                (
+                    cx + radius * math.cos((2 * math.pi * index) / segments),
+                    cy + radius * math.sin((2 * math.pi * index) / segments),
+                )
+                for index in range(segments)
+            ]
+
+            for index, start in enumerate(points):
+                end = points[(index + 1) % len(points)]
+                self._draw_line(target, start, end)
 
     def _stroke_details(self) -> tuple[Color, int]:
         stroke_color = self.stroke_color or self.color

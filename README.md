@@ -258,6 +258,38 @@ flag to control how frames are exported:
 - `--format png` outputs lossless RGBA PNGs while preserving alpha.
 - `--format gif` / `--format mp4` bundle the render into a single animation.
 
+Filled shapes can also be outlined: supply `stroke_color` and `stroke_width` on
+rectangles, circles, polygons, and lines to render strokes over the fill. For
+example:
+
+```json
+{
+  "width": 8,
+  "height": 8,
+  "frames": 1,
+  "objects": [
+    {
+      "id": "panel",
+      "type": "rectangle",
+      "color": "#ffaa00",
+      "stroke_color": "#00ff00",
+      "stroke_width": 2,
+      "position": [1, 1],
+      "size": [5, 3]
+    },
+    {
+      "id": "badge",
+      "type": "circle",
+      "color": "#2222ff",
+      "stroke_color": "#ffffff",
+      "stroke_width": 1,
+      "position": [6, 6],
+      "size": [3, 3]
+    }
+  ]
+}
+```
+
 Override the background colour on the fly with `--background "#112233"` when you
 need blank-space contrast without editing the source JSON.
 
