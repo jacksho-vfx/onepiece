@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
+import pytest
 from pytest import MonkeyPatch
 
 from typer.testing import CliRunner
@@ -91,6 +92,14 @@ def test_detect_dcc_from_file_supports_cinema4d() -> None:
     assert (
         dcc_validations.detect_dcc_from_file("/projects/shot/lookdev.c4d")
         is SupportedDCC.CINEMA4D
+    )
+
+
+@pytest.mark.parametrize("extension", [".hip", ".hiplc", ".hipnc"])
+def test_detect_dcc_from_file_supports_houdini(extension: str) -> None:
+    assert (
+        dcc_validations.detect_dcc_from_file(f"/projects/shot/lighting{extension}")
+        is SupportedDCC.HOUDINI
     )
 
 
