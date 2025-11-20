@@ -60,6 +60,7 @@ DCC_GPU_REQUIREMENTS: dict[SupportedDCC, str] = {
     SupportedDCC.BLENDER: "OpenGL 4.3",
     SupportedDCC.HOUDINI: "Vulkan",
     SupportedDCC.MAX: "DirectX 12",
+    SupportedDCC.VRAY: "CUDA 11",
     SupportedDCC.CINEMA4D: "OpenGL 4.5",
 }
 

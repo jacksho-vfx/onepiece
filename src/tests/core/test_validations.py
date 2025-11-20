@@ -178,6 +178,21 @@ def test_check_dcc_environment_missing_gpu(mock_which: MagicMock) -> None:
     assert report.gpu.meets_requirement is False
 
 
+@patch("libraries.platform.validations.dcc.shutil.which", return_value="/usr/bin/vray")
+def test_check_dcc_environment_vray_gpu_requirement(mock_which: MagicMock) -> None:
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.VRAY,
+        env={},
+        plugin_inventory={SupportedDCC.VRAY: frozenset({"vray"})},
+        gpu_info={SupportedDCC.VRAY: "NVIDIA RTX / CUDA 11"},
+    )
+
+    assert report.installed is True
+    assert report.plugins.missing == frozenset()
+    assert report.gpu.required == "CUDA 11"
+    assert report.gpu.meets_requirement is True
+
+
 @patch(
     "libraries.platform.validations.dcc.shutil.which",
     return_value="/Applications/Maxon Cinema 4D/Cinema 4D",
