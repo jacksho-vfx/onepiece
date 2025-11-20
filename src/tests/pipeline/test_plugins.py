@@ -6,9 +6,11 @@ import pytest
 
 from libraries.pipeline import (
     ENTRY_POINT_GROUP,
+    InvalidPipelineStepError,
     InvalidPipelineStepFactoryError,
     MissingPipelineStepRequirementError,
     PipelinePluginError,
+    PipelineStep,
     discover_pipeline_step_factories,
 )
 
@@ -52,15 +54,15 @@ def entry_points(
 def test_discovery_merges_builtin_and_plugins(
     entry_points: Callable[[DummyEntryPoint], None],
 ) -> None:
-    builtin_called = False
-
     def builtin_factory(config: dict[str, Any]) -> dict[str, Any]:
-        nonlocal builtin_called
-        builtin_called = True
         return config
 
-    def plugin_factory(config: dict[str, Any]) -> dict[str, Any]:
-        return {**config, "source": "plugin"}
+    observed_config: dict[str, Any] | None = None
+
+    def plugin_factory(config: dict[str, Any]) -> PipelineStep:
+        nonlocal observed_config
+        observed_config = dict(config)
+        return PipelineStep.from_config({"name": "plugin-step", "provider": "dummy"})
 
     entry_points(
         DummyEntryPoint(
@@ -73,7 +75,7 @@ def test_discovery_merges_builtin_and_plugins(
 
     assert factories["builtin"] is builtin_factory
     assert factories["plugin-step"] is plugin_factory
-    assert builtin_called is False
+    assert observed_config == {"name": "plugin-step", "provider": "plugin-step"}
 
 
 def test_missing_dependency_raises_actionable_error(
@@ -118,3 +120,35 @@ def test_non_callable_factory_raises(
 
     with pytest.raises(InvalidPipelineStepFactoryError):
         discover_pipeline_step_factories()
+
+
+def test_factory_returning_wrong_type_is_rejected(
+    entry_points: Callable[[DummyEntryPoint], None],
+) -> None:
+    def loader() -> Callable[[dict[str, Any]], str]:
+        return lambda config: "not-a-pipeline-step"
+
+    entry_points(DummyEntryPoint("not-a-step", loader=loader))
+
+    with pytest.raises(InvalidPipelineStepError) as excinfo:
+        discover_pipeline_step_factories()
+
+    assert excinfo.value.step_name == "not-a-step"
+    assert "PipelineStep instance" in str(excinfo.value)
+
+
+def test_factory_exception_is_wrapped(
+    entry_points: Callable[[DummyEntryPoint], None],
+) -> None:
+    def loader() -> Callable[[dict[str, Any]], PipelineStep]:
+        def factory(config: dict[str, Any]) -> PipelineStep:
+            raise RuntimeError(f"bad config {config!r}")
+
+        return factory
+
+    entry_points(DummyEntryPoint("explode", loader=loader))
+
+    with pytest.raises(PipelinePluginError) as excinfo:
+        discover_pipeline_step_factories()
+
+    assert "factory raised an exception" in str(excinfo.value)
