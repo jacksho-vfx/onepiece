@@ -32,6 +32,7 @@ DCC_CHOICES: Final[tuple[str, ...]] = (
     "nuke",
     "houdini",
     "blender",
+    "cinema4d",
     "max",
     "vray",
 )
