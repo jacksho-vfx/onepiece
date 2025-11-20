@@ -30,6 +30,7 @@ _EXTENSION_MAP: dict[str, SupportedDCC] = {
     ".mb": SupportedDCC.MAYA,
     ".nk": SupportedDCC.NUKE,
     ".hip": SupportedDCC.HOUDINI,
+    ".hiplc": SupportedDCC.HOUDINI,
     ".hipnc": SupportedDCC.HOUDINI,
     ".blend": SupportedDCC.BLENDER,
     ".max": SupportedDCC.MAX,
