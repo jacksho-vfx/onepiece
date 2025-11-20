@@ -1,5 +1,6 @@
 """Utility helpers for notification backends."""
 
+from dataclasses import dataclass
 from typing import Sequence
 
 import structlog
@@ -28,16 +29,86 @@ class MockNotifier(Notifier):
         return True
 
 
-def get_notifier(kind: str) -> Notifier:
-    """Return a notifier instance for the requested type."""
+@dataclass(slots=True)
+class NotifierOptions:
+    """Configuration options for notifier construction."""
 
-    normalized = kind.lower()
+    webhook_url: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int | str | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    mock_channel: str | None = None
+
+
+def _normalize_port(port: int | str | None) -> int | None:
+    if port is None:
+        return None
+
+    try:
+        normalized = int(port)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise ValueError("SMTP port must be an integer.") from exc
+
+    if normalized <= 0:
+        raise ValueError("SMTP port must be greater than zero.")
+
+    return normalized
+
+
+def get_notifier(kind: str, *, options: NotifierOptions | None = None) -> Notifier:
+    """Return a notifier instance for the requested type.
+
+    Args:
+        kind: Desired notifier backend (e.g. ``"slack"`` or ``"email"``).
+        options: Optional configuration overrides for the selected backend.
+
+    Raises:
+        ValueError: If the requested notifier kind is unknown or if provided
+            options fail validation.
+    """
+
+    if not isinstance(kind, str) or not kind.strip():
+        raise ValueError("Notifier kind cannot be empty.")
+
+    safe_options = options or NotifierOptions()
+    normalized = kind.strip().lower()
+
     if normalized == "slack":
-        return SlackNotifier()
+        webhook: str | None = None
+        if safe_options.webhook_url is not None:
+            webhook = safe_options.webhook_url.strip()
+            if not webhook:
+                raise ValueError("Slack webhook URL must not be empty when provided.")
+
+        return SlackNotifier(webhook_url=webhook)
+
     if normalized == "email":
-        return EmailNotifier()
+        host: str | None = None
+        if safe_options.smtp_host is not None:
+            host = safe_options.smtp_host.strip()
+            if not host:
+                raise ValueError("SMTP host must not be empty when provided.")
+
+        port = _normalize_port(safe_options.smtp_port)
+        return EmailNotifier(
+            host=host,
+            port=port,
+            user=safe_options.smtp_user,
+            password=safe_options.smtp_password,
+        )
+
     if normalized.startswith("mock"):
-        channel = normalized.split(":", 1)[1] if ":" in normalized else "mock"
+        provided_channel = safe_options.mock_channel
+        if ":" in normalized:
+            provided_channel = normalized.split(":", 1)[1] or provided_channel
+
+        channel = (provided_channel or "mock").strip()
+        if not channel:
+            raise ValueError("Mock notifier channel must not be empty.")
         return MockNotifier(channel=channel)
 
-    raise ValueError(f"Unsupported notifier type: {kind}")
+    raise ValueError(
+        "Unsupported notifier type: "
+        f"{kind}. Supported kinds are: slack, email, mock."
+    )
