@@ -251,6 +251,11 @@ count, object roster, and any animation spans; it exits with a non-zero code if
 parsing fails so you can gate CI jobs or authoring workflows on successful
 validation.
 
+Scene objects support an optional integer `z_index` (default `0`) for layering
+control. Lower values are rendered first while higher values sit in the
+foreground. Sorting is stable, so objects with matching `z_index` values keep
+their declaration order.
+
 Render scenes with `chopper render path/to/scene.json` and use the `--format`
 flag to control how frames are exported:
 

@@ -339,6 +339,68 @@ def test_renderer_stacks_multiple_transparent_shapes() -> None:
     assert frame.pixels[0][0] == (191, 63, 63)
 
 
+def test_renderer_sorts_objects_by_z_index() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "foreground",
+                "type": "rectangle",
+                "color": "#ff0000",
+                "position": [0, 0],
+                "size": [1, 1],
+                "z_index": 1,
+            },
+            {
+                "id": "background",
+                "type": "rectangle",
+                "color": "#0000ff",
+                "position": [0, 0],
+                "size": [1, 1],
+                "z_index": -1,
+            },
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (255, 0, 0)
+
+
+def test_renderer_preserves_order_with_equal_z_index() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "first",
+                "type": "rectangle",
+                "color": "#00ff00",
+                "position": [0, 0],
+                "size": [1, 1],
+            },
+            {
+                "id": "second",
+                "type": "rectangle",
+                "color": "#0000ff",
+                "position": [0, 0],
+                "size": [1, 1],
+            },
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (0, 0, 255)
+
+
 def test_animation_easing_applied_to_positions() -> None:
     payload = {
         "width": 4,
