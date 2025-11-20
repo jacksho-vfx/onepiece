@@ -167,21 +167,19 @@ def resolve_metrics(
     metrics = FarmMetrics()
     sources: list[str] = []
 
-    if not optimize:
-        return metrics, tuple(sources)
+    if optimize:
+        try:
+            profile_context = load_profile(profile=profile_name)
+        except OnePieceConfigError as exc:
+            raise OnePieceValidationError(str(exc)) from exc
 
-    try:
-        profile_context = load_profile(profile=profile_name)
-    except OnePieceConfigError as exc:
-        raise OnePieceValidationError(str(exc)) from exc
-
-    profile_metrics = _extract_metrics_from_profile(profile_context.data)
-    if (
-        profile_metrics.queue_depth is not None
-        or profile_metrics.average_frame_time_ms is not None
-    ):
-        metrics = profile_metrics
-        sources.append("profile")
+        profile_metrics = _extract_metrics_from_profile(profile_context.data)
+        if (
+            profile_metrics.queue_depth is not None
+            or profile_metrics.average_frame_time_ms is not None
+        ):
+            metrics = profile_metrics
+            sources.append("profile")
 
     if queue_depth is not None:
         metrics = FarmMetrics(
