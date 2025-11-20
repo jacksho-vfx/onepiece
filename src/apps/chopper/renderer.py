@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+import itertools
 import math
 from pathlib import Path
 import re
@@ -756,15 +757,20 @@ class Renderer:
 class AnimationWriter:
     """Utility for encoding a sequence of :class:`Frame` objects."""
 
-    frames: Sequence[Frame]
+    frames: Iterable[Frame]
     fps: int = 24
 
-    def _ensure_frames(self) -> list[Frame]:
-        if not self.frames:
-            raise ValueError("Cannot encode an empty frame sequence")
+    def _validate_and_split_frames(self) -> tuple[Frame, Iterator[Frame]]:
         if self.fps <= 0:
             raise ValueError("Frames per second must be greater than zero")
-        return list(self.frames)
+
+        iterator = iter(self.frames)
+        try:
+            first = next(iterator)
+        except StopIteration:
+            raise ValueError("Cannot encode an empty frame sequence") from None
+
+        return first, iterator
 
     def write_gif(
         self,
@@ -773,28 +779,30 @@ class AnimationWriter:
         loop: int = 0,
         optimize: bool = True,
         duration_ms: int | None = None,
-    ) -> None:
+    ) -> int:
         """Write the frames to ``destination`` as an animated GIF."""
 
-        frames = self._ensure_frames()
-        images = [frame.to_image(mode="RGBA") for frame in frames]
-        first = images[0]
-        rest = images[1:]
+        first, rest = self._validate_and_split_frames()
+        images = [first.to_image(mode="RGBA")]
+        images.extend(frame.to_image(mode="RGBA") for frame in rest)
         duration = (
             duration_ms
             if duration_ms is not None
             else max(int(round(1000 / self.fps)), 1)
         )
-        first.save(
+        first_image, *remaining = images
+        first_image.save(
             destination,
             format="GIF",
             save_all=True,
-            append_images=rest,
+            append_images=remaining,
             duration=duration,
             loop=loop,
             disposal=2,
             optimize=optimize,
         )
+
+        return len(images)
 
     def write_mp4(
         self,
@@ -803,7 +811,7 @@ class AnimationWriter:
         codec: str = "libx264",
         bitrate: str | None = None,
         pixelformat: str = "yuv420p",
-    ) -> None:
+    ) -> int:
         """Encode the frames into an MP4 container using :mod:`imageio`."""
 
         module = _require_imageio()
@@ -815,23 +823,28 @@ class AnimationWriter:
         if bitrate is not None:
             kwargs["bitrate"] = bitrate
 
-        frames = self._ensure_frames()
+        first, rest = self._validate_and_split_frames()
         numpy = _require_numpy()
+        frame_count = 0
         with module.get_writer(
             destination, format="ffmpeg", mode="I", **kwargs
         ) as stream:
-            for frame in frames:
+            for frame in itertools.chain((first,), rest):
                 image = frame.to_image(mode="RGB")
                 stream.append_data(numpy.asarray(image))
 
-    def write(self, destination: Path) -> None:
+                frame_count += 1
+
+        return frame_count
+
+    def write(self, destination: Path) -> int:
         """Auto-detect the output format based on ``destination``'s suffix."""
 
         suffix = destination.suffix.lower()
         if suffix == ".gif":
-            self.write_gif(destination)
+            return self.write_gif(destination)
         elif suffix in {".mp4", ".m4v"}:
-            self.write_mp4(destination)
+            return self.write_mp4(destination)
         else:  # pragma: no cover - defensive
             raise ValueError(f"Unsupported animation format for '{destination}'")
 
