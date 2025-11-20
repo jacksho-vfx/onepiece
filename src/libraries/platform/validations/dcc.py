@@ -145,7 +145,8 @@ def _detect_executable(
     """Return whether the DCC executable is available and its resolved path."""
 
     path_env = env.get("PATH", "")
-    executable = shutil.which(dcc.command, path=path_env)
+    executable_name = dcc.resolve_command(dict(env))
+    executable = shutil.which(executable_name, path=path_env)
     return executable is not None, executable
 
 
