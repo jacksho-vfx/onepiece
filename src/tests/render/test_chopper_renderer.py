@@ -283,6 +283,62 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[2] == "255"
 
 
+def test_renderer_blends_transparent_shapes_over_background() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#ff0000",
+        "objects": [
+            {
+                "id": "overlay",
+                "type": "rectangle",
+                "color": (0, 0, 255, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (127, 0, 128)
+
+
+def test_renderer_stacks_multiple_transparent_shapes() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#ffffff",
+        "objects": [
+            {
+                "id": "shadow",
+                "type": "rectangle",
+                "color": (0, 0, 0, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            },
+            {
+                "id": "highlight",
+                "type": "rectangle",
+                "color": (255, 0, 0, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            },
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (191, 63, 63)
+
+
 def test_animation_easing_applied_to_positions() -> None:
     payload = {
         "width": 4,
