@@ -44,6 +44,19 @@ class InvalidPipelineStepFactoryError(PipelinePluginError):
         super().__init__(message)
 
 
+class InvalidPipelineStepError(PipelinePluginError):
+    """Raised when a pipeline step factory returns an invalid result."""
+
+    def __init__(self, *, step_name: str, result: Any) -> None:
+        self.step_name = step_name
+        self.result = result
+        message = (
+            f"pipeline step '{step_name}' factory must return a PipelineStep instance, "
+            f"received {type(result)!r}"
+        )
+        super().__init__(message)
+
+
 class PipelineStepFactory(Protocol):
     """Callable converting configuration mappings into :class:`PipelineStep` objects."""
 
@@ -122,6 +135,18 @@ def discover_pipeline_step_factories(
 
         if not isinstance(loaded, Callable):  # type: ignore[arg-type]
             raise InvalidPipelineStepFactoryError(step_name=name, factory=loaded)
+
+        try:
+            result = loaded({"name": name, "provider": name})
+        except Exception as exc:
+            msg = (
+                f"pipeline step '{name}' factory raised an exception when invoked for "
+                f"validation: {exc}"
+            )
+            raise PipelinePluginError(msg) from exc
+
+        if not isinstance(result, PipelineStep):
+            raise InvalidPipelineStepError(step_name=name, result=result)
 
         registry[name] = loaded
 

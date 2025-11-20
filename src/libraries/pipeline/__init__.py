@@ -9,6 +9,7 @@ from .factories import (
 from .models import Pipeline, PipelineStep, TriggerPolicy
 from .plugins import (
     ENTRY_POINT_GROUP,
+    InvalidPipelineStepError,
     InvalidPipelineStepFactoryError,
     MissingPipelineStepRequirementError,
     PipelinePluginError,
@@ -27,6 +28,7 @@ __all__ = [
     "ENTRY_POINT_GROUP",
     "PipelinePluginError",
     "MissingPipelineStepRequirementError",
+    "InvalidPipelineStepError",
     "InvalidPipelineStepFactoryError",
     "PipelineStepFactory",
     "discover_pipeline_step_factories",
