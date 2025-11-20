@@ -29,6 +29,43 @@ def _load_scene(path: Path) -> Scene:
 
 
 @app.command()
+def inspect(
+    scene: Path = typer.Argument(..., help="Path to the JSON scene description."),
+) -> None:
+    """Summarise a scene without rendering frames."""
+
+    parsed = _load_scene(scene)
+
+    typer.echo(f"Dimensions: {parsed.width}x{parsed.height}")
+    typer.echo(f"Frames: {parsed.frame_count}")
+
+    typer.echo("Objects:")
+    if not parsed.objects:
+        typer.echo("- none")
+    else:
+        for obj in parsed.objects:
+            typer.echo(f"- {obj.id} ({obj.kind})")
+
+    animated_objects = [obj for obj in parsed.objects if obj.animation]
+    typer.echo("Animation spans:")
+    if not animated_objects:
+        typer.echo("- none")
+    else:
+        for obj in animated_objects:
+            assert obj.animation is not None  # for type checkers
+            start_frame = obj.animation.keyframes[0].frame
+            end_frame = obj.animation.keyframes[-1].frame
+            span = (
+                f"{start_frame}"
+                if start_frame == end_frame
+                else f"{start_frame}-{end_frame}"
+            )
+            typer.echo(
+                f"- {obj.id}: frames {span} ({len(obj.animation.keyframes)} keyframe(s))"
+            )
+
+
+@app.command()
 def render(
     scene: Path = typer.Argument(..., help="Path to the JSON scene description."),
     output: Path = typer.Option(
@@ -81,4 +118,4 @@ def render(
     typer.echo(message)
 
 
-__all__ = ["app", "render", "_load_scene"]
+__all__ = ["app", "inspect", "render", "_load_scene"]

@@ -245,7 +245,14 @@ scene must declare positive, non-zero `width`, `height`, and `frames` fields in
 addition to any objects. Scenes with zero or negative dimensions are rejected
 before rendering so frame buffers are always valid.
 
-Use the new `--format` flag to control how frames are exported:
+When authoring new scenes, run `chopper inspect path/to/scene.json` to validate
+the payload without generating frames. The command echoes the dimensions, frame
+count, object roster, and any animation spans; it exits with a non-zero code if
+parsing fails so you can gate CI jobs or authoring workflows on successful
+validation.
+
+Render scenes with `chopper render path/to/scene.json` and use the `--format`
+flag to control how frames are exported:
 
 - `--format ppm` (default) dumps each frame as a human-readable plain PPM file.
 - `--format png` outputs lossless RGBA PNGs while preserving alpha.

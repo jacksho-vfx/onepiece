@@ -30,10 +30,10 @@ def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    result = runner.invoke(app, [str(scene_path)])
+    result = runner.invoke(app, ["render", str(scene_path)])
 
     assert result.exit_code == 2
-    assert "Usage: render" in strip_ansi(result.stderr)
+    assert "Usage: root render" in strip_ansi(result.stderr)
 
 
 def test_render_reports_non_numeric_scene_width(tmp_path: Path) -> None:
@@ -44,7 +44,7 @@ def test_render_reports_non_numeric_scene_width(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    result = runner.invoke(app, [str(scene_path)])
+    result = runner.invoke(app, ["render", str(scene_path)])
 
     assert result.exit_code == 2
     message_lines = strip_ansi(result.stderr).splitlines()
@@ -61,7 +61,7 @@ def test_render_reports_malformed_scene_height(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    result = runner.invoke(app, [str(scene_path)])
+    result = runner.invoke(app, ["render", str(scene_path)])
 
     assert result.exit_code == 2
     message_lines = strip_ansi(result.stderr).splitlines()
@@ -78,13 +78,45 @@ def test_render_reports_non_numeric_frame_count(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    result = runner.invoke(app, [str(scene_path)])
+    result = runner.invoke(app, ["render", str(scene_path)])
 
     assert result.exit_code == 2
     message_lines = strip_ansi(result.stderr).splitlines()
     clean_text = " ".join(line.strip(" │") for line in message_lines)
     assert "Scene frame count must be an integer value" in clean_text
     assert "'many'" in clean_text
+
+
+def test_inspect_reports_scene_summary(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene_with_animation(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["inspect", str(scene_path)])
+
+    assert result.exit_code == 0
+    lines = result.stdout.splitlines()
+    assert "Dimensions: 8x6" in lines
+    assert "Frames: 5" in lines
+    assert "- mover (rectangle)" in lines
+    assert "- static (circle)" in lines
+    assert "- mover: frames 0-4 (2 keyframe(s))" in lines
+
+
+def test_inspect_rejects_invalid_scene(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps({"width": 4, "height": 4, "frames": 0}),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["inspect", str(scene_path)])
+
+    assert result.exit_code == 2
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "frame count must be greater than zero" in clean_text
 
 
 def _write_scene(path: Path) -> None:
@@ -122,6 +154,35 @@ def _write_scene(path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_scene_with_animation(path: Path) -> None:
+    payload = {
+        "width": 8,
+        "height": 6,
+        "frames": 5,
+        "objects": [
+            {
+                "id": "mover",
+                "type": "rectangle",
+                "color": "#123456",
+                "position": [0, 0],
+                "size": [2, 2],
+                "animation": [
+                    {"frame": 0, "x": 0, "y": 0},
+                    {"frame": 4, "x": 2.5, "y": 1.5},
+                ],
+            },
+            {
+                "id": "static",
+                "type": "circle",
+                "color": "#654321",
+                "position": [1, 1],
+                "size": [1, 1],
+            },
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_render_png_frames(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     _write_scene(scene_path)
@@ -130,7 +191,7 @@ def test_render_png_frames(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        [str(scene_path), "--format", "png", "--output", str(output_dir)],
+        ["render", str(scene_path), "--format", "png", "--output", str(output_dir)],
     )
 
     assert result.exit_code == 0
@@ -159,7 +220,7 @@ def test_render_png_reports_missing_pillow(
     runner = CliRunner()
     result = runner.invoke(
         app,
-        [str(scene_path), "--format", "png", "--output", str(output_dir)],
+        ["render", str(scene_path), "--format", "png", "--output", str(output_dir)],
     )
 
     assert result.exit_code == 2
@@ -179,7 +240,7 @@ def test_render_gif_animation(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        [str(scene_path), "--output", str(tmp_path / "animation.gif")],
+        ["render", str(scene_path), "--output", str(tmp_path / "animation.gif")],
     )
 
     assert result.exit_code == 0
@@ -206,7 +267,7 @@ def test_render_gif_reports_missing_pillow(
     runner = CliRunner()
     result = runner.invoke(
         app,
-        [str(scene_path), "--output", str(tmp_path / "animation.gif")],
+        ["render", str(scene_path), "--output", str(tmp_path / "animation.gif")],
     )
 
     assert result.exit_code == 2
@@ -225,6 +286,7 @@ def test_render_gif_rejects_invalid_fps(tmp_path: Path, fps: int) -> None:
     result = runner.invoke(
         app,
         [
+            "render",
             str(scene_path),
             "--output",
             str(tmp_path / "animation.gif"),
@@ -234,8 +296,9 @@ def test_render_gif_rejects_invalid_fps(tmp_path: Path, fps: int) -> None:
     )
 
     assert result.exit_code == 2
-    message = strip_ansi(result.stderr)
-    assert "Frames per second must be greater than zero" in message
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "Frames per second must be greater than zero" in clean_text
 
 
 def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
@@ -246,6 +309,7 @@ def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
+            "render",
             str(scene_path),
             "--format",
             "gif",
@@ -256,8 +320,9 @@ def test_render_rejects_conflicting_suffix(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     terms = ["conflicts", "with", "format"]
+    clean_text = " ".join(strip_ansi(result.stderr).split())
     for term in terms:
-        assert term in result.stderr
+        assert term in clean_text
 
 
 def test_render_rejects_unknown_format(tmp_path: Path) -> None:
@@ -265,7 +330,7 @@ def test_render_rejects_unknown_format(tmp_path: Path) -> None:
     _write_scene(scene_path)
 
     runner = CliRunner()
-    result = runner.invoke(app, [str(scene_path), "--format", "unknown"])
+    result = runner.invoke(app, ["render", str(scene_path), "--format", "unknown"])
 
     assert result.exit_code == 2
     assert "format must be one of" in result.stderr
@@ -290,6 +355,7 @@ def test_render_mp4_reports_missing_animation_dependencies(
     result = runner.invoke(
         app,
         [
+            "render",
             str(scene_path),
             "--format",
             "mp4",
