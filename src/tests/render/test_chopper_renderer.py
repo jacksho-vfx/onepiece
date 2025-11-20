@@ -127,6 +127,14 @@ def test_scene_object_requires_finite_position_values() -> None:
         Scene.from_dict(payload)
 
 
+def test_scene_object_rejects_invalid_easing() -> None:
+    payload = build_scene_dict()
+    payload["objects"][1]["easing"] = "squish"  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="Unsupported easing function"):
+        Scene.from_dict(payload)
+
+
 def test_scene_object_animation_requires_finite_coordinates() -> None:
     payload = build_scene_dict()
     payload["objects"][1]["animation"][0]["x"] = float("nan")  # type: ignore[index]
@@ -211,6 +219,96 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[0] == "P3"
     assert contents[1] == f"{scene.width} {scene.height}"
     assert contents[2] == "255"
+
+
+def test_animation_easing_applied_to_positions() -> None:
+    payload = {
+        "width": 4,
+        "height": 4,
+        "frames": 3,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "hero",
+                "type": "circle",
+                "color": "#ffffff",
+                "position": [0, 0],
+                "size": [2, 2],
+                "easing": "ease-in",
+                "animation": [
+                    {"frame": 0, "x": 0, "y": 0},
+                    {"frame": 2, "x": 10, "y": 0},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    obj = scene.objects[0]
+
+    halfway = obj.position_at(1)
+    assert halfway[0] == pytest.approx(2.5)
+    assert halfway[1] == pytest.approx(0.0)
+
+
+def test_animation_keyframe_easing_overrides_default() -> None:
+    payload = {
+        "width": 4,
+        "height": 4,
+        "frames": 3,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "hero",
+                "type": "circle",
+                "color": "#ffffff",
+                "position": [0, 0],
+                "size": [2, 2],
+                "easing": "ease-in",
+                "animation": [
+                    {"frame": 0, "x": 0, "y": 0, "easing": "ease-out"},
+                    {"frame": 2, "x": 10, "y": 0},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    obj = scene.objects[0]
+
+    halfway = obj.position_at(1)
+    assert halfway[0] == pytest.approx(7.5)
+    assert halfway[1] == pytest.approx(0.0)
+
+
+def test_animation_supports_cubic_easing() -> None:
+    payload = {
+        "width": 4,
+        "height": 4,
+        "frames": 3,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "hero",
+                "type": "circle",
+                "color": "#ffffff",
+                "position": [0, 0],
+                "size": [2, 2],
+                "easing": "cubic(0,0,1,1)",
+                "animation": [
+                    {"frame": 0, "x": 0, "y": 0},
+                    {"frame": 2, "x": 10, "y": 0},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    obj = scene.objects[0]
+
+    halfway = obj.position_at(1)
+    assert halfway[0] == pytest.approx(5.0)
+    assert halfway[1] == pytest.approx(0.0)
 
 
 def test_line_and_polygon_rendering() -> None:

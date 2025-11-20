@@ -6,7 +6,8 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+import re
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 try:  # pragma: no cover - dependency optional for basic functionality
     from PIL import Image as PILImage
@@ -64,6 +65,101 @@ class SceneError(ValueError):
     """Raised when a scene description is malformed."""
 
 
+EASING_PATTERN = re.compile(
+    r"cubic(?:-bezier)?\(([^,]+),([^,]+),([^,]+),([^\)]+)\)", re.IGNORECASE
+)
+
+
+def _validate_easing_identifier(value: object) -> str:
+    """Validate and normalise an easing identifier."""
+
+    if not isinstance(value, str):
+        raise SceneError("Easing value must be a string identifier")
+
+    text = value.strip().lower()
+    if not text:
+        raise SceneError("Easing value cannot be empty")
+
+    if text in {"linear", "ease-in", "ease-out", "ease-in-out"}:
+        return text
+
+    match = EASING_PATTERN.fullmatch(text)
+    if match:
+        try:
+            x1, y1, x2, y2 = (float(part) for part in match.groups())
+        except ValueError as exc:  # pragma: no cover - defensive
+            raise SceneError(f"Invalid cubic easing values: {value!r}") from exc
+
+        for component in (x1, y1, x2, y2):
+            if not math.isfinite(component):
+                raise SceneError("Cubic easing components must be finite numbers")
+
+        return f"cubic({x1},{y1},{x2},{y2})"
+
+    raise SceneError(
+        f"Unsupported easing function: {value!r}."
+        " Supported values include linear, ease-in, ease-out, ease-in-out,"
+        " or cubic(x1,y1,x2,y2)."
+    )
+
+
+def _cubic_bezier(x1: float, y1: float, x2: float, y2: float, t: float) -> float:
+    """Evaluate a cubic-bezier curve for progress ``t``."""
+
+    def bezier(a1: float, a2: float, progress: float) -> float:
+        inv_t = 1.0 - progress
+        return (
+            3 * a1 * inv_t * inv_t * progress
+            + 3 * a2 * inv_t * progress * progress
+            + progress * progress * progress
+        )
+
+    # Invert the x curve to find the parametric position for the supplied t
+    # then compute the corresponding y value.
+    target = t
+    lower = 0.0
+    upper = 1.0
+    for _ in range(12):
+        mid = (lower + upper) / 2.0
+        estimate = bezier(x1, x2, mid)
+        if abs(estimate - target) < 1e-6:
+            break
+        if estimate < target:
+            lower = mid
+        else:
+            upper = mid
+    return bezier(y1, y2, (lower + upper) / 2.0)
+
+
+def _easing_function(identifier: str | None) -> Callable[[float], float]:
+    """Return an easing function for ``identifier``."""
+
+    if identifier is None:
+        return lambda t: t
+
+    easing = identifier
+    if easing == "linear":
+        return lambda t: t
+    if easing == "ease-in":
+        return lambda t: t * t
+    if easing == "ease-out":
+        return lambda t: 1 - (1 - t) * (1 - t)
+    if easing == "ease-in-out":
+
+        def ease_in_out(t: float) -> float:
+            if t < 0.5:
+                return 2 * t * t
+            return 1 - 2 * (1 - t) * (1 - t)
+
+        return ease_in_out
+    if easing.startswith("cubic("):
+        x1, y1, x2, y2 = (float(part) for part in easing[6:-1].split(","))
+        return lambda t: _cubic_bezier(x1, y1, x2, y2, t)
+
+    # This should not occur because identifiers are validated when parsing.
+    return lambda t: t
+
+
 @dataclass(slots=True)
 class Keyframe:
     """Represents a single keyframe in an animation track."""
@@ -71,6 +167,7 @@ class Keyframe:
     frame: int
     x: float
     y: float
+    easing: str | None = None
 
 
 @dataclass(slots=True)
@@ -78,6 +175,7 @@ class Animation:
     """Simple linear animation track for two-dimensional positions."""
 
     keyframes: list[Keyframe]
+    default_easing: str | None = None
 
     def position_at(self, frame: int) -> tuple[float, float]:
         """Return the interpolated position for ``frame``."""
@@ -97,7 +195,9 @@ class Animation:
             if left.frame <= frame <= right.frame:
                 if right.frame == left.frame:
                     return left.x, left.y
-                t = (frame - left.frame) / (right.frame - left.frame)
+                raw_t = (frame - left.frame) / (right.frame - left.frame)
+                easing = _easing_function(left.easing or self.default_easing)
+                t = easing(raw_t)
                 x = left.x + (right.x - left.x) * t
                 y = left.y + (right.y - left.y) * t
                 return x, y
@@ -265,6 +365,11 @@ class SceneObject:
         if payload.get("stroke_color") is not None:
             stroke_color = parse_color(payload["stroke_color"])
 
+        default_easing_raw = payload.get("easing")
+        default_easing = None
+        if default_easing_raw is not None:
+            default_easing = _validate_easing_identifier(default_easing_raw)
+
         animation_data = payload.get("animation")
         animation = None
         if animation_data is not None:
@@ -303,7 +408,12 @@ class SceneObject:
                         f"Object animation entry at index {index} must have finite coordinate values"
                     )
 
-                keyframes.append(Keyframe(frame=frame, x=x, y=y))
+                easing_raw = item.get("easing")
+                easing = None
+                if easing_raw is not None:
+                    easing = _validate_easing_identifier(easing_raw)
+
+                keyframes.append(Keyframe(frame=frame, x=x, y=y, easing=easing))
 
             if not keyframes:
                 raise SceneError(
@@ -311,7 +421,7 @@ class SceneObject:
                 )
 
             keyframes.sort(key=lambda keyframe: keyframe.frame)
-            animation = Animation(keyframes=keyframes)
+            animation = Animation(keyframes=keyframes, default_easing=default_easing)
 
         return cls(
             id=str(payload["id"]),
