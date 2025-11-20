@@ -110,6 +110,31 @@ def test_verify_dcc_dependencies_detects_gpu_failure(tmp_path: Path) -> None:
     assert report.is_valid is False
 
 
+def test_verify_dcc_dependencies_vray_requires_gpu(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    target = package / "config" / "vray_settings.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("payload")
+
+    report = verify_dcc_dependencies(
+        SupportedDCC.VRAY,
+        package,
+        plugin_inventory=["vray"],
+        gpu_description="NVIDIA RTX / CUDA 11",
+    )
+
+    assert report.plugins.missing == frozenset()
+    assert report.assets.missing == tuple()
+    assert report.gpu == DCCGPUStatus(
+        required="CUDA 11",
+        detected="NVIDIA RTX / CUDA 11",
+        meets_requirement=True,
+    )
+    assert report.is_valid is True
+
+
 def test_verify_dcc_dependencies_cinema4d_missing_assets(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.mkdir()
