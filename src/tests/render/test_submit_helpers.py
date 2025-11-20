@@ -1,57 +1,70 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
-from apps.onepiece.render.submit import helpers
-from apps.onepiece.render.submit.helpers import resolve_metrics
+from apps.onepiece.render.submit.helpers import resolve_priority_and_chunk_size
+from apps.onepiece.utils.errors import OnePieceValidationError
 
 
-def test_resolve_metrics_honors_cli_metrics_without_optimization(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "capabilities",
+    [
+        {
+            "chunk_size_enabled": True,
+            "default_chunk_size": 1,
+            "chunk_size_min": 2,
+            "chunk_size_max": 5,
+        },
+        {
+            "chunk_size_enabled": True,
+            "default_chunk_size": 6,
+            "chunk_size_min": 2,
+            "chunk_size_max": 5,
+        },
+    ],
+)
+def test_invalid_adapter_default_chunk_size_raises(
+    capabilities: dict[str, int]
 ) -> None:
-    def _fail_profile_load(*_: object, **__: object) -> None:
-        pytest.fail("load_profile should not be called when optimize is False")
-
-    monkeypatch.setattr(helpers, "load_profile", _fail_profile_load)
-
-    metrics, sources = resolve_metrics(
-        optimize=False,
-        profile_name="manual",
-        queue_depth=42,
-        average_frame_ms=16.5,
-    )
-
-    assert metrics.queue_depth == 42
-    assert metrics.average_frame_time_ms == 16.5
-    assert sources == ("cli.queue_depth", "cli.average_frame_ms")
-
-
-def test_resolve_metrics_merges_profile_and_cli_metrics(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _fake_profile_load(*_: object, **__: object) -> SimpleNamespace:
-        return SimpleNamespace(
-            data={
-                "render": {
-                    "optimization": {
-                        "queue_depth": 100,
-                        "average_frame_ms": 25.0,
-                    }
-                }
-            }
+    with pytest.raises(OnePieceValidationError):
+        resolve_priority_and_chunk_size(
+            farm="mock",
+            priority=None,
+            chunk_size=None,
+            capabilities=capabilities,
+            optimize=False,
         )
 
-    monkeypatch.setattr(helpers, "load_profile", _fake_profile_load)
 
-    metrics, sources = resolve_metrics(
-        optimize=True,
-        profile_name="profile",
-        queue_depth=80,
-        average_frame_ms=12.5,
+def test_chunk_size_at_minimum_allowed() -> None:
+    _, resolved_chunk, _, _ = resolve_priority_and_chunk_size(
+        farm="mock",
+        priority=None,
+        chunk_size=None,
+        capabilities={
+            "chunk_size_enabled": True,
+            "default_chunk_size": 2,
+            "chunk_size_min": 2,
+            "chunk_size_max": 5,
+        },
+        optimize=False,
     )
 
-    assert metrics.queue_depth == 80
-    assert metrics.average_frame_time_ms == 12.5
-    assert sources == ("profile", "cli.queue_depth", "cli.average_frame_ms")
+    assert resolved_chunk == 2
+
+
+def test_chunk_size_at_maximum_allowed() -> None:
+    _, resolved_chunk, _, _ = resolve_priority_and_chunk_size(
+        farm="mock",
+        priority=None,
+        chunk_size=5,
+        capabilities={
+            "chunk_size_enabled": True,
+            "default_chunk_size": 3,
+            "chunk_size_min": 2,
+            "chunk_size_max": 5,
+        },
+        optimize=False,
+    )
+
+    assert resolved_chunk == 5
