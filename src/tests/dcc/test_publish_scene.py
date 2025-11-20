@@ -658,6 +658,76 @@ def test_publish_scene_cinema4d_validation_success(
 
 
 @patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_houdini_validation_success(
+    sync_mock: MagicMock, publish_inputs: PublishInputs
+) -> None:
+    renders, previews, otio, metadata, destination = publish_inputs
+
+    scene_name = "ep01_sh041"
+    package_dir = destination / scene_name
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "scene.hiplc").write_text("hip data")
+    caches_dir = package_dir / "caches"
+    caches_dir.mkdir(parents=True, exist_ok=True)
+    (caches_dir / "sim.bgeo").write_text("cache")
+    descriptor_dir = package_dir / "packages"
+    descriptor_dir.mkdir(parents=True, exist_ok=True)
+    (descriptor_dir / "onepiece.json").write_text("{}")
+
+    result = publish_scene(
+        SupportedDCC.HOUDINI,
+        scene_name=scene_name,
+        renders=renders,
+        previews=previews,
+        otio=otio,
+        metadata=metadata,
+        destination=destination,
+        bucket="libraries-bucket",
+        show_code="OP",
+        show_type="vfx",
+        plugin_inventory=["karma"],
+        required_assets=(),
+        gpu_description="Vulkan",
+    )
+
+    expected_package = destination / scene_name
+    assert result.package_dir == expected_package
+    assert result.destination == "s3://libraries-bucket/vfx/OP/ep01_sh041"
+    assert (expected_package / "caches" / "sim.bgeo").exists()
+    assert (expected_package / "packages" / "onepiece.json").exists()
+    sync_mock.assert_called_once()
+
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
+def test_publish_scene_houdini_validation_failure(
+    sync_mock: MagicMock, publish_inputs: PublishInputs
+) -> None:
+    renders, previews, otio, metadata, destination = publish_inputs
+
+    with pytest.raises(RuntimeError) as excinfo:
+        publish_scene(
+            SupportedDCC.HOUDINI,
+            scene_name="ep01_sh042",
+            renders=renders,
+            previews=previews,
+            otio=otio,
+            metadata=metadata,
+            destination=destination,
+            bucket="libraries-bucket",
+            show_code="OP",
+            show_type="vfx",
+            plugin_inventory=["karma"],
+            required_assets=(),
+            gpu_description="Vulkan",
+        )
+
+    message = str(excinfo.value)
+    assert "Houdini validation failed" in message
+    assert "scene file" in message
+    sync_mock.assert_not_called()
+
+
+@patch("libraries.creative.dcc.dcc_client.s5_sync")
 def test_publish_scene_honours_dry_run(
     sync_mock: MagicMock, publish_inputs: PublishInputs
 ) -> None:

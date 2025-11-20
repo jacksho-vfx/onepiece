@@ -22,6 +22,9 @@ from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportReport,
     validate_unreal_export,
 )
+from libraries.creative.dcc.houdini.validation import (
+    validate_package as validate_houdini_package,
+)
 from libraries.creative.dcc.cinema4d.validation import (
     validate_package as validate_cinema4d_package,
 )
@@ -476,6 +479,15 @@ def publish_scene(
                 "Maya validation skipped; insufficient data",
                 extra={"package": str(package_dir)},
             )
+    elif dcc is SupportedDCC.HOUDINI:
+        houdini_issues = validate_houdini_package(package_dir)
+        if houdini_issues:
+            message = "Houdini validation failed; " + "; ".join(sorted(houdini_issues))
+            log.error(
+                "publish_scene_houdini_validation_failed",
+                extra={"package": str(package_dir), "details": houdini_issues},
+            )
+            raise RuntimeError(message)
     elif dcc is SupportedDCC.CINEMA4D:
         cinema4d_issues = validate_cinema4d_package(package_dir)
         if cinema4d_issues:
