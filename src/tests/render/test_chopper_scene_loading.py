@@ -28,6 +28,7 @@ def stub_chopper_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
         def from_dict(cls, payload: dict[str, object]) -> dict[str, object]:
             return payload
 
+    renderer_module.Color = tuple[int, ...]  # type: ignore[attr-defined]
     renderer_module.Scene = _DummyScene  # type: ignore[attr-defined]
     renderer_module.SceneError = ValueError  # type: ignore[attr-defined]
     renderer_module.Renderer = object  # type: ignore[attr-defined]
