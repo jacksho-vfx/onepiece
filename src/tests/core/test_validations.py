@@ -312,6 +312,79 @@ def test_check_dcc_environment_cinema4d_succeeds(
     assert report.gpu.meets_requirement is True
 
 
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/opt/Houdini/bin/houdini",
+)
+def test_check_dcc_environment_reports_missing_karma(
+    mock_which: MagicMock, tmp_path: Path
+) -> None:
+    houdini_root = tmp_path / "houdini"
+    packages_dir = houdini_root / "packages"
+    packages_dir.mkdir(parents=True)
+    (packages_dir / "onepiece.json").write_text("{}")
+
+    env = {
+        "PATH": str(houdini_root),
+        "HOUDINI_PATH": str(houdini_root),
+    }
+
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.HOUDINI,
+        env=env,
+    )
+
+    assert "karma" in report.plugins.missing
+    assert "packages/onepiece.json" not in report.plugins.missing
+
+
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/opt/Houdini/bin/houdini",
+)
+def test_check_dcc_environment_reports_invalid_houdini_path(
+    mock_which: MagicMock,
+) -> None:
+    env = {
+        "PATH": "/opt/Houdini/bin",
+        "HOUDINI_PATH": "/not/a/real/path",
+    }
+
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.HOUDINI,
+        env=env,
+        plugin_inventory={SupportedDCC.HOUDINI: frozenset({"karma"})},
+    )
+
+    assert "packages/onepiece.json" in report.plugins.missing
+    assert "karma" not in report.plugins.missing
+
+
+@patch(
+    "libraries.platform.validations.dcc.shutil.which",
+    return_value="/opt/Houdini/bin/houdini",
+)
+def test_check_dcc_environment_uses_hconfig_paths(
+    mock_which: MagicMock, tmp_path: Path
+) -> None:
+    package_root = tmp_path / "houdini"
+    package_dir = package_root / "packages"
+    package_dir.mkdir(parents=True)
+    (package_dir / "onepiece.json").write_text("{}")
+
+    env = {
+        "PATH": "/opt/Houdini/bin",
+        "HOUDINI_HCONFIG": f"HOUDINI_PATH = {package_root}{os.pathsep}&",
+    }
+
+    report = dcc_validations.check_dcc_environment(
+        SupportedDCC.HOUDINI,
+        env=env,
+    )
+
+    assert report.plugins.missing == frozenset({"karma"})
+
+
 # ---------- CLI extensions ----------
 
 
