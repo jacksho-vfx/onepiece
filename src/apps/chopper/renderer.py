@@ -265,6 +265,7 @@ class SceneObject:
     color: Color
     position: tuple[float, float]
     size: tuple[float, float]
+    z_index: int = 0
     points: tuple[tuple[float, float], ...] = ()
     stroke_color: Color | None = None
     stroke_width: float | None = None
@@ -399,6 +400,14 @@ class SceneObject:
         if payload.get("stroke_color") is not None:
             stroke_color = parse_color(payload["stroke_color"])
 
+        z_index_raw = payload.get("z_index", 0)
+        if not isinstance(z_index_raw, (int, float)):
+            raise SceneError("Object z_index must be an integer")
+        z_index_value = float(z_index_raw)
+        if not math.isfinite(z_index_value) or not z_index_value.is_integer():
+            raise SceneError("Object z_index must be an integer")
+        z_index = int(z_index_value)
+
         default_easing_raw = payload.get("easing")
         default_easing = None
         if default_easing_raw is not None:
@@ -463,6 +472,7 @@ class SceneObject:
             color=color,
             position=position,
             size=size,
+            z_index=z_index,
             points=points,
             stroke_color=stroke_color,
             stroke_width=stroke_width,
@@ -723,6 +733,8 @@ class Scene:
                 )
             seen_ids.add(scene_object.id)
             objects.append(scene_object)
+
+        objects.sort(key=lambda obj: obj.z_index)
 
         return cls(
             width=width,
