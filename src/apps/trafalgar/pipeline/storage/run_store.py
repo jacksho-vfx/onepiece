@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+from types import TracebackType
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -67,6 +68,21 @@ class PipelineRunStore:
         self._initialise_schema()
         self._subscribers: dict[str, list[_RunEventSubscriber]] = {}
         self._closed = False
+
+    def __enter__(self) -> PipelineRunStore:
+        """Enter the context manager and return the store instance."""
+
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the store when exiting a context block."""
+
+        self.close()
 
     def close(self) -> None:
         """Release any database resources held by the store."""
