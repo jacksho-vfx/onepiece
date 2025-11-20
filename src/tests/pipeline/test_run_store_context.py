@@ -38,6 +38,30 @@ def test_run_store_context_manager_closes_connection(tmp_path: Path) -> None:
         connection.execute("SELECT 1")
 
 
+def test_run_store_enforces_foreign_key_constraints(tmp_path: Path) -> None:
+    store = PipelineRunStore(database=tmp_path / "runs.sqlite3")
+    timestamp = datetime.now(timezone.utc)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with store._connection:
+            store._connection.execute(
+                """
+                INSERT INTO pipeline_run_events (
+                    run_id, pipeline, status, timestamp, parameters
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    "missing-run",
+                    "demo",
+                    "queued",
+                    timestamp.isoformat(),
+                    "{}",
+                ),
+            )
+
+    store.close()
+
+
 @pytest.mark.asyncio
 async def test_run_store_context_manager_notifies_watchers() -> None:
     events: list[PipelineRunEvent] = []
