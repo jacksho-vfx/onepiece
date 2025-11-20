@@ -437,7 +437,9 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
     ]
 
     destination = tmp_path / "animation.gif"
-    AnimationWriter(frames=frames, fps=12).write_gif(destination)
+    frame_count = AnimationWriter(frames=iter(frames), fps=12).write_gif(destination)
+
+    assert frame_count == len(frames)
 
     data = destination.read_bytes()
     assert data.startswith(b"GIF89a")
@@ -494,9 +496,10 @@ def test_animation_writer_converts_frames_to_numpy(
 
     monkeypatch.setattr("apps.chopper.renderer._require_imageio", lambda: DummyModule())
 
-    writer = AnimationWriter(frames=frames, fps=24)
-    writer.write_mp4(tmp_path / "animation.mp4")
+    writer = AnimationWriter(frames=iter(frames), fps=24)
+    frame_count = writer.write_mp4(tmp_path / "animation.mp4")
 
+    assert frame_count == len(frames)
     assert len(stream.captured) == len(frames)
     for frame, data in zip(frames, stream.captured, strict=True):
         assert isinstance(data, numpy.ndarray)

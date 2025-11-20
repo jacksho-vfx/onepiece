@@ -104,7 +104,7 @@ def _write_frames(
 
 
 def _write_animation(
-    frames: list[Any], destination: Path, export_format: str, fps: int
+    frames: Iterable[Any], destination: Path, export_format: str, fps: int
 ) -> int:
     """Encode ``frames`` as an animation at ``destination``."""
 
@@ -116,13 +116,13 @@ def _write_animation(
     writer = AnimationWriter(frames=frames, fps=fps)
     try:
         if export_format == "gif":
-            writer.write_gif(destination)
+            frame_count = int(writer.write_gif(destination))
         else:
-            writer.write_mp4(destination)
-    except RuntimeError as exc:
+            frame_count = int(writer.write_mp4(destination))
+    except (RuntimeError, ValueError) as exc:
         raise ChopperRenderError(str(exc)) from exc
 
-    return len(frames)
+    return frame_count
 
 
 def render_scene(
@@ -156,7 +156,6 @@ def render_scene(
         destination = destination.with_suffix(suffix)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    frames = list(frames_iter)
-    frame_count = _write_animation(frames, destination, export_normalized, fps)
+    frame_count = _write_animation(frames_iter, destination, export_normalized, fps)
 
     return f"Rendered {frame_count} frame(s) to {destination}"
