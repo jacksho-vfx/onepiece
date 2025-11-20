@@ -8,11 +8,13 @@ from typing import Any
 import pytest
 
 from libraries.integrations.ftrack import (
+    FtrackCredentials,
     FtrackError,
     FtrackProject,
     FtrackRestClient,
     FtrackShot,
     FtrackTask,
+    load_credentials,
 )
 
 
@@ -109,6 +111,20 @@ def test_authentication_sets_bearer_token() -> None:
     ) in session.requests
 
 
+def test_client_accepts_existing_bearer_token() -> None:
+    base_url = "https://server"
+    session = _StubSession({})
+
+    client = FtrackRestClient(
+        base_url=base_url, bearer_token="existing", session=session
+    )
+
+    assert client.base_url == base_url
+    assert session.headers["Accept"] == "application/json"
+    assert session.headers["Authorization"] == "Bearer existing"
+    assert session.requests == []
+
+
 def test_list_projects_parses_payload_into_models() -> None:
     base_url = "https://server"
     projects_payload = {"data": [{"id": "P1", "name": "Demo"}]}
@@ -140,6 +156,9 @@ def test_list_helpers_validate_required_identifiers() -> None:
         client.get_shot("")
     with pytest.raises(ValueError):
         client.get_task("")
+
+    with pytest.raises(ValueError):
+        FtrackRestClient(base_url=base_url, api_user="", api_key="secret")
 
 
 @pytest.mark.parametrize(
@@ -266,3 +285,58 @@ def test_workflow_stubs_raise_not_implemented() -> None:
         client.sync_shot_structure(project.id, [shot])
     with pytest.raises(NotImplementedError):
         client.sync_task_assignments(project.id, [task])
+
+
+def test_client_from_credentials_uses_bearer_token() -> None:
+    credentials = FtrackCredentials(base_url="https://server", bearer_token="token")
+    session = _StubSession({})
+
+    client = FtrackRestClient.from_credentials(credentials, session=session)
+
+    assert client.base_url == "https://server"
+    assert session.headers["Authorization"] == "Bearer token"
+    assert session.requests == []
+
+
+def test_load_credentials_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FTRACK_URL", "https://env")
+    monkeypatch.setenv("FTRACK_API_USER", "env_user")
+    monkeypatch.setenv("FTRACK_API_KEY", "env_key")
+
+    credentials = load_credentials()
+
+    assert credentials.base_url == "https://env"
+    assert credentials.api_user == "env_user"
+    assert credentials.api_key == "env_key"
+
+
+def test_load_credentials_merges_file_and_env(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = {
+        "base_url": "https://file",
+        "api_user": "file_user",
+        "api_key": "file_key",
+    }
+    credentials_file = tmp_path / "ftrack.json"
+    credentials_file.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("FTRACK_CREDENTIALS_FILE", str(credentials_file))
+    monkeypatch.setenv("FTRACK_URL", "https://env")
+    monkeypatch.setenv("FTRACK_BEARER_TOKEN", "token")
+
+    credentials = load_credentials()
+
+    assert credentials.base_url == "https://env"
+    assert credentials.api_user == "file_user"
+    assert credentials.api_key == "file_key"
+    assert credentials.bearer_token == "token"
+
+
+def test_load_credentials_requires_auth_inputs(tmp_path: Any) -> None:
+    credentials_file = tmp_path / "ftrack.json"
+    credentials_file.write_text(
+        json.dumps({"base_url": "https://file"}), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError):
+        load_credentials(credentials_file)
