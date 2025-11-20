@@ -310,6 +310,22 @@ def resolve_priority_and_chunk_size(
         if chunk_enabled
         else None
     )
+
+    def _validate_chunk_size(value: int) -> None:
+        if chunk_min is not None and value < chunk_min:
+            raise OnePieceValidationError(
+                f"Chunk size {value} is below the supported minimum of {chunk_min} (--chunk-size)."
+            )
+        if chunk_max is not None and value > chunk_max:
+            raise OnePieceValidationError(
+                f"Chunk size {value} exceeds the supported maximum of {chunk_max} (--chunk-size)."
+            )
+
+    if chunk_enabled:
+        if chunk_size is not None:
+            _validate_chunk_size(chunk_size)
+        if adapter_default_chunk is not None:
+            _validate_chunk_size(adapter_default_chunk)
     resolved_chunk: int | None
     if chunk_size is not None:
         resolved_chunk = chunk_size

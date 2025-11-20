@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -154,7 +155,7 @@ def _resolved_settings_path() -> Path | None:
     return None
 
 
-def _settings_signature() -> tuple[str | None, str, int | None]:
+def _settings_signature() -> tuple[str | None, str, int | None, int | None, str | None]:
     """Return the cache signature for the current settings configuration."""
 
     env_path = os.getenv("PERONA_SETTINGS_PATH")
@@ -162,15 +163,26 @@ def _settings_signature() -> tuple[str | None, str, int | None]:
     signature_path = resolved_path or DEFAULT_SETTINGS_PATH.expanduser()
 
     mtime_ns: int | None = None
+    file_size: int | None = None
+    digest: str | None = None
     try:
         stat_result = signature_path.stat()
         mtime_ns = getattr(stat_result, "st_mtime_ns", None)
         if mtime_ns is None:
             mtime_ns = int(stat_result.st_mtime * 1_000_000_000)
+        file_size = stat_result.st_size
+        checksum = hashlib.sha256()
+        with signature_path.open("rb") as handle:
+            while True:
+                chunk = handle.read(8192)
+                if not chunk:
+                    break
+                checksum.update(chunk)
+        digest = checksum.hexdigest()
     except OSError:
         mtime_ns = None
 
-    return (env_path, str(signature_path), mtime_ns)
+    return (env_path, str(signature_path), mtime_ns, file_size, digest)
 
 
 def _get_engine_cache_entry(force_refresh: bool = False) -> _EngineCacheEntry:
