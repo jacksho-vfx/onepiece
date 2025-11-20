@@ -808,10 +808,29 @@ class Renderer:
     def __init__(self, scene: Scene):
         self.scene = scene
 
-    def render(self) -> Iterator[Frame]:
-        """Yield each rendered frame in the scene lazily."""
+    def render(self, frames: Iterable[int] | None = None) -> Iterator[Frame]:
+        """Yield selected rendered frames lazily.
 
-        for index in range(self.scene.frame_count):
+        Parameters
+        ----------
+        frames:
+            Optional iterable of frame indices to render. If omitted, all frames in the
+            scene will be produced.
+        """
+
+        if frames is None:
+            frame_indices = list(range(self.scene.frame_count))
+        else:
+            frame_indices = list(frames)
+            if not frame_indices:
+                raise SceneError("No frame indices were supplied for rendering")
+            for index in frame_indices:
+                if index < 0 or index >= self.scene.frame_count:
+                    raise SceneError(
+                        f"Frame index {index} is outside the 0-{self.scene.frame_count - 1} range"
+                    )
+
+        for index in frame_indices:
             frame = Frame.blank(
                 index, self.scene.width, self.scene.height, self.scene.background
             )

@@ -239,6 +239,114 @@ def test_render_png_frames(tmp_path: Path) -> None:
     )
 
 
+def test_render_supports_frame_range(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene_with_animation(scene_path)
+
+    output_dir = tmp_path / "range"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--format",
+            "png",
+            "--output",
+            str(output_dir),
+            "--start",
+            "1",
+            "--end",
+            "3",
+        ],
+    )
+
+    assert result.exit_code == 0
+    contents = sorted(output_dir.glob("*.png"))
+    assert [path.name for path in contents] == [
+        "frame_0001.png",
+        "frame_0002.png",
+        "frame_0003.png",
+    ]
+    assert "frames 1-3" in result.stdout
+
+
+def test_render_supports_frame_list(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene_with_animation(scene_path)
+
+    output_dir = tmp_path / "frames"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--format",
+            "png",
+            "--output",
+            str(output_dir),
+            "--frames",
+            "0,2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    contents = sorted(output_dir.glob("*.png"))
+    assert [path.name for path in contents] == ["frame_0000.png", "frame_0002.png"]
+    assert "frames 0, 2" in result.stdout
+
+
+def test_render_rejects_invalid_frame_selection(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--start",
+            "5",
+        ],
+    )
+
+    assert result.exit_code == 2
+    clean_text = " ".join(strip_ansi(result.stderr).split())
+    assert "within the 0-1 range" in clean_text
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--frames",
+            "0,a",
+        ],
+    )
+
+    assert result.exit_code == 2
+    clean_text = " ".join(strip_ansi(result.stderr).split())
+    assert "Frame value 'a' is not an integer" in clean_text
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--frames",
+            "0,1",
+            "--start",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 2
+    clean_text = " ".join(strip_ansi(result.stderr).split())
+    assert "Cannot combine --frames with --start/--end options" in clean_text
+
+
 def test_render_supports_background_override(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     _write_blank_scene(scene_path)

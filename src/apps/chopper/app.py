@@ -93,11 +93,30 @@ def render(
         "-b",
         help="Override the scene background colour using a hex value like '#112233'.",
     ),
+    start: int | None = typer.Option(
+        None,
+        "--start",
+        help="First frame index to render (defaults to the first frame).",
+    ),
+    end: int | None = typer.Option(
+        None,
+        "--end",
+        help="Last frame index to render (defaults to the final frame).",
+    ),
+    frames: str | None = typer.Option(
+        None,
+        "--frames",
+        help=(
+            "Comma-separated list of specific frame indices to render; cannot be combined "
+            "with --start/--end."
+        ),
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
     export_was_explicit = False
     background_override: Color | None = None
+    frame_list: list[int] | None = None
 
     try:
         ctx = click.get_current_context(silent=True)
@@ -117,6 +136,12 @@ def render(
         except SceneError as exc:
             raise typer.BadParameter(str(exc)) from exc
 
+    if frames is not None:
+        try:
+            frame_list = _parse_frame_list(frames)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
     try:
         message = render_scene(
             scene_path=scene,
@@ -125,11 +150,29 @@ def render(
             fps=fps,
             export_was_explicit=export_was_explicit,
             background_override=background_override,
+            start_frame=start,
+            end_frame=end,
+            frames=frame_list,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(message)
+
+
+def _parse_frame_list(raw: str) -> list[int]:
+    values = [part.strip() for part in raw.split(",") if part.strip()]
+    if not values:
+        raise ValueError("Frame list cannot be empty")
+
+    indices: list[int] = []
+    for value in values:
+        try:
+            indices.append(int(value))
+        except ValueError as exc:
+            raise ValueError(f"Frame value {value!r} is not an integer") from exc
+
+    return indices
 
 
 __all__ = ["app", "inspect", "render", "_load_scene"]

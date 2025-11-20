@@ -131,6 +131,88 @@ def _write_animation(
     return frame_count
 
 
+def _render_message(
+    frame_count: int, destination: Path, description: str | None
+) -> str:
+    suffix = f" to {destination}"
+    if description:
+        return f"Rendered {frame_count} frame(s) {description}{suffix}"
+    return f"Rendered {frame_count} frame(s){suffix}"
+
+
+def _resolve_frame_indices(
+    *,
+    frame_count: int,
+    start_frame: int | None,
+    end_frame: int | None,
+    frames: Iterable[int] | None,
+) -> list[int] | None:
+    """Validate frame selection parameters and return a list of indices."""
+
+    upper = frame_count - 1
+
+    if frames is not None:
+        if start_frame is not None or end_frame is not None:
+            raise ChopperRenderError(
+                "Cannot combine --frames with --start/--end options"
+            )
+        indices = list(frames)
+        if not indices:
+            raise ChopperRenderError("At least one frame index must be provided")
+    elif start_frame is None and end_frame is None:
+        return None
+    else:
+        start = start_frame if start_frame is not None else 0
+        end = end_frame if end_frame is not None else frame_count - 1
+        if start < 0 or end < 0:
+            raise ChopperRenderError("Frame indices must be zero or greater")
+        if start > upper or end > upper:
+            raise ChopperRenderError(
+                f"Frame indices must be within the 0-{upper} range"
+            )
+        if start > end:
+            raise ChopperRenderError("Start frame cannot be greater than end frame")
+        indices = list(range(start, end + 1))
+
+    for index in indices:
+        if index < 0 or index > upper:
+            raise ChopperRenderError(
+                f"Frame index {index} is outside the valid range 0-{upper}"
+            )
+
+    # Remove duplicates while preserving order to avoid rendering the same frame twice
+    seen: set[int] = set()
+    deduped: list[int] = []
+    for index in indices:
+        if index not in seen:
+            seen.add(index)
+            deduped.append(index)
+
+    return deduped
+
+
+def _frame_selection_description(frame_indices: list[int] | None) -> str | None:
+    if not frame_indices:
+        return None
+
+    if len(frame_indices) == 1:
+        return f"(frame {frame_indices[0]})"
+
+    if _is_contiguous(frame_indices):
+        ordered = sorted(frame_indices)
+        return f"(frames {ordered[0]}-{ordered[-1]})"
+
+    joined = ", ".join(str(value) for value in frame_indices)
+    return f"(frames {joined})"
+
+
+def _is_contiguous(values: list[int]) -> bool:
+    if len(values) < 2:
+        return True
+    sorted_values = sorted(values)
+    return sorted_values == list(range(sorted_values[0], sorted_values[-1] + 1))
+
+
 def render_scene(
     scene_path: Path,
     output_path: Path,
@@ -139,6 +221,9 @@ def render_scene(
     *,
     export_was_explicit: bool = False,
     background_override: Color | None = None,
+    start_frame: int | None = None,
+    end_frame: int | None = None,
+    frames: Iterable[int] | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
@@ -146,7 +231,14 @@ def render_scene(
     if background_override is not None:
         parsed_scene.background = background_override
     renderer = Renderer(parsed_scene)
-    frames_iter = renderer.render()
+
+    frame_indices = _resolve_frame_indices(
+        frame_count=parsed_scene.frame_count,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        frames=frames,
+    )
+    frames_iter = renderer.render(frames=frame_indices)
 
     export_normalized = _normalize_export_format(
         output_path=output_path,
@@ -154,10 +246,12 @@ def render_scene(
         export_was_explicit=export_was_explicit,
     )
 
+    frame_description = _frame_selection_description(frame_indices)
+
     if export_normalized in {"ppm", "png"}:
         output_path.mkdir(parents=True, exist_ok=True)
         frame_count = _write_frames(frames_iter, output_path, export_normalized)
-        return f"Rendered {frame_count} frame(s) to {output_path}"
+        return _render_message(frame_count, output_path, frame_description)
 
     destination = output_path
     suffix = f".{export_normalized}"
@@ -167,4 +261,4 @@ def render_scene(
 
     frame_count = _write_animation(frames_iter, destination, export_normalized, fps)
 
-    return f"Rendered {frame_count} frame(s) to {destination}"
+    return _render_message(frame_count, destination, frame_description)
