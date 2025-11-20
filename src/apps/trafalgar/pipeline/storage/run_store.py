@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,9 @@ from .models import (
 __all__ = [
     "PipelineRunStore",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineRunStore:
@@ -118,9 +122,17 @@ class PipelineRunStore:
     def _decode_parameters(payload: str) -> dict[str, Any]:
         if not payload:
             return {}
-        data = json.loads(payload)
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Failed to decode pipeline parameters payload; using defaults",
+                exc_info=True,
+            )
+            return {}
         if isinstance(data, dict):
             return data
+        logger.warning("Pipeline parameters payload was not a mapping; using defaults")
         return {}
 
     @staticmethod
@@ -131,9 +143,17 @@ class PipelineRunStore:
     def _decode_definition_snapshot(payload: str | None) -> dict[str, Any]:
         if not payload:
             return {}
-        data = json.loads(payload)
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Failed to decode definition snapshot payload; using defaults",
+                exc_info=True,
+            )
+            return {}
         if isinstance(data, dict):
             return data
+        logger.warning("Definition snapshot payload was not a mapping; using defaults")
         return {}
 
     @staticmethod
@@ -180,9 +200,16 @@ class PipelineRunStore:
     def _decode_metrics(payload: str | None) -> dict[str, Any]:
         if not payload:
             return {}
-        data = json.loads(payload)
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Failed to decode metrics payload; using defaults", exc_info=True
+            )
+            return {}
         if isinstance(data, dict):
             return data
+        logger.warning("Metrics payload was not a mapping; using defaults")
         return {}
 
     @staticmethod
