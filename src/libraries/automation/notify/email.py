@@ -35,7 +35,7 @@ class EmailNotifier(Notifier):
         security_value = security_mode or os.environ.get(
             "ONEPIECE_SMTP_SECURITY", "starttls"
         )
-        self.security_mode = security_value.lower()
+        self.security_mode = security_value.lower()  # type: ignore[union-attr]
         require_tls_value = (
             require_tls
             if require_tls is not None
