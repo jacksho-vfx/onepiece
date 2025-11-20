@@ -233,3 +233,29 @@ def test_starttls_failure_blocks_when_tls_required(
 def test_missing_config_returns_false() -> None:
     notifier = EmailNotifier(host="", port=None)
     assert notifier.send("Subject", "Body", ["to@example.com"]) is False
+
+
+def test_send_failure_is_logged_and_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[FakeSMTP] = []
+
+    def fake_smtp(host: str, port: int, timeout: float) -> FakeSMTP:
+        smtp = FakeSMTP(host, port, timeout)
+        created.append(smtp)
+
+        def fail_send(_: EmailMessage) -> None:
+            raise smtplib.SMTPException("cannot send")
+
+        smtp.send_message = fail_send  # type: ignore[assignment]
+        return smtp
+
+    monkeypatch.setattr(smtplib, "SMTP", fake_smtp)
+
+    notifier = EmailNotifier(host="smtp.test", port=25)
+
+    with capture_email_logs(monkeypatch) as logs:
+        assert notifier.send("Subject", "Body", ["to@example.com"]) is False
+
+    assert created and not created[0].sent_messages
+    assert any(entry["event"] == "notify.email.failed" for entry in logs.events)

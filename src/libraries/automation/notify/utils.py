@@ -12,20 +12,49 @@ from .slack import SlackNotifier
 log = structlog.get_logger(__name__)
 
 
+def _redact_notification_fields(
+    *,
+    subject: str,
+    message: str,
+    recipients: Sequence[str],
+    redact: bool = True,
+    placeholder: str = "***",
+) -> dict[str, object]:
+    """Return structured log fields with optional redaction applied."""
+
+    if not redact:
+        return {
+            "subject": subject,
+            "message": message,
+            "recipients": list(recipients),
+        }
+
+    redacted_recipients = [placeholder for _ in recipients]
+    redacted_message = placeholder if message else ""
+
+    return {
+        "subject": subject,
+        "message": redacted_message,
+        "recipients": redacted_recipients,
+    }
+
+
 class MockNotifier(Notifier):
     """Mock notifier used for dry-run mode."""
 
-    def __init__(self, channel: str = "mock") -> None:
+    def __init__(self, channel: str = "mock", *, redact: bool = True) -> None:
         self.channel = channel
+        self.redact = redact
 
     def send(self, subject: str, message: str, recipients: Sequence[str]) -> bool:
-        log.info(
-            "notify.mock.sent",
-            channel=self.channel,
+        log_fields = _redact_notification_fields(
             subject=subject,
             message=message,
-            recipients=list(recipients),
+            recipients=recipients,
+            redact=self.redact,
         )
+
+        log.info("notify.mock.sent", channel=self.channel, **log_fields)
         return True
 
 

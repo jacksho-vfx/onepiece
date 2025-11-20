@@ -1,7 +1,10 @@
 """Tests for notification utilities."""
 
+from __future__ import annotations
+
 import pytest
 
+import libraries.automation.notify.utils as utils_module
 from libraries.automation.notify.email import EmailNotifier
 from libraries.automation.notify.slack import SlackNotifier
 from libraries.automation.notify.utils import (
@@ -9,6 +12,14 @@ from libraries.automation.notify.utils import (
     NotifierOptions,
     get_notifier,
 )
+
+
+class StubLogger:
+    def __init__(self) -> None:
+        self.events: list[dict[str, object]] = []
+
+    def info(self, event: str, **kwargs: object) -> None:
+        self.events.append({"event": event, **kwargs})
 
 
 def test_slack_notifier_accepts_injected_settings() -> None:
@@ -72,3 +83,36 @@ def test_get_notifier_provides_descriptive_errors(
 ) -> None:
     with pytest.raises(ValueError, match=expected_message):
         get_notifier(kind, options=options)
+
+
+def test_mock_notifier_redacts_payload_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logger = StubLogger()
+    monkeypatch.setattr(utils_module, "log", logger)
+
+    notifier = MockNotifier()
+    notifier.send("Alert", "Sensitive message", ["a@example.com", "b@example.com"])
+
+    assert logger.events, "A log entry should have been recorded"
+    entry = logger.events[0]
+
+    assert entry["event"] == "notify.mock.sent"
+    assert entry["channel"] == "mock"
+    assert entry["subject"] == "Alert"
+    assert entry["message"] == "***"
+    assert entry["recipients"] == ["***", "***"]
+
+
+def test_mock_notifier_can_disable_redaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = StubLogger()
+    monkeypatch.setattr(utils_module, "log", logger)
+
+    notifier = MockNotifier(channel="cli", redact=False)
+    notifier.send("Alert", "Plaintext", ("a@example.com",))
+
+    entry = logger.events[0]
+
+    assert entry["channel"] == "cli"
+    assert entry["message"] == "Plaintext"
+    assert entry["recipients"] == ["a@example.com"]
