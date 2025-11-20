@@ -117,6 +117,20 @@ def _job_payload(farm: str = "mock") -> dict[str, Any]:
     }
 
 
+def test_render_job_request_accepts_cinema4d() -> None:
+    request = RenderJobRequest(
+        dcc="Cinema4D",
+        scene="/projects/demo/scene.c4d",
+        frames="5-15",
+        output="/tmp/output",
+        farm="mock",
+        priority=50,
+        user="artist",
+    )
+
+    assert request.dcc == "cinema4d"
+
+
 @pytest.mark.anyio("asyncio")
 async def test_background_poller_refreshes_jobs_without_requests() -> None:
     adapter = StubJobAdapter()
