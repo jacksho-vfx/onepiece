@@ -108,6 +108,26 @@ def test_detect_dcc_from_file_supports_houdini(extension: str) -> None:
     )
 
 
+@patch("libraries.platform.validations.dcc.shutil.which", return_value=None)
+def test_detect_executable_respects_empty_path(mock_which: MagicMock) -> None:
+    installed, executable = dcc_validations._detect_executable(
+        SupportedDCC.NUKE, {"PATH": ""}
+    )
+
+    mock_which.assert_called_once_with(SupportedDCC.NUKE.command, path="")
+    assert installed is False
+    assert executable is None
+
+
+@patch("libraries.platform.validations.dcc.shutil.which", return_value=None)
+def test_detect_executable_without_path_env(mock_which: MagicMock) -> None:
+    installed, executable = dcc_validations._detect_executable(SupportedDCC.MAYA, {})
+
+    mock_which.assert_called_once_with(SupportedDCC.MAYA.command, path="")
+    assert installed is False
+    assert executable is None
+
+
 def test_check_paths_handles_missing_parent_directories(tmp_path: Path) -> None:
     target = tmp_path / "nested" / "renders"
 
