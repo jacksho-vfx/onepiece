@@ -48,6 +48,34 @@ def build_scene_dict() -> dict[str, object]:
     }
 
 
+def build_shape_scene() -> dict[str, object]:
+    return {
+        "width": 6,
+        "height": 6,
+        "frames": 1,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "line",
+                "type": "line",
+                "color": "#00ff00",
+                "position": [0, 0],
+                "points": [[0, 5], [5, 5]],
+                "stroke_width": 1,
+            },
+            {
+                "id": "triangle",
+                "type": "polygon",
+                "color": "#0000ff",
+                "stroke_color": "#ff00ff",
+                "stroke_width": 1,
+                "position": [0, 0],
+                "points": [[1, 1], [4, 1], [4, 4], [1, 4]],
+            },
+        ],
+    }
+
+
 @pytest.fixture
 def unsupported_scene_payload() -> dict[str, object]:
     payload = build_scene_dict()
@@ -120,7 +148,9 @@ def test_scene_object_animation_requires_keyframes() -> None:
 def test_scene_object_rejects_unsupported_type(
     unsupported_scene_payload: dict[str, object],
 ) -> None:
-    with pytest.raises(SceneError, match="Supported types are: rectangle, circle"):
+    with pytest.raises(
+        SceneError, match="Supported types are: rectangle, circle, line, polygon"
+    ):
         Scene.from_dict(unsupported_scene_payload)
 
 
@@ -181,6 +211,46 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[0] == "P3"
     assert contents[1] == f"{scene.width} {scene.height}"
     assert contents[2] == "255"
+
+
+def test_line_and_polygon_rendering() -> None:
+    scene = Scene.from_dict(build_shape_scene())
+    renderer = Renderer(scene)
+
+    frame = next(renderer.render())
+
+    # Polygon fill and stroke
+    assert frame.pixels[2][2] == (0, 0, 255)
+    assert frame.pixels[1][1] == (255, 0, 255)
+    assert frame.pixels[0][0] == (0, 0, 0)
+
+    # Line stroke across the bottom row
+    for x in range(scene.width):
+        assert frame.pixels[5][x] == (0, 255, 0)
+
+
+def test_line_requires_two_points() -> None:
+    payload = build_shape_scene()
+    payload["objects"][0]["points"] = [[0, 0]]  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="must contain at least 2 point"):
+        Scene.from_dict(payload)
+
+
+def test_polygon_requires_three_points() -> None:
+    payload = build_shape_scene()
+    payload["objects"][1]["points"] = [[0, 0], [1, 1]]  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="must contain at least 3 point"):
+        Scene.from_dict(payload)
+
+
+def test_line_rejects_non_positive_stroke_width() -> None:
+    payload = build_shape_scene()
+    payload["objects"][0]["stroke_width"] = 0  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="stroke width must be greater than zero"):
+        Scene.from_dict(payload)
 
 
 def test_renderer_render_is_iterator() -> None:
