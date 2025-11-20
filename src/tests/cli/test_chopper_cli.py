@@ -201,6 +201,44 @@ def test_render_png_frames(tmp_path: Path) -> None:
     )
 
 
+def test_render_supports_background_override(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_blank_scene(scene_path)
+
+    output_dir = tmp_path / "ppm"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--background",
+            "#112233",
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    ppm_path = output_dir / "frame_0000.ppm"
+    assert ppm_path.exists()
+    ppm_contents = ppm_path.read_text(encoding="ascii").splitlines()
+    assert "17 34 51 17 34 51" in ppm_contents
+
+
+def test_render_rejects_invalid_background_override(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_blank_scene(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app, ["render", str(scene_path), "--background", "not-a-colour"]
+    )
+
+    assert result.exit_code == 2
+    assert "Could not parse colour value" in strip_ansi(result.stderr)
+
+
 def test_render_png_reports_missing_pillow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -408,3 +446,8 @@ def test_load_scene_other_oserror(
 
     with pytest.raises(typer.BadParameter, match="could not be read: disk I/O error"):
         chopper_app_module._load_scene(scene_path)
+
+
+def _write_blank_scene(path: Path) -> None:
+    payload = {"width": 2, "height": 1, "frames": 1, "objects": []}
+    path.write_text(json.dumps(payload), encoding="utf-8")

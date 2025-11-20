@@ -8,7 +8,7 @@ import click
 from click.core import ParameterSource
 import typer
 
-from apps.chopper.renderer import Scene
+from apps.chopper.renderer import Color, Scene, SceneError, parse_color
 from libraries.automation.render.chopper import (
     ChopperRenderError,
     load_scene,
@@ -87,10 +87,17 @@ def render(
     fps: int = typer.Option(
         24, help="Frames per second used when encoding animations."
     ),
+    background: str | None = typer.Option(
+        None,
+        "--background",
+        "-b",
+        help="Override the scene background colour using a hex value like '#112233'.",
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
     export_was_explicit = False
+    background_override: Color | None = None
 
     try:
         ctx = click.get_current_context(silent=True)
@@ -104,6 +111,12 @@ def render(
             parameter_source = None
         export_was_explicit = parameter_source not in (None, ParameterSource.DEFAULT)
 
+    if background is not None:
+        try:
+            background_override = parse_color(background)
+        except SceneError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
     try:
         message = render_scene(
             scene_path=scene,
@@ -111,6 +124,7 @@ def render(
             export_format=export,
             fps=fps,
             export_was_explicit=export_was_explicit,
+            background_override=background_override,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc

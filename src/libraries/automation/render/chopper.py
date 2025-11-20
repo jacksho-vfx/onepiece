@@ -6,7 +6,13 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from apps.chopper.renderer import AnimationWriter, Renderer, Scene, SceneError
+from apps.chopper.renderer import (
+    AnimationWriter,
+    Color,
+    Renderer,
+    Scene,
+    SceneError,
+)
 
 __all__ = ["ChopperRenderError", "load_scene", "render_scene"]
 
@@ -132,10 +138,13 @@ def render_scene(
     fps: int,
     *,
     export_was_explicit: bool = False,
+    background_override: Color | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
     parsed_scene = load_scene(scene_path)
+    if background_override is not None:
+        parsed_scene.background = background_override
     renderer = Renderer(parsed_scene)
     frames_iter = renderer.render()
 

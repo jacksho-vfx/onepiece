@@ -258,6 +258,9 @@ flag to control how frames are exported:
 - `--format png` outputs lossless RGBA PNGs while preserving alpha.
 - `--format gif` / `--format mp4` bundle the render into a single animation.
 
+Override the background colour on the fly with `--background "#112233"` when you
+need blank-space contrast without editing the source JSON.
+
 PNG and animation outputs rely on optional encoders. Install them when needed:
 
 ```bash
