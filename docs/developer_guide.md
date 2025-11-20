@@ -99,6 +99,20 @@ onepiece/
 
 7. **Open a pull request** summarising your changes, screenshots, and any caveats. Link to relevant tickets and call out breaking changes explicitly.
 
+### Resource cleanup patterns
+
+Storage helpers such as `PipelineRunStore` implement context manager hooks so SQLite connections and event subscribers are always torn down, even when exceptions bubble up. Prefer the pattern below when wiring orchestration logic or tests:
+
+```python
+from apps.trafalgar.pipeline import PipelineRunStore
+
+with PipelineRunStore(database="runs.sqlite3") as store:
+    store.create_run(run, initial_event)
+    # watch_run_events subscribers will be notified when the block exits
+```
+
+Exiting the context closes the underlying database handle and delivers the terminal signal to any active `watch_run_events` iterators, preventing dangling threads or blocked queues.
+
 ## CLI utilities and UX guidelines
 
 - **Progress reporting** – The Rich-powered progress tracker defined in `apps/onepiece/utils/progress.py` provides a consistent way to surface progress bars, success/failure banners, and task descriptions. Use it for long-running operations such as ingest, project setup, or delivery packaging.

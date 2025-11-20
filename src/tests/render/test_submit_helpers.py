@@ -24,7 +24,7 @@ from apps.onepiece.utils.errors import OnePieceValidationError
     ],
 )
 def test_invalid_adapter_default_chunk_size_raises(
-    capabilities: dict[str, int]
+    capabilities: dict[str, int],
 ) -> None:
     with pytest.raises(OnePieceValidationError):
         resolve_priority_and_chunk_size(
