@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
@@ -405,6 +407,65 @@ def test_append_event_records_queue_wait_metrics() -> None:
     assert queue_metrics.get("min_ms") == 12_000
     assert queue_metrics.get("max_ms") == 12_000
     assert "last_queued_at" not in queue_metrics
+
+
+def test_append_event_with_malformed_anchor_discards_queue_wait(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = PipelineRunStore()
+    base = datetime(2024, 7, 1, 11, tzinfo=timezone.utc)
+    _create_queued_run(
+        store,
+        run_id="run-malformed-anchor",
+        pipeline="render",
+        created_at=base,
+    )
+
+    malformed_metrics = {
+        "steps": {},
+        "totals": {
+            "queue_wait": {
+                "total_ms": 0,
+                "count": 0,
+                "min_ms": None,
+                "max_ms": None,
+                "last_queued_at": "not-a-timestamp",
+            }
+        },
+    }
+    encoded = PipelineRunStore._encode_metrics(malformed_metrics)
+    with store._connection:
+        store._connection.execute(
+            "UPDATE pipeline_runs SET metrics = ? WHERE run_id = ?",
+            (encoded, "run-malformed-anchor"),
+        )
+
+    caplog.set_level(logging.WARNING)
+
+    started = base + timedelta(seconds=30)
+    store.append_event(
+        "run-malformed-anchor",
+        status="running",
+        timestamp=started,
+        parameters={},
+        run_status="running",
+    )
+
+    persisted = store.get_run("run-malformed-anchor")
+    assert persisted.started_at == started
+
+    totals = persisted.metrics.get("totals", {})
+    queue_wait = totals.get("queue_wait", {}) if isinstance(totals, dict) else {}
+    assert queue_wait.get("total_ms") == 0
+    assert queue_wait.get("count") == 0
+    assert queue_wait.get("last_wait_ms") is None
+    assert queue_wait.get("min_ms") is None
+    assert queue_wait.get("max_ms") is None
+
+    assert any(
+        "Discarding invalid queued timestamp" in record.message
+        for record in caplog.records
+    )
 
 
 def test_aggregate_runs_includes_queue_wait_statistics() -> None:

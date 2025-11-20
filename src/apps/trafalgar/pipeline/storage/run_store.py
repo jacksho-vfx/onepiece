@@ -285,6 +285,7 @@ class PipelineRunStore:
         started_at: datetime | None,
         finished_at: datetime | None,
         duration_ms: int | None,
+        discard_invalid_queue_anchor: bool = True,
     ) -> tuple[dict[str, Any], datetime | None, datetime | None, int | None]:
         steps = metrics.setdefault("steps", {})
         totals = metrics.setdefault("totals", {})
@@ -359,18 +360,33 @@ class PipelineRunStore:
         if run_status == "running":
             anchor_text = queue_totals.pop("last_queued_at", None)
             anchor = None
+            anchor_was_invalid = False
             if isinstance(anchor_text, str):
                 try:
                     parsed = datetime.fromisoformat(anchor_text)
                 except ValueError:
                     parsed = None
+                    anchor_was_invalid = True
+                    logger.warning(
+                        "Discarding invalid queued timestamp '%s' when transitioning to running",
+                        anchor_text,
+                    )
                 if parsed is not None:
                     if parsed.tzinfo is None:
                         anchor = parsed.replace(tzinfo=timezone.utc)
                     else:
                         anchor = parsed.astimezone(timezone.utc)
+            elif anchor_text is not None:
+                anchor_was_invalid = True
+                logger.warning(
+                    "Discarding non-string queued timestamp %r when transitioning to running",
+                    anchor_text,
+                )
             if anchor is None:
-                anchor = created_at
+                if anchor_was_invalid and discard_invalid_queue_anchor:
+                    anchor = None
+                else:
+                    anchor = created_at
             if anchor is not None:
                 wait_delta = timestamp - anchor
                 wait_ms = int(max(wait_delta.total_seconds() * 1000, 0))
