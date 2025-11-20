@@ -14,7 +14,7 @@ from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-from libraries.automation.render import deadline, mock, opencue, tractor
+from libraries.automation.render import deadline, houdini, mock, opencue, tractor
 from libraries.automation.render.base import (
     AdapterCapabilities,
     RenderSubmissionError,
@@ -37,12 +37,19 @@ DCC_CHOICES: Final[tuple[str, ...]] = (
     "vray",
 )
 
-FARM_CHOICES: Final[tuple[str, ...]] = ("deadline", "tractor", "opencue", "mock")
+FARM_CHOICES: Final[tuple[str, ...]] = (
+    "deadline",
+    "tractor",
+    "opencue",
+    "houdini",
+    "mock",
+)
 
 FARM_ADAPTERS: Final[dict[str, RenderAdapter]] = {
     "deadline": deadline.submit_job,
     "tractor": tractor.submit_job,
     "opencue": opencue.submit_job,
+    "houdini": houdini.submit_job,
     "mock": mock.submit_job,
 }
 
@@ -50,6 +57,7 @@ FARM_CAPABILITY_PROVIDERS: Final[dict[str, CapabilityProvider]] = {
     "deadline": deadline.get_capabilities,
     "tractor": tractor.get_capabilities,
     "opencue": opencue.get_capabilities,
+    "houdini": houdini.get_capabilities,
     "mock": mock.get_capabilities,
 }
 
