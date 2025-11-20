@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from libraries.creative.dcc.dcc_client import (
+    DCC_ASSET_REQUIREMENTS,
     DCC_GPU_REQUIREMENTS,
     DCC_PLUGIN_REQUIREMENTS,
     SupportedDCC,
@@ -159,6 +160,79 @@ def _gpu_from_env(dcc: SupportedDCC, env: Mapping[str, str]) -> str | None:
     return env.get("ONEPIECE_GPU")
 
 
+def _houdini_paths_from_hconfig(hconfig_output: str) -> frozenset[Path]:
+    """Return HOUDINI_PATH entries parsed from ``hconfig -ap`` output."""
+
+    paths: set[Path] = set()
+    for line in hconfig_output.splitlines():
+        if not line.lstrip().startswith("HOUDINI_PATH"):
+            continue
+
+        _, _, value = line.partition("=")
+        if not value:
+            continue
+
+        value = value.strip().strip('"').strip("'")
+        for entry in value.split(os.pathsep):
+            normalized = entry.strip()
+            if not normalized or normalized == "&":
+                continue
+            paths.add(Path(normalized))
+
+    return frozenset(sorted(paths))
+
+
+def _houdini_package_roots(env: Mapping[str, str]) -> frozenset[Path]:
+    """Return Houdini package roots derived from environment and hconfig output."""
+
+    roots: set[Path] = set()
+
+    if raw_path := env.get("HOUDINI_PATH"):
+        parts = [
+            segment
+            for segment in raw_path.split(os.pathsep)
+            if segment and segment != "&"
+        ]
+        roots.update(Path(entry) for entry in parts)
+
+    hconfig_output = env.get("HOUDINI_HCONFIG") or env.get("HCONFIG_AP")
+    if hconfig_output:
+        roots.update(_houdini_paths_from_hconfig(hconfig_output))
+
+    return frozenset(sorted(roots))
+
+
+def _houdini_available_assets(
+    package_roots: frozenset[Path], required_assets: frozenset[str]
+) -> frozenset[str]:
+    """Return Houdini assets that exist under the supplied package roots."""
+
+    available: set[str] = set()
+    for asset in required_assets:
+        asset_path = Path(asset)
+        for root in package_roots:
+            candidate = root / asset_path
+            if candidate.exists():
+                available.add(asset)
+                break
+    return frozenset(sorted(available))
+
+
+def _houdini_has_karma(package_roots: frozenset[Path], env: Mapping[str, str]) -> bool:
+    """Return ``True`` when Karma is detected via binaries or env hints."""
+
+    candidates = []
+    if hfs_root := env.get("HFS"):
+        candidates.append(Path(hfs_root) / "bin" / "karma")
+
+    candidates.extend(root / "bin" / "karma" for root in package_roots)
+
+    if karma_path := env.get("KARMA_PATH"):
+        candidates.append(Path(karma_path))
+
+    return any(path.exists() for path in candidates)
+
+
 def check_dcc_environment(
     dcc: SupportedDCC,
     *,
@@ -178,10 +252,33 @@ def check_dcc_environment(
         )
     else:
         available_plugins = _plugins_from_env(dcc, env_mapping)
+
     required_plugins = frozenset(
         sorted(plugin.lower() for plugin in DCC_PLUGIN_REQUIREMENTS.get(dcc, ()))
     )
-    missing_plugins = frozenset(sorted(required_plugins - available_plugins))
+
+    if dcc is SupportedDCC.HOUDINI:
+        required_assets = frozenset(
+            sorted(asset.lower() for asset in DCC_ASSET_REQUIREMENTS.get(dcc, ()))
+        )
+
+        package_roots = _houdini_package_roots(env_mapping)
+        available_assets = _houdini_available_assets(package_roots, required_assets)
+
+        available_plugins = frozenset(sorted(available_plugins | available_assets))
+        required_plugins = frozenset(sorted(required_plugins | required_assets))
+
+        if _houdini_has_karma(package_roots, env_mapping):
+            available_plugins = frozenset(sorted(available_plugins | {"karma"}))
+
+        missing_plugins = frozenset(
+            sorted(
+                (required_plugins - available_plugins)
+                | (required_assets - available_assets)
+            )
+        )
+    else:
+        missing_plugins = frozenset(sorted(required_plugins - available_plugins))
     plugin_result = PluginValidation(
         required=required_plugins,
         available=available_plugins,
