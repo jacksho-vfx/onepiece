@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 import requests
 from requests import Session
 
+from .auth import FtrackCredentials
 from .models import FtrackProject, FtrackShot, FtrackTask
 
 log = structlog.getLogger(__name__)
@@ -29,26 +30,30 @@ class FtrackRestClient:
     def __init__(
         self,
         base_url: str,
-        api_user: str,
-        api_key: str,
+        api_user: str | None = None,
+        api_key: str | None = None,
+        bearer_token: str | None = None,
         *,
         session: Session | None = None,
         auto_authenticate: bool = True,
     ) -> None:
         if not base_url:
             raise ValueError("base_url must be provided")
-        if not api_user:
-            raise ValueError("api_user must be provided")
-        if not api_key:
-            raise ValueError("api_key must be provided")
+        if not bearer_token and not (api_user and api_key):
+            raise ValueError(
+                "Either bearer_token or both api_user and api_key must be provided"
+            )
 
         self.base_url = base_url.rstrip("/")
         self.api_user = api_user
         self.api_key = api_key
+        self._bearer_token = bearer_token
         self._session = session or requests.Session()
         self._session.headers.setdefault("Accept", "application/json")
 
-        if auto_authenticate:
+        if bearer_token:
+            self._session.headers["Authorization"] = f"Bearer {bearer_token}"
+        elif auto_authenticate:
             self._authenticate()
 
     # ------------------------------------------------------------------
@@ -56,6 +61,11 @@ class FtrackRestClient:
     # ------------------------------------------------------------------
     def _authenticate(self) -> None:
         """Authenticate against Ftrack and persist a bearer token."""
+
+        if not self.api_user or not self.api_key:
+            raise ValueError(
+                "api_user and api_key must be provided to request a bearer token"
+            )
 
         url = self._build_url("api", "authenticate")
         payload = {"username": self.api_user, "apiKey": self.api_key}
@@ -74,6 +84,7 @@ class FtrackRestClient:
             raise FtrackError("Authentication response did not contain a token")
 
         self._session.headers["Authorization"] = f"Bearer {token}"
+        self._bearer_token = token
         log.info("ftrack.authenticated", base_url=self.base_url)
 
     def _build_url(self, *segments: str) -> str:
@@ -119,6 +130,14 @@ class FtrackRestClient:
         params: dict[str, Any] | None = None,
     ) -> Any:
         return self._request("POST", *segments, params=params, payload=payload)
+
+    @classmethod
+    def from_credentials(
+        cls, credentials: FtrackCredentials, **kwargs: Any
+    ) -> "FtrackRestClient":
+        """Instantiate a client from :class:`FtrackCredentials`."""
+
+        return cls(**credentials.as_kwargs(), **kwargs)
 
     # ------------------------------------------------------------------
     # Entity helpers

@@ -21,17 +21,23 @@ Ftrack API.  It provides:
 ## Quick start
 
 ```python
-from libraries.integrations.ftrack import FtrackRestClient
-
-client = FtrackRestClient(
-    base_url="https://my.ftrack.server",
-    api_user="pipeline_bot",
-    api_key="super-secret",
+from libraries.integrations.ftrack import (
+    FtrackRestClient,
+    load_credentials,
 )
+
+credentials = load_credentials()
+client = FtrackRestClient.from_credentials(credentials)
 
 projects = client.list_projects()
 print(projects[0].name)
 ```
+
+The credential loader understands both environment variables and JSON files
+containing the keys `base_url`, `api_user`, `api_key`, and `bearer_token`. Set
+`FTRACK_URL`, `FTRACK_API_USER`, `FTRACK_API_KEY`, and `FTRACK_BEARER_TOKEN` to
+override file values, or point `FTRACK_CREDENTIALS_FILE` at a JSON file to keep
+secrets out of shell history.
 
 The list helpers return instances of the pydantic models so calling code gets
 runtime validation for free.  Higher-level convenience methods such as
@@ -50,15 +56,22 @@ providing a pre-issued bearer token sets the `Authorization: Bearer` header for
 each request.
 
 ```python
-client = FtrackRestClient(
+import os
+
+from libraries.integrations.ftrack import FtrackCredentials, FtrackRestClient
+
+credentials = FtrackCredentials(
     base_url="https://my.ftrack.server",
     bearer_token=os.environ["FTRACK_BEARER_TOKEN"],
 )
+client = FtrackRestClient.from_credentials(credentials)
 ```
 
 Use the `libraries.integrations.ftrack.auth.load_credentials` helper to read credentials from
 environment variables or JSON files—mirroring the Trafalgar authentication
-workflow—so workstation scripts and automation jobs behave consistently.
+workflow—so workstation scripts and automation jobs behave consistently. When
+`bearer_token` is provided the client will skip the authentication request and
+reuse the supplied token.
 
 ## Usage patterns
 
