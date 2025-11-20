@@ -12,7 +12,6 @@ from libraries.creative.dcc import (
     BaseDCCClient,
     BlenderClient,
     DCC,
-    HoudiniClient,
     Cinema4DClient,
     MaxClient,
     MayaClient,
@@ -24,7 +23,15 @@ from libraries.creative.dcc import (
 CLIENT_CLASSES = {
     DCC.MAYA: MayaClient,
     DCC.NUKE: NukeClient,
-    DCC.HOUDINI: HoudiniClient,
+    DCC.BLENDER: BlenderClient,
+    DCC.MAX: MaxClient,
+    DCC.VRAY: VrayClient,
+    DCC.CINEMA4D: Cinema4DClient,
+}
+
+STUB_CLIENT_CLASSES = {
+    DCC.MAYA: MayaClient,
+    DCC.NUKE: NukeClient,
     DCC.BLENDER: BlenderClient,
     DCC.MAX: MaxClient,
     DCC.VRAY: VrayClient,
@@ -32,7 +39,7 @@ CLIENT_CLASSES = {
 }
 
 
-@pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
+@pytest.mark.parametrize("dcc, client_cls", STUB_CLIENT_CLASSES.items())
 def test_get_current_scene_not_implemented(
     dcc: DCC, client_cls: type[BaseDCCClient]
 ) -> None:
@@ -49,7 +56,7 @@ def test_get_selected_nodes_returns_empty_list(
     assert client.get_selected_nodes() == []
 
 
-@pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
+@pytest.mark.parametrize("dcc, client_cls", STUB_CLIENT_CLASSES.items())
 def test_apply_template_returns_false(
     dcc: DCC, client_cls: type[BaseDCCClient]
 ) -> None:
@@ -57,7 +64,7 @@ def test_apply_template_returns_false(
     assert client.apply_template("/path/to/template") is False
 
 
-@pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
+@pytest.mark.parametrize("dcc, client_cls", STUB_CLIENT_CLASSES.items())
 def test_export_thumbnail_returns_false(
     dcc: DCC, client_cls: type[BaseDCCClient]
 ) -> None:
@@ -98,7 +105,7 @@ def test_export_metadata_includes_scene_path(tmp_path: Path) -> None:
     assert metadata["scene_file"] == "ep01_sh010.ma"
 
 
-@pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
+@pytest.mark.parametrize("dcc, client_cls", STUB_CLIENT_CLASSES.items())
 def test_check_plugins_returns_false_map(
     dcc: DCC, client_cls: type[BaseDCCClient]
 ) -> None:
@@ -107,7 +114,7 @@ def test_check_plugins_returns_false_map(
     assert plugins == {"plugin_a": False, "plugin_b": False}
 
 
-@pytest.mark.parametrize("dcc, client_cls", CLIENT_CLASSES.items())
+@pytest.mark.parametrize("dcc, client_cls", STUB_CLIENT_CLASSES.items())
 def test_validate_scene_returns_placeholder(
     dcc: DCC, client_cls: type[BaseDCCClient]
 ) -> None:

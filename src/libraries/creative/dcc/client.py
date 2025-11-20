@@ -16,7 +16,7 @@ from datetime import datetime
 import getpass
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import structlog
 
@@ -187,6 +187,182 @@ class HoudiniClient(BaseDCCClient):
 
     def __init__(self) -> None:
         super().__init__(dcc=DCC.HOUDINI)
+
+    # ------------------------------------------------------------------
+    # Scene state helpers
+    # ------------------------------------------------------------------
+    def get_current_scene(self) -> str | None:
+        self._log.info("houdini.get_current_scene")
+        try:
+            import hou
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.missing_module", error=str(exc))
+            raise NotImplementedError("Houdini python module not available")
+
+        scene_path_raw = hou.hipFile.path()
+        scene_path = str(scene_path_raw) if scene_path_raw else ""
+        try:
+            is_new = hou.hipFile.isNewFile()
+        except AttributeError:  # pragma: no cover - Houdini < 19
+            is_new = False
+
+        if is_new:
+            return None
+
+        if scene_path:
+            path_obj = Path(scene_path)
+            if not path_obj.is_absolute() or path_obj.stem.lower().startswith(
+                "untitled"
+            ):
+                return None
+            return scene_path
+        return None
+
+    def get_selected_nodes(self) -> list[str]:
+        self._log.info("houdini.get_selected_nodes")
+        try:
+            import hou
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.missing_module", error=str(exc))
+            return []
+
+        try:
+            nodes = hou.selectedNodes() or []
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.selection_failure", error=str(exc))
+            return []
+
+        selected = []
+        for node in nodes:
+            try:
+                selected.append(node.path())
+            except Exception:  # pragma: no cover - fall back to repr
+                selected.append(str(node))
+
+        return selected
+
+    # ------------------------------------------------------------------
+    # Scene manipulation helpers
+    # ------------------------------------------------------------------
+    def apply_template(self, template_path: str) -> bool:
+        self._log.info("houdini.apply_template", template_path=template_path)
+        try:
+            import hou
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.missing_module", error=str(exc))
+            return False
+
+        try:
+            hou.hipFile.merge(
+                template_path,
+                node_pattern="*",
+                overwrite_on_conflict=True,
+                ignore_load_warnings=True,
+                suppress_save_prompt=True,
+            )
+            return True
+        except Exception as exc:
+            self._log.warning("houdini.apply_template_failed", error=str(exc))
+            return False
+
+    def export_thumbnail(self, output_path: str) -> bool:
+        self._log.info("houdini.export_thumbnail", output_path=output_path)
+        try:
+            import hou
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.missing_module", error=str(exc))
+            return False
+
+        try:
+            desktop = hou.ui.curDesktop()
+            viewer = desktop.paneTabOfType(hou.paneTabType.SceneViewer)
+            viewport = viewer.curViewport() if viewer is not None else None
+            if viewport is None:
+                self._log.warning("houdini.export_thumbnail.no_viewport")
+                return False
+
+            viewport.saveViewToImage(output_path)
+            return True
+        except Exception as exc:
+            self._log.warning("houdini.export_thumbnail_failed", error=str(exc))
+            return False
+
+    # ------------------------------------------------------------------
+    # Metadata helpers
+    # ------------------------------------------------------------------
+    def export_metadata(self, output_path: str) -> dict[str, object]:
+        self._log.info("houdini.export_metadata", output_path=output_path)
+        scene_path = self.get_current_scene()
+        metadata = self._build_metadata_template(scene_path)
+        metadata["dcc"] = "houdini"
+
+        try:
+            import hou
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            self._log.warning("houdini.missing_module", error=str(exc))
+        else:
+            metadata["frame_range"] = self._frame_range_from_houdini(hou)
+            metadata["resolution"] = self._resolution_from_houdini(hou)
+            selection = self.get_selected_nodes()
+            if selection:
+                metadata["selected_nodes"] = selection
+
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(metadata, indent=2, sort_keys=True))
+        return metadata
+
+    def _frame_range_from_houdini(self, hou: Any) -> list[int] | None:
+        try:
+            start, end = hou.playbar.frameRange()
+        except Exception:
+            return None
+        try:
+            return [int(round(start)), int(round(end))]
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    def _resolution_from_houdini(self, hou: Any) -> list[int] | None:
+        try:
+            desktop = hou.ui.curDesktop()
+            viewer = desktop.paneTabOfType(hou.paneTabType.SceneViewer)
+            viewport = viewer.curViewport() if viewer is not None else None
+            if viewport and hasattr(viewport, "size"):
+                width, height = viewport.size()
+                return [int(width), int(height)]
+        except Exception:
+            return None
+        return None
+
+    # ------------------------------------------------------------------
+    # Environment validation helpers
+    # ------------------------------------------------------------------
+    def validate_scene(self) -> list[str]:
+        self._log.info("houdini.validate_scene")
+        issues: list[str] = []
+
+        try:
+            scene_path = self.get_current_scene()
+        except NotImplementedError:
+            return ["Houdini environment unavailable"]
+
+        if not scene_path:
+            issues.append("Houdini scene has not been saved")
+
+        try:
+            import hou
+        except ImportError:
+            return issues
+
+        has_unsaved = False
+        try:
+            has_unsaved = hou.hipFile.hasUnsavedChanges()
+        except Exception:
+            pass
+        if has_unsaved:
+            issues.append("Houdini scene has unsaved changes")
+
+        return issues
 
 
 class BlenderClient(BaseDCCClient):
