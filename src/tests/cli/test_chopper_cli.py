@@ -119,6 +119,44 @@ def test_inspect_rejects_invalid_scene(tmp_path: Path) -> None:
     assert "frame count must be greater than zero" in clean_text
 
 
+def test_inspect_rejects_duplicate_object_ids(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(
+        json.dumps(
+            {
+                "width": 4,
+                "height": 4,
+                "frames": 2,
+                "objects": [
+                    {
+                        "id": "dupe",
+                        "type": "rectangle",
+                        "color": "#00ff00",
+                        "position": [0, 0],
+                        "size": [2, 2],
+                    },
+                    {
+                        "id": "dupe",
+                        "type": "circle",
+                        "color": "#ff0000",
+                        "position": [1, 1],
+                        "size": [1, 1],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["inspect", str(scene_path)])
+
+    assert result.exit_code == 2
+    message_lines = strip_ansi(result.stderr).splitlines()
+    clean_text = " ".join(line.strip(" │") for line in message_lines)
+    assert "duplicate id 'dupe'" in clean_text
+
+
 def _write_scene(path: Path) -> None:
     payload = {
         "width": 4,

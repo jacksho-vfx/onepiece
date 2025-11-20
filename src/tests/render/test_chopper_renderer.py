@@ -4,7 +4,7 @@ import json
 import math
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import typing_extensions
@@ -94,6 +94,39 @@ def test_scene_from_dict_creates_objects() -> None:
     assert len(scene.objects) == 2
     assert scene.objects[0].kind == "rectangle"
     assert scene.objects[1].kind == "circle"
+
+
+def test_scene_accepts_unique_object_ids() -> None:
+    payload = build_scene_dict()
+    objects = cast(list[dict[str, object]], payload["objects"])
+    objects.append(
+        {
+            "id": "backdrop",
+            "type": "rectangle",
+            "color": "#000000",
+            "position": [0, 0],
+            "size": [4, 3],
+        }
+    )
+
+    scene = Scene.from_dict(payload)
+
+    assert {obj.id for obj in scene.objects} == {
+        "background-strip",
+        "hero",
+        "backdrop",
+    }
+
+
+def test_scene_rejects_duplicate_object_ids() -> None:
+    payload = build_scene_dict()
+    objects = cast(list[dict[str, object]], payload["objects"])
+    duplicate = dict(objects[0])
+    duplicate["id"] = str(objects[1]["id"])
+    objects.append(duplicate)
+
+    with pytest.raises(SceneError, match="duplicate id 'hero'"):
+        Scene.from_dict(payload)
 
 
 def test_scene_requires_mapping_payload() -> None:
