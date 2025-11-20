@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import shutil
 from enum import Enum
 from pathlib import Path
 from typing import Literal, TypeAlias
@@ -28,17 +29,42 @@ class SupportedDCC(Enum):
     def command(self) -> str:
         """Return the executable name associated with the DCC."""
 
+        return self.resolve_command()
+
+    def resolve_command(self, env: dict[str, str] | None = None) -> str:
+        """Return the executable associated with the DCC using ``env`` when supplied."""
+
+        env_mapping = env or os.environ
+        suffix = ".exe" if os.name == "nt" else ""
+
         if self is SupportedDCC.MAYA:
-            base_command = "maya"
-            if os.name == "nt":  # type: ignore[attr-defined]
-                return f"{base_command}.exe"
-            return base_command
+            return f"maya{suffix}"
 
         if self is SupportedDCC.VRAY:
-            base_command = "vray"
-            if os.name == "nt":  # type: ignore[attr-defined]
-                return f"{base_command}.exe"
-            return base_command
+            return f"vray{suffix}"
+
+        if self is SupportedDCC.HOUDINI:
+            candidates = ("houdini", "houdinifx", "hython")
+
+            hfs_root = env_mapping.get("HFS")
+            if hfs_root:
+                hfs_bin = Path(hfs_root) / "bin"
+                for candidate in candidates:
+                    candidate_path = hfs_bin / f"{candidate}{suffix}"
+                    if candidate_path.exists():
+                        return str(candidate_path)
+
+            path_env = env_mapping.get("PATH")
+            for candidate in candidates:
+                command_name = f"{candidate}{suffix}"
+                try:
+                    resolved = shutil.which(command_name, path=path_env)
+                except TypeError:
+                    resolved = shutil.which(command_name)
+                if resolved:
+                    return resolved
+
+            return f"{candidates[0]}{suffix}"
 
         return str(self.value)
 

@@ -77,7 +77,7 @@ def _build_launch_command(dcc: SupportedDCC, path: Path) -> list[str]:
     if not isinstance(dcc, SupportedDCC):  # pragma: no cover - defensive.
         raise TypeError("dcc must be an instance of SupportedDCC")
 
-    executable = dcc.command
+    executable = dcc.resolve_command()
     if dcc in {SupportedDCC.MAYA, SupportedDCC.VRAY} and os.name == "nt":
         if not executable.lower().endswith(".exe"):
             executable = f"{executable}.exe"

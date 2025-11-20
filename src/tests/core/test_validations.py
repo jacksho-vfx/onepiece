@@ -1,5 +1,6 @@
 """Tests for the validation helpers and CLI interfaces."""
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
@@ -114,7 +115,9 @@ def test_detect_executable_respects_empty_path(mock_which: MagicMock) -> None:
         SupportedDCC.NUKE, {"PATH": ""}
     )
 
-    mock_which.assert_called_once_with(SupportedDCC.NUKE.command, path="")
+    mock_which.assert_called_once_with(
+        SupportedDCC.NUKE.resolve_command({"PATH": ""}), path=""
+    )
     assert installed is False
     assert executable is None
 
@@ -123,9 +126,53 @@ def test_detect_executable_respects_empty_path(mock_which: MagicMock) -> None:
 def test_detect_executable_without_path_env(mock_which: MagicMock) -> None:
     installed, executable = dcc_validations._detect_executable(SupportedDCC.MAYA, {})
 
-    mock_which.assert_called_once_with(SupportedDCC.MAYA.command, path="")
+    mock_which.assert_called_once_with(SupportedDCC.MAYA.resolve_command({}), path="")
     assert installed is False
     assert executable is None
+
+
+def test_detect_houdini_uses_hfs_bin(tmp_path: Path) -> None:
+    hfs_root = tmp_path / "hfs"
+    bin_dir = hfs_root / "bin"
+    bin_dir.mkdir(parents=True)
+
+    houdini_exec = bin_dir / "houdini"
+    houdini_exec.write_text("")
+    houdini_exec.chmod(houdini_exec.stat().st_mode | 0o111)
+
+    env = {"HFS": str(hfs_root), "PATH": ""}
+
+    installed, executable = dcc_validations._detect_executable(
+        SupportedDCC.HOUDINI, env
+    )
+
+    assert installed is True
+    assert executable == str(houdini_exec)
+
+
+def test_detect_houdini_falls_back_to_aliases(tmp_path: Path) -> None:
+    fx_dir = tmp_path / "fx"
+    fx_dir.mkdir()
+    fx_executable = fx_dir / "houdinifx"
+    fx_executable.write_text("")
+    fx_executable.chmod(fx_executable.stat().st_mode | 0o111)
+
+    hython_dir = tmp_path / "hython"
+    hython_dir.mkdir()
+    hython_executable = hython_dir / "hython"
+    hython_executable.write_text("")
+    hython_executable.chmod(hython_executable.stat().st_mode | 0o111)
+
+    env = {
+        "PATH": f"{fx_dir}{os.pathsep}{hython_dir}",
+    }
+
+    installed, executable = dcc_validations._detect_executable(
+        SupportedDCC.HOUDINI, env
+    )
+
+    assert installed is True
+    assert executable == str(fx_executable)
 
 
 def test_check_paths_handles_missing_parent_directories(tmp_path: Path) -> None:
