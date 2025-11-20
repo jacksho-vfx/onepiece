@@ -14,6 +14,7 @@ from libraries.platform.validations.dcc import (
     PluginValidation,
     SupportedDCC,
     check_dcc_environment,
+    validate_dcc,
 )
 
 log = structlog.get_logger(__name__)
@@ -58,7 +59,7 @@ def _has_failures(report: DCCEnvironmentReport) -> bool:
 
 
 def render_dcc_environment(
-    dcc: Optional[List[SupportedDCC]] = typer.Option(
+    dcc: Optional[List[str]] = typer.Option(
         None,
         "--dcc",
         help="Specific DCCs to inspect. Defaults to all supported DCCs.",
@@ -69,7 +70,7 @@ def render_dcc_environment(
 
     targets: Iterable[SupportedDCC]
     if dcc:
-        targets = dcc
+        targets = [validate_dcc(entry) for entry in dcc]
     else:
         targets = list(SupportedDCC)
 

@@ -81,6 +81,11 @@ def test_validate_dcc_supports_cinema4d() -> None:
     assert dcc_validations.validate_dcc("cinema4d") is SupportedDCC.CINEMA4D
 
 
+def test_validate_dcc_accepts_aliases() -> None:
+    assert dcc_validations.validate_dcc("max") is SupportedDCC.MAX
+    assert dcc_validations.validate_dcc("c4d") is SupportedDCC.CINEMA4D
+
+
 def test_detect_dcc_from_file_supports_vray() -> None:
     assert (
         dcc_validations.detect_dcc_from_file("/projects/shot/lighting.vrscene")
@@ -341,3 +346,26 @@ def test_dcc_environment_cli_flags_failures(mock_check: MagicMock) -> None:
 
     assert result.exit_code != 0
     assert "require attention" in result.stdout
+
+
+@patch("apps.onepiece.validate.dcc_environment.check_dcc_environment")
+def test_dcc_environment_cli_accepts_aliases(mock_check: MagicMock) -> None:
+    mock_check.return_value = DCCEnvironmentReport(
+        dcc=SupportedDCC.MAX,
+        installed=True,
+        executable="C:/Program Files/Autodesk/3ds Max 2024/3dsmax.exe",
+        plugins=PluginValidation(
+            required=frozenset({"vray"}),
+            available=frozenset({"vray"}),
+            missing=frozenset(),
+        ),
+        gpu=GPUValidation(
+            required="DirectX 12", detected="NVIDIA RTX", meets_requirement=True
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(validate_app, ["dcc-environment", "--dcc", "max"])
+
+    assert result.exit_code == 0
+    mock_check.assert_called_once_with(SupportedDCC.MAX)

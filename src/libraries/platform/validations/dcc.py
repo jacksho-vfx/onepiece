@@ -39,6 +39,22 @@ _EXTENSION_MAP: dict[str, SupportedDCC] = {
 }
 
 
+_DCC_ALIASES: dict[str, SupportedDCC] = {
+    "3dsmax": SupportedDCC.MAX,
+    "max": SupportedDCC.MAX,
+    "c4d": SupportedDCC.CINEMA4D,
+}
+
+_CANONICAL_DCC_NAMES: dict[str, SupportedDCC] = {
+    dcc.value.lower(): dcc for dcc in SupportedDCC
+}
+
+_SUPPORTED_DCC_LOOKUP: dict[str, SupportedDCC] = {
+    **_CANONICAL_DCC_NAMES,
+    **_DCC_ALIASES,
+}
+
+
 def validate_dcc(dcc_name: str | SupportedDCC) -> Any:
     """Return the :class:`SupportedDCC` matching ``dcc_name``.
 
@@ -50,11 +66,13 @@ def validate_dcc(dcc_name: str | SupportedDCC) -> Any:
         return dcc_name
 
     normalized = dcc_name.lower()
-    for dcc in SupportedDCC:
-        if dcc.value.lower() == normalized:
-            return dcc
-    supported = ", ".join(sorted(d.value for d in SupportedDCC))
-    raise ValueError(f"Unsupported DCC: {dcc_name}. Supported: {supported}")
+    try:
+        return _SUPPORTED_DCC_LOOKUP[normalized]
+    except KeyError as exc:
+        supported = ", ".join(sorted(_SUPPORTED_DCC_LOOKUP))
+        raise ValueError(
+            f"Unsupported DCC: {dcc_name}. Supported: {supported}"
+        ) from exc
 
 
 def detect_dcc_from_file(file_path: str | Path) -> Any:
