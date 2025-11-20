@@ -76,6 +76,35 @@ def build_shape_scene() -> dict[str, object]:
     }
 
 
+def build_stroked_shape_scene() -> dict[str, object]:
+    return {
+        "width": 8,
+        "height": 8,
+        "frames": 1,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "panel",
+                "type": "rectangle",
+                "color": "#ffff00",
+                "stroke_color": "#00ff00",
+                "stroke_width": 1,
+                "position": [1, 1],
+                "size": [4, 3],
+            },
+            {
+                "id": "badge",
+                "type": "circle",
+                "color": "#0000ff",
+                "stroke_color": "#ffffff",
+                "stroke_width": 2,
+                "position": [5, 5],
+                "size": [4, 4],
+            },
+        ],
+    }
+
+
 @pytest.fixture
 def unsupported_scene_payload() -> dict[str, object]:
     payload = build_scene_dict()
@@ -358,6 +387,21 @@ def test_line_and_polygon_rendering() -> None:
     # Line stroke across the bottom row
     for x in range(scene.width):
         assert frame.pixels[5][x] == (0, 255, 0)
+
+
+def test_rectangle_and_circle_strokes() -> None:
+    scene = Scene.from_dict(build_stroked_shape_scene())
+    renderer = Renderer(scene)
+
+    frame = next(renderer.render())
+
+    # Rectangle stroke and fill
+    assert frame.pixels[1][1] == (0, 255, 0)
+    assert frame.pixels[2][2] == (255, 255, 0)
+
+    # Circle stroke and fill
+    assert frame.pixels[5][5] == (0, 0, 255)
+    assert frame.pixels[5][7] == (255, 255, 255)
 
 
 def test_line_requires_two_points() -> None:
