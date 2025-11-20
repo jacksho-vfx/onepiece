@@ -299,6 +299,46 @@ def test_render_submit_refresh_capabilities_flag(
     assert capability_calls == 2
 
 
+def test_render_submit_rejects_chunk_when_capabilities_disable_chunking(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
+) -> None:
+    scene_file = tmp_path / "shot01.blend"
+    scene_file.write_text("requires blender")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    monkeypatch.setitem(
+        submit_module.FARM_CAPABILITY_PROVIDERS,
+        "mock",
+        lambda: {
+            "default_priority": 42,
+            "chunk_size_enabled": False,
+        },
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "blender",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_dir),
+            "--chunk-size",
+            "5",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, OnePieceValidationError)
+    assert "Chunk sizing is not supported" in str(result.exception)
+
+
 def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -367,6 +407,65 @@ def test_render_submit_ignores_default_chunk_when_adapter_disables_chunking(
     assert result.exit_code == 0, result.stdout
     assert "Submitted blender scene" in result.stdout
     assert captured["priority"] == 42
+    assert captured["chunk_size"] is None
+
+
+def test_render_submit_uses_none_chunk_when_capabilities_absent(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runner: CliRunner,
+) -> None:
+    scene_file = tmp_path / "shot01.blend"
+    scene_file.write_text("requires blender")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
+    captured: dict[str, Any] = {}
+
+    def fake_submit(
+        scene: str,
+        frames: str,
+        output: str,
+        dcc: str,
+        priority: int,
+        user: str,
+        chunk_size: int | None,
+    ) -> dict[str, str]:
+        captured.update(
+            {
+                "scene": scene,
+                "frames": frames,
+                "output": output,
+                "dcc": dcc,
+                "priority": priority,
+                "user": user,
+                "chunk_size": chunk_size,
+            }
+        )
+        return {
+            "job_id": "job-789",
+            "status": "submitted",
+            "farm_type": "mock",
+        }
+
+    monkeypatch.setitem(submit_module.FARM_ADAPTERS, "mock", fake_submit)
+    monkeypatch.setitem(submit_module.FARM_CAPABILITY_PROVIDERS, "mock", lambda: {})
+
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "submit",
+            "--dcc",
+            "blender",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
     assert captured["chunk_size"] is None
 
 

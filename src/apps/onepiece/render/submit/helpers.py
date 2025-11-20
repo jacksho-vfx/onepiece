@@ -299,6 +299,10 @@ def resolve_priority_and_chunk_size(
         )
 
     chunk_enabled = resolved_capabilities.get("chunk_size_enabled", False)
+    if chunk_size is not None and not chunk_enabled:
+        raise OnePieceValidationError(
+            "Chunk sizing is not supported by this adapter (--chunk-size)."
+        )
     chunk_min = resolved_capabilities.get("chunk_size_min")
     chunk_max = resolved_capabilities.get("chunk_size_max")
     adapter_default_chunk = (
