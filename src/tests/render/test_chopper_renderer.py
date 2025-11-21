@@ -552,7 +552,15 @@ def test_line_requires_two_points() -> None:
     payload = build_shape_scene()
     payload["objects"][0]["points"] = [[0, 0]]  # type: ignore[index]
 
-    with pytest.raises(SceneError, match="must contain at least 2 point"):
+    with pytest.raises(SceneError, match="must contain exactly 2 point"):
+        Scene.from_dict(payload)
+
+
+def test_line_rejects_excess_points() -> None:
+    payload = build_shape_scene()
+    payload["objects"][0]["points"] = [[0, 0], [1, 1], [2, 2]]  # type: ignore[index]
+
+    with pytest.raises(SceneError, match="must contain exactly 2 point"):
         Scene.from_dict(payload)
 
 
