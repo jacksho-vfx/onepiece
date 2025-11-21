@@ -355,13 +355,16 @@ def test_render_supports_frame_list(tmp_path: Path) -> None:
             "--output",
             str(output_dir),
             "--frames",
-            "0,2",
+            "2,0",
         ],
     )
 
     assert result.exit_code == 0
-    contents = sorted(output_dir.glob("*.png"))
-    assert [path.name for path in contents] == ["frame_0000.png", "frame_0002.png"]
+    contents = list(output_dir.glob("*.png"))
+    assert [path.name for path in sorted(contents)] == [
+        "frame_0000.png",
+        "frame_0002.png",
+    ]
     assert "frames 0, 2" in result.stdout
 
 
