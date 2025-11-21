@@ -368,11 +368,10 @@ class SceneObject:
                     )
                 parsed_points.append((x, y))
 
-            minimum_points = 2 if kind == "line" else 3
-            if len(parsed_points) < minimum_points:
-                raise SceneError(
-                    f"{kind.title()} objects must contain at least {minimum_points} point(s)"
-                )
+            if kind == "line" and len(parsed_points) != 2:
+                raise SceneError("Line objects must contain exactly 2 point(s)")
+            if kind == "polygon" and len(parsed_points) < 3:
+                raise SceneError("Polygon objects must contain at least 3 point(s)")
             if len(parsed_points) > 1000:
                 raise SceneError(
                     "Object points exceeds maximum supported length (1000)"
