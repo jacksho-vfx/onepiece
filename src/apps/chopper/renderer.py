@@ -652,41 +652,44 @@ class SceneObject:
         x, y, rotation = self.animation.transform_at(frame)
         return (x, y), rotation
 
-    def render(self, target: "Frame", frame_index: int) -> None:
+    def render(self, target: "Frame", frame_index: int, *, scale: int = 1) -> None:
         """Draw the object on ``target``."""
 
         if self.kind == "rectangle":
-            self._render_rectangle(target, frame_index)
+            self._render_rectangle(target, frame_index, scale)
         elif self.kind == "circle":
-            self._render_circle(target, frame_index)
+            self._render_circle(target, frame_index, scale)
         elif self.kind == "line":
-            self._render_line(target, frame_index)
+            self._render_line(target, frame_index, scale)
         elif self.kind == "polygon":
-            self._render_polygon(target, frame_index)
+            self._render_polygon(target, frame_index, scale)
         else:  # pragma: no cover - defensive
             supported = ", ".join(SUPPORTED_OBJECT_TYPES)
             raise SceneError(
                 f"Unsupported object type: {self.kind!r}. Supported types are: {supported}"
             )
 
-    def _render_rectangle(self, target: "Frame", frame_index: int) -> None:
+    def _render_rectangle(self, target: "Frame", frame_index: int, scale: int) -> None:
         origin, rotation = self._frame_transform(frame_index)
-        width, height = self.size
+        width, height = (value * scale for value in self.size)
+        scaled_origin = (origin[0] * scale, origin[1] * scale)
         corners = ((0.0, 0.0), (width, 0.0), (width, height), (0.0, height))
-        points = self._rotate_and_translate_points(corners, origin, rotation)
+        points = self._rotate_and_translate_points(
+            corners, scaled_origin, rotation, scale=scale
+        )
 
         self._fill_polygon(target, points, self.color_at(frame_index))
 
-        _, stroke_width = self._stroke_details(frame_index)
+        _, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
             for index, start in enumerate(points):
                 end = points[(index + 1) % len(points)]
-                self._draw_line(target, start, end, frame_index)
+                self._draw_line(target, start, end, frame_index, scale)
 
-    def _render_circle(self, target: "Frame", frame_index: int) -> None:
+    def _render_circle(self, target: "Frame", frame_index: int, scale: int) -> None:
         position = self.position_at(frame_index)
         color = self.color_at(frame_index)
-        width, height = self.size
+        width, height = (value * scale for value in self.size)
         min_diameter = min(width, height)
         if min_diameter <= 0:
             raise SceneError(
@@ -694,8 +697,8 @@ class SceneObject:
             )
 
         radius = max(min_diameter / 2.0, 1.0)
-        cx = position[0]
-        cy = position[1]
+        cx = position[0] * scale
+        cy = position[1] * scale
         radius_sq = radius * radius
 
         min_x = max(0, int(round(cx - radius - 1)))
@@ -711,7 +714,7 @@ class SceneObject:
                 if dx * dx + dy * dy <= radius_sq:
                     target._blend_into(row, x, color)
 
-        stroke_color, stroke_width = self._stroke_details(frame_index)
+        stroke_color, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
             segments = max(12, int(math.ceil(radius * 6)))
             points = [
@@ -725,13 +728,18 @@ class SceneObject:
             for index, start in enumerate(points):
                 end = points[(index + 1) % len(points)]
                 self._draw_line(
-                    target, start, end, frame_index, stroke_color=stroke_color
+                    target,
+                    start,
+                    end,
+                    frame_index,
+                    scale,
+                    stroke_color=stroke_color,
                 )
 
-    def _stroke_details(self, frame_index: int) -> tuple[Color, int]:
+    def _stroke_details(self, frame_index: int, scale: int) -> tuple[Color, int]:
         stroke_color = self.stroke_color or self.color_at(frame_index)
         stroke_width_value = 1.0 if self.stroke_width is None else self.stroke_width
-        stroke_width = max(0, int(round(stroke_width_value)))
+        stroke_width = max(0, int(round(stroke_width_value * scale)))
         return stroke_color, stroke_width
 
     def _rotate_and_translate_points(
@@ -739,23 +747,32 @@ class SceneObject:
         points: Sequence[tuple[float, float]],
         origin: tuple[float, float],
         rotation: float,
+        *,
+        scale: float = 1.0,
     ) -> list[tuple[float, float]]:
         origin_x, origin_y = origin
         if rotation == 0:
-            return [(x + origin_x, y + origin_y) for x, y in points]
+            return [(x * scale + origin_x, y * scale + origin_y) for x, y in points]
 
         cos_r = math.cos(rotation)
         sin_r = math.sin(rotation)
         rotated = []
         for x, y in points:
-            rx = x * cos_r - y * sin_r
-            ry = x * sin_r + y * cos_r
+            sx = x * scale
+            sy = y * scale
+            rx = sx * cos_r - sy * sin_r
+            ry = sx * sin_r + sy * cos_r
             rotated.append((rx + origin_x, ry + origin_y))
         return rotated
 
-    def _transformed_points(self, frame_index: int) -> list[tuple[float, float]]:
+    def _transformed_points(
+        self, frame_index: int, scale: float
+    ) -> list[tuple[float, float]]:
         origin, rotation = self._frame_transform(frame_index)
-        return self._rotate_and_translate_points(self.points, origin, rotation)
+        scaled_origin = (origin[0] * scale, origin[1] * scale)
+        return self._rotate_and_translate_points(
+            self.points, scaled_origin, rotation, scale=scale
+        )
 
     def _draw_point(
         self, target: "Frame", x: float, y: float, stroke_width: int, color: Color
@@ -777,10 +794,11 @@ class SceneObject:
         start: tuple[float, float],
         end: tuple[float, float],
         frame_index: int,
+        scale: int,
         *,
         stroke_color: Color | None = None,
     ) -> None:
-        stroke_color_value, stroke_width = self._stroke_details(frame_index)
+        stroke_color_value, stroke_width = self._stroke_details(frame_index, scale)
         resolved_stroke_color = stroke_color or stroke_color_value
         if stroke_width <= 0:
             return
@@ -797,23 +815,23 @@ class SceneObject:
             y = y0 + dy * t
             self._draw_point(target, x, y, stroke_width, resolved_stroke_color)
 
-    def _render_line(self, target: "Frame", frame_index: int) -> None:
-        points = self._transformed_points(frame_index)
-        self._draw_line(target, points[0], points[1], frame_index)
+    def _render_line(self, target: "Frame", frame_index: int, scale: int) -> None:
+        points = self._transformed_points(frame_index, scale)
+        self._draw_line(target, points[0], points[1], frame_index, scale)
 
-    def _render_polygon(self, target: "Frame", frame_index: int) -> None:
-        points = self._transformed_points(frame_index)
+    def _render_polygon(self, target: "Frame", frame_index: int, scale: int) -> None:
+        points = self._transformed_points(frame_index, scale)
         if len(points) < 3:
             raise SceneError("Polygon must contain at least three points")
 
         self._fill_polygon(target, points, self.color_at(frame_index))
 
-        stroke_color, stroke_width = self._stroke_details(frame_index)
+        stroke_color, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
             for i, start in enumerate(points):
                 end = points[(i + 1) % len(points)]
                 self._draw_line(
-                    target, start, end, frame_index, stroke_color=stroke_color
+                    target, start, end, frame_index, scale, stroke_color=stroke_color
                 )
 
     def _fill_polygon(
@@ -999,6 +1017,86 @@ class Frame:
                     raw.append(alpha)
         return bytes(raw)
 
+    def downsample(self, factor: int, *, filter_name: str = "box") -> "Frame":
+        """Return a version of the frame reduced by ``factor`` using ``filter``."""
+
+        if factor <= 0:
+            raise ValueError("Downsample factor must be greater than zero")
+        if factor == 1:
+            return self
+        if self.width % factor != 0 or self.height % factor != 0:
+            raise ValueError(
+                "Downsample factor must evenly divide the frame dimensions"
+            )
+
+        normalized_filter = filter_name.lower()
+        if normalized_filter not in {"box", "gaussian"}:
+            raise ValueError("Downsample filter must be 'box' or 'gaussian'")
+
+        include_alpha = self._has_alpha()
+        if normalized_filter == "box":
+            channels = 4 if include_alpha else 3
+            out_width = self.width // factor
+            out_height = self.height // factor
+            pixels: list[list[Color]] = []
+            for block_y in range(out_height):
+                row: list[Color] = []
+                y_start = block_y * factor
+                for block_x in range(out_width):
+                    x_start = block_x * factor
+                    totals = [0, 0, 0, 0]
+                    for yy in range(y_start, y_start + factor):
+                        for xx in range(x_start, x_start + factor):
+                            pixel = self.pixels[yy][xx]
+                            r, g, b = pixel[:3]
+                            totals[0] += r
+                            totals[1] += g
+                            totals[2] += b
+                            totals[3] += pixel[3] if len(pixel) >= 4 else 255
+                    divisor = factor * factor
+                    averaged = [
+                        int(round(component / divisor))
+                        for component in totals[:channels]
+                    ]
+                    row.append(tuple(averaged))
+                pixels.append(row)
+
+            return Frame(
+                index=self.index,
+                width=out_width,
+                height=out_height,
+                pixels=pixels,
+                has_alpha=include_alpha,
+            )
+
+        pillow = _require_pillow()
+        mode = "RGBA" if include_alpha else "RGB"
+        image = self.to_image(mode=mode)
+        from PIL import ImageFilter as PILImageFilter  # imported lazily
+
+        radius = max(factor / 2.0, 0.0)
+        blurred = image.filter(PILImageFilter.GaussianBlur(radius=radius))
+        resample = getattr(pillow, "Resampling", pillow)
+        resized = blurred.resize(
+            (self.width // factor, self.height // factor),
+            resample=resample.BOX,
+        )
+
+        data = list(resized.getdata())
+        resized_pixels: list[list[Color]] = []
+        iterator = iter(data)
+        for _ in range(resized.height):
+            row = [tuple(next(iterator)) for _ in range(resized.width)]
+            resized_pixels.append(row)
+
+        return Frame(
+            index=self.index,
+            width=resized.width,
+            height=resized.height,
+            pixels=resized_pixels,
+            has_alpha=include_alpha,
+        )
+
     def save_ppm(self, destination: Path) -> None:
         """Write the frame to ``destination`` in the plain PPM format."""
 
@@ -1035,8 +1133,21 @@ class Frame:
 class Renderer:
     """Render engine responsible for producing image frames."""
 
-    def __init__(self, scene: Scene):
+    def __init__(
+        self,
+        scene: Scene,
+        *,
+        samples: int = 1,
+        filter_name: str = "box",
+    ):
         self.scene = scene
+        if samples <= 0:
+            raise SceneError("Supersampling 'samples' must be greater than zero")
+        self.samples = samples
+        normalized_filter = filter_name.lower()
+        if normalized_filter not in {"box", "gaussian"}:
+            raise SceneError("Downsample filter must be 'box' or 'gaussian'")
+        self.filter = normalized_filter
 
     def render(self, frames: Iterable[int] | None = None) -> Iterator[Frame]:
         """Yield selected rendered frames lazily.
@@ -1061,12 +1172,24 @@ class Renderer:
                     )
 
         for index in frame_indices:
-            frame = Frame.blank(
-                index, self.scene.width, self.scene.height, self.scene.background
+            if self.samples == 1:
+                frame = Frame.blank(
+                    index, self.scene.width, self.scene.height, self.scene.background
+                )
+                for obj in self.scene.objects:
+                    obj.render(frame, index)
+                yield frame
+                continue
+
+            scaled_width = self.scene.width * self.samples
+            scaled_height = self.scene.height * self.samples
+            supersampled_frame = Frame.blank(
+                index, scaled_width, scaled_height, self.scene.background
             )
             for obj in self.scene.objects:
-                obj.render(frame, index)
-            yield frame
+                obj.render(supersampled_frame, index, scale=self.samples)
+
+            yield supersampled_frame.downsample(self.samples, filter_name=self.filter)
 
 
 @dataclass(slots=True)
