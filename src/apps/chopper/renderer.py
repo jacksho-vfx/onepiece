@@ -208,6 +208,7 @@ class Keyframe:
     frame: int
     x: float
     y: float
+    rotation: float
     easing: str | None = None
 
 
@@ -218,33 +219,46 @@ class Animation:
     keyframes: list[Keyframe]
     default_easing: str | None = None
 
-    def position_at(self, frame: int) -> tuple[float, float]:
-        """Return the interpolated position for ``frame``."""
+    def transform_at(self, frame: int) -> tuple[float, float, float]:
+        """Return the interpolated position and rotation for ``frame``."""
 
         if not self.keyframes:
             raise SceneError("Animation track defined without any keyframes")
 
         if frame <= self.keyframes[0].frame:
             start = self.keyframes[0]
-            return start.x, start.y
+            return start.x, start.y, start.rotation
 
         if frame >= self.keyframes[-1].frame:
             end = self.keyframes[-1]
-            return end.x, end.y
+            return end.x, end.y, end.rotation
 
         for left, right in pairwise(self.keyframes):
             if left.frame <= frame <= right.frame:
                 if right.frame == left.frame:
-                    return left.x, left.y
+                    return left.x, left.y, left.rotation
                 raw_t = (frame - left.frame) / (right.frame - left.frame)
                 easing = _easing_function(left.easing or self.default_easing)
                 t = easing(raw_t)
                 x = left.x + (right.x - left.x) * t
                 y = left.y + (right.y - left.y) * t
-                return x, y
+                rotation = left.rotation + (right.rotation - left.rotation) * t
+                return x, y, rotation
 
         end = self.keyframes[-1]
-        return end.x, end.y
+        return end.x, end.y, end.rotation
+
+    def position_at(self, frame: int) -> tuple[float, float]:
+        """Return the interpolated position for ``frame``."""
+
+        x, y, _ = self.transform_at(frame)
+        return x, y
+
+    def rotation_at(self, frame: int) -> float:
+        """Return the interpolated rotation for ``frame``."""
+
+        _, _, rotation = self.transform_at(frame)
+        return rotation
 
 
 T = TypeVar("T")
@@ -263,6 +277,41 @@ def pairwise(values: Iterable[T]) -> Iterator[tuple[T, T]]:
 SUPPORTED_OBJECT_TYPES: tuple[str, ...] = ("rectangle", "circle", "line", "polygon")
 
 
+def _parse_rotation_value(value: object, *, default: float = 0.0) -> float:
+    """Parse ``value`` into a rotation in radians."""
+
+    if value is None:
+        return default
+
+    unit = "degrees"
+    magnitude: object = value
+
+    if isinstance(value, Mapping):
+        has_degrees = "degrees" in value
+        has_radians = "radians" in value
+        if has_degrees == has_radians:
+            raise SceneError(
+                "Rotation mapping must specify exactly one of 'degrees' or 'radians'"
+            )
+        if has_degrees:
+            magnitude = value["degrees"]
+        else:
+            unit = "radians"
+            magnitude = value["radians"]
+
+    try:
+        rotation_value = float(cast(float | int | str, magnitude))
+    except (TypeError, ValueError) as exc:
+        raise SceneError("Rotation must be a numeric value") from exc
+
+    if not math.isfinite(rotation_value):
+        raise SceneError("Rotation must be a finite number")
+
+    if unit == "degrees":
+        return math.radians(rotation_value)
+    return rotation_value
+
+
 @dataclass(slots=True)
 class SceneObject:
     """Renderable object within a scene."""
@@ -272,6 +321,7 @@ class SceneObject:
     color: Color
     position: tuple[float, float]
     size: tuple[float, float]
+    rotation: float = 0.0
     z_index: int = 0
     points: tuple[tuple[float, float], ...] = ()
     stroke_color: Color | None = None
@@ -312,6 +362,8 @@ class SceneObject:
             raise SceneError("Object position coordinates must be finite numbers")
 
         position = position_x, position_y
+
+        rotation = _parse_rotation_value(payload.get("rotation"), default=0.0)
 
         size: tuple[float, float] = (0.0, 0.0)
         size_data = payload.get("size")
@@ -457,12 +509,20 @@ class SceneObject:
                         f"Object animation entry at index {index} must have finite coordinate values"
                     )
 
+                rotation_value = _parse_rotation_value(
+                    item.get("rotation"), default=rotation
+                )
+
                 easing_raw = item.get("easing")
                 easing = None
                 if easing_raw is not None:
                     easing = _validate_easing_identifier(easing_raw)
 
-                keyframes.append(Keyframe(frame=frame, x=x, y=y, easing=easing))
+                keyframes.append(
+                    Keyframe(
+                        frame=frame, x=x, y=y, rotation=rotation_value, easing=easing
+                    )
+                )
 
             if not keyframes:
                 raise SceneError(
@@ -492,6 +552,7 @@ class SceneObject:
             color=color,
             position=position,
             size=size,
+            rotation=rotation,
             z_index=z_index,
             points=points,
             stroke_color=stroke_color,
@@ -505,6 +566,21 @@ class SceneObject:
         if self.animation is None:
             return self.position
         return self.animation.position_at(frame)
+
+    def rotation_at(self, frame: int) -> float:
+        """Return the rotation of the object (in radians) for ``frame``."""
+
+        if self.animation is None:
+            return self.rotation
+        return self.animation.rotation_at(frame)
+
+    def _frame_transform(self, frame: int) -> tuple[tuple[float, float], float]:
+        """Return the position and rotation for ``frame``."""
+
+        if self.animation is None:
+            return self.position, self.rotation
+        x, y, rotation = self.animation.transform_at(frame)
+        return (x, y), rotation
 
     def render(self, target: "Frame", frame_index: int) -> None:
         """Draw the object on ``target``."""
@@ -524,29 +600,18 @@ class SceneObject:
             )
 
     def _render_rectangle(self, target: "Frame", frame_index: int) -> None:
-        position = self.position_at(frame_index)
+        origin, rotation = self._frame_transform(frame_index)
         width, height = self.size
-        left = int(round(position[0]))
-        top = int(round(position[1]))
-        right = left + int(round(width))
-        bottom = top + int(round(height))
+        corners = ((0.0, 0.0), (width, 0.0), (width, height), (0.0, height))
+        points = self._rotate_and_translate_points(corners, origin, rotation)
 
-        for y in range(max(0, top), min(target.height, bottom)):
-            row = target.pixels[y]
-            for x in range(max(0, left), min(target.width, right)):
-                target._blend_into(row, x, self.color)
+        self._fill_polygon(target, points)
 
         _, stroke_width = self._stroke_details()
         if stroke_width > 0:
-            top_left = (left, top)
-            top_right = (right - 1, top)
-            bottom_right = (right - 1, bottom - 1)
-            bottom_left = (left, bottom - 1)
-
-            self._draw_line(target, top_left, top_right)
-            self._draw_line(target, top_right, bottom_right)
-            self._draw_line(target, bottom_right, bottom_left)
-            self._draw_line(target, bottom_left, top_left)
+            for index, start in enumerate(points):
+                end = points[(index + 1) % len(points)]
+                self._draw_line(target, start, end)
 
     def _render_circle(self, target: "Frame", frame_index: int) -> None:
         position = self.position_at(frame_index)
@@ -596,9 +661,28 @@ class SceneObject:
         stroke_width = max(0, int(round(stroke_width_value)))
         return stroke_color, stroke_width
 
-    def _translated_points(self, frame_index: int) -> list[tuple[float, float]]:
-        offset_x, offset_y = self.position_at(frame_index)
-        return [(x + offset_x, y + offset_y) for x, y in self.points]
+    def _rotate_and_translate_points(
+        self,
+        points: Sequence[tuple[float, float]],
+        origin: tuple[float, float],
+        rotation: float,
+    ) -> list[tuple[float, float]]:
+        origin_x, origin_y = origin
+        if rotation == 0:
+            return [(x + origin_x, y + origin_y) for x, y in points]
+
+        cos_r = math.cos(rotation)
+        sin_r = math.sin(rotation)
+        rotated = []
+        for x, y in points:
+            rx = x * cos_r - y * sin_r
+            ry = x * sin_r + y * cos_r
+            rotated.append((rx + origin_x, ry + origin_y))
+        return rotated
+
+    def _transformed_points(self, frame_index: int) -> list[tuple[float, float]]:
+        origin, rotation = self._frame_transform(frame_index)
+        return self._rotate_and_translate_points(self.points, origin, rotation)
 
     def _draw_point(
         self, target: "Frame", x: float, y: float, stroke_width: int, color: Color
@@ -634,14 +718,25 @@ class SceneObject:
             self._draw_point(target, x, y, stroke_width, stroke_color)
 
     def _render_line(self, target: "Frame", frame_index: int) -> None:
-        points = self._translated_points(frame_index)
+        points = self._transformed_points(frame_index)
         self._draw_line(target, points[0], points[1])
 
     def _render_polygon(self, target: "Frame", frame_index: int) -> None:
-        points = self._translated_points(frame_index)
+        points = self._transformed_points(frame_index)
         if len(points) < 3:
             raise SceneError("Polygon must contain at least three points")
 
+        self._fill_polygon(target, points)
+
+        stroke_color, stroke_width = self._stroke_details()
+        if stroke_width > 0:
+            for i, start in enumerate(points):
+                end = points[(i + 1) % len(points)]
+                self._draw_line(target, start, end)
+
+    def _fill_polygon(
+        self, target: "Frame", points: Sequence[tuple[float, float]]
+    ) -> None:
         xs = [x for x, _ in points]
         ys = [y for _, y in points]
         min_x = max(0, int(math.floor(min(xs))))
@@ -671,12 +766,6 @@ class SceneObject:
                 end_x = int(math.floor(right))
                 for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
                     target._blend_into(row, x, self.color)
-
-        stroke_color, stroke_width = self._stroke_details()
-        if stroke_width > 0:
-            for i, start in enumerate(points):
-                end = points[(i + 1) % len(points)]
-                self._draw_line(target, start, end)
 
 
 @dataclass(slots=True)
