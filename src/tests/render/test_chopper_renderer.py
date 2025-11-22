@@ -11,6 +11,7 @@ import typing_extensions
 
 from apps.chopper.renderer import (
     AnimationWriter,
+    Color,
     Frame,
     Renderer,
     Scene,
@@ -652,6 +653,36 @@ def test_frame_to_image_rgba_matches_bytes() -> None:
     assert image.mode == "RGBA"
     assert image.size == (2, 1)
     assert image.tobytes() == frame.to_bytes(mode="RGBA")
+
+
+def test_frame_alpha_tracking_updates_during_blends() -> None:
+    frame = Frame(index=0, width=1, height=1, pixels=[[(0, 0, 0, 0)]], has_alpha=False)
+
+    assert frame.has_alpha is False
+
+    row = frame.pixels[0]
+    frame._blend_into(row, 0, (255, 0, 0, 128))
+
+    assert frame.has_alpha is True
+
+
+def test_frame_alpha_cache_avoids_expensive_scan() -> None:
+    frame = Frame.blank(index=0, width=4, height=4, color=(0, 0, 0))
+
+    class CountingPixels(list[list[Color]]):
+        def __init__(self, rows: list[list[Color]]):
+            super().__init__(rows)
+            self.iterations = 0
+
+        def __iter__(self) -> Iterator[list[Color]]:  # type: ignore[override]
+            self.iterations += 1
+            return super().__iter__()
+
+    counted_pixels = CountingPixels(frame.pixels)
+    frame.pixels = counted_pixels
+
+    assert frame._has_alpha() is False
+    assert counted_pixels.iterations == 0
 
 
 def test_animation_writer_creates_gif(tmp_path: Path) -> None:
