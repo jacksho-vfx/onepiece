@@ -16,6 +16,7 @@ from apps.chopper.renderer import (
     Renderer,
     Scene,
     SceneError,
+    _blend_colors,
     parse_color,
 )
 
@@ -655,6 +656,12 @@ def test_frame_to_image_rgba_matches_bytes() -> None:
     assert image.tobytes() == frame.to_bytes(mode="RGBA")
 
 
+def test_blend_colors_preserves_alpha_when_opaque() -> None:
+    opaque_gray = _blend_colors((255, 255, 255, 255), (0, 0, 0, 128))
+
+    assert opaque_gray == (128, 128, 128, 255)
+
+
 def test_frame_alpha_tracking_updates_during_blends() -> None:
     frame = Frame(index=0, width=1, height=1, pixels=[[(0, 0, 0, 0)]], has_alpha=False)
 
@@ -664,6 +671,24 @@ def test_frame_alpha_tracking_updates_during_blends() -> None:
     frame._blend_into(row, 0, (255, 0, 0, 128))
 
     assert frame.has_alpha is True
+
+
+def test_frame_blending_retains_alpha_metadata_after_multiple_passes() -> None:
+    frame = Frame(index=0, width=1, height=1, pixels=[[(0, 0, 0, 0)]], has_alpha=False)
+
+    first_row = frame.pixels[0]
+    frame._blend_into(first_row, 0, (255, 0, 0, 128))
+    assert len(first_row[0]) == 4
+    assert frame.has_alpha is True
+
+    frame._blend_into(first_row, 0, (0, 255, 0, 255))
+
+    assert len(first_row[0]) == 4
+    assert first_row[0][3] == 255
+
+    frame.has_alpha = None
+
+    assert frame._has_alpha() is True
 
 
 def test_frame_alpha_cache_avoids_expensive_scan() -> None:
