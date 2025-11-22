@@ -156,9 +156,10 @@ def _resolve_frame_indices(
             raise ChopperRenderError(
                 "Cannot combine --frames with --start/--end options"
             )
-        indices = list(frames)
-        if not indices:
+        provided_indices = list(frames)
+        if not provided_indices:
             raise ChopperRenderError("At least one frame index must be provided")
+        indices = sorted(set(provided_indices))
     elif start_frame is None and end_frame is None:
         return None
     else:
