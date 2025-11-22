@@ -87,6 +87,17 @@ def render(
     fps: int = typer.Option(
         24, help="Frames per second used when encoding animations."
     ),
+    samples: int = typer.Option(
+        1,
+        "--samples",
+        help="Supersampling factor applied before downsampling the final frame.",
+    ),
+    downsample_filter: str = typer.Option(
+        "box",
+        "--filter",
+        case_sensitive=False,
+        help="Downsample filter to apply after supersampling: box or gaussian.",
+    ),
     background: str | None = typer.Option(
         None,
         "--background",
@@ -153,6 +164,8 @@ def render(
             start_frame=start,
             end_frame=end,
             frames=frame_list,
+            samples=samples,
+            filter_name=downsample_filter,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc

@@ -225,13 +225,20 @@ def render_scene(
     start_frame: int | None = None,
     end_frame: int | None = None,
     frames: Iterable[int] | None = None,
+    samples: int = 1,
+    filter_name: str = "box",
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
     parsed_scene = load_scene(scene_path)
     if background_override is not None:
         parsed_scene.background = background_override
-    renderer = Renderer(parsed_scene)
+    if samples <= 0:
+        raise ChopperRenderError("Supersampling 'samples' must be greater than zero")
+    try:
+        renderer = Renderer(parsed_scene, samples=samples, filter_name=filter_name)
+    except SceneError as exc:
+        raise ChopperRenderError(str(exc)) from exc
 
     frame_indices = _resolve_frame_indices(
         frame_count=parsed_scene.frame_count,

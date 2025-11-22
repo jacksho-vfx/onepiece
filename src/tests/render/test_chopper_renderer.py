@@ -351,6 +351,94 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[2] == "255"
 
 
+def test_supersampling_smooths_diagonal_line() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 2,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "diag",
+                    "type": "line",
+                    "color": "#ff0000",
+                    "position": [0, 0],
+                    "points": [[0, 0], [1, 1]],
+                    "stroke_width": 1,
+                }
+            ],
+        }
+    )
+
+    base = next(Renderer(scene).render())
+    supersampled = next(Renderer(scene, samples=4).render())
+
+    assert base.pixels[0][1] == (0, 0, 0, 0)
+    assert supersampled.pixels[0][1] == (143, 0, 0, 143)
+    assert supersampled.pixels[1][0] == (143, 0, 0, 143)
+
+
+def test_supersampling_softens_polygon_edges() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 2,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "poly",
+                    "type": "polygon",
+                    "color": "#0000ff",
+                    "position": [0, 0],
+                    "points": [
+                        [0.5, 0.5],
+                        [1.5, 0.5],
+                        [1.5, 1.5],
+                        [0.5, 1.5],
+                    ],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    base = next(Renderer(scene).render())
+    supersampled = next(Renderer(scene, samples=4).render())
+
+    assert base.pixels[0][0] == (0, 0, 0, 0)
+    assert supersampled.pixels[0][0] == (0, 0, 64, 64)
+    assert supersampled.pixels[1][1] == (0, 0, 96, 96)
+
+
+def test_gaussian_filter_downsamples_supersampled_frames() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 2,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "diag",
+                    "type": "line",
+                    "color": "#00ff00",
+                    "position": [0, 0],
+                    "points": [[0, 0], [1, 1]],
+                    "stroke_width": 1,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene, samples=2, filter_name="gaussian").render())
+
+    assert frame.width == scene.width
+    assert frame.height == scene.height
+    assert frame.pixels[0][1][1] > 0
+
+
 def test_renderer_blends_transparent_shapes_over_background() -> None:
     payload = {
         "width": 1,
