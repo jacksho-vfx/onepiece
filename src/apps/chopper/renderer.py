@@ -35,18 +35,25 @@ Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 def _blend_colors(destination: Color, source: Color) -> Color:
     """Return the result of alpha blending ``source`` over ``destination``."""
 
-    src_r, src_g, src_b = source[:3]
-    dst_r, dst_g, dst_b = destination[:3]
+    src_values: Sequence[int] = source
+    dst_values: Sequence[int] = destination
 
-    src_a = source[3] if len(source) >= 4 else 255
-    dst_a = destination[3] if len(destination) >= 4 else 255
+    src_r, src_g, src_b = src_values[:3]
+    dst_r, dst_g, dst_b = dst_values[:3]
+
+    src_has_alpha = len(src_values) >= 4
+    dst_has_alpha = len(dst_values) >= 4
+    include_alpha = src_has_alpha or dst_has_alpha
+
+    src_a = src_values[3] if src_has_alpha else 255
+    dst_a = dst_values[3] if dst_has_alpha else 255
 
     src_alpha = src_a / 255.0
     dst_alpha = dst_a / 255.0
 
     out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
     if out_alpha == 0:
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0) if include_alpha else (0, 0, 0)
 
     out_r = int(
         round((src_r * src_alpha + dst_r * dst_alpha * (1.0 - src_alpha)) / out_alpha)
@@ -59,10 +66,10 @@ def _blend_colors(destination: Color, source: Color) -> Color:
     )
     out_a = int(round(out_alpha * 255.0))
 
-    if out_a >= 255:
-        return (out_r, out_g, out_b)
+    if include_alpha:
+        return (out_r, out_g, out_b, out_a)
 
-    return (out_r, out_g, out_b, out_a)
+    return (out_r, out_g, out_b)
 
 
 def _require_pillow() -> Any:
