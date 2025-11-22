@@ -256,6 +256,13 @@ control. Lower values are rendered first while higher values sit in the
 foreground. Sorting is stable, so objects with matching `z_index` values keep
 their declaration order.
 
+Objects can animate their position, rotation, and colour by supplying an
+`animation` array. Each entry specifies a `frame` number and any combination of
+`x`, `y`, `rotation`, or `color`. Colour keyframes accept the same hex or
+tuple formats as static `color` values and interpolate per-channel, including
+alpha when provided. This makes simple fades or hue shifts possible without
+manually authoring per-frame assets.
+
 Render scenes with `chopper render path/to/scene.json` and use the `--format`
 flag to control how frames are exported:
 
