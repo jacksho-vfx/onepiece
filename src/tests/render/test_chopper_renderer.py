@@ -107,6 +107,35 @@ def build_stroked_shape_scene() -> dict[str, object]:
     }
 
 
+def build_rotated_shape_scene() -> dict[str, object]:
+    return {
+        "width": 5,
+        "height": 5,
+        "frames": 1,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "rotated-rect",
+                "type": "rectangle",
+                "color": "#ff0000",
+                "position": [2, 1],
+                "size": [2, 1],
+                "rotation": {"degrees": 90},
+                "stroke_width": 0,
+            },
+            {
+                "id": "rotated-line",
+                "type": "line",
+                "color": "#00ff00",
+                "position": [3, 2],
+                "points": [[0, 0], [2, 0]],
+                "rotation": {"degrees": 90},
+                "stroke_width": 1,
+            },
+        ],
+    }
+
+
 @pytest.fixture
 def unsupported_scene_payload() -> dict[str, object]:
     payload = build_scene_dict()
@@ -189,6 +218,17 @@ def test_scene_object_requires_finite_position_values() -> None:
 
     with pytest.raises(SceneError, match="finite numbers"):
         Scene.from_dict(payload)
+
+
+def test_scene_object_parses_rotation_units() -> None:
+    payload = build_scene_dict()
+    payload["objects"][0]["rotation"] = {"degrees": 90}  # type: ignore[index]
+    payload["objects"][1]["rotation"] = {"radians": math.pi}  # type: ignore[index]
+
+    scene = Scene.from_dict(payload)
+
+    assert scene.objects[0].rotation == pytest.approx(math.pi / 2)
+    assert scene.objects[1].rotation == pytest.approx(math.pi)
 
 
 def test_scene_object_rejects_invalid_easing() -> None:
@@ -459,6 +499,35 @@ def test_animation_easing_applied_to_positions() -> None:
     assert halfway[1] == pytest.approx(0.0)
 
 
+def test_animation_interpolates_rotation() -> None:
+    payload = {
+        "width": 2,
+        "height": 2,
+        "frames": 3,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "spinner",
+                "type": "rectangle",
+                "color": "#ffffff",
+                "position": [0, 0],
+                "size": [1, 1],
+                "animation": [
+                    {"frame": 0, "rotation": {"degrees": 0}},
+                    {"frame": 2, "rotation": {"degrees": 90}},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    obj = scene.objects[0]
+
+    assert obj.rotation_at(0) == pytest.approx(0)
+    assert obj.rotation_at(1) == pytest.approx(math.pi / 4)
+    assert obj.rotation_at(2) == pytest.approx(math.pi / 2)
+
+
 def test_animation_keyframe_easing_overrides_default() -> None:
     payload = {
         "width": 4,
@@ -548,6 +617,24 @@ def test_rectangle_and_circle_strokes() -> None:
     # Circle stroke and fill
     assert frame.pixels[5][5] == (0, 0, 255)
     assert frame.pixels[5][7] == (255, 255, 255)
+
+
+def test_rotated_shapes_render_correctly() -> None:
+    scene = Scene.from_dict(build_rotated_shape_scene())
+    renderer = Renderer(scene)
+
+    frame = next(renderer.render())
+
+    # Rotated rectangle occupies two rows after 90 degree rotation about its origin
+    assert frame.pixels[1][1] == (255, 0, 0)
+    assert frame.pixels[2][1] == (255, 0, 0)
+    assert frame.pixels[1][2] == (255, 0, 0)
+    assert frame.pixels[2][2] == (255, 0, 0)
+
+    # Rotated line now vertical at x=3
+    assert frame.pixels[2][3] == (0, 255, 0)
+    assert frame.pixels[3][3] == (0, 255, 0)
+    assert frame.pixels[4][3] == (0, 255, 0)
 
 
 def test_line_requires_two_points() -> None:
