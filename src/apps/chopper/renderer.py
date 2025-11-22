@@ -209,6 +209,7 @@ class Keyframe:
     x: float
     y: float
     rotation: float
+    color: Color | None = None
     easing: str | None = None
 
 
@@ -259,6 +260,59 @@ class Animation:
 
         _, _, rotation = self.transform_at(frame)
         return rotation
+
+    def color_at(self, frame: int, *, default_color: Color) -> Color:
+        """Return the interpolated color for ``frame``."""
+
+        def _to_rgba(color: Color) -> tuple[int, int, int, int]:
+            r, g, b = color[:3]
+            a = color[3] if len(color) >= 4 else 255
+            return r, g, b, a
+
+        color_keyframes = [
+            keyframe for keyframe in self.keyframes if keyframe.color is not None
+        ]
+        include_alpha = len(default_color) >= 4 or any(
+            len(cast(tuple[int, ...], keyframe.color)) >= 4
+            for keyframe in color_keyframes
+        )
+
+        def _from_rgba(color: tuple[int, int, int, int]) -> Color:
+            r, g, b, a = color
+            if include_alpha:
+                return r, g, b, a
+            return r, g, b
+
+        base_color = _to_rgba(default_color)
+
+        if not color_keyframes:
+            return _from_rgba(base_color)
+
+        first = color_keyframes[0]
+        last = color_keyframes[-1]
+
+        if frame < first.frame:
+            return _from_rgba(base_color)
+
+        if frame >= last.frame:
+            return _from_rgba(_to_rgba(last.color or base_color))
+
+        for left, right in pairwise(color_keyframes):
+            left_color = _to_rgba(left.color or base_color)
+            right_color = _to_rgba(right.color or base_color)
+            if left.frame == right.frame:
+                return _from_rgba(left_color)
+            if left.frame <= frame <= right.frame:
+                raw_t = (frame - left.frame) / (right.frame - left.frame)
+                easing = _easing_function(left.easing or self.default_easing)
+                t = easing(raw_t)
+                interpolated = tuple(
+                    int(round(component_left + (component_right - component_left) * t))
+                    for component_left, component_right in zip(left_color, right_color)
+                )
+                return _from_rgba(cast(tuple[int, int, int, int], interpolated))
+
+        return _from_rgba(_to_rgba(last.color or base_color))
 
 
 T = TypeVar("T")
@@ -513,6 +567,10 @@ class SceneObject:
                     item.get("rotation"), default=rotation
                 )
 
+                color_value = None
+                if item.get("color") is not None:
+                    color_value = parse_color(item["color"])
+
                 easing_raw = item.get("easing")
                 easing = None
                 if easing_raw is not None:
@@ -520,7 +578,12 @@ class SceneObject:
 
                 keyframes.append(
                     Keyframe(
-                        frame=frame, x=x, y=y, rotation=rotation_value, easing=easing
+                        frame=frame,
+                        x=x,
+                        y=y,
+                        rotation=rotation_value,
+                        color=color_value,
+                        easing=easing,
                     )
                 )
 
@@ -574,6 +637,13 @@ class SceneObject:
             return self.rotation
         return self.animation.rotation_at(frame)
 
+    def color_at(self, frame: int) -> Color:
+        """Return the color of the object for ``frame``."""
+
+        if self.animation is None:
+            return self.color
+        return self.animation.color_at(frame, default_color=self.color)
+
     def _frame_transform(self, frame: int) -> tuple[tuple[float, float], float]:
         """Return the position and rotation for ``frame``."""
 
@@ -605,16 +675,17 @@ class SceneObject:
         corners = ((0.0, 0.0), (width, 0.0), (width, height), (0.0, height))
         points = self._rotate_and_translate_points(corners, origin, rotation)
 
-        self._fill_polygon(target, points)
+        self._fill_polygon(target, points, self.color_at(frame_index))
 
-        _, stroke_width = self._stroke_details()
+        _, stroke_width = self._stroke_details(frame_index)
         if stroke_width > 0:
             for index, start in enumerate(points):
                 end = points[(index + 1) % len(points)]
-                self._draw_line(target, start, end)
+                self._draw_line(target, start, end, frame_index)
 
     def _render_circle(self, target: "Frame", frame_index: int) -> None:
         position = self.position_at(frame_index)
+        color = self.color_at(frame_index)
         width, height = self.size
         min_diameter = min(width, height)
         if min_diameter <= 0:
@@ -638,9 +709,9 @@ class SceneObject:
                 dx = x - cx
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
-                    target._blend_into(row, x, self.color)
+                    target._blend_into(row, x, color)
 
-        _, stroke_width = self._stroke_details()
+        stroke_color, stroke_width = self._stroke_details(frame_index)
         if stroke_width > 0:
             segments = max(12, int(math.ceil(radius * 6)))
             points = [
@@ -653,10 +724,12 @@ class SceneObject:
 
             for index, start in enumerate(points):
                 end = points[(index + 1) % len(points)]
-                self._draw_line(target, start, end)
+                self._draw_line(
+                    target, start, end, frame_index, stroke_color=stroke_color
+                )
 
-    def _stroke_details(self) -> tuple[Color, int]:
-        stroke_color = self.stroke_color or self.color
+    def _stroke_details(self, frame_index: int) -> tuple[Color, int]:
+        stroke_color = self.stroke_color or self.color_at(frame_index)
         stroke_width_value = 1.0 if self.stroke_width is None else self.stroke_width
         stroke_width = max(0, int(round(stroke_width_value)))
         return stroke_color, stroke_width
@@ -699,9 +772,16 @@ class SceneObject:
                 target._blend_into(row, xx, color)
 
     def _draw_line(
-        self, target: "Frame", start: tuple[float, float], end: tuple[float, float]
+        self,
+        target: "Frame",
+        start: tuple[float, float],
+        end: tuple[float, float],
+        frame_index: int,
+        *,
+        stroke_color: Color | None = None,
     ) -> None:
-        stroke_color, stroke_width = self._stroke_details()
+        stroke_color_value, stroke_width = self._stroke_details(frame_index)
+        resolved_stroke_color = stroke_color or stroke_color_value
         if stroke_width <= 0:
             return
         x0, y0 = start
@@ -715,27 +795,29 @@ class SceneObject:
             t = step / steps
             x = x0 + dx * t
             y = y0 + dy * t
-            self._draw_point(target, x, y, stroke_width, stroke_color)
+            self._draw_point(target, x, y, stroke_width, resolved_stroke_color)
 
     def _render_line(self, target: "Frame", frame_index: int) -> None:
         points = self._transformed_points(frame_index)
-        self._draw_line(target, points[0], points[1])
+        self._draw_line(target, points[0], points[1], frame_index)
 
     def _render_polygon(self, target: "Frame", frame_index: int) -> None:
         points = self._transformed_points(frame_index)
         if len(points) < 3:
             raise SceneError("Polygon must contain at least three points")
 
-        self._fill_polygon(target, points)
+        self._fill_polygon(target, points, self.color_at(frame_index))
 
-        stroke_color, stroke_width = self._stroke_details()
+        stroke_color, stroke_width = self._stroke_details(frame_index)
         if stroke_width > 0:
             for i, start in enumerate(points):
                 end = points[(i + 1) % len(points)]
-                self._draw_line(target, start, end)
+                self._draw_line(
+                    target, start, end, frame_index, stroke_color=stroke_color
+                )
 
     def _fill_polygon(
-        self, target: "Frame", points: Sequence[tuple[float, float]]
+        self, target: "Frame", points: Sequence[tuple[float, float]], color: Color
     ) -> None:
         xs = [x for x, _ in points]
         ys = [y for _, y in points]
@@ -765,7 +847,7 @@ class SceneObject:
                 start_x = int(math.ceil(left))
                 end_x = int(math.floor(right))
                 for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
-                    target._blend_into(row, x, self.color)
+                    target._blend_into(row, x, color)
 
 
 @dataclass(slots=True)

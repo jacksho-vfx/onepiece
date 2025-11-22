@@ -55,7 +55,7 @@ def build_shape_scene() -> dict[str, object]:
         "width": 6,
         "height": 6,
         "frames": 1,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "line",
@@ -83,7 +83,7 @@ def build_stroked_shape_scene() -> dict[str, object]:
         "width": 8,
         "height": 8,
         "frames": 1,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "panel",
@@ -112,7 +112,7 @@ def build_rotated_shape_scene() -> dict[str, object]:
         "width": 5,
         "height": 5,
         "frames": 1,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "rotated-rect",
@@ -412,7 +412,7 @@ def test_renderer_sorts_objects_by_z_index() -> None:
         "width": 1,
         "height": 1,
         "frames": 1,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "foreground",
@@ -436,7 +436,7 @@ def test_renderer_sorts_objects_by_z_index() -> None:
     scene = Scene.from_dict(payload)
     frame = next(Renderer(scene).render())
 
-    assert frame.pixels[0][0] == (255, 0, 0)
+    assert frame.pixels[0][0] == (255, 0, 0, 255)
 
 
 def test_renderer_preserves_order_with_equal_z_index() -> None:
@@ -444,7 +444,7 @@ def test_renderer_preserves_order_with_equal_z_index() -> None:
         "width": 1,
         "height": 1,
         "frames": 1,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "first",
@@ -466,7 +466,7 @@ def test_renderer_preserves_order_with_equal_z_index() -> None:
     scene = Scene.from_dict(payload)
     frame = next(Renderer(scene).render())
 
-    assert frame.pixels[0][0] == (0, 0, 255)
+    assert frame.pixels[0][0] == (0, 0, 255, 255)
 
 
 def test_animation_easing_applied_to_positions() -> None:
@@ -474,7 +474,7 @@ def test_animation_easing_applied_to_positions() -> None:
         "width": 4,
         "height": 4,
         "frames": 3,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "hero",
@@ -504,7 +504,7 @@ def test_animation_interpolates_rotation() -> None:
         "width": 2,
         "height": 2,
         "frames": 3,
-        "background": "#000000",
+        "background": "#00000000",
         "objects": [
             {
                 "id": "spinner",
@@ -526,6 +526,66 @@ def test_animation_interpolates_rotation() -> None:
     assert obj.rotation_at(0) == pytest.approx(0)
     assert obj.rotation_at(1) == pytest.approx(math.pi / 4)
     assert obj.rotation_at(2) == pytest.approx(math.pi / 2)
+
+
+def test_animation_interpolates_color_channels() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 3,
+        "background": "#000000",
+        "objects": [
+            {
+                "id": "panel",
+                "type": "rectangle",
+                "color": "#ff0000",
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+                "animation": [
+                    {"frame": 0, "color": "#ff0000"},
+                    {"frame": 2, "color": "#0000ff"},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frames = list(Renderer(scene).render())
+
+    assert frames[0].pixels[0][0] == (255, 0, 0)
+    assert frames[1].pixels[0][0] == (128, 0, 128)
+    assert frames[2].pixels[0][0] == (0, 0, 255)
+
+
+def test_animation_interpolates_alpha_channel() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 3,
+        "background": "#00000000",
+        "objects": [
+            {
+                "id": "panel",
+                "type": "rectangle",
+                "color": "#ff0000ff",
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+                "animation": [
+                    {"frame": 0, "color": "#ff0000ff"},
+                    {"frame": 2, "color": "#ff000000"},
+                ],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frames = list(Renderer(scene).render())
+
+    assert frames[0].pixels[0][0] == (255, 0, 0, 255)
+    assert frames[1].pixels[0][0] == (255, 0, 0, 128)
+    assert frames[2].pixels[0][0] == (0, 0, 0, 0)
 
 
 def test_animation_keyframe_easing_overrides_default() -> None:
@@ -595,13 +655,13 @@ def test_line_and_polygon_rendering() -> None:
     frame = next(renderer.render())
 
     # Polygon fill and stroke
-    assert frame.pixels[2][2] == (0, 0, 255)
-    assert frame.pixels[1][1] == (255, 0, 255)
-    assert frame.pixels[0][0] == (0, 0, 0)
+    assert frame.pixels[2][2] == (0, 0, 255, 255)
+    assert frame.pixels[1][1] == (255, 0, 255, 255)
+    assert frame.pixels[0][0] == (0, 0, 0, 0)
 
     # Line stroke across the bottom row
     for x in range(scene.width):
-        assert frame.pixels[5][x] == (0, 255, 0)
+        assert frame.pixels[5][x] == (0, 255, 0, 255)
 
 
 def test_rectangle_and_circle_strokes() -> None:
@@ -611,12 +671,12 @@ def test_rectangle_and_circle_strokes() -> None:
     frame = next(renderer.render())
 
     # Rectangle stroke and fill
-    assert frame.pixels[1][1] == (0, 255, 0)
-    assert frame.pixels[2][2] == (255, 255, 0)
+    assert frame.pixels[1][1] == (0, 255, 0, 255)
+    assert frame.pixels[2][2] == (255, 255, 0, 255)
 
     # Circle stroke and fill
-    assert frame.pixels[5][5] == (0, 0, 255)
-    assert frame.pixels[5][7] == (255, 255, 255)
+    assert frame.pixels[5][5] == (0, 0, 255, 255)
+    assert frame.pixels[5][7] == (255, 255, 255, 255)
 
 
 def test_rotated_shapes_render_correctly() -> None:
@@ -626,15 +686,15 @@ def test_rotated_shapes_render_correctly() -> None:
     frame = next(renderer.render())
 
     # Rotated rectangle occupies two rows after 90 degree rotation about its origin
-    assert frame.pixels[1][1] == (255, 0, 0)
-    assert frame.pixels[2][1] == (255, 0, 0)
-    assert frame.pixels[1][2] == (255, 0, 0)
-    assert frame.pixels[2][2] == (255, 0, 0)
+    assert frame.pixels[1][1] == (255, 0, 0, 255)
+    assert frame.pixels[2][1] == (255, 0, 0, 255)
+    assert frame.pixels[1][2] == (255, 0, 0, 255)
+    assert frame.pixels[2][2] == (255, 0, 0, 255)
 
     # Rotated line now vertical at x=3
-    assert frame.pixels[2][3] == (0, 255, 0)
-    assert frame.pixels[3][3] == (0, 255, 0)
-    assert frame.pixels[4][3] == (0, 255, 0)
+    assert frame.pixels[2][3] == (0, 255, 0, 255)
+    assert frame.pixels[3][3] == (0, 255, 0, 255)
+    assert frame.pixels[4][3] == (0, 255, 0, 255)
 
 
 def test_line_requires_two_points() -> None:
