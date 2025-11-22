@@ -527,7 +527,7 @@ class SceneObject:
         for y in range(max(0, top), min(target.height, bottom)):
             row = target.pixels[y]
             for x in range(max(0, left), min(target.width, right)):
-                row[x] = _blend_colors(row[x], self.color)
+                target._blend_into(row, x, self.color)
 
         _, stroke_width = self._stroke_details()
         if stroke_width > 0:
@@ -566,7 +566,7 @@ class SceneObject:
                 dx = x - cx
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
-                    row[x] = _blend_colors(row[x], self.color)
+                    target._blend_into(row, x, self.color)
 
         _, stroke_width = self._stroke_details()
         if stroke_width > 0:
@@ -605,7 +605,7 @@ class SceneObject:
         for yy in range(min_y, max_y + 1):
             row = target.pixels[yy]
             for xx in range(min_x, max_x + 1):
-                row[xx] = _blend_colors(row[xx], color)
+                target._blend_into(row, xx, color)
 
     def _draw_line(
         self, target: "Frame", start: tuple[float, float], end: tuple[float, float]
@@ -644,6 +644,7 @@ class SceneObject:
 
         # Fill polygon using an even-odd rule scanline approach.
         for y in range(min_y, max_y + 1):
+            row = target.pixels[y]
             intersections: list[float] = []
             for i, (x1, y1) in enumerate(points):
                 x2, y2 = points[(i + 1) % len(points)]
@@ -662,7 +663,7 @@ class SceneObject:
                 start_x = int(math.ceil(left))
                 end_x = int(math.floor(right))
                 for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
-                    target.pixels[y][x] = _blend_colors(target.pixels[y][x], self.color)
+                    target._blend_into(row, x, self.color)
 
         stroke_color, stroke_width = self._stroke_details()
         if stroke_width > 0:
@@ -766,16 +767,42 @@ class Frame:
     width: int
     height: int
     pixels: list[list[Color]]
+    has_alpha: bool | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.has_alpha is None:
+            self.has_alpha = any(
+                len(pixel) >= 4 for row in self.pixels for pixel in row
+            )
+
+    def _update_alpha_flag(self, pixel: Color) -> None:
+        if self.has_alpha is not True and len(pixel) >= 4:
+            self.has_alpha = True
+
+    def _blend_into(self, row: list[Color], x: int, color: Color) -> None:
+        blended = _blend_colors(row[x], color)
+        row[x] = blended
+        self._update_alpha_flag(blended)
 
     @classmethod
     def blank(cls, index: int, width: int, height: int, color: Color) -> "Frame":
         """Create a blank frame filled with ``color``."""
 
         pixels = [[color for _ in range(width)] for _ in range(height)]
-        return cls(index=index, width=width, height=height, pixels=pixels)
+        return cls(
+            index=index,
+            width=width,
+            height=height,
+            pixels=pixels,
+            has_alpha=len(color) >= 4,
+        )
 
     def _has_alpha(self) -> bool:
-        return any(len(pixel) == 4 for row in self.pixels for pixel in row)
+        if self.has_alpha is None:
+            self.has_alpha = any(
+                len(pixel) >= 4 for row in self.pixels for pixel in row
+            )
+        return self.has_alpha
 
     def to_bytes(self, *, mode: str = "RGB") -> bytes:
         """Return the frame encoded as ``mode`` bytes."""
