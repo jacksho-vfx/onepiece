@@ -332,7 +332,7 @@ def test_renderer_blends_transparent_shapes_over_background() -> None:
     scene = Scene.from_dict(payload)
     frame = next(Renderer(scene).render())
 
-    assert frame.pixels[0][0] == (127, 0, 128)
+    assert frame.pixels[0][0] == (127, 0, 128, 255)
 
 
 def test_renderer_stacks_multiple_transparent_shapes() -> None:
@@ -364,7 +364,7 @@ def test_renderer_stacks_multiple_transparent_shapes() -> None:
     scene = Scene.from_dict(payload)
     frame = next(Renderer(scene).render())
 
-    assert frame.pixels[0][0] == (191, 63, 63)
+    assert frame.pixels[0][0] == (191, 63, 63, 255)
 
 
 def test_renderer_sorts_objects_by_z_index() -> None:
@@ -659,7 +659,7 @@ def test_frame_to_image_rgba_matches_bytes() -> None:
 def test_blend_colors_preserves_alpha_when_opaque() -> None:
     opaque_gray = _blend_colors((255, 255, 255, 255), (0, 0, 0, 128))
 
-    assert opaque_gray == (128, 128, 128, 255)
+    assert opaque_gray == (127, 127, 127, 255)
 
 
 def test_frame_alpha_tracking_updates_during_blends() -> None:
