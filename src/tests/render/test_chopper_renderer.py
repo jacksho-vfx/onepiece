@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
+import tracemalloc
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -1399,6 +1400,65 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
         image.seek(1)
         second = image.convert("RGBA")
         assert second.getpixel((0, 0))[0] == 20
+
+
+def test_animation_writer_streams_gif_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pillow = pytest.importorskip("PIL.Image")
+
+    frames = [
+        Frame(index=idx, width=1, height=1, pixels=[[(idx, idx, idx, 255)]])
+        for idx in range(5)
+    ]
+
+    append_argument: list[object] = []
+    original_save = pillow.Image.save
+
+    def _save(
+        self: Any, fp: object, *, append_images: object = (), **kwargs: Any
+    ) -> Any:
+        append_argument.append(append_images)
+        return original_save(self, fp, append_images=append_images, **kwargs)
+
+    monkeypatch.setattr(pillow.Image, "save", _save, raising=False)
+
+    destination = tmp_path / "animation.gif"
+    writer = AnimationWriter(frames=iter(frames), fps=12)
+    frame_count = writer.write_gif(destination, optimize=False)
+
+    assert frame_count == len(frames)
+    assert append_argument and not isinstance(append_argument[0], list)
+
+
+def test_animation_writer_gif_memory_regression(tmp_path: Path) -> None:
+    pillow = pytest.importorskip("PIL.Image")
+
+    class StubFrame:
+        def __init__(self, color: tuple[int, int, int, int]):
+            self.color = color
+
+        def to_image(
+            self: Any, mode: str = "RGBA"
+        ) -> Any:  # pragma: no cover - trivial
+            return pillow.new(mode, (256, 256), self.color)
+
+    frame_count = 180
+    frames = (
+        StubFrame((idx % 255, 0, 255 - idx % 255, 255)) for idx in range(frame_count)
+    )
+
+    tracemalloc.start()
+    try:
+        writer = AnimationWriter(frames=frames, fps=12)
+        start_current, _ = tracemalloc.get_traced_memory()
+        written = writer.write_gif(tmp_path / "large.gif", optimize=False)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert written == frame_count
+    assert peak - start_current < 60 * 1024 * 1024
 
 
 def test_animation_writer_converts_frames_to_numpy(
