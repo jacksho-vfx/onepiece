@@ -14,6 +14,7 @@ from apps.chopper import renderer as renderer_module
 from apps.chopper.renderer import (
     AnimationWriter,
     Color,
+    ColorSpace,
     GuidesOverlay,
     Frame,
     Renderer,
@@ -157,6 +158,15 @@ def test_scene_from_dict_creates_objects() -> None:
     assert len(scene.objects) == 2
     assert scene.objects[0].kind == "rectangle"
     assert scene.objects[1].kind == "circle"
+
+
+def test_scene_from_dict_reads_color_space() -> None:
+    payload = build_scene_dict()
+    payload["color_space"] = "linear"
+
+    scene = Scene.from_dict(payload)
+
+    assert scene.color_space is ColorSpace.LINEAR
 
 
 def test_scene_accepts_unique_object_ids() -> None:
@@ -523,6 +533,31 @@ def test_renderer_blends_transparent_shapes_over_background() -> None:
     scene = Scene.from_dict(payload)
     frame = next(Renderer(scene).render())
 
+    assert frame.pixels[0][0] == (187, 0, 188, 255)
+
+
+def test_renderer_blends_transparent_shapes_in_linear_space() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#ff0000",
+        "color_space": "linear",
+        "objects": [
+            {
+                "id": "overlay",
+                "type": "rectangle",
+                "color": (0, 0, 255, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
     assert frame.pixels[0][0] == (127, 0, 128, 255)
 
 
@@ -532,6 +567,39 @@ def test_renderer_stacks_multiple_transparent_shapes() -> None:
         "height": 1,
         "frames": 1,
         "background": "#ffffff",
+        "objects": [
+            {
+                "id": "shadow",
+                "type": "rectangle",
+                "color": (0, 0, 0, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            },
+            {
+                "id": "highlight",
+                "type": "rectangle",
+                "color": (255, 0, 0, 128),
+                "position": [0, 0],
+                "size": [1, 1],
+                "stroke_width": 0,
+            },
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (225, 136, 136, 255)
+
+
+def test_renderer_stacks_multiple_transparent_shapes_linear_space() -> None:
+    payload = {
+        "width": 1,
+        "height": 1,
+        "frames": 1,
+        "background": "#ffffff",
+        "color_space": "linear",
         "objects": [
             {
                 "id": "shadow",
@@ -585,6 +653,37 @@ def test_linear_gradient_rectangle() -> None:
 
     frame = next(Renderer(scene).render())
 
+    assert frame.pixels[0][0] == (225, 0, 137, 255)
+
+
+def test_linear_gradient_rectangle_linear_space() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 1,
+            "frames": 1,
+            "background": "#00000000",
+            "color_space": "linear",
+            "objects": [
+                {
+                    "id": "gradient",
+                    "type": "rectangle",
+                    "color": {
+                        "type": "linear-gradient",
+                        "from": [0, 0],
+                        "to": [1, 0],
+                        "colors": ["#ff0000", "#0000ff"],
+                    },
+                    "position": [0, 0],
+                    "size": [2, 1],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
     assert frame.pixels[0][0] == (191, 0, 64, 255)
     assert frame.pixels[0][1] == (64, 0, 191, 255)
 
@@ -617,7 +716,39 @@ def test_radial_gradient_rectangle() -> None:
     frame = next(Renderer(scene).render())
 
     assert frame.pixels[1][1] == (255, 255, 255, 255)
-    assert frame.pixels[0][0][0] < 64
+    assert frame.pixels[0][0] == (68, 68, 68, 255)
+
+
+def test_radial_gradient_rectangle_linear_space() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 3,
+            "height": 3,
+            "frames": 1,
+            "background": "#00000000",
+            "color_space": "linear",
+            "objects": [
+                {
+                    "id": "spotlight",
+                    "type": "rectangle",
+                    "color": {
+                        "type": "radial-gradient",
+                        "center": [0.5, 0.5],
+                        "radius": 0.5,
+                        "colors": ["#ffffff", "#000000"],
+                    },
+                    "position": [0, 0],
+                    "size": [3, 3],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[1][1] == (255, 255, 255, 255)
+    assert frame.pixels[0][0] == (15, 15, 15, 255)
 
 
 def test_textured_polygon(tmp_path: Path) -> None:
@@ -1161,7 +1292,17 @@ def test_frame_to_image_rgba_matches_bytes() -> None:
 
 
 def test_blend_colors_preserves_alpha_when_opaque() -> None:
-    opaque_gray = _blend_colors((255, 255, 255, 255), (0, 0, 0, 128))
+    opaque_gray = _blend_colors(
+        (255, 255, 255, 255), (0, 0, 0, 128), color_space=ColorSpace.SRGB
+    )
+
+    assert opaque_gray == (187, 187, 187, 255)
+
+
+def test_blend_colors_linear_space() -> None:
+    opaque_gray = _blend_colors(
+        (255, 255, 255, 255), (0, 0, 0, 128), color_space=ColorSpace.LINEAR
+    )
 
     assert opaque_gray == (127, 127, 127, 255)
 
@@ -1193,6 +1334,21 @@ def test_frame_blending_retains_alpha_metadata_after_multiple_passes() -> None:
     frame.has_alpha = None
 
     assert frame._has_alpha() is True
+
+
+def test_frame_blending_respects_color_space() -> None:
+    srgb_frame = Frame.blank(0, 1, 1, (0, 0, 0), color_space=ColorSpace.SRGB)
+    linear_frame = Frame.blank(0, 1, 1, (0, 0, 0), color_space=ColorSpace.LINEAR)
+
+    srgb_row = srgb_frame.pixels[0]
+    linear_row = linear_frame.pixels[0]
+
+    srgb_frame._blend_into(srgb_row, 0, (255, 0, 0, 128))
+    linear_frame._blend_into(linear_row, 0, (255, 0, 0, 128))
+
+    assert srgb_row[0][0] == 188
+    assert linear_row[0][0] == 128
+    assert srgb_row[0] != linear_row[0]
 
 
 def test_frame_alpha_cache_avoids_expensive_scan() -> None:

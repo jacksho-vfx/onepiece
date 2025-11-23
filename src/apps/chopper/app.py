@@ -8,7 +8,14 @@ import click
 from click.core import ParameterSource
 import typer
 
-from apps.chopper.renderer import Color, GuidesOverlay, Scene, SceneError, parse_color
+from apps.chopper.renderer import (
+    Color,
+    ColorSpace,
+    GuidesOverlay,
+    Scene,
+    SceneError,
+    parse_color,
+)
 from libraries.automation.render.chopper import (
     ChopperRenderError,
     load_scene,
@@ -134,6 +141,12 @@ def render(
     center_mark: bool = typer.Option(
         False, "--center-mark", help="Overlay a small crosshair at the frame centre."
     ),
+    color_space: str | None = typer.Option(
+        None,
+        "--color-space",
+        help="Colour space for interpreting inputs: srgb or linear.",
+        case_sensitive=False,
+    ),
     guides_color: str = typer.Option(
         "#ffffff", "--guides-color", help="Stroke colour to use for overlay guides."
     ),
@@ -163,6 +176,7 @@ def render(
     export_was_explicit = False
     background_override: Color | None = None
     frame_list: list[int] | None = None
+    color_space_choice: ColorSpace | None = None
     guides_overlay: GuidesOverlay | None = None
 
     try:
@@ -187,6 +201,12 @@ def render(
         try:
             frame_list = _parse_frame_list(frames)
         except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+    if color_space is not None:
+        try:
+            color_space_choice = ColorSpace.from_value(color_space)
+        except SceneError as exc:
             raise typer.BadParameter(str(exc)) from exc
 
     guides_enabled = any((safe_frame, action_frame, thirds_grid, center_mark))
@@ -226,6 +246,7 @@ def render(
             workers=workers,
             worker_backend=worker_backend,
             guides=guides_overlay,
+            color_space=color_space_choice,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc

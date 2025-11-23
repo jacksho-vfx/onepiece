@@ -9,6 +9,7 @@ from typing import Any, Iterable
 from apps.chopper.renderer import (
     AnimationWriter,
     Color,
+    ColorSpace,
     GuidesOverlay,
     Renderer,
     Scene,
@@ -231,10 +232,13 @@ def render_scene(
     workers: int | None = None,
     worker_backend: str = "process",
     guides: GuidesOverlay | None = None,
+    color_space: ColorSpace | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
     parsed_scene = load_scene(scene_path)
+    if color_space is not None:
+        parsed_scene.color_space = color_space
     if background_override is not None:
         parsed_scene.background = background_override
     if samples <= 0:
