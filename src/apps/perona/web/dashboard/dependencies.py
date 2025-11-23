@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -31,6 +32,9 @@ _metrics_max_bytes_env = "PERONA_METRICS_MAX_BYTES"
 _metrics_max_files_env = "PERONA_METRICS_MAX_FILES"
 _default_metrics_max_bytes = 5 * 1024 * 1024  # 5 MiB
 _default_metrics_max_files = 5
+
+
+logger = logging.getLogger(__name__)
 
 
 class RenderMetricBatch(BaseModel):
@@ -479,7 +483,14 @@ def get_engine_cache_entry() -> _EngineCacheEntry:
 def persist_metrics(records: Sequence[Mapping[str, Any]]) -> None:
     """Persist telemetry records using the shared metrics store."""
 
-    _metrics_store.persist(records)
+    try:
+        _metrics_store.persist(records)
+    except Exception:
+        logger.exception(
+            "Failed to persist render metrics.",
+            extra={"record_count": len(records)},
+        )
+        raise
 
 
 def metrics_store_path() -> Path:

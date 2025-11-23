@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -24,6 +26,7 @@ from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import RenderMetric
 
 router = APIRouter(tags=["metrics"])
+logger = logging.getLogger(__name__)
 
 
 def compute_metrics_summary(engine: PeronaEngine) -> dict[str, Any]:
@@ -146,7 +149,22 @@ async def ingest_render_metrics(
             ),
         )
 
-    background_tasks.add_task(dependencies.persist_metrics, records)
+    try:
+        background_tasks.add_task(dependencies.persist_metrics, records)
+    except Exception:
+        correlation_id = str(uuid4())
+        logger.exception(
+            "Failed to enqueue metrics persistence task.",
+            extra={"correlation_id": correlation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Unable to enqueue metrics persistence task. "
+                f"Correlation ID: {correlation_id}"
+            ),
+        )
+
     return {"status": "accepted", "enqueued": record_count}
 
 

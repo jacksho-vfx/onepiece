@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -295,3 +296,43 @@ def test_metrics_ingest_rejects_empty_payload(tmp_path: Path) -> None:
         assert not metrics_path.exists()
     finally:
         dashboard_module._metrics_store = original_store
+
+
+def test_metrics_ingest_reports_enqueue_failure(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _raise(*_: Any, **__: Any) -> None:
+        raise RuntimeError("queue unavailable")
+
+    monkeypatch.setattr("fastapi.BackgroundTasks.add_task", _raise)
+
+    payload = {"metrics": [_render_metric_payload("SQ42", "SQ42_SH010", 0)]}
+
+    with caplog.at_level(logging.ERROR):
+        response = client.post("/api/metrics", json=payload, headers=AUTH_HEADERS)
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    detail = response.json()["detail"]
+    assert "Correlation ID" in detail
+    assert "Unable to enqueue metrics persistence task" in detail
+    assert "Failed to enqueue metrics persistence task" in caplog.text
+
+
+def test_persist_metrics_logs_io_errors(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class FailingStore:
+        path = Path("/tmp/metrics.ndjson")
+
+        def persist(self, _: Any) -> None:  # pragma: no cover - intentionally raises
+            raise OSError("write failure")
+
+    monkeypatch.setattr(dashboard_module.dependencies, "_metrics_store", FailingStore())
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(OSError):
+            dashboard_module.persist_metrics(
+                (_render_metric_payload("SQ42", "SQ42_SH010", 0),)
+            )
+
+    assert "Failed to persist render metrics" in caplog.text
