@@ -122,6 +122,18 @@ def render(
             "with --start/--end."
         ),
     ),
+    workers: int | None = typer.Option(
+        None,
+        "--workers",
+        "-w",
+        help="Optional number of worker processes/threads to render frames in parallel.",
+    ),
+    worker_backend: str = typer.Option(
+        "process",
+        "--worker-backend",
+        case_sensitive=False,
+        help="Worker type to use when --workers is provided: process or thread.",
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
@@ -166,6 +178,8 @@ def render(
             frames=frame_list,
             samples=samples,
             filter_name=downsample_filter,
+            workers=workers,
+            worker_backend=worker_backend,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
