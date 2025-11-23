@@ -479,6 +479,51 @@ def test_render_accepts_supersampling_options(
     assert captured["filter_name"] == "gaussian"
     assert captured["workers"] == 3
     assert captured["worker_backend"] == "thread"
+    assert captured["guides"] is None
+
+
+def test_render_accepts_guides_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_blank_scene(scene_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--safe-frame",
+            "--thirds-grid",
+            "--center-mark",
+            "--guides-color",
+            "#112233",
+            "--guides-opacity",
+            "0.75",
+            "--guides-width",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    guides = captured["guides"]
+    assert isinstance(guides, chopper_renderer_module.GuidesOverlay)
+    assert guides.safe_frame is True
+    assert guides.action_frame is False
+    assert guides.thirds_grid is True
+    assert guides.center_mark is True
+    assert guides.color == (0x11, 0x22, 0x33)
+    assert guides.opacity == 0.75
+    assert guides.stroke_width == 2
 
 
 def test_render_rejects_invalid_background_override(tmp_path: Path) -> None:
@@ -492,6 +537,26 @@ def test_render_rejects_invalid_background_override(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Could not parse colour value" in strip_ansi(result.stderr)
+
+
+def test_render_rejects_invalid_guides(tmp_path: Path) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_blank_scene(scene_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--safe-frame",
+            "--guides-opacity",
+            "1.5",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "guides-opacity" in strip_ansi(result.stderr)
 
 
 def test_render_png_reports_missing_pillow(

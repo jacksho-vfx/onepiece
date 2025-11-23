@@ -308,6 +308,17 @@ gradient coordinates to paint per-pixel ramps. To texture a shape, use a
 `texture` fill and point `path` at an image readable by Pillow; the texture is
 stretched over the object's local bounds and cached between uses.
 
+You can also overlay guides for editorial review. Combine `--safe-frame` and
+`--action-frame` to draw safety rectangles, add `--thirds-grid` for rule-of-
+thirds guides, and include `--center-mark` for a small crosshair. Configure the
+stroke with `--guides-color`, `--guides-opacity`, and `--guides-width` to match
+studio conventions:
+
+```sh
+chopper render scene.json --format png --safe-frame --thirds-grid --center-mark \
+  --guides-color "#00ff88" --guides-opacity 0.35 --guides-width 2
+```
+
 ```json
 {
   "id": "panel",
