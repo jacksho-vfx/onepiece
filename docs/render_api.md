@@ -1,6 +1,6 @@
 # Render API capability schema
 
-> **Documentation refresh (April 2024):** Capability examples now sit alongside registry extension notes, job submission payloads, and retention monitoring tips. Follow the outline below to land on the API contract or lifecycle guidance you need.
+> **Documentation refresh (November 2025):** Capability examples now sit alongside registry extension notes, job submission payloads, and retention monitoring tips. Follow the outline below to land on the API contract or lifecycle guidance you need.
 
 ## At a glance
 

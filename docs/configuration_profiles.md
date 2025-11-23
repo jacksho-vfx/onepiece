@@ -1,6 +1,6 @@
 # OnePiece configuration profiles
 
-> **Documentation refresh (April 2024):** Profile discovery details now ship with quick links to the most referenced sections and the environment variables that influence merging behaviour. Use the outline below to jump directly to the resolution tier you need to audit.
+> **Documentation refresh (November 2025):** Profile discovery details now ship with quick links to the most referenced sections and the environment variables that influence merging behaviour. Use the outline below to jump directly to the resolution tier you need to audit.
 
 ## At a glance
 
