@@ -135,8 +135,19 @@ async def ingest_render_metrics(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No metrics supplied."
         )
 
+    max_batch_size = dependencies.metrics_max_batch_size()
+    record_count = len(records)
+    if record_count > max_batch_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"Batch size {record_count} exceeds the configured limit of "
+                f"{max_batch_size} records."
+            ),
+        )
+
     background_tasks.add_task(dependencies.persist_metrics, records)
-    return {"status": "accepted", "enqueued": len(records)}
+    return {"status": "accepted", "enqueued": record_count}
 
 
 @router.get("/render-feed", response_model=list[RenderMetric])

@@ -24,7 +24,9 @@ from libraries.analytics.perona.ml_foundations import FeatureStatistics
 
 
 _metrics_token_env = "PERONA_METRICS_TOKEN"
+_metrics_max_batch_env = "PERONA_METRICS_MAX_BATCH"
 _metrics_bearer_scheme = HTTPBearer(auto_error=False)
+_default_metrics_max_batch = 500
 
 
 class RenderMetricBatch(BaseModel):
@@ -96,6 +98,34 @@ def _expected_metrics_token() -> str:
             detail="Metrics authentication token is not configured.",
         )
     return token
+
+
+def metrics_max_batch_size() -> int:
+    """Return the configured maximum ingest batch size.
+
+    Falls back to ``_default_metrics_max_batch`` when the environment variable is
+    not set. Raises ``HTTPException`` if the configured value is invalid.
+    """
+
+    raw_value = os.getenv(_metrics_max_batch_env)
+    if raw_value is None:
+        return _default_metrics_max_batch
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid metrics batch size configuration.",
+        ) from exc
+
+    if value < 1:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Metrics batch size must be at least 1.",
+        )
+
+    return value
 
 
 def require_metrics_auth(
@@ -386,6 +416,7 @@ __all__ = [
     "get_engine_cache_entry",
     "invalidate_engine_cache",
     "list_wrangler_scripts",
+    "metrics_max_batch_size",
     "metrics_store_path",
     "persist_metrics",
     "reload_settings",
