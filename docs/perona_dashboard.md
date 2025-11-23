@@ -36,6 +36,8 @@ Key options:
 - `--settings-path PATH` &mdash; optional, validates that the file exists and is readable before using it.
 - `--diff/--no-diff` &mdash; opt-in, appends a comparison against the packaged defaults (works with both table and JSON output).
 - `--format table|json` &mdash; switches between the aligned table (default) and JSON output for automation.
+- `--ignore-warnings-exit-zero` &mdash; preserves the warnings section in output but exits with status 0 instead of 1 when
+  validation warnings occur. Useful for CI scripts that tolerate soft validation errors.
 
 The JSON output doubles as an export helper so downstream tooling can persist the configuration snapshot:
 

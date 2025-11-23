@@ -173,6 +173,14 @@ def settings(
         help="Output format for the resolved settings (table or json).",
         case_sensitive=False,
     ),
+    ignore_warnings_exit_zero: bool = typer.Option(
+        False,
+        "--ignore-warnings-exit-zero",
+        help=(
+            "Suppress non-zero exit codes when settings warnings are emitted."
+            " Warnings still print to stdout."
+        ),
+    ),
 ) -> None:
     """Display the resolved Perona configuration values."""
 
@@ -225,7 +233,7 @@ def settings(
         for message in warnings:
             typer.echo(f"- {message}")
 
-    if warnings:
+    if warnings and not ignore_warnings_exit_zero:
         raise typer.Exit(code=1)
 
 

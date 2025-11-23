@@ -7,8 +7,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 import click
 from click.core import ParameterSource
+from PIL import Image
 import typer
 
 from apps.chopper.renderer import (
@@ -491,6 +494,66 @@ def qc_render(
         raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(message)
+    
+    
+@app.command()
+def compare(
+    first: Path = typer.Argument(
+        ..., help="Path to the first scene file or frame directory."
+    ),
+    second: Path = typer.Argument(
+        ..., help="Path to the second scene file or frame directory."
+    ),
+    output: Path = typer.Option(
+        Path("diff"),
+        "--output",
+        "-o",
+        help="Directory where per-frame difference images will be written.",
+    ),
+) -> None:
+    """Render and compare two scenes or directories of frames."""
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_root = Path(tmpdir)
+        try:
+            first_frames = _prepare_frames(first, temp_root / "first")
+            second_frames = _prepare_frames(second, temp_root / "second")
+        except ChopperRenderError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+        first_list = _collect_frames(first_frames)
+        second_list = _collect_frames(second_frames)
+
+        if len(first_list) != len(second_list):
+            raise typer.BadParameter(
+                "Frame directories must contain the same number of frames"
+            )
+
+        output.mkdir(parents=True, exist_ok=True)
+
+        total_delta = 0.0
+        total_pixels = 0
+        overall_max = 0.0
+
+        for left, right in zip(first_list, second_list):
+            if left.name != right.name:
+                raise typer.BadParameter("Frame names must match between directories")
+
+            diff_stats = _write_diff(left, right, output)
+            frame_pixels = diff_stats.pixel_count
+            total_delta += diff_stats.total_delta
+            total_pixels += frame_pixels
+            overall_max = max(overall_max, diff_stats.max_delta)
+
+            typer.echo(
+                f"{left.name}: mean delta {diff_stats.mean_delta:.2f}, "
+                f"max delta {diff_stats.max_delta:.2f}"
+            )
+
+        overall_mean = total_delta / total_pixels if total_pixels else 0.0
+        typer.echo(
+            f"Overall: mean delta {overall_mean:.2f}, max delta {overall_max:.2f}"
+        )
 
 
 def _parse_frame_list(raw: str) -> list[int]:
@@ -508,4 +571,67 @@ def _parse_frame_list(raw: str) -> list[int]:
     return indices
 
 
-__all__ = ["app", "inspect", "render", "_load_scene"]
+def _prepare_frames(source: Path, destination: Path) -> Path:
+    if source.is_dir():
+        return source
+
+    render_scene(
+        scene_path=source,
+        output_path=destination,
+        export_format="png",
+        fps=24,
+        export_was_explicit=True,
+    )
+    return destination
+
+
+def _collect_frames(directory: Path) -> list[Path]:
+    frames = sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.lower() in {".png", ".ppm"}
+    )
+
+    if not frames:
+        raise ChopperRenderError(f"No frames found in {directory}")
+
+    return frames
+
+
+class _DiffStats:
+    def __init__(self, mean_delta: float, max_delta: float, pixel_count: int):
+        self.mean_delta = mean_delta
+        self.max_delta = max_delta
+        self.total_delta = mean_delta * pixel_count
+        self.pixel_count = pixel_count
+
+
+def _write_diff(left: Path, right: Path, output_dir: Path) -> _DiffStats:
+    left_image = Image.open(left).convert("RGB")
+    right_image = Image.open(right).convert("RGB")
+
+    if left_image.size != right_image.size:
+        raise ChopperRenderError("Frames must share the same dimensions")
+
+    left_array = np.asarray(left_image, dtype=np.int16)
+    right_array = np.asarray(right_image, dtype=np.int16)
+    delta = np.abs(left_array - right_array)
+
+    mean_delta = float(delta.mean())
+    max_delta = float(delta.max(initial=0))
+
+    diff_path = output_dir / f"{left.stem}_diff.png"
+    diff_image = Image.fromarray(delta.astype(np.uint8), mode="RGB")
+    diff_image.save(diff_path)
+
+    pixel_count = int(delta.size)
+    return _DiffStats(mean_delta, max_delta, pixel_count)
+
+
+__all__ = [
+    "app",
+    "inspect",
+    "render",
+    "compare",
+    "_load_scene",
+]
