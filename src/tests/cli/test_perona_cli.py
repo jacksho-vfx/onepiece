@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 from pathlib import Path
 
 import pytest
@@ -677,3 +678,71 @@ def test_risk_heatmap_emits_json_payload(
     assert indicators_payload[0]["shot_id"] == "SQ18_SH110"
     assert indicators_payload[0]["risk_score"] == pytest.approx(71.2)
     assert payload["settings_path"] == str(settings_file)
+
+
+def test_metrics_path_reports_xdg_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
+    monkeypatch.delenv("PERONA_METRICS_PATH", raising=False)
+
+    import apps.perona.web.dashboard.dependencies as dashboard_dependencies
+
+    try:
+        importlib.reload(dashboard_dependencies)
+
+        result = runner.invoke(perona_app, ["metrics-path"])
+
+        expected_path = cache_dir / "perona" / "render-metrics.ndjson"
+        assert result.exit_code == 0
+        assert f"Active metrics path: {expected_path}" in result.output
+        assert "No PERONA_METRICS_PATH override detected" in result.output
+    finally:
+        monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+        importlib.reload(dashboard_dependencies)
+
+
+def test_metrics_path_highlights_env_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metrics_path = tmp_path / "override" / "render.ndjson"
+    monkeypatch.setenv("PERONA_METRICS_PATH", str(metrics_path))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+    import apps.perona.web.dashboard.dependencies as dashboard_dependencies
+
+    try:
+        importlib.reload(dashboard_dependencies)
+
+        result = runner.invoke(perona_app, ["metrics-path"])
+
+        assert result.exit_code == 0
+        assert f"Active metrics path: {metrics_path}" in result.output
+        assert (
+            f"Environment override detected: PERONA_METRICS_PATH={metrics_path}"
+            in result.output
+        )
+    finally:
+        monkeypatch.delenv("PERONA_METRICS_PATH", raising=False)
+        importlib.reload(dashboard_dependencies)
+
+
+def test_metrics_path_rejects_directory_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PERONA_METRICS_PATH", str(tmp_path))
+
+    import apps.perona.web.dashboard.dependencies as dashboard_dependencies
+
+    try:
+        importlib.reload(dashboard_dependencies)
+
+        result = runner.invoke(perona_app, ["metrics-path"])
+
+        assert result.exit_code != 0
+        assert "points to a directory" in result.output
+    finally:
+        monkeypatch.delenv("PERONA_METRICS_PATH", raising=False)
+        importlib.reload(dashboard_dependencies)
