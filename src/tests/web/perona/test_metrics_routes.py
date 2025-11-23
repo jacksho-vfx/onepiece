@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-# import pytest
+import pytest
+from fastapi import status
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web.dashboard import app
@@ -13,11 +15,25 @@ from libraries.analytics.perona.models import RenderMetric
 
 from . import KNOWN_SEQUENCES
 
+METRICS_TOKEN = "demo-metrics-token"
+AUTH_HEADERS = {"Authorization": f"Bearer {METRICS_TOKEN}"}
+
+
+@pytest.fixture(autouse=True)
+def _configure_metrics_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PERONA_METRICS_TOKEN", METRICS_TOKEN)
+
+
 client = TestClient(app)
 
 
 def test_render_feed_stream() -> None:
-    with client.stream("GET", "/render-feed/live", params={"limit": 3}) as response:
+    with client.stream(
+        "GET",
+        "/render-feed/live",
+        params={"limit": 3},
+        headers=AUTH_HEADERS,
+    ) as response:
         assert response.status_code == 200
         payloads: list[dict[str, object]] = []
         for raw_line in response.iter_lines():
@@ -28,9 +44,24 @@ def test_render_feed_stream() -> None:
     assert all("gpuUtilisation" in item for item in payloads)
 
 
+def test_render_feed_stream_requires_auth() -> None:
+    response = client.get("/render-feed/live")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "Invalid authentication token."
+
+
 def test_render_feed_stream_filters() -> None:
-    params = {"sequence": "SQ05", "shot_id": "SQ05_SH045", "limit": 2}
-    with client.stream("GET", "/render-feed/live", params=params) as response:  # type: ignore[arg-type]
+    params: dict[str, str | int] = {
+        "sequence": "SQ05",
+        "shot_id": "SQ05_SH045",
+        "limit": 2,
+    }
+    with client.stream(
+        "GET",
+        "/render-feed/live",
+        params=params,
+        headers=AUTH_HEADERS,
+    ) as response:  # type: ignore[arg-type]
         assert response.status_code == 200
         payloads: list[dict[str, object]] = []
         for raw_line in response.iter_lines():
@@ -43,7 +74,7 @@ def test_render_feed_stream_filters() -> None:
 
 
 def test_metrics_summary_endpoint() -> None:
-    response = client.get("/metrics")
+    response = client.get("/metrics", headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["total_samples"] > 0
@@ -115,12 +146,31 @@ def test_metrics_summary_matches_manual_calculation() -> None:
     assert summary["latest_sample"] == expected_payload
 
 
+def test_openapi_documents_metrics_security() -> None:
+    schema = client.get("/openapi.json").json()
+    bearer_scheme = schema["components"]["securitySchemes"]["HTTPBearer"]
+    assert bearer_scheme["type"] == "http"
+    assert bearer_scheme["scheme"] == "bearer"
+
+    metrics_security = schema["paths"]["/api/metrics"]["post"]["security"]
+    live_feed_security = schema["paths"]["/render-feed/live"]["get"]["security"]
+
+    assert {"HTTPBearer": []} in metrics_security
+    assert {"HTTPBearer": []} in live_feed_security
+
+
 def test_metrics_websocket_stream() -> None:
-    with client.websocket_connect("/ws/metrics") as websocket:
+    with client.websocket_connect("/ws/metrics", headers=AUTH_HEADERS) as websocket:
         payload_one = websocket.receive_json()
         payload_two = websocket.receive_json()
     assert payload_one["sequence"] in KNOWN_SEQUENCES
     assert payload_two["shot_id"].startswith("SQ")
+
+
+def test_metrics_websocket_requires_auth() -> None:
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/metrics") as websocket:
+            websocket.receive_json()
 
 
 # def test_metrics_ingest_persists_payload(tmp_path: Path) -> None:
@@ -164,7 +214,9 @@ def test_metrics_ingest_rejects_empty_payload(tmp_path: Path) -> None:
     original_store = dashboard_module._metrics_store
     dashboard_module._metrics_store = dashboard_module.RenderMetricStore(metrics_path)
     try:
-        response = client.post("/api/metrics", json={"metrics": []})
+        response = client.post(
+            "/api/metrics", json={"metrics": []}, headers=AUTH_HEADERS
+        )
         assert response.status_code == 400
         body = response.json()
         assert body["detail"] == "No metrics supplied."
