@@ -45,6 +45,7 @@ OpenEXR = cast("Any", _OpenEXR)
 Imath = cast("Any", _Imath)
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
+BackplatePath = str | Path
 
 
 class ColorSpace(enum.Enum):
@@ -626,6 +627,25 @@ class TextureFill:
 Fill = SolidFill | LinearGradientFill | RadialGradientFill | TextureFill
 
 
+@dataclass(slots=True)
+class Backplate:
+    """Template describing a still image or numbered backplate sequence."""
+
+    path: BackplatePath
+    start_index: int = 0
+    color_space: ColorSpace = ColorSpace.SRGB
+
+    def path_for_frame(self, index: int) -> Path:
+        frame_number = index + self.start_index
+        try:
+            formatted = str(self.path).format(frame=frame_number, index=frame_number)
+        except Exception as exc:  # pragma: no cover - defensive
+            raise SceneError(
+                f"Backplate path '{self.path}' could not be formatted for frame {index}"
+            ) from exc
+        return Path(formatted)
+
+
 class _TextureCache:
     """Cache of decoded Pillow images used as textures."""
 
@@ -649,6 +669,86 @@ class _TextureCache:
 _TEXTURE_CACHE = _TextureCache()
 
 
+class _BackplateCache:
+    """Cache of decoded and colour-managed backplate frames."""
+
+    def __init__(self) -> None:
+        self._cache: dict[
+            tuple[Path, int, int, ColorSpace, tuple[str, str, str] | None, ColorSpace],
+            Frame,
+        ] = {}
+
+    def get(
+        self,
+        backplate: Backplate,
+        *,
+        frame_index: int,
+        target_width: int,
+        target_height: int,
+        color_space: ColorSpace,
+        color_manager: OcioConfig | None,
+    ) -> "Frame":
+        resolved = backplate.path_for_frame(frame_index).resolve()
+        converter_key: tuple[str, str, str] | None = None
+        if color_manager is not None:
+            converter_key = (
+                color_manager.display,
+                color_manager.view,
+                color_manager.working_space,
+            )
+        key = (
+            resolved,
+            target_width,
+            target_height,
+            color_space,
+            converter_key,
+            backplate.color_space,
+        )
+
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+
+        pillow = _require_pillow()
+        if not resolved.is_file():
+            raise SceneError(f"Backplate file does not exist: {resolved}")
+
+        image = cast("PILImage.Image", pillow.open(resolved).convert("RGBA"))
+        if image.width != target_width or image.height != target_height:
+            resample = getattr(pillow, "Resampling", pillow)
+            image = image.resize(
+                (target_width, target_height), resample=resample.NEAREST
+            )
+
+        data = list(image.getdata())
+        iterator = iter(data)
+        pixels: list[list[Color]] = []
+        for _ in range(target_height):
+            row: list[Color] = []
+            for _ in range(target_width):
+                pixel = _normalize_pixel(next(iterator))
+                if color_manager is not None:
+                    pixel = color_manager.to_working(
+                        pixel, source_space=backplate.color_space
+                    )
+                row.append(pixel)
+            pixels.append(row)
+
+        frame = Frame(
+            index=frame_index,
+            width=target_width,
+            height=target_height,
+            pixels=pixels,
+            color_space=color_space,
+            has_alpha=True,
+        )
+        self._cache[key] = frame
+        return frame
+
+
+_BACKPLATE_CACHE = _BackplateCache()
+
+
 def _object_is_visible(obj: object, frame_index: int) -> bool:
     visibility_check = getattr(obj, "is_visible", None)
     if visibility_check is None:
@@ -663,6 +763,19 @@ def _render_frame_static(
     filter_name: str,
     guides: GuidesOverlay | None,
 ) -> Frame:
+    def _apply_backplate(target: Frame) -> None:
+        if scene.backplate is None:
+            return
+        backplate_frame = _BACKPLATE_CACHE.get(
+            scene.backplate,
+            frame_index=index,
+            target_width=target.width,
+            target_height=target.height,
+            color_space=scene.color_space,
+            color_manager=getattr(scene, "_color_manager", None),
+        )
+        target.apply_overlay(backplate_frame)
+
     guides_frame: Frame | None = None
     if samples == 1:
         frame = Frame.blank(
@@ -672,6 +785,7 @@ def _render_frame_static(
             scene.background,
             color_space=scene.color_space,
         )
+        _apply_backplate(frame)
         for obj in scene.objects:
             if _object_is_visible(obj, index):
                 obj.render(frame, index)
@@ -697,6 +811,7 @@ def _render_frame_static(
         scene.background,
         color_space=scene.color_space,
     )
+    _apply_backplate(supersampled_frame)
     for obj in scene.objects:
         if _object_is_visible(obj, index):
             obj.render(supersampled_frame, index, scale=samples)
@@ -804,6 +919,33 @@ def _parse_fill(value: object, *, object_id: str) -> Fill:
         )
 
     return SolidFill(parse_color(value))
+
+
+def _parse_backplate(
+    value: object | None, *, color_space: ColorSpace
+) -> Backplate | None:
+    """Parse a backplate description into a :class:`Backplate`."""
+
+    if value is None:
+        return None
+    if isinstance(value, (str, Path)):
+        return Backplate(path=value, color_space=color_space)
+    if isinstance(value, Mapping):
+        if "path" not in value:
+            raise SceneError("Backplates must include a 'path' entry")
+        raw_path = value["path"]
+        if not isinstance(raw_path, (str, Path)):
+            raise SceneError("Backplate 'path' must be a string or Path")
+        start_value = value.get("start_index", 0)
+        try:
+            start_index = int(cast(int | float | str, start_value))
+        except (TypeError, ValueError) as exc:
+            raise SceneError("Backplate start_index must be an integer") from exc
+        plate_space = ColorSpace.from_value(value.get("color_space", color_space))
+        return Backplate(
+            path=raw_path, start_index=start_index, color_space=plate_space
+        )
+    raise SceneError("Backplate must be provided as a string path or mapping")
 
 
 def _blend_colors(
@@ -2061,12 +2203,14 @@ class Scene:
     height: int
     frame_count: int
     background: Color
+    backplate: Backplate | None = None
     color_space: ColorSpace = ColorSpace.SRGB
     objects: list[SceneObject] = field(default_factory=list)
     camera: CameraSettings = field(default_factory=CameraSettings)
     _render_transform: RenderTransform | None = field(
         default=None, init=False, repr=False
     )
+    _color_manager: OcioConfig | None = field(default=None, init=False, repr=False)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "Scene":
@@ -2121,6 +2265,8 @@ class Scene:
             payload.get("color_space", ColorSpace.SRGB.value)
         )
 
+        backplate = _parse_backplate(payload.get("backplate"), color_space=color_space)
+
         objects_data = payload.get("objects", [])
         if not isinstance(objects_data, Sequence):
             raise SceneError("Scene objects must be supplied as a sequence")
@@ -2147,6 +2293,7 @@ class Scene:
             height=height,
             frame_count=frame_count,
             background=background,
+            backplate=backplate,
             color_space=color_space,
             objects=objects,
             camera=camera,
@@ -2214,11 +2361,13 @@ class Scene:
             height=render_height,
             frame_count=self.frame_count,
             background=self.background,
+            backplate=self.backplate,
             color_space=self.color_space,
             objects=transformed_objects,
             camera=self.camera,
         )
         transformed_scene._render_transform = transform
+        transformed_scene._color_manager = self._color_manager
         return transformed_scene
 
     def rasterized(self) -> "Scene":
@@ -2626,6 +2775,8 @@ class Renderer:
 
         self._render_scene = self.scene.rasterized()
         self._render_transform = self._render_scene._render_transform
+        self.scene._color_manager = self._ocio_config
+        self._render_scene._color_manager = self._ocio_config
 
     def _attach_color_manager(self, frame: Frame) -> Frame:
         if self._ocio_config is not None:
@@ -2909,6 +3060,7 @@ __all__ = [
     "ColorSpace",
     "Frame",
     "GuidesOverlay",
+    "Backplate",
     "Keyframe",
     "Renderer",
     "Scene",

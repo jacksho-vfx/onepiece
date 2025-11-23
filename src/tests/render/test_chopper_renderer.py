@@ -631,6 +631,42 @@ def test_renderer_blends_transparent_shapes_in_linear_space() -> None:
     assert frame.pixels[0][0] == (127, 0, 128, 255)
 
 
+def test_renderer_overlays_backplate_with_alpha(tmp_path: Path) -> None:
+    pillow = pytest.importorskip("PIL.Image")
+    plate_path = tmp_path / "plate.png"
+    image = pillow.new("RGBA", (2, 2))
+    image.putdata(
+        [
+            (0, 0, 255, 255),
+            (0, 255, 0, 128),
+            (255, 255, 255, 0),
+            (0, 0, 0, 255),
+        ]
+    )
+    image.save(plate_path)
+
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 2,
+            "frames": 1,
+            "background": "#ff0000",
+            "backplate": str(plate_path),
+            "objects": [],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (0, 0, 255, 255)
+    expected_green = _blend_colors(
+        (255, 0, 0), (0, 255, 0, 128), color_space=scene.color_space
+    )
+    assert frame.pixels[0][1] == expected_green
+    assert frame.pixels[1][0] == (255, 0, 0)
+    assert frame.pixels[1][1] == (0, 0, 0, 255)
+
+
 def test_renderer_stacks_multiple_transparent_shapes() -> None:
     payload = {
         "width": 1,
@@ -661,6 +697,32 @@ def test_renderer_stacks_multiple_transparent_shapes() -> None:
     frame = next(Renderer(scene).render())
 
     assert frame.pixels[0][0] == (225, 136, 136, 255)
+
+
+def test_renderer_resolves_backplate_sequence_indices(tmp_path: Path) -> None:
+    pillow = pytest.importorskip("PIL.Image")
+    template = tmp_path / "plate_{index:04d}.png"
+    plates = [
+        (tmp_path / "plate_1001.png", (10, 20, 30, 255)),
+        (tmp_path / "plate_1002.png", (40, 50, 60, 255)),
+    ]
+    for path, color in plates:
+        pillow.new("RGBA", (1, 1), color=color).save(path)
+
+    scene = Scene.from_dict(
+        {
+            "width": 1,
+            "height": 1,
+            "frames": 2,
+            "background": "#000000",
+            "backplate": {"path": str(template), "start_index": 1001},
+            "objects": [],
+        }
+    )
+
+    frames = list(Renderer(scene).render())
+
+    assert [frame.pixels[0][0] for frame in frames] == [color for _, color in plates]
 
 
 def test_renderer_stacks_multiple_transparent_shapes_linear_space() -> None:
@@ -1711,3 +1773,43 @@ def test_renderer_rejects_missing_ocio_space(tmp_path: Path) -> None:
 
     with pytest.raises(SceneError, match="color space"):
         Renderer(scene, ocio_config=config_path)
+
+
+def test_backplate_transformed_with_ocio(tmp_path: Path) -> None:
+    numpy = pytest.importorskip("numpy")
+    pillow = pytest.importorskip("PIL.Image")
+
+    srgb_to_acescg = numpy.array(
+        [
+            [0.6132, 0.3395, 0.0473],
+            [0.0707, 0.9163, 0.0130],
+            [0.0206, 0.1096, 0.8697],
+        ]
+    )
+    ocio_config = _write_matrix_ocio_config(tmp_path, srgb_to_acescg)
+
+    plate_path = tmp_path / "plate.png"
+    pillow.new("RGBA", (1, 1), color=(255, 0, 0, 255)).save(plate_path)
+
+    scene = Scene.from_dict(
+        {
+            "width": 1,
+            "height": 1,
+            "frames": 1,
+            "background": "#000000",
+            "backplate": str(plate_path),
+            "objects": [],
+        }
+    )
+
+    renderer = Renderer(
+        scene, ocio_config=ocio_config, ocio_display="artist", ocio_view="monitor"
+    )
+    frame = next(renderer.render([0]))
+
+    expected_linear = numpy.clip(
+        numpy.array([1.0, 0.0, 0.0]) @ srgb_to_acescg.T, 0.0, 1.0
+    )
+    expected_pixel = tuple(int(round(channel * 255.0)) for channel in expected_linear)
+
+    assert frame.pixels[0][0] == expected_pixel + (255,)

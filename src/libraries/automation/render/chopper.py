@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 
 from apps.chopper.renderer import (
     AnimationWriter,
+    Backplate,
     Color,
     ColorSpace,
     GuidesOverlay,
@@ -330,6 +331,8 @@ def render_scene(
     *,
     export_was_explicit: bool = False,
     background_override: Color | None = None,
+    backplate_path: str | Path | None = None,
+    backplate_start: int = 0,
     start_frame: int | None = None,
     end_frame: int | None = None,
     frames: Iterable[int] | None = None,
@@ -374,6 +377,15 @@ def render_scene(
         parsed_scene.color_space = color_space
     if background_override is not None:
         parsed_scene.background = background_override
+    if backplate_path is not None:
+        try:
+            parsed_scene.backplate = Backplate(
+                path=backplate_path,
+                start_index=int(backplate_start),
+                color_space=parsed_scene.color_space,
+            )
+        except SceneError as exc:
+            raise ChopperRenderError(str(exc)) from exc
     if guides is not None:
         if parsed_scene.camera.active_window is not None:
             guides.action_ratio = parsed_scene.camera.active_ratio()
