@@ -321,8 +321,9 @@ curl -X POST http://127.0.0.1:8065/api/metrics \
 Tips for supplying bespoke metric stores:
 
 - Set `PERONA_METRICS_PATH=/var/perona/render-metrics.ndjson` before launching the API or CLI to point ingestion at a shared
-  filesystem. The service creates parent directories automatically, so you only need to ensure the process user can write to the
-  directory.
+  filesystem. If the variable is not set, Perona defaults to `$XDG_CACHE_HOME/perona/render-metrics.ndjson` or
+  `~/.cache/perona/render-metrics.ndjson` when XDG cache is not configured.
+- Run `perona metrics-path` to print the active metrics store path and verify the current configuration.
 - When running multiple dashboard instances behind a load balancer, mount the same network path on each host so `/api/metrics`
   appends to a shared NDJSON file. The append-only writes are guarded by a process lock to avoid interleaving records.
 - Control store rotation with `PERONA_METRICS_MAX_BYTES` (default `5 MiB`) and

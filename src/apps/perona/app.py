@@ -31,6 +31,7 @@ from apps.perona.cli.web import (
     _resolve_dashboard_url,
     _resolve_settings_reload_timeout,
 )
+from apps.perona.web.dashboard import dependencies as dashboard_dependencies
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import SUPPORTED_CURRENCIES
 from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
@@ -45,6 +46,7 @@ from apps.perona.version import PERONA_VERSION
 OutputFormat = Literal["table", "json"]
 
 RISK_HEATMAP_TOP_LIMIT = 100
+METRICS_PATH_ENV = "PERONA_METRICS_PATH"
 
 app = typer.Typer(
     name="perona",
@@ -89,6 +91,32 @@ def _validate_settings_path(settings_path: Path | None) -> Path | None:
         raise typer.BadParameter(f"Settings file '{resolved}' is not readable.")
 
     return resolved
+
+
+def _validate_metrics_path(metrics_path: Path) -> None:
+    """Ensure the metrics path resolves to a writable file location."""
+
+    if metrics_path.exists() and metrics_path.is_dir():
+        raise typer.BadParameter(
+            f"Metrics path '{metrics_path}' points to a directory; expected a file."
+        )
+
+    parent = metrics_path.parent
+    existing_parent = parent
+    while not existing_parent.exists():
+        if existing_parent.parent == existing_parent:  # pragma: no cover - defensive
+            break
+        existing_parent = existing_parent.parent
+
+    if existing_parent.exists() and not existing_parent.is_dir():
+        raise typer.BadParameter(
+            f"Metrics path parent '{existing_parent}' is not a directory."
+        )
+
+    if existing_parent.exists() and not os.access(existing_parent, os.W_OK):
+        raise typer.BadParameter(
+            f"Metrics directory '{existing_parent}' is not writable."
+        )
 
 
 def _post_settings_reload(base_url: str) -> SettingsSummary:
@@ -153,6 +181,26 @@ def _echo_settings_summary(summary: SettingsSummary) -> None:
         typer.echo("Warnings:")
         for message in summary.warnings:
             typer.echo(f"- {message}")
+
+
+@app.command("metrics-path")
+def metrics_path() -> None:
+    """Display and validate the configured render metrics path."""
+
+    resolved_path = dashboard_dependencies.metrics_store_path()
+    env_override = os.getenv(METRICS_PATH_ENV)
+
+    _validate_metrics_path(resolved_path)
+
+    typer.echo(f"Active metrics path: {resolved_path}")
+    if env_override:
+        typer.echo(
+            f"Environment override detected: {METRICS_PATH_ENV}={env_override}"  # noqa: E501
+        )
+    else:
+        typer.echo(
+            "No PERONA_METRICS_PATH override detected; using XDG cache fallback."
+        )
 
 
 @settings_app.callback(invoke_without_command=True)
@@ -670,6 +718,7 @@ __all__ = [
     "cost_insights",
     "dashboard",
     "demo_dashboard",
+    "metrics_path",
     "settings",
     "settings_export",
     "version",
