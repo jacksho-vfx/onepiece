@@ -494,8 +494,8 @@ def qc_render(
         raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(message)
-    
-    
+
+
 @app.command()
 def compare(
     first: Path = typer.Argument(
