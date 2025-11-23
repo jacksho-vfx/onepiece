@@ -314,10 +314,12 @@ def test_dailies_cli_creates_missing_output_directory(
         *,
         codec: str,
         burnins: Sequence[Any] | None,
+        burnin_options: Any | None = None,
     ) -> None:
         ffmpeg_calls.append(output_path)
         assert output_path.parent.exists()
         output_path.write_bytes(b"rendered")
+        assert burnin_options is not None
 
     monkeypatch.setattr(dailies, "run_ffmpeg_concat", _fake_run_ffmpeg_concat)
 

@@ -14,6 +14,7 @@ import typer
 from libraries.automation.dailies.manifest import write_manifest
 from libraries.platform.media.ffmpeg.wrapper import (
     BurnInMetadata,
+    BurnInOptions,
     create_concat_file,
     run_ffmpeg_concat,
 )
@@ -247,11 +248,15 @@ def fetch_today_approved_versions(
     return _fetch_versions(client, filters)
 
 
-def _build_burnin_metadata(clips: Iterable[DailiesClip]) -> list[BurnInMetadata]:
+def _build_burnin_metadata(
+    clips: Iterable[DailiesClip], *, show: str, burnin_date: str
+) -> list[BurnInMetadata]:
     return [
         BurnInMetadata(
+            show=show,
             shot=clip.shot,
             version=clip.version,
+            date=burnin_date,
             frame_range=clip.frame_range,
             user=clip.user,
         )
@@ -264,6 +269,10 @@ def _render_dailies(
     output: Path,
     codec: str,
     burnin: bool,
+    burnin_options: BurnInOptions,
+    *,
+    show: str,
+    burnin_date: str,
 ) -> None:
     sources = [clip.source_path for clip in clips]
     if not sources:
@@ -273,8 +282,18 @@ def _render_dailies(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         concat_path = create_concat_file(sources, Path(tmp_dir))
-        burnin_metadata = _build_burnin_metadata(clips) if burnin else None
-        run_ffmpeg_concat(concat_path, output, codec=codec, burnins=burnin_metadata)
+        burnin_metadata = (
+            _build_burnin_metadata(clips, show=show, burnin_date=burnin_date)
+            if burnin
+            else None
+        )
+        run_ffmpeg_concat(
+            concat_path,
+            output,
+            codec=codec,
+            burnins=burnin_metadata,
+            burnin_options=burnin_options,
+        )
 
 
 def _summarize_duration(clips: Sequence[DailiesClip]) -> float:
@@ -298,6 +317,60 @@ def create_dailies(
         True,
         "--burnin/--no-burnin",
         help="Overlay shot metadata as text burn-ins.",
+    ),
+    show: str | None = typer.Option(
+        None,
+        "--show",
+        help="Override show or project name to display on the slate.",
+    ),
+    burnin_date: str = typer.Option(
+        _dt.date.today().isoformat(),
+        "--burnin-date",
+        help="Date label rendered in the burn-in slate.",
+    ),
+    burnin_font: Path | None = typer.Option(
+        None,
+        "--burnin-font",
+        help="Path to a font file for burn-in text rendering.",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+    ),
+    burnin_font_size: int = typer.Option(
+        24,
+        "--burnin-font-size",
+        help="Font size for burn-in overlays.",
+    ),
+    burnin_font_color: str = typer.Option(
+        "white",
+        "--burnin-font-color",
+        help="Font colour for burn-in overlays.",
+    ),
+    burnin_box_color: str = typer.Option(
+        "black@0.6",
+        "--burnin-box-color",
+        help="Box colour for burn-in overlays.",
+    ),
+    burnin_margin: int = typer.Option(
+        24,
+        "--burnin-margin",
+        help="Margin, in pixels, applied to burn-in elements.",
+    ),
+    burnin_slate_position: str = typer.Option(
+        "top-left",
+        "--burnin-slate-position",
+        help="Screen corner used to anchor burn-in slates.",
+    ),
+    burnin_counter_position: str = typer.Option(
+        "bottom-right",
+        "--burnin-counter-position",
+        help="Screen corner used to anchor timecode and frame counters.",
+    ),
+    burnin_frame_rate: float = typer.Option(
+        24.0,
+        "--burnin-frame-rate",
+        help="Frame rate used to advance the timecode counter.",
     ),
     codec: str = typer.Option(
         "prores", "--codec", help="Output codec passed to ffmpeg (e.g. prores, h264)."
@@ -338,8 +411,28 @@ def create_dailies(
         for clip in progress:
             processed.append(clip)
 
+    burnin_options = BurnInOptions(
+        fontfile=str(burnin_font) if burnin_font else None,
+        fontcolor=burnin_font_color,
+        boxcolor=burnin_box_color,
+        fontsize=burnin_font_size,
+        margin=burnin_margin,
+        slate_position=burnin_slate_position,
+        counter_position=burnin_counter_position,
+        frame_rate=burnin_frame_rate,
+    )
+    selected_show = show or project
+
     try:
-        _render_dailies(processed, output=output, codec=codec, burnin=burnin)
+        _render_dailies(
+            processed,
+            output=output,
+            codec=codec,
+            burnin=burnin,
+            burnin_options=burnin_options,
+            show=selected_show,
+            burnin_date=burnin_date,
+        )
     except NoVersionsFoundError as exc:
         typer.secho(str(exc), fg=typer.colors.YELLOW)
         raise typer.Exit(code=1) from exc
