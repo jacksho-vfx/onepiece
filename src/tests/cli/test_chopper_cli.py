@@ -616,6 +616,60 @@ def test_render_accepts_guides_options(
     assert guides.stroke_width == 2
 
 
+def test_render_forwards_camera_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    profile_path = tmp_path / "camera.json"
+    _write_blank_scene(scene_path)
+    profile_path.write_text(
+        json.dumps({"camera": {"focal_length": 55}}), encoding="utf-8"
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--camera-profile",
+            str(profile_path),
+            "--pixel-aspect-ratio",
+            "1.5",
+            "--horizontal-aperture",
+            "36",
+            "--vertical-aperture",
+            "24",
+            "--focal-length",
+            "40",
+            "--overscan",
+            "0.1",
+            "--active-window",
+            "24x18",
+            "--safe-window",
+            "20,15",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["camera_profile"] == profile_path
+    assert captured["pixel_aspect_ratio"] == 1.5
+    assert captured["horizontal_aperture"] == 36.0
+    assert captured["vertical_aperture"] == 24.0
+    assert captured["focal_length"] == 40.0
+    assert captured["overscan"] == 0.1
+    assert captured["active_window"] == (24.0, 18.0)
+    assert captured["safe_window"] == (20.0, 15.0)
+
+
 def test_render_rejects_invalid_background_override(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     _write_blank_scene(scene_path)

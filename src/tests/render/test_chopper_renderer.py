@@ -171,6 +171,74 @@ def test_scene_from_dict_reads_color_space() -> None:
     assert scene.color_space is ColorSpace.LINEAR
 
 
+def test_scene_from_dict_reads_camera_settings() -> None:
+    payload = build_scene_dict()
+    payload["camera"] = {
+        "pixel_aspect_ratio": 1.5,
+        "horizontal_aperture": 36,
+        "vertical_aperture": 24,
+        "active_window": [24, 18],
+        "safe_window": [20, 15],
+        "overscan": 0.05,
+        "focal_length": 50,
+    }
+
+    scene = Scene.from_dict(payload)
+
+    assert scene.camera.pixel_aspect_ratio == 1.5
+    assert scene.camera.overscan == 0.05
+    assert scene.camera.horizontal_aperture == 36
+    assert scene.camera.vertical_aperture == 24
+    assert scene.camera.focal_length == 50
+    assert scene.camera.active_ratio() == pytest.approx(0.6666, rel=1e-3)
+    assert scene.camera.safe_ratio() == pytest.approx(0.8333, rel=1e-3)
+
+
+def test_scene_rejects_invalid_camera_settings() -> None:
+    payload = build_scene_dict()
+    payload["camera"] = {"pixel_aspect_ratio": 0}
+
+    with pytest.raises(SceneError, match="greater than zero"):
+        Scene.from_dict(payload)
+
+    payload["camera"] = {"safe_window": [0, -1]}
+
+    with pytest.raises(SceneError, match="greater than zero"):
+        Scene.from_dict(payload)
+
+
+def test_renderer_applies_camera_transform() -> None:
+    payload: dict[str, object] = {
+        "width": 100,
+        "height": 50,
+        "frames": 1,
+        "background": "#000000",
+        "camera": {"pixel_aspect_ratio": 2.0, "overscan": 0.1},
+        "objects": [
+            {
+                "id": "box",
+                "type": "rectangle",
+                "color": "#ffffff",
+                "position": [0, 0],
+                "size": [10, 10],
+            }
+        ],
+    }
+
+    scene = Scene.from_dict(payload)
+    renderer = Renderer(scene)
+
+    render_scene = renderer._render_scene
+    assert render_scene.width == 240
+    assert render_scene.height == 60
+    assert render_scene.objects[0].position == pytest.approx((20.0, 5.0))
+    assert render_scene.objects[0].size == pytest.approx((20.0, 10.0))
+
+    frame = next(renderer.render([0]))
+    assert frame.width == 240
+    assert frame.height == 60
+
+
 def test_scene_accepts_unique_object_ids() -> None:
     payload = build_scene_dict()
     objects = cast(list[dict[str, object]], payload["objects"])

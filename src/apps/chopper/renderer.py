@@ -431,8 +431,8 @@ class GuidesOverlay:
     opacity: float = 0.5
     stroke_width: float = 1.0
 
-    _ACTION_RATIO = 0.9
-    _SAFE_RATIO = 0.8
+    action_ratio: float = 0.9
+    safe_ratio: float = 0.8
 
     def _stroke_settings(self, scale: int) -> tuple[Color, int]:
         stroke_width = max(1, int(round(self.stroke_width * scale)))
@@ -498,11 +498,11 @@ class GuidesOverlay:
 
         if self.action_frame:
             self._draw_inset_frame(
-                frame, ratio=self._ACTION_RATIO, stroke_width=stroke_width, color=color
+                frame, ratio=self.action_ratio, stroke_width=stroke_width, color=color
             )
         if self.safe_frame:
             self._draw_inset_frame(
-                frame, ratio=self._SAFE_RATIO, stroke_width=stroke_width, color=color
+                frame, ratio=self.safe_ratio, stroke_width=stroke_width, color=color
             )
         if self.thirds_grid:
             self._draw_thirds(frame, stroke_width=stroke_width, color=color)
@@ -1037,6 +1037,168 @@ def _easing_function(identifier: str | None) -> Callable[[float], float]:
 
     # This should not occur because identifiers are validated when parsing.
     return lambda t: t
+
+
+@dataclass(slots=True)
+class RenderTransform:
+    """Coordinate transform derived from camera framing."""
+
+    scale_x: float = 1.0
+    scale_y: float = 1.0
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+    def apply_point(self, point: tuple[float, float]) -> tuple[float, float]:
+        x, y = point
+        return (x + self.offset_x) * self.scale_x, (y + self.offset_y) * self.scale_y
+
+    def apply_size(self, size: tuple[float, float]) -> tuple[float, float]:
+        width, height = size
+        return width * self.scale_x, height * self.scale_y
+
+    @property
+    def stroke_scale(self) -> float:
+        return max(self.scale_x, self.scale_y)
+
+
+def _parse_window(value: object, *, label: str) -> tuple[float, float]:
+    if not isinstance(value, Sequence) or len(value) != 2:
+        raise SceneError(f"Camera {label} must be a length two sequence")
+    try:
+        width = float(value[0])
+        height = float(value[1])
+    except (TypeError, ValueError) as exc:
+        raise SceneError(f"Camera {label} values must be numeric") from exc
+    if not math.isfinite(width) or not math.isfinite(height):
+        raise SceneError(f"Camera {label} values must be finite numbers")
+    if width <= 0 or height <= 0:
+        raise SceneError(f"Camera {label} values must be greater than zero")
+    return width, height
+
+
+@dataclass(slots=True)
+class CameraSettings:
+    """Camera metadata controlling rasterisation."""
+
+    pixel_aspect_ratio: float = 1.0
+    horizontal_aperture: float | None = None
+    vertical_aperture: float | None = None
+    focal_length: float | None = None
+    overscan: float = 0.0
+    active_window: tuple[float, float] | None = None
+    safe_window: tuple[float, float] | None = None
+
+    @classmethod
+    def from_dict(cls, payload: object) -> "CameraSettings":
+        if payload is None:
+            return cls()
+        if not isinstance(payload, Mapping):
+            raise SceneError("Camera settings must be provided as a mapping")
+
+        pixel_aspect_raw = payload.get("pixel_aspect_ratio", 1.0)
+        try:
+            pixel_aspect_ratio = float(pixel_aspect_raw)
+        except (TypeError, ValueError) as exc:
+            raise SceneError("Camera pixel_aspect_ratio must be numeric") from exc
+        if not math.isfinite(pixel_aspect_ratio) or pixel_aspect_ratio <= 0:
+            raise SceneError("Camera pixel_aspect_ratio must be greater than zero")
+
+        overscan_raw = payload.get("overscan", 0.0)
+        try:
+            overscan = float(overscan_raw)
+        except (TypeError, ValueError) as exc:
+            raise SceneError("Camera overscan must be numeric") from exc
+        if not math.isfinite(overscan) or overscan < 0:
+            raise SceneError("Camera overscan must be a non-negative number")
+
+        horizontal_aperture = payload.get("horizontal_aperture")
+        vertical_aperture = payload.get("vertical_aperture")
+        focal_length = payload.get("focal_length")
+
+        aperture_width = None
+        aperture_height = None
+        if horizontal_aperture is not None:
+            try:
+                aperture_width = float(horizontal_aperture)
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Camera horizontal_aperture must be numeric") from exc
+            if not math.isfinite(aperture_width) or aperture_width <= 0:
+                raise SceneError("Camera horizontal_aperture must be greater than zero")
+        if vertical_aperture is not None:
+            try:
+                aperture_height = float(vertical_aperture)
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Camera vertical_aperture must be numeric") from exc
+            if not math.isfinite(aperture_height) or aperture_height <= 0:
+                raise SceneError("Camera vertical_aperture must be greater than zero")
+        focal_value: float | None = None
+        if focal_length is not None:
+            try:
+                focal_value = float(focal_length)
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Camera focal_length must be numeric") from exc
+            if not math.isfinite(focal_value) or focal_value <= 0:
+                raise SceneError("Camera focal_length must be greater than zero")
+
+        active_window = None
+        if payload.get("active_window") is not None:
+            active_window = _parse_window(
+                payload["active_window"], label="active_window"
+            )
+
+        safe_window = None
+        if payload.get("safe_window") is not None:
+            safe_window = _parse_window(payload["safe_window"], label="safe_window")
+
+        return cls(
+            pixel_aspect_ratio=pixel_aspect_ratio,
+            horizontal_aperture=aperture_width,
+            vertical_aperture=aperture_height,
+            focal_length=focal_value,
+            overscan=overscan,
+            active_window=active_window,
+            safe_window=safe_window,
+        )
+
+    def active_ratio(self) -> float:
+        if self.active_window is None:
+            return 1.0
+        if self.horizontal_aperture is None or self.vertical_aperture is None:
+            return 1.0
+        ratio_x = self.active_window[0] / self.horizontal_aperture
+        ratio_y = self.active_window[1] / self.vertical_aperture
+        return min(ratio_x, ratio_y, 1.0)
+
+    def safe_ratio(self) -> float:
+        if self.safe_window is None:
+            return 0.8
+        base_width, base_height = self.safe_window
+        if self.active_window is not None:
+            base_width, base_height = self.active_window
+        elif (
+            self.horizontal_aperture is not None and self.vertical_aperture is not None
+        ):
+            base_width, base_height = self.horizontal_aperture, self.vertical_aperture
+        ratio_x = self.safe_window[0] / base_width
+        ratio_y = self.safe_window[1] / base_height
+        return min(ratio_x, ratio_y, 1.0)
+
+    def build_transform(
+        self, width: int, height: int
+    ) -> tuple[RenderTransform, int, int]:
+        overscan_x = width * self.overscan
+        overscan_y = height * self.overscan
+        base_width = width + 2 * overscan_x
+        base_height = height + 2 * overscan_y
+        transform = RenderTransform(
+            scale_x=self.pixel_aspect_ratio,
+            scale_y=1.0,
+            offset_x=overscan_x,
+            offset_y=overscan_y,
+        )
+        render_width = int(round(base_width * transform.scale_x))
+        render_height = int(round(base_height * transform.scale_y))
+        return transform, render_width, render_height
 
 
 @dataclass(slots=True)
@@ -1901,6 +2063,10 @@ class Scene:
     background: Color
     color_space: ColorSpace = ColorSpace.SRGB
     objects: list[SceneObject] = field(default_factory=list)
+    camera: CameraSettings = field(default_factory=CameraSettings)
+    _render_transform: RenderTransform | None = field(
+        default=None, init=False, repr=False
+    )
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "Scene":
@@ -1974,6 +2140,8 @@ class Scene:
 
         objects.sort(key=lambda obj: obj.z_index)
 
+        camera = CameraSettings.from_dict(payload.get("camera"))
+
         return cls(
             width=width,
             height=height,
@@ -1981,6 +2149,84 @@ class Scene:
             background=background,
             color_space=color_space,
             objects=objects,
+            camera=camera,
+        )
+
+    def _transform_animation(
+        self, animation: Animation | None, transform: RenderTransform
+    ) -> Animation | None:
+        if animation is None:
+            return None
+
+        transformed_keyframes: list[Keyframe] = []
+        for keyframe in animation.keyframes:
+            transformed_point = transform.apply_point((keyframe.x, keyframe.y))
+            transformed_keyframes.append(
+                Keyframe(
+                    frame=keyframe.frame,
+                    x=transformed_point[0],
+                    y=transformed_point[1],
+                    rotation=keyframe.rotation,
+                    color=keyframe.color,
+                    easing=keyframe.easing,
+                )
+            )
+
+        return Animation(
+            keyframes=transformed_keyframes, default_easing=animation.default_easing
+        )
+
+    def _apply_transform(
+        self, transform: RenderTransform, *, render_width: int, render_height: int
+    ) -> "Scene":
+        transformed_objects: list[SceneObject] = []
+
+        for obj in self.objects:
+            if not isinstance(obj, SceneObject):
+                transformed_objects.append(obj)
+                continue
+            transformed_objects.append(
+                SceneObject(
+                    id=obj.id,
+                    kind=obj.kind,
+                    color=obj.color,
+                    fill=obj.fill,
+                    position=transform.apply_point(obj.position),
+                    size=transform.apply_size(obj.size),
+                    rotation=obj.rotation,
+                    z_index=obj.z_index,
+                    points=tuple(transform.apply_point(point) for point in obj.points),
+                    stroke_color=obj.stroke_color,
+                    stroke_width=(
+                        obj.stroke_width * transform.stroke_scale
+                        if obj.stroke_width is not None
+                        else None
+                    ),
+                    start_frame=obj.start_frame,
+                    end_frame=obj.end_frame,
+                    visibility=obj.visibility,
+                    animation=self._transform_animation(obj.animation, transform),
+                )
+            )
+
+        transformed_scene = Scene(
+            width=render_width,
+            height=render_height,
+            frame_count=self.frame_count,
+            background=self.background,
+            color_space=self.color_space,
+            objects=transformed_objects,
+            camera=self.camera,
+        )
+        transformed_scene._render_transform = transform
+        return transformed_scene
+
+    def rasterized(self) -> "Scene":
+        transform, render_width, render_height = self.camera.build_transform(
+            self.width, self.height
+        )
+        return self._apply_transform(
+            transform, render_width=render_width, render_height=render_height
         )
 
 
@@ -2378,6 +2624,9 @@ class Renderer:
         if self._ocio_config is not None:
             self._apply_ocio_transforms()
 
+        self._render_scene = self.scene.rasterized()
+        self._render_transform = self._render_scene._render_transform
+
     def _attach_color_manager(self, frame: Frame) -> Frame:
         if self._ocio_config is not None:
             frame.color_manager = self._ocio_config
@@ -2418,6 +2667,8 @@ class Renderer:
         self.scene.background = convert(self.scene.background)
 
         for obj in self.scene.objects:
+            if not isinstance(obj, SceneObject):
+                continue
             obj.color = convert(obj.color)
             if obj.stroke_color is not None:
                 obj.stroke_color = convert(obj.stroke_color)
@@ -2455,22 +2706,24 @@ class Renderer:
         if backend_normalized not in {"process", "thread"}:
             raise SceneError("backend must be 'process' or 'thread'")
 
+        target_scene = self._render_scene
+
         if frames is None:
-            frame_indices = list(range(self.scene.frame_count))
+            frame_indices = list(range(target_scene.frame_count))
         else:
             frame_indices = list(frames)
             if not frame_indices:
                 raise SceneError("No frame indices were supplied for rendering")
             for index in frame_indices:
-                if index < 0 or index >= self.scene.frame_count:
+                if index < 0 or index >= target_scene.frame_count:
                     raise SceneError(
-                        f"Frame index {index} is outside the 0-{self.scene.frame_count - 1} range"
+                        f"Frame index {index} is outside the 0-{target_scene.frame_count - 1} range"
                     )
 
         if workers is None or workers == 1 or len(frame_indices) <= 1:
             for index in frame_indices:
                 frame = _render_frame_static(
-                    self.scene, index, self.samples, self.filter, self.guides
+                    target_scene, index, self.samples, self.filter, self.guides
                 )
                 yield self._attach_color_manager(frame)
             return
@@ -2492,7 +2745,7 @@ class Renderer:
         with executor_cls(max_workers=workers) as executor:  # type: ignore[call-arg]
             results = executor.map(
                 _render_frame_static,
-                itertools.repeat(self.scene),
+                itertools.repeat(target_scene),
                 frame_indices,
                 itertools.repeat(self.samples),
                 itertools.repeat(self.filter),
@@ -2661,5 +2914,6 @@ __all__ = [
     "Scene",
     "SceneError",
     "SceneObject",
+    "CameraSettings",
     "parse_color",
 ]

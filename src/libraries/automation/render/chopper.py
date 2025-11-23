@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from apps.chopper.renderer import (
     AnimationWriter,
@@ -15,6 +15,11 @@ from apps.chopper.renderer import (
     Scene,
     SceneError,
 )
+
+try:  # pragma: no cover - fallback for stubbed renderer modules in tests
+    from apps.chopper.renderer import CameraSettings
+except ImportError:  # pragma: no cover - defensive
+    CameraSettings = None  # type: ignore[assignment]
 
 __all__ = ["ChopperRenderError", "load_scene", "render_scene"]
 
@@ -56,6 +61,88 @@ def load_scene(path: Path) -> Scene:
         return Scene.from_dict(payload)
     except SceneError as exc:
         raise ChopperRenderError(f"Scene file '{path}' is invalid: {exc}") from exc
+
+
+def _load_camera_profile(path: Path) -> Mapping[str, Any]:
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:  # pragma: no cover - defensive
+        raise ChopperRenderError(f"Camera profile '{path}' was not found") from exc
+    except IsADirectoryError as exc:
+        raise ChopperRenderError(
+            f"Camera profile '{path}' is a directory; expected a JSON file"
+        ) from exc
+    except PermissionError as exc:
+        raise ChopperRenderError(
+            f"Camera profile '{path}' cannot be read due to permissions"
+        ) from exc
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ChopperRenderError(
+            f"Camera profile '{path}' could not be decoded as UTF-8"
+        ) from exc
+    except OSError as exc:
+        raise ChopperRenderError(
+            f"Camera profile '{path}' could not be read: {exc}"
+        ) from exc
+
+    try:
+        payload: Mapping[str, Any] = json.loads(contents)
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+        raise ChopperRenderError(f"Camera profile '{path}' is not valid JSON") from exc
+
+    if not isinstance(payload, Mapping):
+        raise ChopperRenderError("Camera profile JSON must be a mapping")
+    return payload
+
+
+def _apply_camera_overrides(
+    scene: Scene,
+    *,
+    profile: Mapping[str, Any] | None,
+    pixel_aspect_ratio: float | None,
+    horizontal_aperture: float | None,
+    vertical_aperture: float | None,
+    focal_length: float | None,
+    overscan: float | None,
+    active_window: tuple[float, float] | None,
+    safe_window: tuple[float, float] | None,
+) -> None:
+    camera_payload: dict[str, Any] = {
+        "pixel_aspect_ratio": scene.camera.pixel_aspect_ratio,
+        "horizontal_aperture": scene.camera.horizontal_aperture,
+        "vertical_aperture": scene.camera.vertical_aperture,
+        "focal_length": scene.camera.focal_length,
+        "overscan": scene.camera.overscan,
+        "active_window": scene.camera.active_window,
+        "safe_window": scene.camera.safe_window,
+    }
+
+    if profile is not None:
+        profile_payload = profile.get("camera") if "camera" in profile else profile
+        if not isinstance(profile_payload, Mapping):
+            raise ChopperRenderError(
+                "Camera profile must contain a mapping of settings"
+            )
+        camera_payload.update(profile_payload)
+
+    overrides: dict[str, Any] = {
+        "pixel_aspect_ratio": pixel_aspect_ratio,
+        "horizontal_aperture": horizontal_aperture,
+        "vertical_aperture": vertical_aperture,
+        "focal_length": focal_length,
+        "overscan": overscan,
+        "active_window": active_window,
+        "safe_window": safe_window,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            camera_payload[key] = value
+
+    camera_cls = CameraSettings or scene.camera.__class__
+    try:
+        scene.camera = camera_cls.from_dict(camera_payload)
+    except SceneError as exc:
+        raise ChopperRenderError(str(exc)) from exc
 
 
 def _normalize_export_format(
@@ -257,14 +344,41 @@ def render_scene(
     ocio_config: Path | None = None,
     ocio_display: str | None = None,
     ocio_view: str | None = None,
+    camera_profile: Path | None = None,
+    pixel_aspect_ratio: float | None = None,
+    horizontal_aperture: float | None = None,
+    vertical_aperture: float | None = None,
+    focal_length: float | None = None,
+    overscan: float | None = None,
+    active_window: tuple[float, float] | None = None,
+    safe_window: tuple[float, float] | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
     parsed_scene = load_scene(scene_path)
+    profile_payload = None
+    if camera_profile is not None:
+        profile_payload = _load_camera_profile(camera_profile)
+    _apply_camera_overrides(
+        parsed_scene,
+        profile=profile_payload,
+        pixel_aspect_ratio=pixel_aspect_ratio,
+        horizontal_aperture=horizontal_aperture,
+        vertical_aperture=vertical_aperture,
+        focal_length=focal_length,
+        overscan=overscan,
+        active_window=active_window,
+        safe_window=safe_window,
+    )
     if color_space is not None:
         parsed_scene.color_space = color_space
     if background_override is not None:
         parsed_scene.background = background_override
+    if guides is not None:
+        if parsed_scene.camera.active_window is not None:
+            guides.action_ratio = parsed_scene.camera.active_ratio()
+        if parsed_scene.camera.safe_window is not None:
+            guides.safe_ratio = parsed_scene.camera.safe_ratio()
     if samples <= 0:
         raise ChopperRenderError("Supersampling 'samples' must be greater than zero")
     if workers is not None and workers <= 0:
