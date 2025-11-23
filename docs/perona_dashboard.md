@@ -323,6 +323,9 @@ Tips for supplying bespoke metric stores:
   directory.
 - When running multiple dashboard instances behind a load balancer, mount the same network path on each host so `/api/metrics`
   appends to a shared NDJSON file. The append-only writes are guarded by a process lock to avoid interleaving records.
+- Control store rotation with `PERONA_METRICS_MAX_BYTES` (default `5 MiB`) and
+  `PERONA_METRICS_MAX_FILES` (default `5`). Setting `PERONA_METRICS_MAX_FILES`
+  to `1` switches to a truncate-on-rollover policy instead of keeping backups.
 - Rotate large stores by copying the NDJSON file to archival storage and truncating the original path. Because Perona streams the
   file lazily, rotations take effect on the next ingestion without a restart.
 
