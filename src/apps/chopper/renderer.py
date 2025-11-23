@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 import itertools
 import math
@@ -203,6 +204,26 @@ class _TextureCache:
 
 
 _TEXTURE_CACHE = _TextureCache()
+
+
+def _render_frame_static(
+    scene: Scene, index: int, samples: int, filter_name: str
+) -> Frame:
+    if samples == 1:
+        frame = Frame.blank(index, scene.width, scene.height, scene.background)
+        for obj in scene.objects:
+            obj.render(frame, index)
+        return frame
+
+    scaled_width = scene.width * samples
+    scaled_height = scene.height * samples
+    supersampled_frame = Frame.blank(
+        index, scaled_width, scaled_height, scene.background
+    )
+    for obj in scene.objects:
+        obj.render(supersampled_frame, index, scale=samples)
+
+    return supersampled_frame.downsample(samples, filter_name=filter_name)
 
 
 def _validate_unit_point(
@@ -1475,7 +1496,13 @@ class Renderer:
             raise SceneError("Downsample filter must be 'box' or 'gaussian'")
         self.filter = normalized_filter
 
-    def render(self, frames: Iterable[int] | None = None) -> Iterator[Frame]:
+    def render(
+        self,
+        frames: Iterable[int] | None = None,
+        *,
+        workers: int | None = None,
+        backend: str = "process",
+    ) -> Iterator[Frame]:
         """Yield selected rendered frames lazily.
 
         Parameters
@@ -1484,6 +1511,13 @@ class Renderer:
             Optional iterable of frame indices to render. If omitted, all frames in the
             scene will be produced.
         """
+
+        if workers is not None and workers <= 0:
+            raise SceneError("Worker count must be greater than zero when provided")
+
+        backend_normalized = backend.lower()
+        if backend_normalized not in {"process", "thread"}:
+            raise SceneError("backend must be 'process' or 'thread'")
 
         if frames is None:
             frame_indices = list(range(self.scene.frame_count))
@@ -1497,25 +1531,36 @@ class Renderer:
                         f"Frame index {index} is outside the 0-{self.scene.frame_count - 1} range"
                     )
 
-        for index in frame_indices:
-            if self.samples == 1:
-                frame = Frame.blank(
-                    index, self.scene.width, self.scene.height, self.scene.background
+        if workers is None or workers == 1 or len(frame_indices) <= 1:
+            for index in frame_indices:
+                yield _render_frame_static(self.scene, index, self.samples, self.filter)
+            return
+
+        executor_cls: type[Executor]
+        if backend_normalized == "thread":
+            if any(
+                isinstance(getattr(obj, "fill", None), TextureFill)
+                for obj in self.scene.objects
+            ):
+                raise SceneError(
+                    "Threaded rendering is not supported for scenes using texture fills; "
+                    "use process workers instead to isolate shared caches."
                 )
-                for obj in self.scene.objects:
-                    obj.render(frame, index)
-                yield frame
-                continue
+            executor_cls = ThreadPoolExecutor
+        else:
+            executor_cls = ProcessPoolExecutor
 
-            scaled_width = self.scene.width * self.samples
-            scaled_height = self.scene.height * self.samples
-            supersampled_frame = Frame.blank(
-                index, scaled_width, scaled_height, self.scene.background
+        with executor_cls(max_workers=workers) as executor:  # type: ignore[call-arg]
+            results = executor.map(
+                _render_frame_static,
+                itertools.repeat(self.scene),
+                frame_indices,
+                itertools.repeat(self.samples),
+                itertools.repeat(self.filter),
             )
-            for obj in self.scene.objects:
-                obj.render(supersampled_frame, index, scale=self.samples)
 
-            yield supersampled_frame.downsample(self.samples, filter_name=self.filter)
+            for frame in results:
+                yield frame
 
 
 @dataclass(slots=True)

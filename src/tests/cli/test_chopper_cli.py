@@ -467,12 +467,18 @@ def test_render_accepts_supersampling_options(
             "4",
             "--filter",
             "gaussian",
+            "--workers",
+            "3",
+            "--worker-backend",
+            "thread",
         ],
     )
 
     assert result.exit_code == 0
     assert captured["samples"] == 4
     assert captured["filter_name"] == "gaussian"
+    assert captured["workers"] == 3
+    assert captured["worker_backend"] == "thread"
 
 
 def test_render_rejects_invalid_background_override(tmp_path: Path) -> None:

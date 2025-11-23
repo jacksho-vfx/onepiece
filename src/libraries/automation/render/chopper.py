@@ -227,6 +227,8 @@ def render_scene(
     frames: Iterable[int] | None = None,
     samples: int = 1,
     filter_name: str = "box",
+    workers: int | None = None,
+    worker_backend: str = "process",
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
@@ -235,6 +237,11 @@ def render_scene(
         parsed_scene.background = background_override
     if samples <= 0:
         raise ChopperRenderError("Supersampling 'samples' must be greater than zero")
+    if workers is not None and workers <= 0:
+        raise ChopperRenderError("Worker count must be greater than zero")
+    backend_normalized = worker_backend.lower()
+    if backend_normalized not in {"process", "thread"}:
+        raise ChopperRenderError("worker_backend must be 'process' or 'thread'")
     try:
         renderer = Renderer(parsed_scene, samples=samples, filter_name=filter_name)
     except SceneError as exc:
@@ -246,7 +253,9 @@ def render_scene(
         end_frame=end_frame,
         frames=frames,
     )
-    frames_iter = renderer.render(frames=frame_indices)
+    frames_iter = renderer.render(
+        frames=frame_indices, workers=workers, backend=backend_normalized
+    )
 
     export_normalized = _normalize_export_format(
         output_path=output_path,

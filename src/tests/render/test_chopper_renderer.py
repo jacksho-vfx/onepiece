@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -9,6 +10,7 @@ from typing import Any, cast
 import pytest
 import typing_extensions
 
+from apps.chopper import renderer as renderer_module
 from apps.chopper.renderer import (
     AnimationWriter,
     Color,
@@ -831,6 +833,59 @@ def test_animation_supports_cubic_easing() -> None:
     halfway = obj.position_at(1)
     assert halfway[0] == pytest.approx(5.0)
     assert halfway[1] == pytest.approx(0.0)
+
+
+class _NoopObject:
+    def __init__(self) -> None:
+        self.rendered_frames: list[int] = []
+
+    def render(self, frame: Frame, index: int, scale: int = 1) -> None:
+        frame.pixels[0][0] = (index, 0, 0)
+        self.rendered_frames.append(index)
+
+
+def test_parallel_render_preserves_order_with_workers() -> None:
+    scene = Scene(width=1, height=1, frame_count=4, background=(0, 0, 0), objects=[])
+    worker = _NoopObject()
+    scene.objects = [worker]
+
+    renderer = Renderer(scene)
+    frames = list(renderer.render(workers=2, backend="thread"))
+
+    assert [frame.index for frame in frames] == [0, 1, 2, 3]
+    assert [frame.pixels[0][0][:3] for frame in frames] == [
+        (0, 0, 0),
+        (1, 0, 0),
+        (2, 0, 0),
+        (3, 0, 0),
+    ]
+    assert sorted(worker.rendered_frames) == [0, 1, 2, 3]
+
+
+def test_parallel_render_reduces_wall_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    scene = Scene(width=1, height=1, frame_count=4, background=(0, 0, 0), objects=[])
+    scene.objects = [_NoopObject()]
+
+    original_render = renderer_module._render_frame_static
+
+    def slow_render(scene: Scene, index: int, samples: int, filter_name: str) -> Frame:
+        time.sleep(0.05)
+        return original_render(scene, index, samples, filter_name)
+
+    monkeypatch.setattr(renderer_module, "_render_frame_static", slow_render)
+
+    renderer = Renderer(scene)
+
+    start = time.perf_counter()
+    list(renderer.render())
+    sequential_duration = time.perf_counter() - start
+
+    start = time.perf_counter()
+    list(renderer.render(workers=4, backend="thread"))
+    parallel_duration = time.perf_counter() - start
+
+    assert parallel_duration < sequential_duration
+    assert parallel_duration < sequential_duration * 0.8
 
 
 def test_line_and_polygon_rendering() -> None:
