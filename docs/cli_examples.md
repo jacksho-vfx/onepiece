@@ -1,6 +1,6 @@
 # CLI Examples
 
-> **Documentation refresh (April 2024):** Command groups now include quick links to their most common flags, plus notes on the environment variables that influence behaviour. Use the index below to jump straight to the CLI surface you need.
+> **Documentation refresh (November 2025):** Command groups now include quick links to their most common flags, plus notes on the environment variables that influence behaviour. Use the index below to jump straight to the CLI surface you need.
 
 ## At a glance
 

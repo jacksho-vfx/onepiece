@@ -1,6 +1,6 @@
 # Ftrack client primer
 
-> **Documentation refresh (April 2024):** The primer now surfaces authentication tips, usage patterns, and CLI hooks up front. Use the outline below to navigate to the code samples you need when experimenting with the experimental REST client.
+> **Documentation refresh (November 2025):** The primer now surfaces authentication tips, usage patterns, and CLI hooks up front. Use the outline below to navigate to the code samples you need when experimenting with the experimental REST client.
 
 ## At a glance
 

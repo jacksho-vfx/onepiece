@@ -1,6 +1,6 @@
 # Trafalgar Dashboard API
 
-> **Documentation refresh (April 2024):** This guide now foregrounds authentication, caching controls, and troubleshooting steps pulled from recent support requests. Use the outline below when you need to verify tokens, tune cache behaviour, or diagnose stale data.
+> **Documentation refresh (November 2025):** This guide now foregrounds authentication, caching controls, and troubleshooting steps pulled from recent support requests. Use the outline below when you need to verify tokens, tune cache behaviour, or diagnose stale data.
 
 ## At a glance
 

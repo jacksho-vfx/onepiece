@@ -1,6 +1,6 @@
 # Maya Character Selector Panel
 
-> **Documentation refresh (April 2024):** Animators requested faster signposts to usage snippets, rig discovery heuristics, and UI extension hooks. The outline below gathers those sections for quick reference during show-specific customisation.
+> **Documentation refresh (November 2025):** Animators requested faster signposts to usage snippets, rig discovery heuristics, and UI extension hooks. The outline below gathers those sections for quick reference during show-specific customisation.
 
 ## At a glance
 

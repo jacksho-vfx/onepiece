@@ -1,6 +1,6 @@
 # Trafalgar Service Authentication
 
-> **Documentation refresh (April 2024):** Authentication setup now leads with configuration tables, role summaries, and rotation playbooks. Use the outline below to jump to the section that matches your deployment task.
+> **Documentation refresh (November 2025):** Authentication setup now leads with configuration tables, role summaries, and rotation playbooks. Use the outline below to jump to the section that matches your deployment task.
 
 ## At a glance
 

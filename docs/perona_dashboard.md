@@ -1,6 +1,6 @@
 # Perona dashboard operations
 
-> **Documentation refresh (April 2024):** Operators asked for faster entry points to settings inspection, telemetry analysis, and API references. The outline below gathers those touchpoints so you can reach the right command or endpoint in seconds.
+> **Documentation refresh (November 2025):** Operators asked for faster entry points to settings inspection, telemetry analysis, and API references. The outline below gathers those touchpoints so you can reach the right command or endpoint in seconds.
 
 ## At a glance
 
