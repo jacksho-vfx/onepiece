@@ -1550,7 +1550,7 @@ class Renderer:
         else:
             executor_cls = ProcessPoolExecutor
 
-        with executor_cls(max_workers=workers) as executor:
+        with executor_cls(max_workers=workers) as executor:  # type: ignore[call-arg]
             results = executor.map(
                 _render_frame_static,
                 itertools.repeat(self.scene),
