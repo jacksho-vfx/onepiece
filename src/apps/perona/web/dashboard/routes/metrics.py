@@ -119,7 +119,11 @@ def compute_metrics_summary(engine: PeronaEngine) -> dict[str, Any]:
     }
 
 
-@router.post("/api/metrics", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/api/metrics",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(dependencies.require_metrics_auth)],
+)
 async def ingest_render_metrics(
     payload: dependencies.RenderMetricBatch, background_tasks: BackgroundTasks
 ) -> dict[str, Any]:
@@ -153,7 +157,10 @@ def render_feed(
     return metrics
 
 
-@router.get("/render-feed/live")
+@router.get(
+    "/render-feed/live",
+    dependencies=[Depends(dependencies.require_metrics_auth)],
+)
 async def render_feed_stream(
     limit: int = Query(30, ge=1, le=250),
     sequence: str | None = Query(None),
@@ -187,6 +194,7 @@ def metrics_summary(
 async def metrics_websocket(websocket: WebSocket) -> None:
     """Stream render telemetry samples over a WebSocket connection."""
 
+    await dependencies.require_metrics_websocket_auth(websocket)
     await websocket.accept()
     try:
         while True:

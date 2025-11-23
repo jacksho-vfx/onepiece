@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -10,7 +11,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Mapping, NamedTuple, Sequence, TypeVar
 
-from fastapi import Query
+from fastapi import HTTPException, Query, Security, status
+from starlette.websockets import WebSocket, WebSocketDisconnect
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.perona.web import wrangler
@@ -18,6 +21,10 @@ from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
 from libraries.analytics.perona.models import RenderMetric, SettingsSummary
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
+
+
+_metrics_token_env = "PERONA_METRICS_TOKEN"
+_metrics_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class RenderMetricBatch(BaseModel):
@@ -77,6 +84,49 @@ def _resolve_metrics_store_path() -> Path:
 
 
 _metrics_store = RenderMetricStore(_resolve_metrics_store_path())
+
+
+def _expected_metrics_token() -> str:
+    """Return the configured metrics token or raise if not set."""
+
+    token = os.getenv(_metrics_token_env)
+    if not token:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Metrics authentication token is not configured.",
+        )
+    return token
+
+
+def require_metrics_auth(
+    credentials: HTTPAuthorizationCredentials | None = Security(_metrics_bearer_scheme),
+) -> None:
+    """Validate bearer credentials for metrics ingestion and streaming endpoints."""
+
+    expected_token = _expected_metrics_token()
+    provided = credentials.credentials if credentials else None
+    if not provided or not hmac.compare_digest(provided, expected_token):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid authentication token."
+        )
+
+
+async def require_metrics_websocket_auth(websocket: WebSocket) -> None:
+    """Validate bearer credentials for websocket clients."""
+
+    try:
+        expected_token = _expected_metrics_token()
+    except HTTPException:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        raise WebSocketDisconnect(code=status.WS_1011_INTERNAL_ERROR)
+
+    header = websocket.headers.get("Authorization", "")
+    scheme, _, provided = header.partition(" ")
+    token = provided.strip() if scheme.lower() == "bearer" else None
+
+    if not token or not hmac.compare_digest(token, expected_token):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
 
 
 class _CostInsightsMemo:
