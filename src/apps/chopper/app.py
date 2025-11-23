@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import re
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,8 @@ def _build_guides_overlay(
     guides_color: str,
     guides_opacity: float,
     guides_width: float,
+    action_ratio: float | None = None,
+    safe_ratio: float | None = None,
 ) -> GuidesOverlay | None:
     guides_enabled = any((safe_frame, action_frame, thirds_grid, center_mark))
     if not guides_enabled:
@@ -73,7 +76,7 @@ def _build_guides_overlay(
     except SceneError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    return GuidesOverlay(
+    overlay = GuidesOverlay(
         safe_frame=safe_frame,
         action_frame=action_frame,
         thirds_grid=thirds_grid,
@@ -82,6 +85,31 @@ def _build_guides_overlay(
         opacity=guides_opacity,
         stroke_width=guides_width,
     )
+
+    if action_ratio is not None:
+        overlay.action_ratio = action_ratio
+    if safe_ratio is not None:
+        overlay.safe_ratio = safe_ratio
+
+    return overlay
+
+
+def _parse_window_option(value: str | None, label: str) -> tuple[float, float] | None:
+    if value is None:
+        return None
+    parts = re.split(r"[x,]", value)
+    if len(parts) != 2:
+        raise typer.BadParameter(
+            f"{label} must contain width and height separated by 'x' or ','"
+        )
+    try:
+        width = float(parts[0])
+        height = float(parts[1])
+    except ValueError as exc:
+        raise typer.BadParameter(f"{label} values must be numeric") from exc
+    if width <= 0 or height <= 0:
+        raise typer.BadParameter(f"{label} values must be greater than zero")
+    return width, height
 
 
 def _build_qc_scene_payload(width: int = 1920, height: int = 1080) -> dict[str, Any]:
@@ -342,6 +370,49 @@ def render(
         "--ocio-view",
         help="View name to use from the OCIO config when one is provided.",
     ),
+    camera_profile: Path | None = typer.Option(
+        None,
+        "--camera-profile",
+        help="Path to a JSON camera profile containing gate information.",
+    ),
+    pixel_aspect_ratio: float | None = typer.Option(
+        None,
+        "--pixel-aspect-ratio",
+        help="Override the camera pixel aspect ratio.",
+    ),
+    horizontal_aperture: float | None = typer.Option(
+        None,
+        "--horizontal-aperture",
+        help="Camera horizontal aperture size (e.g. in millimetres).",
+    ),
+    vertical_aperture: float | None = typer.Option(
+        None,
+        "--vertical-aperture",
+        help="Camera vertical aperture size (e.g. in millimetres).",
+    ),
+    focal_length: float | None = typer.Option(
+        None,
+        "--focal-length",
+        help="Camera focal length metadata used for framing calculations.",
+    ),
+    overscan: float | None = typer.Option(
+        None,
+        "--overscan",
+        help=(
+            "Fractional overscan to apply to the camera gate (e.g. 0.1 adds 10%"
+            " padding)."
+        ),
+    ),
+    active_window: str | None = typer.Option(
+        None,
+        "--active-window",
+        help=("Active aperture width and height as 'width,height' or 'widthxheight'."),
+    ),
+    safe_window: str | None = typer.Option(
+        None,
+        "--safe-window",
+        help="Safe aperture width and height as 'width,height' or 'widthxheight'.",
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
@@ -351,6 +422,8 @@ def render(
     color_space_choice: ColorSpace | None = None
     guides_overlay: GuidesOverlay | None = None
     layer_set: set[str] | None = None
+    active_window_tuple: tuple[float, float] | None = None
+    safe_window_tuple: tuple[float, float] | None = None
 
     if background is not None:
         try:
@@ -379,6 +452,12 @@ def render(
             color_space_choice = ColorSpace.from_value(color_space)
         except SceneError as exc:
             raise typer.BadParameter(str(exc)) from exc
+
+    try:
+        active_window_tuple = _parse_window_option(active_window, "active-window")
+        safe_window_tuple = _parse_window_option(safe_window, "safe-window")
+    except typer.BadParameter:
+        raise
 
     guides_overlay = _build_guides_overlay(
         safe_frame=safe_frame,
@@ -409,6 +488,14 @@ def render(
             color_space=color_space_choice,
             bit_depth=bit_depth,
             layers=layer_set,
+            camera_profile=camera_profile,
+            pixel_aspect_ratio=pixel_aspect_ratio,
+            horizontal_aperture=horizontal_aperture,
+            vertical_aperture=vertical_aperture,
+            focal_length=focal_length,
+            overscan=overscan,
+            active_window=active_window_tuple,
+            safe_window=safe_window_tuple,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -504,6 +591,46 @@ def qc_render(
         "--ocio-view",
         help="View name to use from the OCIO config when one is provided.",
     ),
+    camera_profile: Path | None = typer.Option(
+        None,
+        "--camera-profile",
+        help="Optional JSON file describing camera gate settings.",
+    ),
+    pixel_aspect_ratio: float | None = typer.Option(
+        None,
+        "--pixel-aspect-ratio",
+        help="Override the camera pixel aspect ratio for QC renders.",
+    ),
+    horizontal_aperture: float | None = typer.Option(
+        None,
+        "--horizontal-aperture",
+        help="Camera horizontal aperture size (e.g. in millimetres).",
+    ),
+    vertical_aperture: float | None = typer.Option(
+        None,
+        "--vertical-aperture",
+        help="Camera vertical aperture size (e.g. in millimetres).",
+    ),
+    focal_length: float | None = typer.Option(
+        None,
+        "--focal-length",
+        help="Camera focal length metadata used for framing calculations.",
+    ),
+    overscan: float | None = typer.Option(
+        None,
+        "--overscan",
+        help="Fractional overscan padding applied around the render gate.",
+    ),
+    active_window: str | None = typer.Option(
+        None,
+        "--active-window",
+        help=("Active aperture width and height as 'width,height' or 'widthxheight'."),
+    ),
+    safe_window: str | None = typer.Option(
+        None,
+        "--safe-window",
+        help="Safe aperture width and height as 'width,height' or 'widthxheight'.",
+    ),
 ) -> None:
     """Render a built-in QC scene without providing an input file."""
 
@@ -519,6 +646,8 @@ def qc_render(
     )
 
     color_space_choice: ColorSpace | None = None
+    active_window_tuple = _parse_window_option(active_window, "active-window")
+    safe_window_tuple = _parse_window_option(safe_window, "safe-window")
     if color_space is not None:
         try:
             color_space_choice = ColorSpace.from_value(color_space)
@@ -547,6 +676,14 @@ def qc_render(
                 ocio_config=ocio_config,
                 ocio_display=ocio_display,
                 ocio_view=ocio_view,
+                camera_profile=camera_profile,
+                pixel_aspect_ratio=pixel_aspect_ratio,
+                horizontal_aperture=horizontal_aperture,
+                vertical_aperture=vertical_aperture,
+                focal_length=focal_length,
+                overscan=overscan,
+                active_window=active_window_tuple,
+                safe_window=safe_window_tuple,
             )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
