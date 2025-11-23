@@ -302,6 +302,28 @@ example:
 }
 ```
 
+Objects support more than flat fills. Supply a `color` mapping with `type` set
+to `linear-gradient` or `radial-gradient` alongside a pair of `colors` and
+gradient coordinates to paint per-pixel ramps. To texture a shape, use a
+`texture` fill and point `path` at an image readable by Pillow; the texture is
+stretched over the object's local bounds and cached between uses.
+
+```json
+{
+  "id": "panel",
+  "type": "rectangle",
+  "color": {
+    "type": "linear-gradient",
+    "from": [0, 0],
+    "to": [1, 0],
+    "colors": ["#ff0000", "#0000ff"]
+  },
+  "position": [0, 0],
+  "size": [4, 1]
+}
+```
+
+
 Override the background colour on the fly with `--background "#112233"` when you
 need blank-space contrast without editing the source JSON.
 

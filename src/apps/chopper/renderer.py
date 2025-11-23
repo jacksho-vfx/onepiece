@@ -32,6 +32,266 @@ else:
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
 
+def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
+    """Clamp ``value`` to the inclusive ``lower``/``upper`` range."""
+
+    return max(lower, min(upper, value))
+
+
+def _parse_point(value: object, *, label: str) -> tuple[float, float]:
+    """Parse a 2D coordinate from ``value`` or raise :class:`SceneError`."""
+
+    if not isinstance(value, Sequence) or len(value) != 2:
+        raise SceneError(f"{label} must be a length two sequence")
+
+    try:
+        x = float(value[0])
+        y = float(value[1])
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise SceneError(f"{label} values must be numeric") from exc
+
+    if not math.isfinite(x) or not math.isfinite(y):
+        raise SceneError(f"{label} values must be finite numbers")
+
+    return x, y
+
+
+def _interpolate_color(left: Color, right: Color, t: float) -> Color:
+    """Linearly interpolate between ``left`` and ``right`` using ``t``."""
+
+    clamped = _clamp(t)
+    include_alpha = len(left) >= 4 or len(right) >= 4
+    left_r, left_g, left_b = left[:3]
+    right_r, right_g, right_b = right[:3]
+    left_a = left[3] if len(left) >= 4 else 255
+    right_a = right[3] if len(right) >= 4 else 255
+
+    components = (
+        int(round(left_r + (right_r - left_r) * clamped)),
+        int(round(left_g + (right_g - left_g) * clamped)),
+        int(round(left_b + (right_b - left_b) * clamped)),
+        int(round(left_a + (right_a - left_a) * clamped)),
+    )
+
+    if include_alpha:
+        return components
+
+    r, g, b, _ = components
+    return r, g, b
+
+
+def _normalize_pixel(value: object) -> Color:
+    """Convert a Pillow pixel value into a :class:`Color` tuple."""
+
+    if isinstance(value, tuple):
+        components = tuple(int(component) for component in value)
+        if len(components) == 4:
+            return cast(Color, components)
+        if len(components) == 3:
+            r, g, b = components
+            return r, g, b, 255
+
+    if isinstance(value, (int, float)):
+        component = int(value)
+    else:
+        component = 0
+    return component, component, component, 255
+
+
+@dataclass(slots=True)
+class SolidFill:
+    """Uniform fill colour."""
+
+    color: Color
+
+    @property
+    def anchor_color(self) -> Color:
+        return self.color
+
+    def sample(self, _: float, __: float, *, texture_cache: "_TextureCache") -> Color:
+        return self.color
+
+
+@dataclass(slots=True)
+class LinearGradientFill:
+    """Linear gradient fill spanning two points in normalised space."""
+
+    start: tuple[float, float]
+    end: tuple[float, float]
+    start_color: Color
+    end_color: Color
+
+    @property
+    def anchor_color(self) -> Color:
+        return self.start_color
+
+    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+        delta_x = self.end[0] - self.start[0]
+        delta_y = self.end[1] - self.start[1]
+        magnitude = delta_x * delta_x + delta_y * delta_y
+        if magnitude == 0:
+            return self.start_color
+
+        t = ((u - self.start[0]) * delta_x + (v - self.start[1]) * delta_y) / magnitude
+        return _interpolate_color(self.start_color, self.end_color, t)
+
+
+@dataclass(slots=True)
+class RadialGradientFill:
+    """Radial gradient fill radiating from a normalised centre."""
+
+    center: tuple[float, float]
+    radius: float
+    inner_color: Color
+    outer_color: Color
+
+    @property
+    def anchor_color(self) -> Color:
+        return self.inner_color
+
+    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+        dx = u - self.center[0]
+        dy = v - self.center[1]
+        distance = math.sqrt(dx * dx + dy * dy)
+        if self.radius <= 0:
+            return self.inner_color
+        t = distance / self.radius
+        return _interpolate_color(self.inner_color, self.outer_color, t)
+
+
+@dataclass(slots=True)
+class TextureFill:
+    """Image texture stretched across the object's bounds."""
+
+    path: Path
+
+    @property
+    def anchor_color(self) -> Color:
+        image = _TEXTURE_CACHE.get(self.path)
+        return _normalize_pixel(image.getpixel((0, 0)))
+
+    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+        image = texture_cache.get(self.path)
+        clamped_u = _clamp(u)
+        clamped_v = _clamp(v)
+        x = int(round(clamped_u * (image.width - 1)))
+        y = int(round(clamped_v * (image.height - 1)))
+        return _normalize_pixel(image.getpixel((x, y)))
+
+
+Fill = SolidFill | LinearGradientFill | RadialGradientFill | TextureFill
+
+
+class _TextureCache:
+    """Cache of decoded Pillow images used as textures."""
+
+    def __init__(self) -> None:
+        self._cache: dict[Path, "PILImage.Image"] = {}
+
+    def get(self, path: Path) -> "PILImage.Image":
+        image = self._cache.get(path)
+        if image is not None:
+            return image
+
+        pil_image = cast("Any", _require_pillow())
+        resolved = Path(path)
+        if not resolved.is_file():
+            raise SceneError(f"Texture file does not exist: {resolved}")
+        loaded = cast("PILImage.Image", pil_image.open(resolved).convert("RGBA"))
+        self._cache[resolved] = loaded
+        return loaded
+
+
+_TEXTURE_CACHE = _TextureCache()
+
+
+def _validate_unit_point(
+    point: tuple[float, float], *, label: str
+) -> tuple[float, float]:
+    x, y = point
+    if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+        raise SceneError(f"{label} must be in the 0-1 range")
+    return point
+
+
+def _parse_fill(value: object, *, object_id: str) -> Fill:
+    """Parse a fill description from ``value``."""
+
+    if isinstance(value, Mapping):
+        if "type" not in value:
+            raise SceneError(
+                f"Object '{object_id}' colour mappings must include a 'type' field"
+            )
+
+        fill_type = str(value["type"]).strip().lower()
+        if fill_type in {"linear", "linear-gradient", "linear_gradient"}:
+            start = _validate_unit_point(
+                _parse_point(
+                    value.get("from", (0.0, 0.0)), label="Linear gradient 'from'"
+                ),
+                label="Linear gradient 'from'",
+            )
+            end = _validate_unit_point(
+                _parse_point(value.get("to", (1.0, 0.0)), label="Linear gradient 'to'"),
+                label="Linear gradient 'to'",
+            )
+            colors_value = value.get("colors")
+            if not isinstance(colors_value, Sequence) or len(colors_value) != 2:
+                raise SceneError(
+                    "Linear gradients must provide two colours via a 'colors' sequence"
+                )
+            start_color = parse_color(colors_value[0])
+            end_color = parse_color(colors_value[1])
+            return LinearGradientFill(
+                start=start, end=end, start_color=start_color, end_color=end_color
+            )
+
+        if fill_type in {"radial", "radial-gradient", "radial_gradient"}:
+            center = _validate_unit_point(
+                _parse_point(
+                    value.get("center", (0.5, 0.5)), label="Radial gradient 'center'"
+                ),
+                label="Radial gradient 'center'",
+            )
+            try:
+                radius = float(value.get("radius", 0.5))
+            except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+                raise SceneError("Radial gradient radius must be numeric") from exc
+            if not math.isfinite(radius) or radius <= 0:
+                raise SceneError(
+                    "Radial gradient radius must be a positive, finite number"
+                )
+
+            colors_value = value.get("colors")
+            if not isinstance(colors_value, Sequence) or len(colors_value) != 2:
+                raise SceneError(
+                    "Radial gradients must provide two colours via a 'colors' sequence"
+                )
+            inner_color = parse_color(colors_value[0])
+            outer_color = parse_color(colors_value[1])
+            return RadialGradientFill(
+                center=center,
+                radius=radius,
+                inner_color=inner_color,
+                outer_color=outer_color,
+            )
+
+        if fill_type == "texture":
+            raw_path = value.get("path")
+            if not isinstance(raw_path, (str, Path)):
+                raise SceneError(
+                    "Texture fills must provide a string 'path' to an image file"
+                )
+            return TextureFill(Path(raw_path))
+
+        raise SceneError(
+            f"Unsupported fill type {fill_type!r} for object '{object_id}'."
+            " Supported types include linear-gradient, radial-gradient, and texture."
+        )
+
+    return SolidFill(parse_color(value))
+
+
 def _blend_colors(destination: Color, source: Color) -> Color:
     """Return the result of alpha blending ``source`` over ``destination``."""
 
@@ -373,6 +633,7 @@ class SceneObject:
     id: str
     kind: str
     color: Color
+    fill: Fill
     position: tuple[float, float]
     size: tuple[float, float]
     rotation: float = 0.0
@@ -399,7 +660,11 @@ class SceneObject:
                 f"Unsupported object type: {kind!r}. Supported types are: {supported}"
             )
 
-        color = parse_color(payload["color"])
+        fill = _parse_fill(payload["color"], object_id=str(payload["id"]))
+        color = fill.anchor_color
+
+        if kind == "line" and not isinstance(fill, SolidFill):
+            raise SceneError("Line objects must use a solid colour fill")
 
         position_data = payload["position"]
         if not isinstance(position_data, Sequence) or len(position_data) != 2:
@@ -569,6 +834,10 @@ class SceneObject:
 
                 color_value = None
                 if item.get("color") is not None:
+                    if not isinstance(fill, SolidFill):
+                        raise SceneError(
+                            "Colour animation is only supported for solid fills"
+                        )
                     color_value = parse_color(item["color"])
 
                 easing_raw = item.get("easing")
@@ -613,6 +882,7 @@ class SceneObject:
             id=str(payload["id"]),
             kind=kind,
             color=color,
+            fill=fill,
             position=position,
             size=size,
             rotation=rotation,
@@ -640,9 +910,59 @@ class SceneObject:
     def color_at(self, frame: int) -> Color:
         """Return the color of the object for ``frame``."""
 
-        if self.animation is None:
-            return self.color
-        return self.animation.color_at(frame, default_color=self.color)
+        if isinstance(self.fill, SolidFill):
+            if self.animation is None:
+                return self.fill.color
+            return self.animation.color_at(frame, default_color=self.fill.color)
+        return self.fill.anchor_color
+
+    def _local_bounds(self) -> tuple[float, float, float, float]:
+        if self.kind in {"rectangle", "circle"}:
+            width, height = self.size
+            return 0.0, 0.0, width, height
+
+        xs = [x for x, _ in self.points] or [0.0]
+        ys = [y for _, y in self.points] or [0.0]
+        min_x = min(xs)
+        max_x = max(xs)
+        min_y = min(ys)
+        max_y = max(ys)
+        return min_x, min_y, max_x - min_x, max_y - min_y
+
+    def _color_sampler(
+        self, frame_index: int, scale: int
+    ) -> Callable[[float, float], Color]:
+        if isinstance(self.fill, SolidFill):
+            color = self.color_at(frame_index)
+
+            def _solid_sampler(_: float, __: float) -> Color:
+                return color
+
+            return _solid_sampler
+
+        min_x, min_y, width, height = self._local_bounds()
+        position = self.position_at(frame_index)
+        pos_x = position[0] * scale
+        pos_y = position[1] * scale
+        rotation = self.rotation_at(frame_index)
+        cos_r = math.cos(-rotation)
+        sin_r = math.sin(-rotation)
+
+        def _gradient_sampler(x: float, y: float) -> Color:
+            dx = x - pos_x
+            dy = y - pos_y
+            if rotation != 0:
+                local_x = dx * cos_r - dy * sin_r
+                local_y = dx * sin_r + dy * cos_r
+            else:
+                local_x, local_y = dx, dy
+            local_x /= scale
+            local_y /= scale
+            u = 0.0 if width == 0 else (local_x - min_x) / width
+            v = 0.0 if height == 0 else (local_y - min_y) / height
+            return self.fill.sample(u, v, texture_cache=_TEXTURE_CACHE)
+
+        return _gradient_sampler
 
     def _frame_transform(self, frame: int) -> tuple[tuple[float, float], float]:
         """Return the position and rotation for ``frame``."""
@@ -678,7 +998,8 @@ class SceneObject:
             corners, scaled_origin, rotation, scale=scale
         )
 
-        self._fill_polygon(target, points, self.color_at(frame_index))
+        sampler = self._color_sampler(frame_index, scale)
+        self._fill_polygon(target, points, sampler)
 
         _, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
@@ -688,7 +1009,6 @@ class SceneObject:
 
     def _render_circle(self, target: "Frame", frame_index: int, scale: int) -> None:
         position = self.position_at(frame_index)
-        color = self.color_at(frame_index)
         width, height = (value * scale for value in self.size)
         min_diameter = min(width, height)
         if min_diameter <= 0:
@@ -701,6 +1021,8 @@ class SceneObject:
         cy = position[1] * scale
         radius_sq = radius * radius
 
+        sampler = self._color_sampler(frame_index, scale)
+
         min_x = max(0, int(round(cx - radius - 1)))
         max_x = min(target.width - 1, int(round(cx + radius + 1)))
         min_y = max(0, int(round(cy - radius - 1)))
@@ -712,7 +1034,7 @@ class SceneObject:
                 dx = x - cx
                 dy = y - cy
                 if dx * dx + dy * dy <= radius_sq:
-                    target._blend_into(row, x, color)
+                    target._blend_into(row, x, sampler(x + 0.5, y + 0.5))
 
         stroke_color, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
@@ -824,7 +1146,8 @@ class SceneObject:
         if len(points) < 3:
             raise SceneError("Polygon must contain at least three points")
 
-        self._fill_polygon(target, points, self.color_at(frame_index))
+        sampler = self._color_sampler(frame_index, scale)
+        self._fill_polygon(target, points, sampler)
 
         stroke_color, stroke_width = self._stroke_details(frame_index, scale)
         if stroke_width > 0:
@@ -835,7 +1158,10 @@ class SceneObject:
                 )
 
     def _fill_polygon(
-        self, target: "Frame", points: Sequence[tuple[float, float]], color: Color
+        self,
+        target: "Frame",
+        points: Sequence[tuple[float, float]],
+        sampler: Callable[[float, float], Color],
     ) -> None:
         xs = [x for x, _ in points]
         ys = [y for _, y in points]
@@ -865,7 +1191,7 @@ class SceneObject:
                 start_x = int(math.ceil(left))
                 end_x = int(math.floor(right))
                 for x in range(max(min_x, start_x), min(max_x, end_x) + 1):
-                    target._blend_into(row, x, color)
+                    target._blend_into(row, x, sampler(x + 0.5, y + 0.5))
 
 
 @dataclass(slots=True)
