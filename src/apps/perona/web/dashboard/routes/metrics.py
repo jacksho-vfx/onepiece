@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timedelta
+from typing import Annotated, Any
 from uuid import uuid4
 
 from fastapi import (
@@ -29,8 +29,19 @@ router = APIRouter(tags=["metrics"])
 logger = logging.getLogger(__name__)
 
 
-def compute_metrics_summary(engine: PeronaEngine) -> dict[str, Any]:
+def compute_metrics_summary(
+    engine: PeronaEngine,
+    *,
+    sample_limit: int | None = None,
+    window_seconds: int | None = None,
+) -> dict[str, Any]:
     """Return aggregated statistics for recent render telemetry."""
+
+    cutoff: datetime | None = None
+    if window_seconds is not None:
+        latest_metric = engine.latest_render_metric()
+        if latest_metric is not None:
+            cutoff = latest_metric.timestamp - timedelta(seconds=window_seconds)
 
     def _rounded_mean(total: float, count: int) -> float:
         return round(total / count, 3) if count else 0.0
@@ -45,7 +56,9 @@ def compute_metrics_summary(engine: PeronaEngine) -> dict[str, Any]:
     latest_sample: RenderMetric | None = None
     latest_timestamp: datetime | None = None
 
-    for sample in engine.stream_render_metrics():
+    samples = tuple(engine.stream_render_metrics(limit=sample_limit, since=cutoff))
+
+    for sample in samples:
         total_samples += 1
         total_fps += sample.fps
         total_frame_time += sample.frame_time_ms
@@ -212,11 +225,34 @@ async def render_feed_stream(
 
 @router.get("/metrics")
 def metrics_summary(
+    sample_limit: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=5000,
+            description=(
+                "Number of recent samples to include when summarising metrics. "
+                "Defaults to 250."
+            ),
+        ),
+    ] = 250,
+    window_seconds: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            description=(
+                "Optional rolling window, in seconds, applied relative to the "
+                "latest render metric timestamp. Defaults to no time limit."
+            ),
+        ),
+    ] = None,
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> dict[str, Any]:
     """Return aggregated statistics for recent render telemetry."""
 
-    return compute_metrics_summary(engine)
+    return compute_metrics_summary(
+        engine, sample_limit=sample_limit, window_seconds=window_seconds
+    )
 
 
 @router.websocket("/ws/metrics")

@@ -5,6 +5,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from datetime import datetime, timedelta
+from time import perf_counter
+
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -12,6 +15,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from apps.perona.web import dashboard as dashboard_module
 from apps.perona.web.dashboard import app
+from libraries.analytics.perona.engine.engine import PeronaEngine
+from libraries.analytics.perona.engine.models import RenderMetric as EngineRenderMetric
 from libraries.analytics.perona.models import RenderMetric
 
 from . import KNOWN_SEQUENCES
@@ -160,6 +165,109 @@ def test_metrics_summary_matches_manual_calculation() -> None:
     assert summary["latest_sample"] == expected_payload
 
 
+def test_compute_metrics_summary_empty_dataset() -> None:
+    engine = PeronaEngine()
+    engine._render_log = tuple()
+
+    summary = dashboard_module.compute_metrics_summary(engine, sample_limit=50)
+
+    assert summary["total_samples"] == 0
+    assert summary["averages"] == {
+        "fps": 0.0,
+        "frame_time_ms": 0.0,
+        "gpu_utilisation": 0.0,
+        "error_count": 0.0,
+    }
+    assert summary["sequences"] == []
+    assert summary["latest_sample"] is None
+
+
+def test_compute_metrics_summary_respects_windows() -> None:
+    base_time = datetime(2024, 1, 1, 12, 0, 0)
+    metrics = [
+        EngineRenderMetric(
+            sequence="SQ01",
+            shot_id="SQ01_SH010",
+            timestamp=base_time + timedelta(seconds=offset),
+            fps=20.0 + offset,
+            frame_time_ms=100.0 + (offset * 0.5),
+            error_count=offset,
+            gpu_utilisation=0.5,
+            cache_health=0.9,
+        )
+        for offset in (0, 60, 240, 300)
+    ]
+
+    engine = PeronaEngine()
+    engine._render_log = tuple(metrics)
+
+    summary = dashboard_module.compute_metrics_summary(
+        engine, sample_limit=2, window_seconds=180
+    )
+
+    expected_samples = metrics[-2:]
+    assert summary["total_samples"] == len(expected_samples)
+
+    def _rounded_mean(values: list[float]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    assert summary["averages"] == {
+        "fps": _rounded_mean([sample.fps for sample in expected_samples]),
+        "frame_time_ms": _rounded_mean(
+            [sample.frame_time_ms for sample in expected_samples]
+        ),
+        "gpu_utilisation": _rounded_mean(
+            [sample.gpu_utilisation for sample in expected_samples]
+        ),
+        "error_count": _rounded_mean(
+            [float(sample.error_count) for sample in expected_samples]
+        ),
+    }
+    assert summary["sequences"][0]["sequence"] == "SQ01"
+    assert (
+        summary["latest_sample"]["timestamp"]
+        == expected_samples[-1].timestamp.isoformat()
+    )
+
+
+def test_compute_metrics_summary_handles_large_dataset_quickly() -> None:
+    engine = PeronaEngine()
+    base_time = datetime(2024, 1, 1, 0, 0, 0)
+    metrics = [
+        EngineRenderMetric(
+            sequence="SQ%02d" % (index % 5),
+            shot_id=f"SQ{index % 5:02d}_SH{index:03d}",
+            timestamp=base_time + timedelta(seconds=index),
+            fps=18.0 + (index % 10),
+            frame_time_ms=100.0 + (index % 7),
+            error_count=index % 3,
+            gpu_utilisation=0.4 + ((index % 4) * 0.1),
+            cache_health=0.8,
+        )
+        for index in range(20000)
+    ]
+    engine._render_log = tuple(metrics)
+
+    start = perf_counter()
+    summary = dashboard_module.compute_metrics_summary(engine, sample_limit=500)
+    duration = perf_counter() - start
+
+    tail = metrics[-500:]
+
+    def _rounded_mean(values: list[float]) -> float:
+        return round(sum(values) / len(values), 3)
+
+    assert summary["total_samples"] == len(tail)
+    assert summary["averages"] == {
+        "fps": _rounded_mean([sample.fps for sample in tail]),
+        "frame_time_ms": _rounded_mean([sample.frame_time_ms for sample in tail]),
+        "gpu_utilisation": _rounded_mean([sample.gpu_utilisation for sample in tail]),
+        "error_count": _rounded_mean([float(sample.error_count) for sample in tail]),
+    }
+    assert summary["latest_sample"]["timestamp"] == tail[-1].timestamp.isoformat()
+    assert duration < 0.6
+
+
 def test_openapi_documents_metrics_security() -> None:
     schema = client.get("/openapi.json").json()
     bearer_scheme = schema["components"]["securitySchemes"]["HTTPBearer"]
@@ -171,6 +279,40 @@ def test_openapi_documents_metrics_security() -> None:
 
     assert {"HTTPBearer": []} in metrics_security
     assert {"HTTPBearer": []} in live_feed_security
+
+
+def test_metrics_summary_documents_window_defaults() -> None:
+    schema = client.get("/openapi.json").json()
+    parameters = schema["paths"]["/metrics"]["get"]["parameters"]
+
+    sample_limit_param = next(
+        item for item in parameters if item["name"] == "sample_limit"
+    )
+    assert sample_limit_param["schema"]["default"] == 250
+    assert "summarising metrics" in sample_limit_param["description"]
+
+    window_param = next(item for item in parameters if item["name"] == "window_seconds")
+    assert window_param["schema"].get("default") is None
+    assert "Defaults to no time limit" in window_param["description"]
+
+
+def test_metrics_summary_endpoint_respects_query_parameters() -> None:
+    engine = dashboard_module.get_engine()
+    samples = list(engine.stream_render_metrics())
+    latest = samples[-1]
+    cutoff = latest.timestamp - timedelta(minutes=5)
+    expected = [sample for sample in samples if sample.timestamp >= cutoff][-2:]
+
+    response = client.get(
+        "/metrics",
+        params={"sample_limit": 2, "window_seconds": 300},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["total_samples"] == len(expected)
+    assert payload["latest_sample"]["timestamp"] == expected[-1].timestamp.isoformat()
 
 
 def test_metrics_websocket_stream() -> None:

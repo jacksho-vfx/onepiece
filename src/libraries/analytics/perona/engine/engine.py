@@ -146,24 +146,34 @@ class PeronaEngine:
             warnings=tuple(warning_messages),
         )
 
+    def latest_render_metric(self) -> RenderMetric | None:
+        """Return the most recent render metric when available."""
+
+        if not self._render_log:
+            return None
+        return self._render_log[-1]
+
     def stream_render_metrics(
         self,
         limit: int | None = None,
         *,
         sequence: str | None = None,
         shot_id: str | None = None,
+        since: datetime | None = None,
     ) -> Iterable[RenderMetric]:
         """Return recent render metrics filtered by the supplied identifiers."""
+
+        if limit is not None and limit <= 0:
+            return
 
         filtered: list[RenderMetric] = [
             sample
             for sample in self._render_log
             if (sequence is None or sample.sequence == sequence)
             and (shot_id is None or sample.shot_id == shot_id)
+            and (since is None or sample.timestamp >= since)
         ]
         if limit is not None:
-            if limit <= 0:
-                return
             filtered = filtered[-limit:]
         for sample in filtered:
             yield sample
