@@ -206,13 +206,21 @@ class _TextureCache:
 _TEXTURE_CACHE = _TextureCache()
 
 
+def _object_is_visible(obj: object, frame_index: int) -> bool:
+    visibility_check = getattr(obj, "is_visible", None)
+    if visibility_check is None:
+        return True
+    return bool(cast(Callable[[int], object], visibility_check)(frame_index))
+
+
 def _render_frame_static(
     scene: Scene, index: int, samples: int, filter_name: str
 ) -> Frame:
     if samples == 1:
         frame = Frame.blank(index, scene.width, scene.height, scene.background)
         for obj in scene.objects:
-            obj.render(frame, index)
+            if _object_is_visible(obj, index):
+                obj.render(frame, index)
         return frame
 
     scaled_width = scene.width * samples
@@ -221,7 +229,8 @@ def _render_frame_static(
         index, scaled_width, scaled_height, scene.background
     )
     for obj in scene.objects:
-        obj.render(supersampled_frame, index, scale=samples)
+        if _object_is_visible(obj, index):
+            obj.render(supersampled_frame, index, scale=samples)
 
     return supersampled_frame.downsample(samples, filter_name=filter_name)
 
@@ -495,6 +504,14 @@ class Keyframe:
 
 
 @dataclass(slots=True)
+class VisibilityKeyframe:
+    """Represents a visibility change at a given frame."""
+
+    frame: int
+    visible: bool
+
+
+@dataclass(slots=True)
 class Animation:
     """Simple linear animation track for two-dimensional positions."""
 
@@ -662,10 +679,15 @@ class SceneObject:
     points: tuple[tuple[float, float], ...] = ()
     stroke_color: Color | None = None
     stroke_width: float | None = None
+    start_frame: int | None = None
+    end_frame: int | None = None
+    visibility: tuple[VisibilityKeyframe, ...] = ()
     animation: Animation | None = None
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "SceneObject":
+    def from_dict(
+        cls, payload: dict[str, object], *, frame_count: int | None = None
+    ) -> "SceneObject":
         """Create an object from a dictionary description."""
 
         required = {"id", "type", "color", "position"}
@@ -704,6 +726,32 @@ class SceneObject:
         position = position_x, position_y
 
         rotation = _parse_rotation_value(payload.get("rotation"), default=0.0)
+
+        start_frame_value = payload.get("start_frame")
+        start_frame = None
+        if start_frame_value is not None:
+            try:
+                start_frame_parsed = int(cast(int | float | str, start_frame_value))
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Object start_frame must be an integer") from exc
+            if start_frame_parsed < 0:
+                raise SceneError("Object start_frame must be zero or greater")
+            start_frame = start_frame_parsed
+
+        end_frame_value = payload.get("end_frame")
+        end_frame = None
+        if end_frame_value is not None:
+            try:
+                end_frame_parsed = int(cast(int | float | str, end_frame_value))
+            except (TypeError, ValueError) as exc:
+                raise SceneError("Object end_frame must be an integer") from exc
+            if end_frame_parsed < 0:
+                raise SceneError("Object end_frame must be zero or greater")
+            end_frame = end_frame_parsed
+
+        if start_frame is not None and end_frame is not None:
+            if start_frame > end_frame:
+                raise SceneError("Object start_frame cannot be greater than end_frame")
 
         size: tuple[float, float] = (0.0, 0.0)
         size_data = payload.get("size")
@@ -777,6 +825,66 @@ class SceneObject:
                 )
 
             points = tuple(parsed_points)
+
+        visibility: list[VisibilityKeyframe] = []
+        visibility_data = payload.get("visibility")
+        if visibility_data is not None:
+            if not isinstance(visibility_data, Iterable):
+                raise SceneError("Object visibility must be an iterable of mappings")
+
+            for index, entry in enumerate(visibility_data):
+                if not isinstance(entry, Mapping):
+                    raise SceneError(
+                        f"Object visibility entry at index {index} must be a mapping"
+                    )
+                if "frame" not in entry:
+                    raise SceneError(
+                        f"Object visibility entry at index {index} is missing a 'frame' value"
+                    )
+                if "visible" not in entry:
+                    raise SceneError(
+                        f"Object visibility entry at index {index} is missing a 'visible' value"
+                    )
+
+                try:
+                    frame_value = int(entry["frame"])
+                except (TypeError, ValueError) as exc:
+                    raise SceneError(
+                        f"Object visibility entry at index {index} has an invalid frame value: {entry['frame']!r}"
+                    ) from exc
+
+                if frame_value < 0:
+                    raise SceneError(
+                        f"Object visibility entry at index {index} must have a non-negative frame number"
+                    )
+
+                visible_value = entry["visible"]
+                if not isinstance(visible_value, bool):
+                    raise SceneError(
+                        f"Object visibility entry at index {index} must set 'visible' to a boolean"
+                    )
+
+                visibility.append(
+                    VisibilityKeyframe(frame=frame_value, visible=visible_value)
+                )
+
+            if not visibility:
+                raise SceneError("Object visibility must contain at least one entry")
+
+            sorted_visibility = sorted(visibility, key=lambda keyframe: keyframe.frame)
+
+            if visibility != sorted_visibility:
+                raise SceneError(
+                    "Object visibility keyframes must be ordered by increasing frame"
+                )
+
+            for earlier_visibility, later_visibility in pairwise(sorted_visibility):
+                if later_visibility.frame == earlier_visibility.frame:
+                    raise SceneError(
+                        "Object visibility keyframes must use unique frame numbers"
+                    )
+
+            visibility = sorted_visibility
 
         stroke_color: Color | None = None
         stroke_width: float | None = None
@@ -889,8 +997,8 @@ class SceneObject:
                     "Object animation keyframes must be ordered by increasing frame"
                 )
 
-            for earlier, later in pairwise(sorted_keyframes):
-                if later.frame == earlier.frame:
+            for previous_keyframe, next_keyframe in pairwise(sorted_keyframes):
+                if next_keyframe.frame == previous_keyframe.frame:
                     raise SceneError(
                         "Object animation keyframes must use unique frame numbers"
                     )
@@ -898,6 +1006,22 @@ class SceneObject:
             animation = Animation(
                 keyframes=sorted_keyframes, default_easing=default_easing
             )
+
+        if frame_count is not None:
+            upper = frame_count - 1
+            if start_frame is not None and start_frame > upper:
+                raise SceneError(
+                    "Object start_frame must be within the scene's frame range"
+                )
+            if end_frame is not None and end_frame > upper:
+                raise SceneError(
+                    "Object end_frame must be within the scene's frame range"
+                )
+            for visibility_keyframe in visibility:
+                if visibility_keyframe.frame > upper:
+                    raise SceneError(
+                        "Object visibility keyframes must be within the scene's frame range"
+                    )
 
         return cls(
             id=str(payload["id"]),
@@ -911,8 +1035,32 @@ class SceneObject:
             points=points,
             stroke_color=stroke_color,
             stroke_width=stroke_width,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            visibility=tuple(visibility),
             animation=animation,
         )
+
+    def is_visible(self, frame_index: int) -> bool:
+        """Return whether the object should be drawn for ``frame_index``."""
+
+        if self.start_frame is not None and frame_index < self.start_frame:
+            return False
+
+        if self.end_frame is not None and frame_index > self.end_frame:
+            return False
+
+        if not self.visibility:
+            return True
+
+        if frame_index < self.visibility[0].frame:
+            return False
+
+        for current, next_frame in pairwise(self.visibility):
+            if current.frame <= frame_index < next_frame.frame:
+                return current.visible
+
+        return self.visibility[-1].visible
 
     def position_at(self, frame: int) -> tuple[float, float]:
         """Return the position of the object for ``frame``."""
@@ -1283,7 +1431,7 @@ class Scene:
         for index, obj in enumerate(objects_data):
             if not isinstance(obj, Mapping):
                 raise SceneError(f"Scene object at index {index} must be a mapping")
-            scene_object = SceneObject.from_dict(dict(obj))
+            scene_object = SceneObject.from_dict(dict(obj), frame_count=frame_count)
             if scene_object.id in seen_ids:
                 raise SceneError(
                     f"Scene object ids must be unique (duplicate id {scene_object.id!r})"
