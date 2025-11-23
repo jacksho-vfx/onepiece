@@ -2054,26 +2054,32 @@ class AnimationWriter:
         """Write the frames to ``destination`` as an animated GIF."""
 
         first, rest = self._validate_and_split_frames()
-        images = [first.to_image(mode="RGBA")]
-        images.extend(frame.to_image(mode="RGBA") for frame in rest)
+        first_image = first.to_image(mode="RGBA")
+        frame_count = 1
+
+        def _image_stream() -> Iterator[Any]:
+            nonlocal frame_count
+            for frame in rest:
+                frame_count += 1
+                yield frame.to_image(mode="RGBA")
+
         duration = (
             duration_ms
             if duration_ms is not None
             else max(int(round(1000 / self.fps)), 1)
         )
-        first_image, *remaining = images
         first_image.save(
             destination,
             format="GIF",
             save_all=True,
-            append_images=remaining,
+            append_images=_image_stream(),
             duration=duration,
             loop=loop,
             disposal=2,
             optimize=optimize,
         )
 
-        return len(images)
+        return frame_count
 
     def write_mp4(
         self,
