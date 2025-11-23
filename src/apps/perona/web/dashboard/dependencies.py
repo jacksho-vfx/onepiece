@@ -27,6 +27,10 @@ _metrics_token_env = "PERONA_METRICS_TOKEN"
 _metrics_max_batch_env = "PERONA_METRICS_MAX_BATCH"
 _metrics_bearer_scheme = HTTPBearer(auto_error=False)
 _default_metrics_max_batch = 500
+_metrics_max_bytes_env = "PERONA_METRICS_MAX_BYTES"
+_metrics_max_files_env = "PERONA_METRICS_MAX_FILES"
+_default_metrics_max_bytes = 5 * 1024 * 1024  # 5 MiB
+_default_metrics_max_files = 5
 
 
 class RenderMetricBatch(BaseModel):
@@ -45,15 +49,52 @@ class RenderMetricBatch(BaseModel):
 
 
 class RenderMetricStore:
-    """Simple append-only store that persists render metrics to disk."""
+    """Append-only NDJSON store that supports rotation and size caps.
 
-    def __init__(self, path: Path):
+    The store keeps ``max_files`` rolling copies when rotation is enabled,
+    controlled by ``PERONA_METRICS_MAX_BYTES`` (default ``5 MiB``) and
+    ``PERONA_METRICS_MAX_FILES`` (default ``5``). Set ``max_files`` to ``1``
+    to truncate the active file whenever the size threshold is exceeded.
+    """
+
+    def __init__(self, path: Path, max_bytes: int | None = None, max_files: int = 1):
         self._path = path
+        self._max_bytes = max_bytes
+        self._max_files = max(1, max_files)
         self._lock = Lock()
 
     @property
     def path(self) -> Path:
         return self._path
+
+    def _rotate_if_needed(self, incoming_bytes: int) -> None:
+        if not self._max_bytes:
+            return
+
+        try:
+            current_size = self._path.stat().st_size
+        except FileNotFoundError:
+            current_size = 0
+
+        if current_size + incoming_bytes <= self._max_bytes:
+            return
+
+        if self._max_files > 1:
+            self._roll_files()
+        elif self._path.exists():
+            self._path.unlink()
+
+    def _roll_files(self) -> None:
+        last_index = self._max_files - 1
+        oldest = Path(f"{self._path}.{last_index}")
+        if oldest.exists():
+            oldest.unlink()
+
+        for idx in range(last_index - 1, -1, -1):
+            source = self._path if idx == 0 else Path(f"{self._path}.{idx}")
+            target = Path(f"{self._path}.{idx + 1}")
+            if source.exists():
+                source.replace(target)
 
     def persist(self, records: Sequence[Mapping[str, Any]]) -> None:
         """Append metrics to the backing store as NDJSON."""
@@ -66,9 +107,11 @@ class RenderMetricStore:
             for record in records
         ]
         payload = "\n".join(lines) + "\n"
+        payload_bytes = payload.encode("utf-8")
 
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._rotate_if_needed(len(payload_bytes))
             with self._path.open("a", encoding="utf-8") as handle:
                 handle.write(payload)
 
@@ -85,7 +128,53 @@ def _resolve_metrics_store_path() -> Path:
     return base_dir / "perona" / "render-metrics.ndjson"
 
 
-_metrics_store = RenderMetricStore(_resolve_metrics_store_path())
+def _parse_positive_int(
+    env_name: str, *, default: int, minimum: int, parameter_name: str
+) -> int:
+    raw_value = os.getenv(env_name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Invalid {parameter_name} configuration.",
+        ) from exc
+
+    if value < minimum:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{parameter_name} must be at least {minimum}.",
+        )
+
+    return value
+
+
+def _resolve_metrics_max_bytes() -> int:
+    return _parse_positive_int(
+        _metrics_max_bytes_env,
+        default=_default_metrics_max_bytes,
+        minimum=1,
+        parameter_name="metrics max bytes",
+    )
+
+
+def _resolve_metrics_max_files() -> int:
+    return _parse_positive_int(
+        _metrics_max_files_env,
+        default=_default_metrics_max_files,
+        minimum=1,
+        parameter_name="metrics file retention",
+    )
+
+
+_metrics_store = RenderMetricStore(
+    _resolve_metrics_store_path(),
+    max_bytes=_resolve_metrics_max_bytes(),
+    max_files=_resolve_metrics_max_files(),
+)
 
 
 def _expected_metrics_token() -> str:
