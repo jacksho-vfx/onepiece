@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import enum
 import itertools
 import math
+import json
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
@@ -62,6 +63,198 @@ class ColorSpace(enum.Enum):
                 options = ", ".join(sorted(member.value for member in cls))
                 raise SceneError(f"Colour space must be one of: {options}") from exc
         raise SceneError("Colour space must be provided as a string identifier")
+
+
+class _OcioMatrixTransform:
+    """Simple 3x3 matrix transform used for OCIO-style conversions."""
+
+    def __init__(self, matrix: Sequence[Sequence[float]]):
+        numpy = _require_numpy()
+        array = numpy.asarray(matrix, dtype=float)
+        if array.shape != (3, 3):
+            raise SceneError("OCIO matrix transforms must be 3x3 arrays")
+        self._matrix = array
+
+    def apply_rgb(self, rgb: Any) -> Any:
+        numpy = _require_numpy()
+        vector = numpy.asarray(rgb, dtype=float)
+        return vector @ self._matrix.T
+
+
+class _OcioColorSpace:
+    """Container for OCIO colour space transforms."""
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        to_working: Sequence[Sequence[float]],
+        from_working: Sequence[Sequence[float]],
+    ) -> None:
+        self.name = name
+        self.to_working = _OcioMatrixTransform(to_working)
+        self.from_working = _OcioMatrixTransform(from_working)
+
+
+class OcioConfig:
+    """Lightweight OCIO-inspired config supporting matrix-based transforms."""
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        display: str | None = None,
+        view: str | None = None,
+    ) -> None:
+        try:
+            contents = path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise SceneError(f"OCIO config '{path}' was not found") from exc
+        except PermissionError as exc:
+            raise SceneError(f"OCIO config '{path}' could not be read: {exc}") from exc
+        except OSError as exc:  # pragma: no cover - defensive
+            raise SceneError(f"OCIO config '{path}' could not be read: {exc}") from exc
+
+        try:
+            payload = json.loads(contents)
+        except json.JSONDecodeError as exc:
+            raise SceneError(f"OCIO config '{path}' is not valid JSON") from exc
+
+        working_space_value = payload.get("working_space")
+        if not isinstance(working_space_value, str) or not working_space_value.strip():
+            raise SceneError("OCIO config must define a non-empty 'working_space'")
+        self.working_space = working_space_value.strip().lower()
+
+        color_spaces_payload = payload.get("color_spaces")
+        if not isinstance(color_spaces_payload, Mapping):
+            raise SceneError("OCIO config must include a 'color_spaces' mapping")
+
+        self.color_spaces: dict[str, _OcioColorSpace] = {}
+        for name, details in color_spaces_payload.items():
+            if not isinstance(name, str):
+                raise SceneError("OCIO color space names must be strings")
+            if not isinstance(details, Mapping):
+                raise SceneError("OCIO color space entries must be mappings")
+            to_working = details.get("to_working")
+            from_working = details.get("from_working")
+            if to_working is None or from_working is None:
+                raise SceneError(
+                    f"OCIO color space '{name}' must define to_working and from_working"
+                )
+            self.color_spaces[name.lower()] = _OcioColorSpace(
+                name=name,
+                to_working=cast(Sequence[Sequence[float]], to_working),
+                from_working=cast(Sequence[Sequence[float]], from_working),
+            )
+
+        if self.working_space not in self.color_spaces:
+            raise SceneError(
+                f"OCIO working_space '{self.working_space}' is not defined in color_spaces"
+            )
+
+        displays_payload = payload.get("displays")
+        if not isinstance(displays_payload, Mapping):
+            raise SceneError("OCIO config must include a 'displays' mapping")
+        self.displays: dict[str, dict[str, str]] = {}
+        for display_name, views in displays_payload.items():
+            if not isinstance(display_name, str):
+                raise SceneError("OCIO display names must be strings")
+            if not isinstance(views, Mapping):
+                raise SceneError(
+                    "OCIO display entries must map view names to color spaces"
+                )
+            normalized_views: dict[str, str] = {}
+            for view_name, colorspace_name in views.items():
+                if not isinstance(view_name, str) or not isinstance(
+                    colorspace_name, str
+                ):
+                    raise SceneError("OCIO display views must be string mappings")
+                normalized_views[view_name.strip().lower()] = (
+                    colorspace_name.strip().lower()
+                )
+            self.displays[display_name.strip().lower()] = normalized_views
+
+        if not self.displays:
+            raise SceneError("OCIO config must define at least one display")
+
+        self.display = self._resolve_display(display)
+        self.view = self._resolve_view(view)
+        self.output_color_space = self._resolve_output_space()
+
+    def _resolve_display(self, display: str | None) -> str:
+        if display is None:
+            return next(iter(self.displays))
+        normalized = display.strip().lower()
+        if normalized not in self.displays:
+            available = ", ".join(sorted(self.displays))
+            raise SceneError(
+                f"OCIO display '{display}' was not found in config (available: {available})"
+            )
+        return normalized
+
+    def _resolve_view(self, view: str | None) -> str:
+        display_views = self.displays[self.display]
+        if view is None:
+            return next(iter(display_views))
+        normalized = view.strip().lower()
+        if normalized not in display_views:
+            raise SceneError(
+                f"OCIO view '{view}' was not found for display '{self.display}'"
+            )
+        return normalized
+
+    def _resolve_output_space(self) -> str:
+        output_space = self.displays[self.display].get(self.view)
+        if output_space is None:
+            raise SceneError(
+                f"OCIO display '{self.display}' view '{self.view}' has no target color space"
+            )
+        if output_space not in self.color_spaces:
+            available = ", ".join(sorted(self.color_spaces))
+            raise SceneError(
+                f"OCIO view '{self.view}' on display '{self.display}' references unknown "
+                f"color space '{output_space}'. Available spaces: {available}"
+            )
+        return output_space
+
+    def _clamp_array(self, values: Any) -> Any:
+        numpy = _require_numpy()
+        return numpy.clip(values, 0.0, 1.0)
+
+    def _space_for_color(self, color_space: ColorSpace) -> str:
+        if color_space is ColorSpace.SRGB:
+            space = "srgb"
+        else:
+            space = self.working_space
+        if space not in self.color_spaces:
+            available = ", ".join(sorted(self.color_spaces))
+            raise SceneError(
+                f"OCIO config does not define a color space for '{color_space.value}'. "
+                f"Available: {available}"
+            )
+        return space
+
+    def to_working(self, color: Color, *, source_space: ColorSpace) -> Color:
+        numpy = _require_numpy()
+        space_name = self._space_for_color(source_space)
+        transform = self.color_spaces[space_name].to_working
+        rgb = numpy.asarray(color[:3], dtype=float) / 255.0
+        transformed = transform.apply_rgb(rgb)
+        clamped = self._clamp_array(transformed)
+        alpha = color[3] if len(color) >= 4 else 255
+        r, g, b = (int(round(component * 255.0)) for component in clamped)
+        if len(color) >= 4:
+            return r, g, b, alpha
+        return r, g, b
+
+    def apply_output_transform(self, buffer: Any) -> Any:
+        if self.output_color_space == self.working_space:
+            return self._clamp_array(buffer)
+        transform = self.color_spaces[self.output_color_space].from_working
+        rgb = buffer[:, :, :3]
+        transformed = transform.apply_rgb(rgb)
+        buffer[:, :, :3] = self._clamp_array(transformed)
+        return buffer
 
 
 def _srgb_to_linear_component(component: int) -> float:
@@ -1802,6 +1995,7 @@ class Frame:
     color_space: ColorSpace = ColorSpace.SRGB
     has_alpha: bool | None = field(default=None, repr=False)
     guides: list[list[Color]] | None = None
+    color_manager: OcioConfig | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.has_alpha is None:
@@ -1827,6 +2021,7 @@ class Frame:
         color: Color,
         *,
         color_space: ColorSpace = ColorSpace.SRGB,
+        color_manager: OcioConfig | None = None,
     ) -> "Frame":
         """Create a blank frame filled with ``color``."""
 
@@ -1839,6 +2034,7 @@ class Frame:
             color_space=color_space,
             has_alpha=len(color) >= 4,
             guides=None,
+            color_manager=color_manager,
         )
 
     def _has_alpha(self) -> bool:
@@ -1934,11 +2130,12 @@ class Frame:
                 pixels=pixels,
                 color_space=self.color_space,
                 has_alpha=include_alpha,
+                color_manager=self.color_manager,
             )
 
         pillow = _require_pillow()
         mode = "RGBA" if include_alpha else "RGB"
-        image = self.to_image(mode=mode)
+        image = self.to_image(mode=mode, color_manager=self.color_manager)
         from PIL import ImageFilter as PILImageFilter  # imported lazily
 
         radius = max(factor / 2.0, 0.0)
@@ -1963,6 +2160,7 @@ class Frame:
             pixels=resized_pixels,
             color_space=self.color_space,
             has_alpha=include_alpha,
+            color_manager=self.color_manager,
         )
 
     def save_ppm(self, destination: Path) -> None:
@@ -1970,11 +2168,28 @@ class Frame:
 
         with destination.open("w", encoding="ascii") as stream:
             stream.write(f"P3\n{self.width} {self.height}\n255\n")
-            for row in self.pixels:
-                values = " ".join("{} {} {}".format(*pixel[:3]) for pixel in row)
-                stream.write(values + "\n")
+            if self.color_manager is None:
+                for row in self.pixels:
+                    values = " ".join("{} {} {}".format(*pixel[:3]) for pixel in row)
+                    stream.write(values + "\n")
+                return
 
-    def to_image(self, *, mode: str | None = None) -> PILImage.Image:
+            image = self.to_image(mode="RGB", color_manager=self.color_manager)
+            data = list(image.getdata())
+            iterator = iter(data)
+            for _ in range(self.height):
+                row_values = []
+                for _ in range(self.width):
+                    r, g, b = next(iterator)
+                    row_values.append(f"{r} {g} {b}")
+                stream.write(" ".join(row_values) + "\n")
+
+    def to_image(
+        self,
+        *,
+        mode: str | None = None,
+        color_manager: OcioConfig | None = None,
+    ) -> PILImage.Image:
         """Return the frame as a Pillow :class:`~PIL.Image.Image` instance."""
 
         pillow = _require_pillow()
@@ -1983,13 +2198,35 @@ class Frame:
         if resolved_mode not in {"RGB", "RGBA"}:  # pragma: no cover - defensive
             raise ValueError(f"Unsupported image mode: {resolved_mode}")
 
-        data = self.to_bytes(mode=resolved_mode)
-        image: PILImage.Image = pillow.frombytes(
-            resolved_mode, (self.width, self.height), data
-        )
-        return image
+        if color_manager is None:
+            color_manager = self.color_manager
 
-    def _float_buffer(self, *, dtype: Any = None) -> Any:
+        if color_manager is None:
+            data = self.to_bytes(mode=resolved_mode)
+            pil_image: PILImage.Image = pillow.frombytes(
+                resolved_mode, (self.width, self.height), data
+            )
+            return pil_image
+
+        numpy = _require_numpy()
+        buffer = self._float_buffer(
+            color_manager=color_manager, apply_output_transform=True
+        )
+        scaled = numpy.clip(buffer * 255.0, 0.0, 255.0).astype(numpy.uint8)
+        include_alpha = resolved_mode == "RGBA"
+        channels = scaled[:, :, : (4 if include_alpha else 3)]
+        transformed_image: PILImage.Image = pillow.fromarray(
+            channels, mode=resolved_mode
+        )
+        return transformed_image
+
+    def _float_buffer(
+        self,
+        *,
+        dtype: Any = None,
+        color_manager: OcioConfig | None = None,
+        apply_output_transform: bool = False,
+    ) -> Any:
         """Return a floating-point NumPy buffer of RGBA channels."""
 
         numpy = _require_numpy()
@@ -2003,6 +2240,9 @@ class Frame:
                 buffer[y, x, 1] = _decode_component(g, self.color_space)
                 buffer[y, x, 2] = _decode_component(b, self.color_space)
                 buffer[y, x, 3] = max(0.0, min(255.0, float(a))) / 255.0
+
+        if apply_output_transform and color_manager is not None:
+            buffer = color_manager.apply_output_transform(buffer)
 
         return buffer
 
@@ -2033,7 +2273,11 @@ class Frame:
         )
         dtype = numpy.float32 if normalized_bit_depth == "float32" else numpy.float16
 
-        buffer = self._float_buffer(dtype=dtype)
+        buffer = self._float_buffer(
+            dtype=dtype,
+            color_manager=self.color_manager,
+            apply_output_transform=True,
+        )
 
         header = openexr.Header(self.width, self.height)
         channels: dict[str, Any] = {}
@@ -2084,7 +2328,11 @@ class Frame:
         normalized_bit_depth = bit_depth.lower()
         numpy = _require_numpy()
         dtype = numpy.float32 if normalized_bit_depth == "float32" else numpy.float16
-        buffer = self._float_buffer(dtype=dtype)
+        buffer = self._float_buffer(
+            dtype=dtype,
+            color_manager=self.color_manager,
+            apply_output_transform=True,
+        )
         writer = _require_imageio()
         writer.imwrite(destination, buffer, extension=".dpx")
 
@@ -2109,6 +2357,9 @@ class Renderer:
         samples: int = 1,
         filter_name: str = "box",
         guides: GuidesOverlay | None = None,
+        ocio_config: Path | None = None,
+        ocio_display: str | None = None,
+        ocio_view: str | None = None,
     ):
         self.scene = scene
         if samples <= 0:
@@ -2119,6 +2370,67 @@ class Renderer:
             raise SceneError("Downsample filter must be 'box' or 'gaussian'")
         self.filter = normalized_filter
         self.guides = guides
+        self._ocio_config = (
+            OcioConfig(path=ocio_config, display=ocio_display, view=ocio_view)
+            if ocio_config is not None
+            else None
+        )
+        if self._ocio_config is not None:
+            self._apply_ocio_transforms()
+
+    def _attach_color_manager(self, frame: Frame) -> Frame:
+        if self._ocio_config is not None:
+            frame.color_manager = self._ocio_config
+        return frame
+
+    def _convert_color(self, color: Color, *, source_space: ColorSpace) -> Color:
+        if self._ocio_config is None:
+            return color
+        return self._ocio_config.to_working(color, source_space=source_space)
+
+    def _convert_fill_colors(self, fill: Fill, *, source_space: ColorSpace) -> None:
+        if isinstance(fill, SolidFill):
+            fill.color = self._convert_color(fill.color, source_space=source_space)
+        elif isinstance(fill, LinearGradientFill):
+            fill.start_color = self._convert_color(
+                fill.start_color, source_space=source_space
+            )
+            fill.end_color = self._convert_color(
+                fill.end_color, source_space=source_space
+            )
+        elif isinstance(fill, RadialGradientFill):
+            fill.inner_color = self._convert_color(
+                fill.inner_color, source_space=source_space
+            )
+            fill.outer_color = self._convert_color(
+                fill.outer_color, source_space=source_space
+            )
+
+    def _apply_ocio_transforms(self) -> None:
+        if self._ocio_config is None:
+            return
+
+        source_space = self.scene.color_space
+
+        def convert(value: Color) -> Color:
+            return self._convert_color(value, source_space=source_space)
+
+        self.scene.background = convert(self.scene.background)
+
+        for obj in self.scene.objects:
+            obj.color = convert(obj.color)
+            if obj.stroke_color is not None:
+                obj.stroke_color = convert(obj.stroke_color)
+            self._convert_fill_colors(obj.fill, source_space=source_space)
+            if obj.animation is not None:
+                for keyframe in obj.animation.keyframes:
+                    if keyframe.color is not None:
+                        keyframe.color = convert(keyframe.color)
+
+        if self.guides is not None:
+            self.guides.color = convert(self.guides.color)
+
+        self.scene.color_space = ColorSpace.LINEAR
 
     def render(
         self,
@@ -2157,9 +2469,10 @@ class Renderer:
 
         if workers is None or workers == 1 or len(frame_indices) <= 1:
             for index in frame_indices:
-                yield _render_frame_static(
+                frame = _render_frame_static(
                     self.scene, index, self.samples, self.filter, self.guides
                 )
+                yield self._attach_color_manager(frame)
             return
 
         executor_cls: type[Executor]
@@ -2187,7 +2500,7 @@ class Renderer:
             )
 
             for frame in results:
-                yield frame
+                yield self._attach_color_manager(frame)
 
 
 @dataclass(slots=True)

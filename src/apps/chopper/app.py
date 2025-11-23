@@ -327,6 +327,21 @@ def render(
         case_sensitive=False,
         help="Worker type to use when --workers is provided: process or thread.",
     ),
+    ocio_config: Path | None = typer.Option(
+        None,
+        "--ocio-config",
+        help=("Optional path to an OCIO-style JSON config defining colour transforms."),
+    ),
+    ocio_display: str | None = typer.Option(
+        None,
+        "--ocio-display",
+        help="Display name to use from the OCIO config when one is provided.",
+    ),
+    ocio_view: str | None = typer.Option(
+        None,
+        "--ocio-view",
+        help="View name to use from the OCIO config when one is provided.",
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
@@ -474,6 +489,21 @@ def qc_render(
         help="Colour space for interpreting inputs: srgb or linear.",
         case_sensitive=False,
     ),
+    ocio_config: Path | None = typer.Option(
+        None,
+        "--ocio-config",
+        help="Optional path to an OCIO-style JSON config defining colour transforms.",
+    ),
+    ocio_display: str | None = typer.Option(
+        None,
+        "--ocio-display",
+        help="Display name to use from the OCIO config when one is provided.",
+    ),
+    ocio_view: str | None = typer.Option(
+        None,
+        "--ocio-view",
+        help="View name to use from the OCIO config when one is provided.",
+    ),
 ) -> None:
     """Render a built-in QC scene without providing an input file."""
 
@@ -514,6 +544,9 @@ def qc_render(
                 worker_backend=worker_backend,
                 guides=guides_overlay,
                 color_space=color_space_choice,
+                ocio_config=ocio_config,
+                ocio_display=ocio_display,
+                ocio_view=ocio_view,
             )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc

@@ -254,6 +254,9 @@ def render_scene(
     color_space: ColorSpace | None = None,
     bit_depth: str = "half",
     layers: set[str] | None = None,
+    ocio_config: Path | None = None,
+    ocio_display: str | None = None,
+    ocio_view: str | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
@@ -282,7 +285,13 @@ def render_scene(
             )
     try:
         renderer = Renderer(
-            parsed_scene, samples=samples, filter_name=filter_name, guides=guides
+            parsed_scene,
+            samples=samples,
+            filter_name=filter_name,
+            guides=guides,
+            ocio_config=ocio_config,
+            ocio_display=ocio_display,
+            ocio_view=ocio_view,
         )
     except SceneError as exc:
         raise ChopperRenderError(str(exc)) from exc
