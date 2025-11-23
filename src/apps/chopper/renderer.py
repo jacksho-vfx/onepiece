@@ -20,6 +20,8 @@ except ImportError:  # pragma: no cover - handled lazily when export attempted
 if TYPE_CHECKING:
     import imageio.v3 as iio
     import numpy as np
+    import OpenEXR as _OpenEXR
+    import Imath as _Imath
 else:
     try:
         import imageio.v3 as iio
@@ -30,6 +32,16 @@ else:
         import numpy as np
     except ImportError:
         np = None  # type: ignore[assignment]
+
+    try:
+        import OpenEXR as _OpenEXR
+        import Imath as _Imath
+    except ImportError:  # pragma: no cover - handled lazily when export attempted
+        _OpenEXR = None  # type: ignore[assignment]
+        _Imath = None  # type: ignore[assignment]
+
+OpenEXR = cast("Any", _OpenEXR)
+Imath = cast("Any", _Imath)
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
@@ -458,6 +470,7 @@ def _render_frame_static(
     filter_name: str,
     guides: GuidesOverlay | None,
 ) -> Frame:
+    guides_frame: Frame | None = None
     if samples == 1:
         frame = Frame.blank(
             index,
@@ -470,7 +483,16 @@ def _render_frame_static(
             if _object_is_visible(obj, index):
                 obj.render(frame, index)
         if guides:
-            guides.draw(frame, scale=1)
+            guides_frame = Frame.blank(
+                index,
+                scene.width,
+                scene.height,
+                (0, 0, 0, 0),
+                color_space=scene.color_space,
+            )
+            guides.draw(guides_frame, scale=1)
+            frame.apply_overlay(guides_frame)
+            frame.guides = guides_frame.pixels
         return frame
 
     scaled_width = scene.width * samples
@@ -487,9 +509,21 @@ def _render_frame_static(
             obj.render(supersampled_frame, index, scale=samples)
 
     if guides:
-        guides.draw(supersampled_frame, scale=samples)
+        guides_frame = Frame.blank(
+            index,
+            scaled_width,
+            scaled_height,
+            (0, 0, 0, 0),
+            color_space=scene.color_space,
+        )
+        guides.draw(guides_frame, scale=samples)
+        supersampled_frame.apply_overlay(guides_frame)
+        guides_frame = guides_frame.downsample(samples, filter_name=filter_name)
 
-    return supersampled_frame.downsample(samples, filter_name=filter_name)
+    downsampled = supersampled_frame.downsample(samples, filter_name=filter_name)
+    if guides_frame is not None:
+        downsampled.guides = guides_frame.pixels
+    return downsampled
 
 
 def _validate_unit_point(
@@ -698,6 +732,19 @@ def _require_numpy() -> Any:
             "NumPy is required for animation export. Install the 'onepiece[chopper-anim]' extra."
         )
     return np
+
+
+def _require_openexr() -> tuple[Any, Any]:
+    """Return OpenEXR + Imath modules or raise a helpful error."""
+
+    if (
+        OpenEXR is None or Imath is None
+    ):  # pragma: no cover - exercised in integration tests
+        raise RuntimeError(
+            "OpenEXR is required for EXR export. Install the 'onepiece[chopper-exr]' extra."
+        )
+
+    return OpenEXR, Imath
 
 
 class SceneError(ValueError):
@@ -1754,6 +1801,7 @@ class Frame:
     pixels: list[list[Color]]
     color_space: ColorSpace = ColorSpace.SRGB
     has_alpha: bool | None = field(default=None, repr=False)
+    guides: list[list[Color]] | None = None
 
     def __post_init__(self) -> None:
         if self.has_alpha is None:
@@ -1790,6 +1838,7 @@ class Frame:
             pixels=pixels,
             color_space=color_space,
             has_alpha=len(color) >= 4,
+            guides=None,
         )
 
     def _has_alpha(self) -> bool:
@@ -1815,6 +1864,24 @@ class Frame:
                     alpha = pixel[3] if len(pixel) == 4 else 255
                     raw.append(alpha)
         return bytes(raw)
+
+    def apply_overlay(self, overlay: "Frame") -> None:
+        """Composite ``overlay`` onto this frame in-place."""
+
+        if overlay.width != self.width or overlay.height != self.height:
+            raise ValueError("Overlay dimensions must match the base frame")
+
+        for y, row in enumerate(overlay.pixels):
+            target_row = self.pixels[y]
+            for x, pixel in enumerate(row):
+                alpha = pixel[3] if len(pixel) >= 4 else 255
+                if alpha == 0:
+                    continue
+                blended = _blend_colors(
+                    target_row[x], pixel, color_space=self.color_space
+                )
+                target_row[x] = blended
+                self._update_alpha_flag(blended)
 
     def downsample(self, factor: int, *, filter_name: str = "box") -> "Frame":
         """Return a version of the frame reduced by ``factor`` using ``filter``."""
@@ -1921,6 +1988,105 @@ class Frame:
             resolved_mode, (self.width, self.height), data
         )
         return image
+
+    def _float_buffer(self, *, dtype: Any = None) -> Any:
+        """Return a floating-point NumPy buffer of RGBA channels."""
+
+        numpy = _require_numpy()
+        buffer = numpy.zeros((self.height, self.width, 4), dtype=dtype or numpy.float32)
+
+        for y, row in enumerate(self.pixels):
+            for x, pixel in enumerate(row):
+                r, g, b = pixel[:3]
+                a = pixel[3] if len(pixel) >= 4 else 255
+                buffer[y, x, 0] = _decode_component(r, self.color_space)
+                buffer[y, x, 1] = _decode_component(g, self.color_space)
+                buffer[y, x, 2] = _decode_component(b, self.color_space)
+                buffer[y, x, 3] = max(0.0, min(255.0, float(a))) / 255.0
+
+        return buffer
+
+    def save_exr(
+        self,
+        destination: Path,
+        *,
+        bit_depth: str = "half",
+        layers: set[str] | None = None,
+    ) -> None:
+        """Write the frame to ``destination`` as an OpenEXR file."""
+
+        openexr, imath = _require_openexr()
+        numpy = _require_numpy()
+
+        normalized_layers = {
+            layer.lower() for layer in (layers or {"beauty", "matte", "guides"})
+        }
+        allowed_layers = {"beauty", "matte", "guides"}
+        if invalid := normalized_layers - allowed_layers:
+            raise ValueError(f"Unsupported EXR layers requested: {sorted(invalid)}")
+
+        normalized_bit_depth = bit_depth.lower()
+        pixel_type = imath.PixelType(
+            imath.PixelType.FLOAT
+            if normalized_bit_depth == "float32"
+            else imath.PixelType.HALF
+        )
+        dtype = numpy.float32 if normalized_bit_depth == "float32" else numpy.float16
+
+        buffer = self._float_buffer(dtype=dtype)
+
+        header = openexr.Header(self.width, self.height)
+        channels: dict[str, Any] = {}
+        data: dict[str, bytes] = {}
+
+        def _add_channel(name: str, array: Any) -> None:
+            channels[name] = imath.Channel(pixel_type)
+            data[name] = array.astype(dtype).tobytes()
+
+        if "beauty" in normalized_layers:
+            _add_channel("beauty.R", buffer[:, :, 0])
+            _add_channel("beauty.G", buffer[:, :, 1])
+            _add_channel("beauty.B", buffer[:, :, 2])
+            _add_channel("beauty.A", buffer[:, :, 3])
+
+        if "matte" in normalized_layers:
+            _add_channel("matte.A", buffer[:, :, 3])
+
+        if "guides" in normalized_layers and self.guides is not None:
+            guides_frame = Frame(
+                index=self.index,
+                width=self.width,
+                height=self.height,
+                pixels=self.guides,
+                color_space=self.color_space,
+                has_alpha=True,
+            )
+            guides_buffer = guides_frame._float_buffer(dtype=dtype)
+            _add_channel("guides.R", guides_buffer[:, :, 0])
+            _add_channel("guides.G", guides_buffer[:, :, 1])
+            _add_channel("guides.B", guides_buffer[:, :, 2])
+            _add_channel("guides.A", guides_buffer[:, :, 3])
+
+        header["channels"] = channels
+        with openexr.OutputFile(str(destination), header) as stream:
+            stream.writePixels(data)
+
+    def save_dpx(
+        self,
+        destination: Path,
+        *,
+        bit_depth: str = "half",
+        layers: set[str] | None = None,
+    ) -> None:
+        """Write the frame to ``destination`` as a DPX file."""
+
+        del layers  # DPX currently writes a flattened image
+        normalized_bit_depth = bit_depth.lower()
+        numpy = _require_numpy()
+        dtype = numpy.float32 if normalized_bit_depth == "float32" else numpy.float16
+        buffer = self._float_buffer(dtype=dtype)
+        writer = _require_imageio()
+        writer.imwrite(destination, buffer, extension=".dpx")
 
     def save_png(
         self, destination: Path, *, mode: str | None = None, **options: Any

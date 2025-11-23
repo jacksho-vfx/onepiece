@@ -233,8 +233,20 @@ def render(
         case_sensitive=False,
         help=(
             "Output format: 'ppm' for plain-text dumps, 'png' for per-frame PNGs,"
-            " or 'gif'/'mp4' for bundled animations."
+            " 'exr'/'dpx' for high-dynamic-range exports, or 'gif'/'mp4' for "
+            "bundled animations."
         ),
+    ),
+    bit_depth: str = typer.Option(
+        "half",
+        "--bit-depth",
+        case_sensitive=False,
+        help="EXR/DPX channel depth: half or float32.",
+    ),
+    layers: str = typer.Option(
+        "beauty,matte,guides",
+        "--layers",
+        help=("Comma-separated EXR/DPX layers to include (beauty, matte, guides)."),
     ),
     fps: int = typer.Option(
         24, help="Frames per second used when encoding animations."
@@ -323,6 +335,7 @@ def render(
     frame_list: list[int] | None = None
     color_space_choice: ColorSpace | None = None
     guides_overlay: GuidesOverlay | None = None
+    layer_set: set[str] | None = None
 
     if background is not None:
         try:
@@ -335,6 +348,16 @@ def render(
             frame_list = _parse_frame_list(frames)
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from exc
+
+    if layers:
+        raw_layers = [
+            part.strip().lower() for part in layers.split(",") if part.strip()
+        ]
+        if not raw_layers:
+            raise typer.BadParameter(
+                "At least one layer must be provided when using --layers"
+            )
+        layer_set = set(raw_layers)
 
     if color_space is not None:
         try:
@@ -369,6 +392,8 @@ def render(
             worker_backend=worker_backend,
             guides=guides_overlay,
             color_space=color_space_choice,
+            bit_depth=bit_depth,
+            layers=layer_set,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
