@@ -88,6 +88,19 @@ def _make_settings_summary() -> SettingsSummary:
     )
 
 
+class _StubSettingsEngine:
+    def __init__(
+        self,
+        baseline: CostModelInput,
+        *,
+        target_error_rate: float = 0.01,
+        pnl_baseline_cost: float = 100000.0,
+    ) -> None:
+        self.baseline_cost_input = baseline
+        self.target_error_rate = target_error_rate
+        self.pnl_baseline_cost = pnl_baseline_cost
+
+
 def test_settings_reload_adds_default_scheme_for_explicit_host(
     mocker: pytest_mock.MockerFixture,
 ) -> None:
@@ -133,6 +146,58 @@ def test_settings_rejects_directory_settings_path(
     assert result.exit_code == 2
     assert "Settings path" in result.output
     from_settings.assert_not_called()
+
+
+def test_settings_exit_with_warnings_by_default(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=100,
+        average_frame_time_ms=100.0,
+        gpu_hourly_rate=5.0,
+        gpu_count=2,
+    )
+    engine = _StubSettingsEngine(baseline)
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings",
+        return_value=SettingsLoadResult(
+            engine=engine,
+            settings_path=None,
+            warnings=("Override file missing; using defaults",),
+        ),
+    )
+
+    result = runner.invoke(perona_app, ["settings"])
+
+    assert result.exit_code == 1
+    assert "Warnings:" in result.output
+    assert "Override file missing; using defaults" in result.output
+
+
+def test_settings_can_ignore_warning_exit_code(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=100,
+        average_frame_time_ms=100.0,
+        gpu_hourly_rate=5.0,
+        gpu_count=2,
+    )
+    engine = _StubSettingsEngine(baseline)
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings",
+        return_value=SettingsLoadResult(
+            engine=engine,
+            settings_path=None,
+            warnings=("Override file missing; using defaults",),
+        ),
+    )
+
+    result = runner.invoke(perona_app, ["settings", "--ignore-warnings-exit-zero"])
+
+    assert result.exit_code == 0
+    assert "Warnings:" in result.output
+    assert "Override file missing; using defaults" in result.output
 
 
 def test_cost_estimate_applies_baseline_defaults_in_table_output(
