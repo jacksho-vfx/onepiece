@@ -65,6 +65,7 @@ dashboard_summary = report_routes.dashboard_summary
 daily_report = report_routes.daily_report
 
 metrics_summary = metrics.metrics_summary
+compute_metrics_summary = metrics.compute_metrics_summary
 render_feed = metrics.render_feed
 render_feed_stream = metrics.render_feed_stream
 ingest_render_metrics = metrics.ingest_render_metrics
