@@ -768,6 +768,58 @@ def test_load_scene_other_oserror(
         chopper_app_module._load_scene(scene_path)
 
 
+def test_compare_identical_scenes(tmp_path: Path) -> None:
+    scene_a = tmp_path / "scene_a.json"
+    scene_b = tmp_path / "scene_b.json"
+    _write_scene(scene_a)
+    _write_scene(scene_b)
+
+    output_dir = tmp_path / "diff"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app, ["compare", str(scene_a), str(scene_b), "--output", str(output_dir)]
+    )
+
+    assert result.exit_code == 0
+    diff_frames = sorted(output_dir.glob("*_diff.png"))
+    assert [path.name for path in diff_frames] == [
+        "frame_0000_diff.png",
+        "frame_0001_diff.png",
+    ]
+
+    summary_line = result.stdout.splitlines()[-1]
+    assert summary_line.strip() == "Overall: mean delta 0.00, max delta 0.00"
+
+
+def test_compare_divergent_scenes(tmp_path: Path) -> None:
+    scene_a = tmp_path / "scene_a.json"
+    scene_b = tmp_path / "scene_b.json"
+    _write_scene(scene_a)
+    payload = json.loads(scene_a.read_text())
+    payload["background"] = "#ffffff"
+    scene_b.write_text(json.dumps(payload), encoding="utf-8")
+
+    output_dir = tmp_path / "diff"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app, ["compare", str(scene_a), str(scene_b), "--output", str(output_dir)]
+    )
+
+    assert result.exit_code == 0
+    diff_frames = sorted(output_dir.glob("*_diff.png"))
+    assert len(diff_frames) == 2
+
+    summary_line = result.stdout.splitlines()[-1]
+    match = re.search(r"mean delta ([0-9.]+), max delta ([0-9.]+)", summary_line)
+    assert match is not None
+    mean_delta = float(match.group(1))
+    max_delta = float(match.group(2))
+    assert mean_delta > 0
+    assert max_delta > 0
+
+
 def _write_blank_scene(path: Path) -> None:
     payload = {"width": 2, "height": 1, "frames": 1, "objects": []}
     path.write_text(json.dumps(payload), encoding="utf-8")
