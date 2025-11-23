@@ -353,6 +353,66 @@ def test_renderer_produces_expected_frames(tmp_path: Path) -> None:
     assert contents[2] == "255"
 
 
+def test_scene_object_visibility_window() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 1,
+            "frames": 3,
+            "background": "#000000",
+            "objects": [
+                {
+                    "id": "flash",
+                    "type": "rectangle",
+                    "color": "#ffffff",
+                    "position": [0, 0],
+                    "size": [2, 1],
+                    "start_frame": 1,
+                    "end_frame": 1,
+                }
+            ],
+        }
+    )
+
+    frames = list(Renderer(scene).render())
+
+    assert all(pixel == (0, 0, 0) for pixel in frames[0].pixels[0])
+    assert all(pixel == (255, 255, 255) for pixel in frames[1].pixels[0])
+    assert all(pixel == (0, 0, 0) for pixel in frames[2].pixels[0])
+
+
+def test_scene_object_visibility_keyframes() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 1,
+            "frames": 4,
+            "background": "#000000",
+            "objects": [
+                {
+                    "id": "blip",
+                    "type": "rectangle",
+                    "color": "#ff0000",
+                    "position": [0, 0],
+                    "size": [2, 1],
+                    "visibility": [
+                        {"frame": 0, "visible": True},
+                        {"frame": 2, "visible": False},
+                        {"frame": 3, "visible": True},
+                    ],
+                }
+            ],
+        }
+    )
+
+    frames = list(Renderer(scene).render())
+
+    assert all(pixel == (255, 0, 0) for pixel in frames[0].pixels[0])
+    assert all(pixel == (255, 0, 0) for pixel in frames[1].pixels[0])
+    assert all(pixel == (0, 0, 0) for pixel in frames[2].pixels[0])
+    assert all(pixel == (255, 0, 0) for pixel in frames[3].pixels[0])
+
+
 def test_supersampling_smooths_diagonal_line() -> None:
     scene = Scene.from_dict(
         {
