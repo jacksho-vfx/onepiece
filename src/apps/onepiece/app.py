@@ -8,6 +8,7 @@ from apps.onepiece.pipeline import app as pipeline
 from apps.onepiece.render import app as render
 from apps.onepiece.shotgrid import app as shotgrid
 from apps.onepiece.validate import app as validate
+from apps.chopper.app import app as chopper
 from libraries.automation.review import app as review
 
 
@@ -18,6 +19,7 @@ app.add_typer(info)
 app.add_typer(aws)
 app.add_typer(dcc)
 app.add_typer(review)
+app.add_typer(chopper)
 app.add_typer(render)
 app.add_typer(notify)
 
