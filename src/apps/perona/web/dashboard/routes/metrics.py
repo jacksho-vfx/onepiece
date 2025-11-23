@@ -260,10 +260,27 @@ async def metrics_websocket(websocket: WebSocket) -> None:
     """Stream render telemetry samples over a WebSocket connection."""
 
     await dependencies.require_metrics_websocket_auth(websocket)
+    refresh_requested = websocket.query_params.get("refresh_engine")
+
+    def _should_refresh(flag: str | None) -> bool:
+        if flag is None:
+            return False
+        return flag.strip().lower() in {"1", "true", "yes", "on"}
+
+    def _current_engine(
+        force_refresh: bool = False,
+    ) -> tuple[PeronaEngine, object | None]:
+        if force_refresh:
+            dependencies.get_engine(refresh=True)
+        cache_entry = dependencies.get_engine_cache_entry()
+        if cache_entry is None:
+            return dependencies.get_engine(refresh=True), None
+        return cache_entry.engine, cache_entry.signature
+
+    engine, signature = _current_engine(_should_refresh(refresh_requested))
     await websocket.accept()
     try:
         while True:
-            engine = dependencies.get_engine(refresh=False)
             for sample in engine.stream_render_metrics(limit=30):
                 payload = RenderMetric.from_entity(sample).model_dump(
                     mode="json", by_alias=True
@@ -271,6 +288,10 @@ async def metrics_websocket(websocket: WebSocket) -> None:
                 await websocket.send_json(payload)
                 await asyncio.sleep(0.1)
             await asyncio.sleep(0.5)
+            latest_entry = dependencies.get_engine_cache_entry()
+            current_signature = latest_entry.signature if latest_entry else None
+            if current_signature != signature:
+                engine, signature = _current_engine()
     except WebSocketDisconnect:
         return
 
