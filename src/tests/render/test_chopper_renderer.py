@@ -14,6 +14,7 @@ from apps.chopper import renderer as renderer_module
 from apps.chopper.renderer import (
     AnimationWriter,
     Color,
+    GuidesOverlay,
     Frame,
     Renderer,
     Scene,
@@ -928,9 +929,11 @@ def test_parallel_render_reduces_wall_time(monkeypatch: pytest.MonkeyPatch) -> N
 
     original_render = renderer_module._render_frame_static
 
-    def slow_render(scene: Scene, index: int, samples: int, filter_name: str) -> Frame:
+    def slow_render(
+        scene: Scene, index: int, samples: int, filter_name: str, guides: None
+    ) -> Frame:
         time.sleep(0.05)
-        return original_render(scene, index, samples, filter_name)
+        return original_render(scene, index, samples, filter_name, guides)
 
     monkeypatch.setattr(renderer_module, "_render_frame_static", slow_render)
 
@@ -995,6 +998,60 @@ def test_rotated_shapes_render_correctly() -> None:
     assert frame.pixels[2][3] == (0, 255, 0, 255)
     assert frame.pixels[3][3] == (0, 255, 0, 255)
     assert frame.pixels[4][3] == (0, 255, 0, 255)
+
+
+def test_guides_overlay_draws_over_scene_objects() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 3,
+            "height": 3,
+            "frames": 1,
+            "background": "#000000",
+            "objects": [
+                {
+                    "id": "fill",
+                    "type": "rectangle",
+                    "color": "#ff0000",
+                    "position": [0, 0],
+                    "size": [3, 3],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    guides = GuidesOverlay(
+        thirds_grid=True,
+        center_mark=True,
+        color=(0, 255, 0),
+        opacity=1.0,
+        stroke_width=1.0,
+    )
+    frame = next(Renderer(scene, guides=guides).render())
+
+    assert frame.pixels == [
+        [(255, 0, 0), (0, 255, 0, 255), (0, 255, 0, 255)],
+        [(0, 255, 0, 255), (0, 255, 0, 255), (0, 255, 0, 255)],
+        [(0, 255, 0, 255), (0, 255, 0, 255), (0, 255, 0, 255)],
+    ]
+
+
+def test_guides_overlay_respects_opacity() -> None:
+    scene = Scene(width=5, height=5, frame_count=1, background=(0, 0, 0, 0), objects=[])
+    guides = GuidesOverlay(center_mark=True, color=(255, 255, 255), opacity=0.25)
+
+    frame = next(Renderer(scene, guides=guides).render())
+    assert frame.pixels[2][2] == (255, 255, 255, 112)
+
+
+def test_guides_overlay_scales_with_supersampling() -> None:
+    scene = Scene(width=2, height=2, frame_count=1, background=(0, 0, 0), objects=[])
+    guides = GuidesOverlay(action_frame=True, color=(0, 0, 255), opacity=1.0)
+
+    frame = next(Renderer(scene, samples=2, guides=guides).render())
+
+    assert frame.pixels[0][0] == (0, 0, 255, 255)
+    assert frame.pixels[-1][-1] == (0, 0, 255, 255)
 
 
 def test_line_requires_two_points() -> None:

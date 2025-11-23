@@ -9,6 +9,7 @@ from typing import Any, Iterable
 from apps.chopper.renderer import (
     AnimationWriter,
     Color,
+    GuidesOverlay,
     Renderer,
     Scene,
     SceneError,
@@ -229,6 +230,7 @@ def render_scene(
     filter_name: str = "box",
     workers: int | None = None,
     worker_backend: str = "process",
+    guides: GuidesOverlay | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
@@ -243,7 +245,9 @@ def render_scene(
     if backend_normalized not in {"process", "thread"}:
         raise ChopperRenderError("worker_backend must be 'process' or 'thread'")
     try:
-        renderer = Renderer(parsed_scene, samples=samples, filter_name=filter_name)
+        renderer = Renderer(
+            parsed_scene, samples=samples, filter_name=filter_name, guides=guides
+        )
     except SceneError as exc:
         raise ChopperRenderError(str(exc)) from exc
 

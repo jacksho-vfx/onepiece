@@ -8,7 +8,7 @@ import click
 from click.core import ParameterSource
 import typer
 
-from apps.chopper.renderer import Color, Scene, SceneError, parse_color
+from apps.chopper.renderer import Color, GuidesOverlay, Scene, SceneError, parse_color
 from libraries.automation.render.chopper import (
     ChopperRenderError,
     load_scene,
@@ -122,6 +122,29 @@ def render(
             "with --start/--end."
         ),
     ),
+    safe_frame: bool = typer.Option(
+        False, "--safe-frame", help="Draw a title-safe frame border overlay."
+    ),
+    action_frame: bool = typer.Option(
+        False, "--action-frame", help="Draw an action-safe frame border overlay."
+    ),
+    thirds_grid: bool = typer.Option(
+        False, "--thirds-grid", help="Overlay a rule-of-thirds grid."
+    ),
+    center_mark: bool = typer.Option(
+        False, "--center-mark", help="Overlay a small crosshair at the frame centre."
+    ),
+    guides_color: str = typer.Option(
+        "#ffffff", "--guides-color", help="Stroke colour to use for overlay guides."
+    ),
+    guides_opacity: float = typer.Option(
+        0.5,
+        "--guides-opacity",
+        help="Overlay opacity in the 0-1 range (defaults to 0.5).",
+    ),
+    guides_width: float = typer.Option(
+        1.0, "--guides-width", help="Stroke width in pixels for overlay guides."
+    ),
     workers: int | None = typer.Option(
         None,
         "--workers",
@@ -140,6 +163,7 @@ def render(
     export_was_explicit = False
     background_override: Color | None = None
     frame_list: list[int] | None = None
+    guides_overlay: GuidesOverlay | None = None
 
     try:
         ctx = click.get_current_context(silent=True)
@@ -165,6 +189,27 @@ def render(
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from exc
 
+    guides_enabled = any((safe_frame, action_frame, thirds_grid, center_mark))
+    if guides_enabled:
+        if guides_opacity < 0 or guides_opacity > 1:
+            raise typer.BadParameter("guides-opacity must be within the 0-1 range")
+        if guides_width <= 0:
+            raise typer.BadParameter("guides-width must be greater than zero")
+        try:
+            overlay_color = parse_color(guides_color)
+        except SceneError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+        guides_overlay = GuidesOverlay(
+            safe_frame=safe_frame,
+            action_frame=action_frame,
+            thirds_grid=thirds_grid,
+            center_mark=center_mark,
+            color=overlay_color,
+            opacity=guides_opacity,
+            stroke_width=guides_width,
+        )
+
     try:
         message = render_scene(
             scene_path=scene,
@@ -180,6 +225,7 @@ def render(
             filter_name=downsample_filter,
             workers=workers,
             worker_backend=worker_backend,
+            guides=guides_overlay,
         )
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc

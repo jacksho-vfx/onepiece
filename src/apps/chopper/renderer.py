@@ -33,6 +33,49 @@ else:
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
 
 
+def _draw_stroke_point(
+    target: "Frame", x: float, y: float, stroke_width: int, color: Color
+) -> None:
+    """Draw a stroked point centred on ``(x, y)``."""
+
+    half = max(0.0, (stroke_width - 1) / 2)
+    min_x = max(0, int(math.floor(x - half)))
+    max_x = min(target.width - 1, int(math.ceil(x + half)))
+    min_y = max(0, int(math.floor(y - half)))
+    max_y = min(target.height - 1, int(math.ceil(y + half)))
+
+    for yy in range(min_y, max_y + 1):
+        row = target.pixels[yy]
+        for xx in range(min_x, max_x + 1):
+            target._blend_into(row, xx, color)
+
+
+def _draw_stroke_line(
+    target: "Frame",
+    start: tuple[float, float],
+    end: tuple[float, float],
+    stroke_width: int,
+    color: Color,
+) -> None:
+    """Draw a stroked line segment between ``start`` and ``end``."""
+
+    if stroke_width <= 0:
+        return
+
+    x0, y0 = start
+    x1, y1 = end
+
+    dx = x1 - x0
+    dy = y1 - y0
+    steps = max(int(round(max(abs(dx), abs(dy)))), 1)
+
+    for step in range(steps + 1):
+        t = step / steps
+        x = x0 + dx * t
+        y = y0 + dy * t
+        _draw_stroke_point(target, x, y, stroke_width, color)
+
+
 def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     """Clamp ``value`` to the inclusive ``lower``/``upper`` range."""
 
@@ -97,6 +140,107 @@ def _normalize_pixel(value: object) -> Color:
     else:
         component = 0
     return component, component, component, 255
+
+
+def _apply_opacity(color: Color, opacity: float) -> Color:
+    """Return ``color`` with its alpha multiplied by ``opacity``."""
+
+    clamped_opacity = _clamp(opacity)
+    r, g, b = color[:3]
+    alpha = color[3] if len(color) >= 4 else 255
+    adjusted_alpha = int(round(alpha * clamped_opacity))
+    return r, g, b, adjusted_alpha
+
+
+@dataclass(slots=True)
+class GuidesOverlay:
+    """Optional guide overlays such as safe areas and grids."""
+
+    safe_frame: bool = False
+    action_frame: bool = False
+    thirds_grid: bool = False
+    center_mark: bool = False
+    color: Color = (255, 255, 255)
+    opacity: float = 0.5
+    stroke_width: float = 1.0
+
+    _ACTION_RATIO = 0.9
+    _SAFE_RATIO = 0.8
+
+    def _stroke_settings(self, scale: int) -> tuple[Color, int]:
+        stroke_width = max(1, int(round(self.stroke_width * scale)))
+        return _apply_opacity(self.color, self.opacity), stroke_width
+
+    def _draw_inset_frame(
+        self, frame: "Frame", *, ratio: float, stroke_width: int, color: Color
+    ) -> None:
+        usable_width = max(frame.width - 1, 0)
+        usable_height = max(frame.height - 1, 0)
+        inset_x = (1.0 - ratio) * usable_width / 2.0
+        inset_y = (1.0 - ratio) * usable_height / 2.0
+        if inset_x < 0 or inset_y < 0:
+            return
+
+        points = [
+            (inset_x, inset_y),
+            (usable_width - inset_x, inset_y),
+            (usable_width - inset_x, usable_height - inset_y),
+            (inset_x, usable_height - inset_y),
+        ]
+
+        for index, start in enumerate(points):
+            end = points[(index + 1) % len(points)]
+            _draw_stroke_line(frame, start, end, stroke_width, color)
+
+    def _draw_thirds(self, frame: "Frame", *, stroke_width: int, color: Color) -> None:
+        max_x = frame.width - 1
+        max_y = frame.height - 1
+        vertical_positions = (frame.width / 3.0, (frame.width * 2.0) / 3.0)
+        horizontal_positions = (frame.height / 3.0, (frame.height * 2.0) / 3.0)
+
+        for x in vertical_positions:
+            _draw_stroke_line(frame, (x, 0.0), (x, max_y), stroke_width, color)
+        for y in horizontal_positions:
+            _draw_stroke_line(frame, (0.0, y), (max_x, y), stroke_width, color)
+
+    def _draw_center_mark(
+        self, frame: "Frame", *, stroke_width: int, color: Color
+    ) -> None:
+        max_extent = min(frame.width, frame.height)
+        if max_extent <= 0:
+            return
+
+        cx = (frame.width - 1) / 2.0
+        cy = (frame.height - 1) / 2.0
+        half_length = max(max_extent * 0.05, stroke_width)
+
+        _draw_stroke_line(
+            frame, (cx - half_length, cy), (cx + half_length, cy), stroke_width, color
+        )
+        _draw_stroke_line(
+            frame, (cx, cy - half_length), (cx, cy + half_length), stroke_width, color
+        )
+
+    def draw(self, frame: "Frame", *, scale: int = 1) -> None:
+        if not any(
+            (self.safe_frame, self.action_frame, self.thirds_grid, self.center_mark)
+        ):
+            return
+
+        color, stroke_width = self._stroke_settings(scale)
+
+        if self.action_frame:
+            self._draw_inset_frame(
+                frame, ratio=self._ACTION_RATIO, stroke_width=stroke_width, color=color
+            )
+        if self.safe_frame:
+            self._draw_inset_frame(
+                frame, ratio=self._SAFE_RATIO, stroke_width=stroke_width, color=color
+            )
+        if self.thirds_grid:
+            self._draw_thirds(frame, stroke_width=stroke_width, color=color)
+        if self.center_mark:
+            self._draw_center_mark(frame, stroke_width=stroke_width, color=color)
 
 
 @dataclass(slots=True)
@@ -214,13 +358,19 @@ def _object_is_visible(obj: object, frame_index: int) -> bool:
 
 
 def _render_frame_static(
-    scene: Scene, index: int, samples: int, filter_name: str
+    scene: Scene,
+    index: int,
+    samples: int,
+    filter_name: str,
+    guides: GuidesOverlay | None,
 ) -> Frame:
     if samples == 1:
         frame = Frame.blank(index, scene.width, scene.height, scene.background)
         for obj in scene.objects:
             if _object_is_visible(obj, index):
                 obj.render(frame, index)
+        if guides:
+            guides.draw(frame, scale=1)
         return frame
 
     scaled_width = scene.width * samples
@@ -231,6 +381,9 @@ def _render_frame_static(
     for obj in scene.objects:
         if _object_is_visible(obj, index):
             obj.render(supersampled_frame, index, scale=samples)
+
+    if guides:
+        guides.draw(supersampled_frame, scale=samples)
 
     return supersampled_frame.downsample(samples, filter_name=filter_name)
 
@@ -1268,16 +1421,7 @@ class SceneObject:
     def _draw_point(
         self, target: "Frame", x: float, y: float, stroke_width: int, color: Color
     ) -> None:
-        half = max(0.0, (stroke_width - 1) / 2)
-        min_x = max(0, int(math.floor(x - half)))
-        max_x = min(target.width - 1, int(math.ceil(x + half)))
-        min_y = max(0, int(math.floor(y - half)))
-        max_y = min(target.height - 1, int(math.ceil(y + half)))
-
-        for yy in range(min_y, max_y + 1):
-            row = target.pixels[yy]
-            for xx in range(min_x, max_x + 1):
-                target._blend_into(row, xx, color)
+        _draw_stroke_point(target, x, y, stroke_width, color)
 
     def _draw_line(
         self,
@@ -1291,20 +1435,7 @@ class SceneObject:
     ) -> None:
         stroke_color_value, stroke_width = self._stroke_details(frame_index, scale)
         resolved_stroke_color = stroke_color or stroke_color_value
-        if stroke_width <= 0:
-            return
-        x0, y0 = start
-        x1, y1 = end
-
-        dx = x1 - x0
-        dy = y1 - y0
-        steps = max(int(round(max(abs(dx), abs(dy)))), 1)
-
-        for step in range(steps + 1):
-            t = step / steps
-            x = x0 + dx * t
-            y = y0 + dy * t
-            self._draw_point(target, x, y, stroke_width, resolved_stroke_color)
+        _draw_stroke_line(target, start, end, stroke_width, resolved_stroke_color)
 
     def _render_line(self, target: "Frame", frame_index: int, scale: int) -> None:
         points = self._transformed_points(frame_index, scale)
@@ -1634,6 +1765,7 @@ class Renderer:
         *,
         samples: int = 1,
         filter_name: str = "box",
+        guides: GuidesOverlay | None = None,
     ):
         self.scene = scene
         if samples <= 0:
@@ -1643,6 +1775,7 @@ class Renderer:
         if normalized_filter not in {"box", "gaussian"}:
             raise SceneError("Downsample filter must be 'box' or 'gaussian'")
         self.filter = normalized_filter
+        self.guides = guides
 
     def render(
         self,
@@ -1681,7 +1814,9 @@ class Renderer:
 
         if workers is None or workers == 1 or len(frame_indices) <= 1:
             for index in frame_indices:
-                yield _render_frame_static(self.scene, index, self.samples, self.filter)
+                yield _render_frame_static(
+                    self.scene, index, self.samples, self.filter, self.guides
+                )
             return
 
         executor_cls: type[Executor]
@@ -1705,6 +1840,7 @@ class Renderer:
                 frame_indices,
                 itertools.repeat(self.samples),
                 itertools.repeat(self.filter),
+                itertools.repeat(self.guides),
             )
 
             for frame in results:
@@ -1856,6 +1992,7 @@ __all__ = [
     "Animation",
     "AnimationWriter",
     "Frame",
+    "GuidesOverlay",
     "Keyframe",
     "Renderer",
     "Scene",
