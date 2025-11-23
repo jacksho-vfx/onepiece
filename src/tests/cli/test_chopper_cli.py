@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import importlib
 import json
 import re
-import importlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -480,6 +481,89 @@ def test_render_accepts_supersampling_options(
     assert captured["workers"] == 3
     assert captured["worker_backend"] == "thread"
     assert captured["guides"] is None
+
+
+def test_qc_render_invokes_render_scene(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--samples",
+            "3",
+            "--filter",
+            "gaussian",
+            "--workers",
+            "2",
+            "--worker-backend",
+            "thread",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["output_path"] == tmp_path / "qc_frames"
+    assert captured["export_format"] == "png"
+    assert captured["fps"] == 24
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["width"] == 1920
+    assert payload["height"] == 1080
+    assert payload["frames"] == 1
+    objects = payload["objects"]
+    assert isinstance(objects, list)
+    assert len(objects) >= 6
+
+
+def test_qc_render_accepts_guides_and_color_space(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--safe-frame",
+            "--guides-opacity",
+            "0.75",
+            "--guides-width",
+            "2",
+            "--color-space",
+            "linear",
+        ],
+    )
+
+    assert result.exit_code == 0
+    guides = captured["guides"]
+    assert isinstance(guides, chopper_renderer_module.GuidesOverlay)
+    assert guides.safe_frame is True
+    assert guides.opacity == 0.75
+    assert guides.stroke_width == 2
+    assert captured["color_space"] is chopper_renderer_module.ColorSpace.LINEAR
 
 
 def test_render_accepts_guides_options(
