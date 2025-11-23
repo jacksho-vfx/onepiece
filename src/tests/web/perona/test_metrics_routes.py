@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 from datetime import datetime, timedelta
 from time import perf_counter
@@ -327,6 +328,58 @@ def test_metrics_websocket_requires_auth() -> None:
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws/metrics") as websocket:
             websocket.receive_json()
+
+
+def test_metrics_websocket_swaps_engine_on_reload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _engine_with_shot(shot_id: str) -> PeronaEngine:
+        class _DummyEngine:
+            def __init__(self, shot_id: str) -> None:
+                self._shot_id = shot_id
+
+            def stream_render_metrics(
+                self, limit: int = 30, **_: Any
+            ) -> tuple[EngineRenderMetric, ...]:
+                return (
+                    EngineRenderMetric(
+                        sequence="SQ_RELOAD",
+                        shot_id=self._shot_id,
+                        timestamp=datetime.utcnow(),
+                        fps=24.0,
+                        frame_time_ms=120.0,
+                        error_count=0,
+                        gpu_utilisation=0.5,
+                        cache_health=1.0,
+                    ),
+                )
+
+        return _DummyEngine(shot_id)  # type: ignore[return-value]
+
+    engines = {"one": _engine_with_shot("FIRST"), "two": _engine_with_shot("SECOND")}
+    cache: dict[str, object] = {"signature": ("one",), "engine": engines["one"]}
+
+    def _fake_get_engine(refresh: bool = False) -> PeronaEngine:  # noqa: ARG001
+        return cache["engine"]  # type: ignore[return-value]
+
+    def _fake_get_engine_cache_entry() -> SimpleNamespace:
+        return SimpleNamespace(engine=cache["engine"], signature=cache["signature"])
+
+    monkeypatch.setattr(dashboard_module.dependencies, "get_engine", _fake_get_engine)
+    monkeypatch.setattr(
+        dashboard_module.dependencies,
+        "get_engine_cache_entry",
+        _fake_get_engine_cache_entry,
+    )
+
+    with client.websocket_connect("/ws/metrics", headers=AUTH_HEADERS) as websocket:
+        payload_one = websocket.receive_json()
+        cache["signature"] = ("two",)
+        cache["engine"] = engines["two"]
+        payload_two = websocket.receive_json()
+
+    assert payload_one["shot_id"] == "FIRST"
+    assert payload_two["shot_id"] == "SECOND"
 
 
 # def test_metrics_ingest_persists_payload(tmp_path: Path) -> None:
