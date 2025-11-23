@@ -65,3 +65,8 @@ def test_write_animation_wraps_stream_errors(
 
     with pytest.raises(ChopperRenderError):
         _write_animation(frame_generator(), tmp_path / "animation.mp4", "mp4", 24)
+
+
+def test_write_animation_rejects_unsupported_format(tmp_path: Path) -> None:
+    with pytest.raises(ChopperRenderError):
+        _write_animation([], tmp_path / "animation.exr", "exr", 24)

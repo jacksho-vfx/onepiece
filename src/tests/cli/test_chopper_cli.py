@@ -471,6 +471,10 @@ def test_render_accepts_supersampling_options(
             "3",
             "--worker-backend",
             "thread",
+            "--bit-depth",
+            "float32",
+            "--layers",
+            "beauty,guides",
         ],
     )
 
@@ -480,6 +484,8 @@ def test_render_accepts_supersampling_options(
     assert captured["workers"] == 3
     assert captured["worker_backend"] == "thread"
     assert captured["guides"] is None
+    assert captured["bit_depth"] == "float32"
+    assert captured["layers"] == {"beauty", "guides"}
 
 
 def test_render_accepts_guides_options(

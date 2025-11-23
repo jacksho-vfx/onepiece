@@ -70,6 +70,8 @@ def _normalize_export_format(
         ".png": "png",
         ".gif": "gif",
         ".mp4": "mp4",
+        ".exr": "exr",
+        ".dpx": "dpx",
     }
 
     export_normalized = export_format.lower()
@@ -84,8 +86,8 @@ def _normalize_export_format(
                 f"Output path suffix '{suffix_display}' conflicts with --format '{export_format}'."
             )
 
-    if export_normalized not in {"ppm", "png", "gif", "mp4"}:
-        raise ChopperRenderError("format must be one of: ppm, png, gif, mp4")
+    if export_normalized not in {"ppm", "png", "gif", "mp4", "exr", "dpx"}:
+        raise ChopperRenderError("format must be one of: ppm, png, gif, mp4, exr, dpx")
 
     return export_normalized
 
@@ -94,6 +96,9 @@ def _write_frames(
     frames: Iterable[Any],
     output_path: Path,
     export_format: str,
+    *,
+    bit_depth: str = "half",
+    layers: set[str] | None = None,
 ) -> int:
     """Persist ``frames`` as image files and return the number written."""
 
@@ -102,6 +107,16 @@ def _write_frames(
         frame_path = output_path / f"frame_{frame.index:04d}.{export_format}"
         if export_format == "ppm":
             frame.save_ppm(frame_path)
+        elif export_format == "exr":
+            try:
+                frame.save_exr(frame_path, bit_depth=bit_depth, layers=layers)
+            except (RuntimeError, ValueError) as exc:
+                raise ChopperRenderError(str(exc)) from exc
+        elif export_format == "dpx":
+            try:
+                frame.save_dpx(frame_path, bit_depth=bit_depth, layers=layers)
+            except (RuntimeError, ValueError) as exc:
+                raise ChopperRenderError(str(exc)) from exc
         else:
             try:
                 frame.save_png(frame_path)
@@ -125,8 +140,12 @@ def _write_animation(
     try:
         if export_format == "gif":
             frame_count = int(writer.write_gif(destination))
-        else:
+        elif export_format == "mp4":
             frame_count = int(writer.write_mp4(destination))
+        else:
+            raise ChopperRenderError(
+                f"Unsupported animation format '{export_format}' was requested"
+            )
     except (RuntimeError, ValueError) as exc:
         raise ChopperRenderError(str(exc)) from exc
 
@@ -233,6 +252,8 @@ def render_scene(
     worker_backend: str = "process",
     guides: GuidesOverlay | None = None,
     color_space: ColorSpace | None = None,
+    bit_depth: str = "half",
+    layers: set[str] | None = None,
 ) -> str:
     """Render ``scene_path`` to ``output_path`` and return a status message."""
 
@@ -248,6 +269,17 @@ def render_scene(
     backend_normalized = worker_backend.lower()
     if backend_normalized not in {"process", "thread"}:
         raise ChopperRenderError("worker_backend must be 'process' or 'thread'")
+    bit_depth_normalized = bit_depth.lower()
+    if bit_depth_normalized not in {"half", "float32"}:
+        raise ChopperRenderError("bit_depth must be 'half' or 'float32'")
+    normalized_layers: set[str] | None = None
+    if layers is not None:
+        normalized_layers = {layer.lower() for layer in layers}
+        allowed_layers = {"beauty", "matte", "guides"}
+        if invalid_layers := normalized_layers - allowed_layers:
+            raise ChopperRenderError(
+                f"Unsupported layers requested: {', '.join(sorted(invalid_layers))}"
+            )
     try:
         renderer = Renderer(
             parsed_scene, samples=samples, filter_name=filter_name, guides=guides
@@ -273,9 +305,15 @@ def render_scene(
 
     frame_description = _frame_selection_description(frame_indices)
 
-    if export_normalized in {"ppm", "png"}:
+    if export_normalized in {"ppm", "png", "exr", "dpx"}:
         output_path.mkdir(parents=True, exist_ok=True)
-        frame_count = _write_frames(frames_iter, output_path, export_normalized)
+        frame_count = _write_frames(
+            frames_iter,
+            output_path,
+            export_normalized,
+            bit_depth=bit_depth_normalized,
+            layers=normalized_layers,
+        )
         return _render_message(frame_count, output_path, frame_description)
 
     destination = output_path
