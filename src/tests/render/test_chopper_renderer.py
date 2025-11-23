@@ -495,6 +495,103 @@ def test_renderer_stacks_multiple_transparent_shapes() -> None:
     assert frame.pixels[0][0] == (191, 63, 63, 255)
 
 
+def test_linear_gradient_rectangle() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 1,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "gradient",
+                    "type": "rectangle",
+                    "color": {
+                        "type": "linear-gradient",
+                        "from": [0, 0],
+                        "to": [1, 0],
+                        "colors": ["#ff0000", "#0000ff"],
+                    },
+                    "position": [0, 0],
+                    "size": [2, 1],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (191, 0, 64, 255)
+    assert frame.pixels[0][1] == (64, 0, 191, 255)
+
+
+def test_radial_gradient_rectangle() -> None:
+    scene = Scene.from_dict(
+        {
+            "width": 3,
+            "height": 3,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "spotlight",
+                    "type": "rectangle",
+                    "color": {
+                        "type": "radial-gradient",
+                        "center": [0.5, 0.5],
+                        "radius": 0.5,
+                        "colors": ["#ffffff", "#000000"],
+                    },
+                    "position": [0, 0],
+                    "size": [3, 3],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[1][1] == (255, 255, 255, 255)
+    assert frame.pixels[0][0][0] < 64
+
+
+def test_textured_polygon(tmp_path: Path) -> None:
+    pillow = pytest.importorskip("PIL.Image")
+    texture = tmp_path / "texture.png"
+    image = pillow.new("RGBA", (2, 2))
+    image.putpixel((0, 0), (255, 0, 0, 255))
+    image.putpixel((1, 0), (0, 255, 0, 255))
+    image.putpixel((0, 1), (0, 0, 255, 255))
+    image.putpixel((1, 1), (255, 255, 255, 255))
+    image.save(texture)
+
+    scene = Scene.from_dict(
+        {
+            "width": 2,
+            "height": 2,
+            "frames": 1,
+            "background": "#00000000",
+            "objects": [
+                {
+                    "id": "textured",
+                    "type": "polygon",
+                    "color": {"type": "texture", "path": str(texture)},
+                    "position": [0, 0],
+                    "points": [[0, 0], [2, 0], [2, 2], [0, 2]],
+                    "stroke_width": 0,
+                }
+            ],
+        }
+    )
+
+    frame = next(Renderer(scene).render())
+
+    assert frame.pixels[0][0] == (255, 0, 0, 255)
+    assert frame.pixels[1][1] == (255, 255, 255, 255)
+
+
 def test_renderer_sorts_objects_by_z_index() -> None:
     payload = {
         "width": 1,
