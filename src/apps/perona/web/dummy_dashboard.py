@@ -104,6 +104,13 @@ def prepare_demo_state() -> None:
     live_analytics.pnl(engine=_ENGINE)
 
 
+@app.on_event("startup")
+def initialise_demo_state() -> None:
+    """Prepare cached demo responses when the application starts."""
+
+    prepare_demo_state()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Simple readiness check for the demo server."""
