@@ -517,6 +517,118 @@ def test_risk_heatmap_renders_top_n_table(
     assert "Showing top 1 of 2 indicators." in output
 
 
+def test_risk_heatmap_defaults_to_full_list(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=800,
+        average_frame_time_ms=150.0,
+        gpu_hourly_rate=8.75,
+        gpu_count=10,
+        render_hours=10.0,
+        render_farm_hourly_rate=4.5,
+        storage_gb=8.0,
+        storage_rate_per_gb=0.45,
+        data_egress_gb=2.0,
+        egress_rate_per_gb=0.2,
+        misc_costs=120.0,
+        currency="USD",
+    )
+    indicators = (
+        RiskIndicator(
+            sequence="SQ10",
+            shot_id="SQ10_SH020",
+            risk_score=84.6,
+            render_time_ms=168.0,
+            error_rate=0.028,
+            cache_stability=0.71,
+            drivers=("Render time volatility", "Deadline risk"),
+        ),
+        RiskIndicator(
+            sequence="SQ12",
+            shot_id="SQ12_SH030",
+            risk_score=62.1,
+            render_time_ms=140.0,
+            error_rate=0.012,
+            cache_stability=0.83,
+            drivers=("Error rate high (+20.0% vs target)",),
+        ),
+    )
+    engine = _StubCostEngine(baseline, risk_indicators=indicators)
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["risk", "heatmap"])
+
+    assert result.exit_code == 0
+    output = result.output
+    assert "SQ10_SH020" in output
+    assert "SQ12_SH030" in output
+    assert "Showing top" not in output
+
+
+def test_risk_heatmap_honours_upper_cap(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    baseline = CostModelInput(
+        frame_count=800,
+        average_frame_time_ms=150.0,
+        gpu_hourly_rate=8.75,
+        gpu_count=10,
+        render_hours=10.0,
+        render_farm_hourly_rate=4.5,
+        storage_gb=8.0,
+        storage_rate_per_gb=0.45,
+        data_egress_gb=2.0,
+        egress_rate_per_gb=0.2,
+        misc_costs=120.0,
+        currency="USD",
+    )
+    indicators = tuple(
+        RiskIndicator(
+            sequence=f"SQ{i:03d}",
+            shot_id=f"SQ{i:03d}_SH{i:03d}",
+            risk_score=50.0 + i,
+            render_time_ms=120.0 + i,
+            error_rate=0.01,
+            cache_stability=0.9,
+            drivers=("Driver",),
+        )
+        for i in range(120)
+    )
+    engine = _StubCostEngine(baseline, risk_indicators=indicators)
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["risk", "heatmap", "--top", "100"])
+
+    assert result.exit_code == 0
+    output = result.output
+    assert "SQ099_SH099" in output
+    assert "SQ119_SH119" not in output
+    assert "Showing top 100 of 120 indicators." in output
+
+
+def test_risk_heatmap_rejects_excessive_top_value(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    engine = mocker.Mock()
+    settings_result = SettingsLoadResult(engine=engine, settings_path=None, warnings=())
+    mocker.patch(
+        "apps.perona.app.PeronaEngine.from_settings", return_value=settings_result
+    )
+
+    result = runner.invoke(perona_app, ["risk", "heatmap", "--top", "101"])
+
+    assert result.exit_code == 2
+    assert "between 1 and 100" in result.output
+    engine.risk_heatmap.assert_not_called()
+
+
 def test_risk_heatmap_emits_json_payload(
     mocker: pytest_mock.MockerFixture, tmp_path: Path
 ) -> None:

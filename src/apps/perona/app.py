@@ -44,6 +44,8 @@ from apps.perona.version import PERONA_VERSION
 
 OutputFormat = Literal["table", "json"]
 
+RISK_HEATMAP_TOP_LIMIT = 100
+
 app = typer.Typer(
     name="perona",
     help=(
@@ -485,7 +487,7 @@ def risk_heatmap(
         None,
         "--top",
         "-n",
-        help="Limit the number of indicators shown (highest risk first).",
+        help=("Limit the number of indicators shown (1-100, highest risk first)."),
     ),
 ) -> None:
     """Display the highest risk shots from the Perona telemetry heatmap."""
@@ -494,11 +496,12 @@ def risk_heatmap(
     settings_result = PeronaEngine.from_settings(path=validated_settings_path)
     engine = settings_result.engine
 
+    if top is not None and (top < 1 or top > RISK_HEATMAP_TOP_LIMIT):
+        raise typer.BadParameter(f"top must be between 1 and {RISK_HEATMAP_TOP_LIMIT}.")
+
     indicators = tuple(engine.risk_heatmap())
     total_count = len(indicators)
     if top is not None:
-        if top <= 0:
-            raise typer.BadParameter("top must be a positive integer.")
         indicators = indicators[:top]
 
     fmt = str(output_format).lower()
