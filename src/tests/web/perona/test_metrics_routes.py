@@ -24,6 +24,19 @@ def _configure_metrics_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PERONA_METRICS_TOKEN", METRICS_TOKEN)
 
 
+def _render_metric_payload(sequence: str, shot_id: str, offset: int) -> dict[str, Any]:
+    return {
+        "sequence": sequence,
+        "shot_id": shot_id,
+        "timestamp": f"2024-05-20T12:30:0{offset}Z",
+        "fps": 24.0 + offset,
+        "frame_time_ms": 120.0 + offset,
+        "error_count": offset,
+        "gpuUtilisation": 0.5 + (offset * 0.01),
+        "cacheHealth": 0.9,
+    }
+
+
 client = TestClient(app)
 
 
@@ -207,6 +220,65 @@ def test_metrics_websocket_requires_auth() -> None:
 #         assert stored["gpuUtilisation"] == pytest.approx(0.78)
 #     finally:
 #         dashboard_module._metrics_store = original_store
+
+
+def test_metrics_ingest_respects_max_batch_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PERONA_METRICS_MAX_BATCH", "2")
+    metrics_path = tmp_path / "metrics.ndjson"
+    original_store = dashboard_module._metrics_store
+    dashboard_module._metrics_store = dashboard_module.RenderMetricStore(metrics_path)
+    try:
+        payload = {
+            "metrics": [
+                _render_metric_payload("SQ42", "SQ42_SH010", 0),
+                _render_metric_payload("SQ42", "SQ42_SH020", 1),
+                _render_metric_payload("SQ42", "SQ42_SH030", 2),
+            ]
+        }
+
+        response = client.post(
+            "/api/metrics",
+            json=payload,
+            headers=AUTH_HEADERS,
+        )
+
+        assert response.status_code == status.HTTP_413_CONTENT_TOO_LARGE
+        body = response.json()
+        assert "2" in body["detail"]
+        assert not metrics_path.exists()
+    finally:
+        dashboard_module._metrics_store = original_store
+
+
+def test_metrics_ingest_allows_batches_within_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PERONA_METRICS_MAX_BATCH", "3")
+    original_store = dashboard_module._metrics_store
+    dashboard_module._metrics_store = dashboard_module.RenderMetricStore(
+        tmp_path / "metrics.ndjson"
+    )
+    try:
+        payload = {
+            "metrics": [
+                _render_metric_payload("SQ42", "SQ42_SH010", 0),
+                _render_metric_payload("SQ42", "SQ42_SH020", 1),
+                _render_metric_payload("SQ42", "SQ42_SH030", 2),
+            ]
+        }
+
+        response = client.post(
+            "/api/metrics",
+            json=payload,
+            headers=AUTH_HEADERS,
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.json() == {"status": "accepted", "enqueued": 3}
+    finally:
+        dashboard_module._metrics_store = original_store
 
 
 def test_metrics_ingest_rejects_empty_payload(tmp_path: Path) -> None:
