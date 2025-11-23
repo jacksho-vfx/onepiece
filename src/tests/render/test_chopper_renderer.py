@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pytest
 import typing_extensions
 
@@ -1574,3 +1575,71 @@ def test_scene_object_rejects_invalid_animation(
 
     with pytest.raises(SceneError, match=expected_message):
         Scene.from_dict(payload)
+
+
+def _write_matrix_ocio_config(tmp_path: Path, srgb_to_acescg: np.ndarray) -> Path:
+    acescg_to_srgb = np.linalg.inv(srgb_to_acescg)
+    identity = np.identity(3)
+    config = {
+        "working_space": "acescg",
+        "color_spaces": {
+            "acescg": {
+                "to_working": identity.tolist(),
+                "from_working": identity.tolist(),
+            },
+            "srgb": {
+                "to_working": srgb_to_acescg.tolist(),
+                "from_working": acescg_to_srgb.tolist(),
+            },
+        },
+        "displays": {"artist": {"monitor": "srgb"}},
+    }
+
+    config_path = tmp_path / "ocio_config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    return config_path
+
+
+def test_renderer_applies_ocio_transforms(tmp_path: Path) -> None:
+    srgb_to_acescg = np.array(
+        [
+            [0.6132, 0.3395, 0.0473],
+            [0.0707, 0.9163, 0.0130],
+            [0.0206, 0.1096, 0.8697],
+        ]
+    )
+    ocio_config = _write_matrix_ocio_config(tmp_path, srgb_to_acescg)
+
+    payload = build_scene_dict()
+    payload.update({"width": 1, "height": 1, "frames": 1, "background": "#ff0000"})
+    scene = Scene.from_dict(payload)
+
+    renderer = Renderer(
+        scene, ocio_config=ocio_config, ocio_display="artist", ocio_view="monitor"
+    )
+    frame = next(renderer.render([0]))
+
+    expected_linear = np.clip(np.array([1.0, 0.0, 0.0]) @ srgb_to_acescg.T, 0.0, 1.0)
+    expected_pixel = tuple(int(round(channel * 255.0)) for channel in expected_linear)
+
+    assert frame.color_space is ColorSpace.LINEAR
+    assert frame.pixels[0][0][:3] == expected_pixel
+
+    image = frame.to_image()
+    assert image.getpixel((0, 0))[:3] == pytest.approx((255, 0, 0), abs=1)
+
+
+def test_renderer_rejects_missing_ocio_space(tmp_path: Path) -> None:
+    identity = np.identity(3).tolist()
+    bad_config = {
+        "working_space": "acescg",
+        "color_spaces": {"acescg": {"to_working": identity, "from_working": identity}},
+        "displays": {"main": {"monitor": "acescg"}},
+    }
+    config_path = tmp_path / "bad_ocio.json"
+    config_path.write_text(json.dumps(bad_config), encoding="utf-8")
+
+    scene = Scene.from_dict(build_scene_dict())
+
+    with pytest.raises(SceneError, match="color space"):
+        Renderer(scene, ocio_config=config_path)
