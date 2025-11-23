@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
+import enum
 import itertools
 import math
 from pathlib import Path
@@ -31,6 +32,52 @@ else:
         np = None  # type: ignore[assignment]
 
 Color = tuple[int, int, int] | tuple[int, int, int, int] | tuple[int, ...]
+
+
+class ColorSpace(enum.Enum):
+    SRGB = "srgb"
+    LINEAR = "linear"
+
+    @classmethod
+    def from_value(cls, value: object) -> "ColorSpace":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            normalised = value.strip().lower()
+            try:
+                return cls(normalised)
+            except ValueError as exc:
+                options = ", ".join(sorted(member.value for member in cls))
+                raise SceneError(f"Colour space must be one of: {options}") from exc
+        raise SceneError("Colour space must be provided as a string identifier")
+
+
+def _srgb_to_linear_component(component: int) -> float:
+    channel = max(0.0, min(255.0, float(component))) / 255.0
+    if channel <= 0.04045:
+        return channel / 12.92
+    return float(((channel + 0.055) / 1.055) ** 2.4)
+
+
+def _linear_to_srgb_component(component: float) -> int:
+    channel = _clamp(component)
+    if channel <= 0.0031308:
+        encoded = channel * 12.92
+    else:
+        encoded = 1.055 * (channel ** (1 / 2.4)) - 0.055
+    return int(round(encoded * 255.0))
+
+
+def _decode_component(component: int, color_space: ColorSpace) -> float:
+    if color_space is ColorSpace.SRGB:
+        return _srgb_to_linear_component(component)
+    return max(0.0, min(255.0, float(component))) / 255.0
+
+
+def _encode_component(component: float, color_space: ColorSpace) -> int:
+    if color_space is ColorSpace.SRGB:
+        return _linear_to_srgb_component(component)
+    return int(round(_clamp(component) * 255.0))
 
 
 def _draw_stroke_point(
@@ -100,7 +147,9 @@ def _parse_point(value: object, *, label: str) -> tuple[float, float]:
     return x, y
 
 
-def _interpolate_color(left: Color, right: Color, t: float) -> Color:
+def _interpolate_color(
+    left: Color, right: Color, t: float, *, color_space: ColorSpace = ColorSpace.SRGB
+) -> Color:
     """Linearly interpolate between ``left`` and ``right`` using ``t``."""
 
     clamped = _clamp(t)
@@ -110,10 +159,23 @@ def _interpolate_color(left: Color, right: Color, t: float) -> Color:
     left_a = left[3] if len(left) >= 4 else 255
     right_a = right[3] if len(right) >= 4 else 255
 
+    left_r_lin = _decode_component(left_r, color_space)
+    left_g_lin = _decode_component(left_g, color_space)
+    left_b_lin = _decode_component(left_b, color_space)
+    right_r_lin = _decode_component(right_r, color_space)
+    right_g_lin = _decode_component(right_g, color_space)
+    right_b_lin = _decode_component(right_b, color_space)
+
     components = (
-        int(round(left_r + (right_r - left_r) * clamped)),
-        int(round(left_g + (right_g - left_g) * clamped)),
-        int(round(left_b + (right_b - left_b) * clamped)),
+        _encode_component(
+            left_r_lin + (right_r_lin - left_r_lin) * clamped, color_space
+        ),
+        _encode_component(
+            left_g_lin + (right_g_lin - left_g_lin) * clamped, color_space
+        ),
+        _encode_component(
+            left_b_lin + (right_b_lin - left_b_lin) * clamped, color_space
+        ),
         int(round(left_a + (right_a - left_a) * clamped)),
     )
 
@@ -253,7 +315,14 @@ class SolidFill:
     def anchor_color(self) -> Color:
         return self.color
 
-    def sample(self, _: float, __: float, *, texture_cache: "_TextureCache") -> Color:
+    def sample(
+        self,
+        _: float,
+        __: float,
+        *,
+        texture_cache: "_TextureCache",
+        color_space: ColorSpace = ColorSpace.SRGB,
+    ) -> Color:
         return self.color
 
 
@@ -270,7 +339,14 @@ class LinearGradientFill:
     def anchor_color(self) -> Color:
         return self.start_color
 
-    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+    def sample(
+        self,
+        u: float,
+        v: float,
+        *,
+        texture_cache: "_TextureCache",
+        color_space: ColorSpace = ColorSpace.SRGB,
+    ) -> Color:
         delta_x = self.end[0] - self.start[0]
         delta_y = self.end[1] - self.start[1]
         magnitude = delta_x * delta_x + delta_y * delta_y
@@ -278,7 +354,9 @@ class LinearGradientFill:
             return self.start_color
 
         t = ((u - self.start[0]) * delta_x + (v - self.start[1]) * delta_y) / magnitude
-        return _interpolate_color(self.start_color, self.end_color, t)
+        return _interpolate_color(
+            self.start_color, self.end_color, t, color_space=color_space
+        )
 
 
 @dataclass(slots=True)
@@ -294,14 +372,23 @@ class RadialGradientFill:
     def anchor_color(self) -> Color:
         return self.inner_color
 
-    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+    def sample(
+        self,
+        u: float,
+        v: float,
+        *,
+        texture_cache: "_TextureCache",
+        color_space: ColorSpace = ColorSpace.SRGB,
+    ) -> Color:
         dx = u - self.center[0]
         dy = v - self.center[1]
         distance = math.sqrt(dx * dx + dy * dy)
         if self.radius <= 0:
             return self.inner_color
         t = distance / self.radius
-        return _interpolate_color(self.inner_color, self.outer_color, t)
+        return _interpolate_color(
+            self.inner_color, self.outer_color, t, color_space=color_space
+        )
 
 
 @dataclass(slots=True)
@@ -315,7 +402,14 @@ class TextureFill:
         image = _TEXTURE_CACHE.get(self.path)
         return _normalize_pixel(image.getpixel((0, 0)))
 
-    def sample(self, u: float, v: float, *, texture_cache: "_TextureCache") -> Color:
+    def sample(
+        self,
+        u: float,
+        v: float,
+        *,
+        texture_cache: "_TextureCache",
+        color_space: ColorSpace = ColorSpace.SRGB,
+    ) -> Color:
         image = texture_cache.get(self.path)
         clamped_u = _clamp(u)
         clamped_v = _clamp(v)
@@ -365,7 +459,13 @@ def _render_frame_static(
     guides: GuidesOverlay | None,
 ) -> Frame:
     if samples == 1:
-        frame = Frame.blank(index, scene.width, scene.height, scene.background)
+        frame = Frame.blank(
+            index,
+            scene.width,
+            scene.height,
+            scene.background,
+            color_space=scene.color_space,
+        )
         for obj in scene.objects:
             if _object_is_visible(obj, index):
                 obj.render(frame, index)
@@ -376,7 +476,11 @@ def _render_frame_static(
     scaled_width = scene.width * samples
     scaled_height = scene.height * samples
     supersampled_frame = Frame.blank(
-        index, scaled_width, scaled_height, scene.background
+        index,
+        scaled_width,
+        scaled_height,
+        scene.background,
+        color_space=scene.color_space,
     )
     for obj in scene.objects:
         if _object_is_visible(obj, index):
@@ -475,7 +579,12 @@ def _parse_fill(value: object, *, object_id: str) -> Fill:
     return SolidFill(parse_color(value))
 
 
-def _blend_colors(destination: Color, source: Color) -> Color:
+def _blend_colors(
+    destination: Color,
+    source: Color,
+    *,
+    color_space: ColorSpace = ColorSpace.SRGB,
+) -> Color:
     """Return the result of alpha blending ``source`` over ``destination``."""
 
     src_values: Sequence[int] = source
@@ -498,16 +607,27 @@ def _blend_colors(destination: Color, source: Color) -> Color:
     if out_alpha == 0:
         return (0, 0, 0, 0) if include_alpha else (0, 0, 0)
 
-    out_r = int(
-        round((src_r * src_alpha + dst_r * dst_alpha * (1.0 - src_alpha)) / out_alpha)
-    )
-    out_g = int(
-        round((src_g * src_alpha + dst_g * dst_alpha * (1.0 - src_alpha)) / out_alpha)
-    )
-    out_b = int(
-        round((src_b * src_alpha + dst_b * dst_alpha * (1.0 - src_alpha)) / out_alpha)
-    )
+    src_r_lin = _decode_component(src_r, color_space)
+    src_g_lin = _decode_component(src_g, color_space)
+    src_b_lin = _decode_component(src_b, color_space)
+    dst_r_lin = _decode_component(dst_r, color_space)
+    dst_g_lin = _decode_component(dst_g, color_space)
+    dst_b_lin = _decode_component(dst_b, color_space)
+
+    out_r_lin = (
+        src_r_lin * src_alpha + dst_r_lin * dst_alpha * (1.0 - src_alpha)
+    ) / out_alpha
+    out_g_lin = (
+        src_g_lin * src_alpha + dst_g_lin * dst_alpha * (1.0 - src_alpha)
+    ) / out_alpha
+    out_b_lin = (
+        src_b_lin * src_alpha + dst_b_lin * dst_alpha * (1.0 - src_alpha)
+    ) / out_alpha
     out_a = int(round(out_alpha * 255.0))
+
+    out_r = _encode_component(out_r_lin, color_space)
+    out_g = _encode_component(out_g_lin, color_space)
+    out_b = _encode_component(out_b_lin, color_space)
 
     if include_alpha:
         return (out_r, out_g, out_b, out_a)
@@ -523,6 +643,41 @@ def _require_pillow() -> Any:
             "Pillow is required for image export. Install the 'onepiece[chopper-images]' extra."
         )
     return PILImage
+
+
+def _png_color_options(color_space: ColorSpace) -> dict[str, Any]:
+    """Return PNG metadata appropriate for the requested ``color_space``."""
+
+    _require_pillow()
+    try:  # pragma: no cover - depends on optional Pillow extras
+        from PIL import ImageCms
+    except ImportError:  # pragma: no cover - exercised in integration tests
+        return {}
+
+    options: dict[str, Any] = {}
+    profile: Any | None = None
+
+    try:
+        if color_space is ColorSpace.SRGB:
+            profile = ImageCms.createProfile("sRGB")
+        else:
+            create_profile = cast(Callable[..., Any], ImageCms.createProfile)
+            profile = create_profile("sRGB", is_linear=True)
+    except Exception:
+        profile = None
+        if color_space is ColorSpace.LINEAR:
+            options["gamma"] = 1.0
+
+    if profile is not None:
+        try:
+            cms_profile = ImageCms.ImageCmsProfile(profile)
+            options["icc_profile"] = cms_profile.tobytes()
+        except (
+            Exception
+        ):  # pragma: no cover - defensive fallback when profiles unavailable
+            pass
+
+    return options
 
 
 def _require_imageio() -> Any:
@@ -1252,7 +1407,7 @@ class SceneObject:
         return min_x, min_y, max_x - min_x, max_y - min_y
 
     def _color_sampler(
-        self, frame_index: int, scale: int
+        self, target: "Frame", frame_index: int, scale: int
     ) -> Callable[[float, float], Color]:
         if isinstance(self.fill, SolidFill):
             color = self.color_at(frame_index)
@@ -1282,7 +1437,9 @@ class SceneObject:
             local_y /= scale
             u = 0.0 if width == 0 else (local_x - min_x) / width
             v = 0.0 if height == 0 else (local_y - min_y) / height
-            return self.fill.sample(u, v, texture_cache=_TEXTURE_CACHE)
+            return self.fill.sample(
+                u, v, texture_cache=_TEXTURE_CACHE, color_space=target.color_space
+            )
 
         return _gradient_sampler
 
@@ -1320,7 +1477,7 @@ class SceneObject:
             corners, scaled_origin, rotation, scale=scale
         )
 
-        sampler = self._color_sampler(frame_index, scale)
+        sampler = self._color_sampler(target, frame_index, scale)
         self._fill_polygon(target, points, sampler)
 
         _, stroke_width = self._stroke_details(frame_index, scale)
@@ -1343,7 +1500,7 @@ class SceneObject:
         cy = position[1] * scale
         radius_sq = radius * radius
 
-        sampler = self._color_sampler(frame_index, scale)
+        sampler = self._color_sampler(target, frame_index, scale)
 
         min_x = max(0, int(round(cx - radius - 1)))
         max_x = min(target.width - 1, int(round(cx + radius + 1)))
@@ -1446,7 +1603,7 @@ class SceneObject:
         if len(points) < 3:
             raise SceneError("Polygon must contain at least three points")
 
-        sampler = self._color_sampler(frame_index, scale)
+        sampler = self._color_sampler(target, frame_index, scale)
         self._fill_polygon(target, points, sampler)
 
         stroke_color, stroke_width = self._stroke_details(frame_index, scale)
@@ -1502,6 +1659,7 @@ class Scene:
     height: int
     frame_count: int
     background: Color
+    color_space: ColorSpace = ColorSpace.SRGB
     objects: list[SceneObject] = field(default_factory=list)
 
     @classmethod
@@ -1553,6 +1711,10 @@ class Scene:
 
         background = parse_color(payload.get("background", "#000000"))
 
+        color_space = ColorSpace.from_value(
+            payload.get("color_space", ColorSpace.SRGB.value)
+        )
+
         objects_data = payload.get("objects", [])
         if not isinstance(objects_data, Sequence):
             raise SceneError("Scene objects must be supplied as a sequence")
@@ -1577,6 +1739,7 @@ class Scene:
             height=height,
             frame_count=frame_count,
             background=background,
+            color_space=color_space,
             objects=objects,
         )
 
@@ -1589,6 +1752,7 @@ class Frame:
     width: int
     height: int
     pixels: list[list[Color]]
+    color_space: ColorSpace = ColorSpace.SRGB
     has_alpha: bool | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -1602,12 +1766,20 @@ class Frame:
             self.has_alpha = True
 
     def _blend_into(self, row: list[Color], x: int, color: Color) -> None:
-        blended = _blend_colors(row[x], color)
+        blended = _blend_colors(row[x], color, color_space=self.color_space)
         row[x] = blended
         self._update_alpha_flag(blended)
 
     @classmethod
-    def blank(cls, index: int, width: int, height: int, color: Color) -> "Frame":
+    def blank(
+        cls,
+        index: int,
+        width: int,
+        height: int,
+        color: Color,
+        *,
+        color_space: ColorSpace = ColorSpace.SRGB,
+    ) -> "Frame":
         """Create a blank frame filled with ``color``."""
 
         pixels = [[color for _ in range(width)] for _ in range(height)]
@@ -1616,6 +1788,7 @@ class Frame:
             width=width,
             height=height,
             pixels=pixels,
+            color_space=color_space,
             has_alpha=len(color) >= 4,
         )
 
@@ -1692,6 +1865,7 @@ class Frame:
                 width=out_width,
                 height=out_height,
                 pixels=pixels,
+                color_space=self.color_space,
                 has_alpha=include_alpha,
             )
 
@@ -1720,6 +1894,7 @@ class Frame:
             width=resized.width,
             height=resized.height,
             pixels=resized_pixels,
+            color_space=self.color_space,
             has_alpha=include_alpha,
         )
 
@@ -1753,7 +1928,9 @@ class Frame:
         """Write the frame to ``destination`` as a PNG file."""
 
         image = self.to_image(mode=mode)
-        image.save(destination, format="PNG", **options)
+        metadata = _png_color_options(self.color_space)
+        metadata.update(options)
+        image.save(destination, format="PNG", **metadata)
 
 
 class Renderer:
@@ -1991,6 +2168,7 @@ def parse_color(value: object) -> Color:
 __all__ = [
     "Animation",
     "AnimationWriter",
+    "ColorSpace",
     "Frame",
     "GuidesOverlay",
     "Keyframe",
