@@ -444,6 +444,38 @@ def test_render_supports_background_override(tmp_path: Path) -> None:
     assert "17 34 51 17 34 51" in ppm_contents
 
 
+def test_render_accepts_backplate_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_blank_scene(scene_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--backplate",
+            "plates/frame_{index:04d}.png",
+            "--backplate-start",
+            "1001",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["backplate_path"] == "plates/frame_{index:04d}.png"
+    assert captured["backplate_start"] == 1001
+
+
 def test_render_accepts_supersampling_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

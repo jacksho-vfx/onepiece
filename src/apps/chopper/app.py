@@ -296,6 +296,19 @@ def render(
         "-b",
         help="Override the scene background colour using a hex value like '#112233'.",
     ),
+    backplate: str | None = typer.Option(
+        None,
+        "--backplate",
+        help=(
+            "Path to a still image or template used as a backplate."
+            " Templates can reference {frame} or {index} for frame numbering."
+        ),
+    ),
+    backplate_start: int = typer.Option(
+        0,
+        "--backplate-start",
+        help="Optional start index added to frame numbers when formatting backplates.",
+    ),
     start: int | None = typer.Option(
         None,
         "--start",
@@ -477,6 +490,8 @@ def render(
             fps=fps,
             export_was_explicit=export_was_explicit,
             background_override=background_override,
+            backplate_path=backplate,
+            backplate_start=backplate_start,
             start_frame=start,
             end_frame=end,
             frames=frame_list,
