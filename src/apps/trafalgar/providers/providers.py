@@ -272,7 +272,10 @@ class S3DeliveryProvider(DeliveryProvider):
         manifest_name = path.name
         parent = path.parent
         if manifest_name == self._manifest_filename and parent != path:
-            identifier = parent.name or str(parent)
+            # Use the parent directory name when present (e.g. deliveries/daily-0521/manifest.json)
+            # but fall back to the manifest stem if the manifest lives in the bucket root where
+            # the parent is just ``.``.
+            identifier = parent.name or path.stem or str(path)
         else:
             identifier = path.stem or str(path)
         name = identifier
