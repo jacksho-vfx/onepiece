@@ -75,6 +75,51 @@ def compute_costs_summary(engine: PeronaEngine) -> dict[str, Any]:
     current_cost_per_frame = round(pnl_breakdown.current_cost / frame_count, 4)
     delta_cost_per_frame = round(current_cost_per_frame - baseline_cost_per_frame, 4)
 
+    samples = tuple(engine.stream_render_metrics())
+    timeline: list[dict[str, Any]] = []
+    sequence_totals: dict[str, dict[str, float]] = {}
+
+    baseline_frame_time = max(baseline_input.average_frame_time_ms, 1e-6)
+    for sample in samples:
+        sequence_data = sequence_totals.setdefault(
+            sample.sequence,
+            {"frame_time_total": 0.0, "count": 0},
+        )
+        sequence_data["frame_time_total"] += sample.frame_time_ms
+        sequence_data["count"] += 1
+
+        current_series_cost = round(
+            baseline_cost_per_frame * (sample.frame_time_ms / baseline_frame_time), 4
+        )
+        timeline.append(
+            {
+                "timestamp": sample.timestamp.isoformat(),
+                "sequence": sample.sequence,
+                "baseline_cost_per_frame": baseline_cost_per_frame,
+                "current_cost_per_frame": current_series_cost,
+            }
+        )
+
+    timeline.sort(key=lambda item: item["timestamp"])
+
+    sequence_series = []
+    for sequence, totals in sequence_totals.items():
+        if totals["count"] <= 0:
+            continue
+        average_frame_time = totals["frame_time_total"] / totals["count"]
+        sequence_series.append(
+            {
+                "sequence": sequence,
+                "average_frame_time_ms": round(average_frame_time, 2),
+                "baseline_cost_per_frame": baseline_cost_per_frame,
+                "current_cost_per_frame": round(
+                    baseline_cost_per_frame
+                    * (average_frame_time / baseline_frame_time),
+                    4,
+                ),
+            }
+        )
+
     return {
         "baseline": baseline_payload,
         "pnl": pnl_payload,
@@ -83,6 +128,10 @@ def compute_costs_summary(engine: PeronaEngine) -> dict[str, Any]:
             "baseline": baseline_cost_per_frame,
             "current": current_cost_per_frame,
             "delta": delta_cost_per_frame,
+        },
+        "series": {
+            "timeline": timeline,
+            "by_sequence": sorted(sequence_series, key=lambda item: item["sequence"]),
         },
     }
 

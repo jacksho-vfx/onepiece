@@ -457,6 +457,37 @@ tbody tr:last-child td {
     font-size: 0.85rem;
 }
 
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.chart-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 1rem;
+    padding: 1rem;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.chart-card__header h3 {
+    margin: 0 0 0.25rem;
+}
+
+.chart-card__header p {
+    margin: 0;
+}
+
+.chart-card canvas {
+    width: 100%;
+    max-height: 360px;
+}
+
 footer {
     text-align: center;
     padding: 2rem 1.5rem 3rem;
