@@ -15,6 +15,8 @@ const costPerFrameBaseline = byId('cost-per-frame-baseline');
 const costPerFrameCurrent = byId('cost-per-frame-current');
 const costPerFrameDelta = byId('cost-per-frame-delta');
 const costContributors = byId('cost-contributors');
+const costTrendChartCanvas = byId('cost-trend-chart');
+const pnlBreakdownChartCanvas = byId('pnl-breakdown-chart');
 const downloadSummaryButton = byId('download-summary');
 const shotsSequence = byId('shots-sequence');
 const shotsArtist = byId('shots-artist');
@@ -42,6 +44,17 @@ const formatNumber = (value, options = {}) => {
         return '—';
     }
     return new Intl.NumberFormat(undefined, options).format(value);
+};
+
+const formatCurrency = (value, currency) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return '—';
+    }
+    return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currency || 'USD',
+        maximumFractionDigits: 2,
+    }).format(value);
 };
 
 const formatDateTime = (value) => {
@@ -126,6 +139,204 @@ const renderCosts = (costs = {}) => {
     });
 };
 
+let costTrendChart;
+let pnlBreakdownChart;
+
+const buildTimelineSeries = (costs = {}) => {
+    const series = costs.series?.timeline;
+    if (!Array.isArray(series) || series.length === 0) {
+        return { labels: [], baseline: [], current: [] };
+    }
+    const labels = [];
+    const baseline = [];
+    const current = [];
+    series.forEach((point) => {
+        labels.push(formatDateTime(point.timestamp));
+        baseline.push(point.baseline_cost_per_frame);
+        current.push(point.current_cost_per_frame);
+    });
+    return { labels, baseline, current };
+};
+
+const buildStackedSeries = (costs = {}) => {
+    const sequenceSeries = Array.isArray(costs.series?.by_sequence)
+        ? costs.series.by_sequence
+        : [];
+    const pnlContributions = Array.isArray(costs.pnl?.contributions)
+        ? costs.pnl.contributions
+        : [];
+
+    const labels = [];
+    const baseline = [];
+    const current = [];
+    const pnlDelta = [];
+
+    sequenceSeries.forEach((entry) => {
+        labels.push(entry.sequence ?? 'Sequence');
+        baseline.push(entry.baseline_cost_per_frame ?? costs.cost_per_frame?.baseline ?? 0);
+        current.push(entry.current_cost_per_frame ?? costs.cost_per_frame?.current ?? 0);
+        pnlDelta.push(0);
+    });
+
+    pnlContributions.forEach((contribution) => {
+        labels.push(contribution.factor ?? 'P&L factor');
+        baseline.push(0);
+        current.push(0);
+        pnlDelta.push(contribution.delta_cost ?? 0);
+    });
+
+    return { labels, baseline, current, pnlDelta };
+};
+
+const renderCostCharts = (costs = {}) => {
+    if (typeof Chart === 'undefined') {
+        return;
+    }
+
+    const currency = costs.currency || costs.baseline?.currency;
+    const timeline = buildTimelineSeries(costs);
+    const stacked = buildStackedSeries(costs);
+
+    const timelineLabels = timeline.labels.length ? timeline.labels : ['Baseline'];
+    const baselineSeries = timeline.baseline.length
+        ? timeline.baseline
+        : [costs.cost_per_frame?.baseline ?? 0];
+    const currentSeries = timeline.current.length
+        ? timeline.current
+        : [costs.cost_per_frame?.current ?? 0];
+
+    if (costTrendChartCanvas) {
+        if (costTrendChart) {
+            costTrendChart.destroy();
+        }
+        costTrendChart = new Chart(costTrendChartCanvas, {
+            type: 'line',
+            data: {
+                labels: timelineLabels,
+                datasets: [
+                    {
+                        label: 'Baseline cost/frame',
+                        data: baselineSeries,
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.3)',
+                        tension: 0.25,
+                        fill: false,
+                    },
+                    {
+                        label: 'Current cost/frame',
+                        data: currentSeries,
+                        borderColor: 'rgba(16, 185, 129, 0.9)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.25)',
+                        tension: 0.25,
+                        fill: false,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: currency ? `Cost per frame (${currency})` : 'Cost per frame',
+                        },
+                    },
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const value = context.parsed.y;
+                                return currency ? formatCurrency(value, currency) : `${value}`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    if (pnlBreakdownChartCanvas) {
+        if (pnlBreakdownChart) {
+            pnlBreakdownChart.destroy();
+        }
+
+        const chartLabels = stacked.labels.length ? stacked.labels : ['Baseline', 'Current'];
+        const baselineValues = stacked.labels.length
+            ? stacked.baseline
+            : [costs.cost_per_frame?.baseline ?? 0, 0];
+        const currentValues = stacked.labels.length
+            ? stacked.current
+            : [0, costs.cost_per_frame?.current ?? 0];
+        const pnlValues = stacked.labels.length ? stacked.pnlDelta : [];
+
+        pnlBreakdownChart = new Chart(pnlBreakdownChartCanvas, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [
+                    {
+                        label: 'Baseline cost/frame',
+                        data: baselineValues,
+                        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                        stack: 'per-frame',
+                    },
+                    {
+                        label: 'Current cost/frame',
+                        data: currentValues,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        stack: 'per-frame',
+                    },
+                ].concat(
+                    pnlValues.length
+                        ? [
+                              {
+                                  label: 'P&L delta',
+                                  data: pnlValues,
+                                  backgroundColor: 'rgba(249, 115, 22, 0.7)',
+                                  stack: 'pnl',
+                              },
+                          ]
+                        : []
+                ),
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: currency ? `Cost (${currency})` : 'Cost',
+                        },
+                    },
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const value = context.parsed.y;
+                                return currency ? formatCurrency(value, currency) : `${value}`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+};
+
 const populateFilters = async () => {
     try {
         const response = await fetch('./shots/sequences');
@@ -174,11 +385,17 @@ const fetchSummary = async () => {
         if (shotsArtist.value) {
             params.set('artist', shotsArtist.value);
         }
-        const response = await fetch(`./dashboard/summary?${params.toString()}`);
-        if (!response.ok) {
+        const [summaryResponse, costResponse] = await Promise.all([
+            fetch(`./dashboard/summary?${params.toString()}`),
+            fetch(`./analytics/costs?${params.toString()}`),
+        ]);
+
+        if (!summaryResponse.ok) {
             throw new Error('Failed to load summary');
         }
-        const summary = await response.json();
+
+        const summary = await summaryResponse.json();
+        const costAnalytics = costResponse.ok ? await costResponse.json() : null;
         summaryGenerated.textContent = summary.generated_at ?? 'Unknown';
         metricsTotal.textContent = formatNumber(summary.metrics?.total_samples);
         metricsFps.textContent = formatNumber(summary.metrics?.average_fps, { maximumFractionDigits: 1 });
@@ -191,6 +408,7 @@ const fetchSummary = async () => {
         renderShots(summary.shots?.notable_active ?? []);
         renderRiskCards(summary.risk?.top_risks ?? []);
         renderCosts(summary.costs ?? {});
+        renderCostCharts(costAnalytics ?? summary.costs ?? {});
         summaryStatus.textContent = 'Data refreshed';
     } catch (error) {
         console.error(error);

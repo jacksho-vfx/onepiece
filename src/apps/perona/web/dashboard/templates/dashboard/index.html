@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Perona Dashboard</title>
     <link rel="stylesheet" href="/dashboard/static/dashboard.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body data-version="__PERONA_VERSION__">
     <header>
@@ -198,6 +199,30 @@
                     <div class="cost-card">
                         <h3>Top contributors</h3>
                         <ul id="cost-contributors" style="margin: 0; padding-left: 1.25rem;"></ul>
+                    </div>
+                </div>
+            </section>
+            <section class="card fade-in span-16">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <h2 class="heading-with-icon">Cost trends</h2>
+                        <p class="muted">Baseline vs. current cost per frame and P&amp;L components</p>
+                    </div>
+                </div>
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <div class="chart-card__header">
+                            <h3>Cost per frame over time</h3>
+                            <p class="muted">Baseline compared with current performance across recent samples</p>
+                        </div>
+                        <canvas id="cost-trend-chart" aria-label="Cost per frame over time" role="img"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card__header">
+                            <h3>Sequence and P&amp;L breakdown</h3>
+                            <p class="muted">Stacked view of baseline vs. current per sequence with P&amp;L deltas</p>
+                        </div>
+                        <canvas id="pnl-breakdown-chart" aria-label="P&amp;L and per-sequence cost breakdown" role="img"></canvas>
                     </div>
                 </div>
             </section>
