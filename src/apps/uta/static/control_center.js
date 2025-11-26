@@ -222,6 +222,30 @@ const toArray = (collection) => {
     });
 
     const commandCards = Array.from(document.querySelectorAll('.command-card'));
+    const getVisibleCards = () => commandCards.filter((card) => !card.classList.contains('is-hidden'));
+    const isTypingElement = (element) => {
+      if (!element) {
+        return false;
+      }
+      const tagName = element.tagName;
+      const typingTags = ['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'];
+      return typingTags.includes(tagName) || element.isContentEditable === true;
+    };
+    const findActiveCard = (element) => {
+      if (!element || typeof element.closest !== 'function') {
+        return null;
+      }
+      return element.closest('.command-card');
+    };
+    const focusCard = (card) => {
+      if (!card || typeof card.focus !== 'function') {
+        return;
+      }
+      card.focus({ preventScroll: true });
+      if (typeof card.scrollIntoView === 'function') {
+        card.scrollIntoView({ block: 'nearest' });
+      }
+    };
     const searchInput = document.getElementById('command-search');
     const favouritesToggle = document.getElementById('favourites-toggle');
     const favouritesPill = document.querySelector('[data-favourites-pill]');
@@ -422,18 +446,51 @@ const toArray = (collection) => {
     document.addEventListener('keydown', (event) => {
     if (event.key === '/' && !(event.ctrlKey || event.metaKey || event.altKey)) {
       const activeElement = document.activeElement;
-      const isTyping = activeElement && ['INPUT', 'TEXTAREA'].includes(activeElement.tagName);
-      if (!isTyping && searchInput) {
+      if (!isTypingElement(activeElement) && searchInput) {
         event.preventDefault();
         searchInput.focus();
         searchInput.select();
       }
     }
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !(event.ctrlKey || event.metaKey || event.altKey)) {
+      const activeElement = document.activeElement;
+      if (isTypingElement(activeElement)) {
+        return;
+      }
+      const visibleCards = getVisibleCards();
+      if (!visibleCards.length) {
+        return;
+      }
+      const currentCard = findActiveCard(activeElement);
+      const currentIndex = visibleCards.indexOf(currentCard);
+      const isArrowDown = event.key === 'ArrowDown';
+      let targetIndex = isArrowDown ? 0 : visibleCards.length - 1;
+      if (currentIndex >= 0) {
+        targetIndex = isArrowDown
+          ? Math.min(currentIndex + 1, visibleCards.length - 1)
+          : Math.max(currentIndex - 1, 0);
+      }
+      const targetCard = visibleCards[targetIndex];
+      if (targetCard) {
+        event.preventDefault();
+        focusCard(targetCard);
+      }
+    }
+    if (event.key === 'Enter' && !(event.ctrlKey || event.metaKey || event.altKey)) {
+      const activeElement = document.activeElement;
+      if (isTypingElement(activeElement)) {
+        return;
+      }
+      const card = findActiveCard(activeElement);
+      const runButton = card ? card.querySelector('.run-command') : null;
+      if (runButton) {
+        event.preventDefault();
+        runButton.click();
+      }
+    }
     if (event.key.toLowerCase() === 'f' && event.shiftKey && !(event.ctrlKey || event.metaKey || event.altKey)) {
       const activeElement = document.activeElement;
-      const card = activeElement && typeof activeElement.closest === 'function'
-        ? activeElement.closest('.command-card')
-        : null;
+      const card = findActiveCard(activeElement);
       if (card) {
         event.preventDefault();
         const button = card.querySelector('.favourite-toggle');
@@ -444,9 +501,7 @@ const toArray = (collection) => {
     }
     if (event.key.toLowerCase() === 'c' && event.shiftKey && !(event.ctrlKey || event.metaKey || event.altKey)) {
       const activeElement = document.activeElement;
-      const card = activeElement && typeof activeElement.closest === 'function'
-        ? activeElement.closest('.command-card')
-        : null;
+      const card = findActiveCard(activeElement);
       if (card) {
         const button = card.querySelector('.copy-command');
         if (button) {

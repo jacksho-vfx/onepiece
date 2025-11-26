@@ -147,6 +147,9 @@ def _render_index(
         <nav class=\"tab-bar\" role=\"tablist\">
           {navigation}
         </nav>
+        <p class=\"keyboard-shortcuts-hint\" role=\"note\">
+          Shortcuts: / focus search, ↑/↓ move between commands, Enter runs the focused command, Shift+C copies it, Shift+F toggles a favourite.
+        </p>
         <main>
           {pages_html}
         </main>
