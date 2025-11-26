@@ -101,6 +101,7 @@ def _render_index(
 
     navigation = "".join(nav_items)
     pages_html = "".join(content_sections)
+    theme_href = _with_root_path(root_path, "/theme/theme.css")
     css_href = _with_root_path(root_path, "/static/control_center.css")
     js_src = _with_root_path(root_path, "/static/control_center.js")
     credentials_attr = ""
@@ -126,6 +127,7 @@ def _render_index(
         <meta charset=\"utf-8\" />
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
         <title>Uta Control Center</title>
+        <link rel=\"stylesheet\" href=\"{theme_href}\" />
         <link rel=\"stylesheet\" href=\"{css_href}\" />
         <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js\" id=\"uta-dashboard-chartjs\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"></script>
       </head>

@@ -1,24 +1,26 @@
 :root {
-    color-scheme: light dark;
-    --uta-bg: #0c111f;
-    --uta-surface: rgba(15, 23, 42, 0.92);
-    --uta-surface-alt: rgba(17, 25, 42, 0.9);
-    --uta-border: rgba(148, 163, 184, 0.4);
-    --uta-border-strong: rgba(96, 165, 250, 0.6);
-    --uta-text: #f3f4f6;
-    --uta-text-muted: rgba(226, 232, 240, 0.9);
-    --uta-text-subtle: rgba(148, 163, 184, 0.88);
-    --uta-accent: #60a5fa;
-    --uta-accent-strong: #2563eb;
-    --uta-success: #34d399;
-    --uta-warning: #fbbf24;
-    --uta-error: #f87171;
-    --uta-card-shadow: 0 18px 36px rgba(15, 23, 42, 0.55);
+    color-scheme: dark;
+    --uta-bg: var(--op-page-bg);
+    --uta-surface: var(--op-surface);
+    --uta-surface-alt: var(--op-surface-alt);
+    --uta-border: var(--op-border);
+    --uta-border-strong: var(--op-border-strong);
+    --uta-text: var(--op-text);
+    --uta-text-muted: var(--op-muted);
+    --uta-text-subtle: var(--op-muted);
+    --uta-accent: var(--op-accent);
+    --uta-accent-strong: var(--op-accent-strong);
+    --uta-success: var(--op-success);
+    --uta-warning: var(--op-warning);
+    --uta-error: var(--op-danger);
+    --uta-card-shadow: var(--op-shadow);
   }
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--uta-bg);
+    font-family: var(--op-font);
+    background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 38%),
+      radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.1), transparent 45%),
+      var(--uta-bg);
     color: var(--uta-text);
   }
   header.app-header {

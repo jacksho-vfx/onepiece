@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typer.testing import CliRunner
 
+from apps.web_theme import get_theme_static_directory
 from apps.onepiece.app import app as cli_app
 from apps.trafalgar.web.dashboard import app as dashboard_app
 from apps.trafalgar.web.render import app as render_app
@@ -35,6 +36,7 @@ PipelineApiError = web_pipeline.PipelineApiError
 get_pipeline_client = web_pipeline.get_pipeline_client
 
 STATIC_DIRECTORY = Path(__file__).with_name("static")
+THEME_STATIC_DIRECTORY = get_theme_static_directory()
 
 DEFAULT_DASHBOARD_API_KEY_ENV = "UTA_DEFAULT_DASHBOARD_API_KEY"
 DEFAULT_DASHBOARD_API_SECRET_ENV = "UTA_DEFAULT_DASHBOARD_API_SECRET"
@@ -54,6 +56,11 @@ app = FastAPI(title="Uta Control Center", docs_url=None, redoc_url=None)
 app.mount("/dashboard", dashboard_app)
 app.mount("/render", render_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="uta-static")
+app.mount(
+    "/theme",
+    StaticFiles(directory=THEME_STATIC_DIRECTORY),
+    name="uta-shared-theme",
+)
 
 
 class RunCommandRequest(BaseModel):
