@@ -5,21 +5,32 @@ def render_pipeline_page(*, is_active: bool) -> str:
     active_class = "active" if is_active else ""
     return f"""
     <section id=\"page-pipelines\" class=\"page {active_class}\" data-pipeline-page>
-      <div class=\"page-header\">\n        <h2>Pipeline orchestrator</h2>
+      <div class=\"page-header\">
+        <h2>Pipeline orchestrator</h2>
         <p class=\"page-help\">Discover Trafalgar pipeline definitions, run orchestrated jobs, and inspect recent events.</p>
       </div>
       <div class=\"pipeline-toolbar\">
         <button type=\"button\" class=\"pipeline-refresh\" data-pipeline-refresh>Refresh pipelines</button>
         <span class=\"pipeline-status\" data-pipeline-status role=\"status\" aria-live=\"polite\"></span>
       </div>
+      <div class=\"pipeline-filters\">
+        <label class=\"pipeline-search\" aria-label=\"Search pipelines\">
+          <span class=\"pipeline-search-icon\" aria-hidden=\"true\">🔎</span>
+          <input type=\"search\" class=\"pipeline-search-input\" placeholder=\"Search by name or ID\" data-pipeline-search />
+        </label>
+        <div class=\"pipeline-status-filters\" data-pipeline-status-chips role=\"group\" aria-label=\"Filter pipelines by status\">
+          <button type=\"button\" class=\"pipeline-status-chip is-active\" data-pipeline-status-chip data-status=\"all\">All statuses</button>
+        </div>
+      </div>
       <p class=\"pipeline-empty\" data-pipeline-empty hidden>No pipelines are currently registered with the orchestrator.</p>
       <p class=\"pipeline-error\" data-pipeline-error hidden></p>
       <div class=\"pipeline-grid\" data-pipeline-cards></div>
       <template id=\"pipeline-card-template\">
-        <article class=\"pipeline-card\" data-pipeline-card>
+        <article class=\"pipeline-card\" data-pipeline-card data-pipeline-name-value data-pipeline-identifier-value data-pipeline-status-value>
           <header class=\"pipeline-card-header\">
             <h3 data-pipeline-name></h3>
             <p class=\"pipeline-card-meta\">Pipeline ID: <code data-pipeline-identifier></code></p>
+            <p class=\"pipeline-card-status\" data-pipeline-status-text></p>
             <p class=\"pipeline-card-description\" data-pipeline-description></p>
           </header>
           <form class=\"pipeline-run-form\" data-pipeline-form autocomplete=\"off\">
