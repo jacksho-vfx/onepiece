@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import tempfile
 import re
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 
@@ -720,6 +722,14 @@ def compare(
         "-o",
         help="Directory where per-frame difference images will be written.",
     ),
+    report_format: list[str] = typer.Option(
+        default_factory=list,
+        help=(
+            "Optional report formats (json, csv, html) to generate alongside diff "
+            "images. Use multiple times to request more than one format."
+        ),
+        case_sensitive=False,
+    ),
 ) -> None:
     """Render and compare two scenes or directories of frames."""
 
@@ -741,29 +751,45 @@ def compare(
 
         output.mkdir(parents=True, exist_ok=True)
 
+        report_formats = _normalize_report_formats(report_format)
+
         total_delta = 0.0
         total_pixels = 0
         overall_max = 0.0
+        frame_stats: list[_FrameResult] = []
 
         for left, right in zip(first_list, second_list):
             if left.name != right.name:
                 raise typer.BadParameter("Frame names must match between directories")
 
-            diff_stats = _write_diff(left, right, output)
-            frame_pixels = diff_stats.pixel_count
-            total_delta += diff_stats.total_delta
+            diff_result = _write_diff(left, right, output)
+            frame_pixels = diff_result.stats.pixel_count
+            total_delta += diff_result.stats.total_delta
             total_pixels += frame_pixels
-            overall_max = max(overall_max, diff_stats.max_delta)
+            overall_max = max(overall_max, diff_result.stats.max_delta)
+            frame_stats.append(diff_result)
 
             typer.echo(
-                f"{left.name}: mean delta {diff_stats.mean_delta:.2f}, "
-                f"max delta {diff_stats.max_delta:.2f}"
+                f"{left.name}: mean delta {diff_result.stats.mean_delta:.2f}, "
+                f"max delta {diff_result.stats.max_delta:.2f}"
             )
 
         overall_mean = total_delta / total_pixels if total_pixels else 0.0
         typer.echo(
             f"Overall: mean delta {overall_mean:.2f}, max delta {overall_max:.2f}"
         )
+
+        if report_formats:
+            report_payload = _build_report_payload(
+                first,
+                second,
+                output,
+                frame_stats,
+                overall_mean,
+                overall_max,
+                total_pixels,
+            )
+            _write_reports(report_payload, report_formats)
 
 
 def _parse_frame_list(raw: str) -> list[int]:
@@ -816,7 +842,14 @@ class _DiffStats:
         self.pixel_count = pixel_count
 
 
-def _write_diff(left: Path, right: Path, output_dir: Path) -> _DiffStats:
+class _FrameResult:
+    def __init__(self, name: str, stats: _DiffStats, diff_path: Path):
+        self.name = name
+        self.stats = stats
+        self.diff_path = diff_path
+
+
+def _write_diff(left: Path, right: Path, output_dir: Path) -> _FrameResult:
     left_image = Image.open(left).convert("RGB")
     right_image = Image.open(right).convert("RGB")
 
@@ -835,7 +868,169 @@ def _write_diff(left: Path, right: Path, output_dir: Path) -> _DiffStats:
     diff_image.save(diff_path)
 
     pixel_count = int(delta.size)
-    return _DiffStats(mean_delta, max_delta, pixel_count)
+    stats = _DiffStats(mean_delta, max_delta, pixel_count)
+    return _FrameResult(left.stem, stats, diff_path)
+
+
+def _normalize_report_formats(values: Sequence[str]) -> list[str]:
+    supported = {"json", "csv", "html"}
+    normalized: list[str] = []
+    for value in values:
+        lower = value.lower()
+        if lower not in supported:
+            raise typer.BadParameter(
+                f"Unsupported report format {value!r}. Choose from json, csv, html."
+            )
+        if lower not in normalized:
+            normalized.append(lower)
+    return normalized
+
+
+def _build_report_payload(
+    first: Path,
+    second: Path,
+    output: Path,
+    frame_results: Iterable[_FrameResult],
+    overall_mean: float,
+    overall_max: float,
+    total_pixels: int,
+) -> dict[str, Any]:
+    frames = [
+        {
+            "frame": result.name,
+            "mean_delta": result.stats.mean_delta,
+            "max_delta": result.stats.max_delta,
+            "pixel_count": result.stats.pixel_count,
+            "total_delta": result.stats.total_delta,
+            "diff_image": str(output.joinpath(result.diff_path.name)),
+        }
+        for result in frame_results
+    ]
+
+    status = "pass" if overall_max == 0 else "fail"
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    return {
+        "metadata": {
+            "timestamp": timestamp,
+            "status": status,
+            "output_directory": str(output),
+            "first_source": str(first),
+            "second_source": str(second),
+        },
+        "summary": {
+            "overall_mean_delta": overall_mean,
+            "overall_max_delta": overall_max,
+            "total_pixels": total_pixels,
+            "frame_count": len(frames),
+        },
+        "frames": frames,
+    }
+
+
+def _write_reports(payload: dict[str, Any], formats: Iterable[str]) -> None:
+    for report_format in formats:
+        if report_format == "json":
+            _write_json_report(payload)
+        elif report_format == "csv":
+            _write_csv_report(payload)
+        elif report_format == "html":
+            _write_html_report(payload)
+
+
+def _write_json_report(payload: dict[str, Any]) -> None:
+    output_path = (
+        Path(payload["metadata"]["output_directory"]) / "comparison_report.json"
+    )
+    with output_path.open("w", encoding="utf-8") as fp:
+        json.dump(payload, fp, indent=2)
+
+
+def _write_csv_report(payload: dict[str, Any]) -> None:
+    output_path = (
+        Path(payload["metadata"]["output_directory"]) / "comparison_report.csv"
+    )
+    fieldnames = [
+        "frame",
+        "mean_delta",
+        "max_delta",
+        "pixel_count",
+        "total_delta",
+        "diff_image",
+    ]
+    with output_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(payload["frames"])
+
+
+def _write_html_report(payload: dict[str, Any]) -> None:
+    output_path = (
+        Path(payload["metadata"]["output_directory"]) / "comparison_report.html"
+    )
+    frame_rows = "\n".join(
+        (
+            "<tr>"
+            f"<td>{frame['frame']}</td>"
+            f"<td>{frame['mean_delta']:.2f}</td>"
+            f"<td>{frame['max_delta']:.2f}</td>"
+            f"<td>{frame['pixel_count']}</td>"
+            f"<td>{frame['total_delta']:.2f}</td>"
+            f"<td>{frame['diff_image']}</td>"
+            "</tr>"
+        )
+        for frame in payload["frames"]
+    )
+
+    metadata = payload["metadata"]
+    summary = payload["summary"]
+    html_content = f"""
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <title>Chopper Comparison Report</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 1.5rem; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+    th {{ background-color: #f4f4f4; }}
+  </style>
+</head>
+<body>
+  <h1>Chopper Comparison Report</h1>
+  <p><strong>Status:</strong> {metadata['status']}</p>
+  <p><strong>Timestamp:</strong> {metadata['timestamp']}</p>
+  <p><strong>First source:</strong> {metadata['first_source']}<br>
+     <strong>Second source:</strong> {metadata['second_source']}</p>
+  <h2>Summary</h2>
+  <ul>
+    <li>Overall mean delta: {summary['overall_mean_delta']:.2f}</li>
+    <li>Overall max delta: {summary['overall_max_delta']:.2f}</li>
+    <li>Total pixels: {summary['total_pixels']}</li>
+    <li>Frame count: {summary['frame_count']}</li>
+  </ul>
+  <h2>Frames</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Frame</th>
+        <th>Mean delta</th>
+        <th>Max delta</th>
+        <th>Pixel count</th>
+        <th>Total delta</th>
+        <th>Diff image</th>
+      </tr>
+    </thead>
+    <tbody>
+      {frame_rows}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+
+    output_path.write_text(html_content, encoding="utf-8")
 
 
 __all__ = [
