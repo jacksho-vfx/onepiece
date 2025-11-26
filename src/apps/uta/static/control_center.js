@@ -664,6 +664,37 @@ const toArray = (collection) => {
     const copyButton = form.querySelector('.copy-command');
     let copyFeedbackTimer = null;
     let statusResetTimer = null;
+    const escapeId = (value) => {
+      if (typeof CSS !== 'undefined' && CSS.escape) {
+        return CSS.escape(value);
+      }
+      return value.replace(/[^\w-]/g, '\\$&');
+    };
+    const findInputById = (targetId) => {
+      if (!targetId) {
+        return null;
+      }
+      return form.querySelector(`#${escapeId(targetId)}`);
+    };
+    const mergePresetValues = (targetId, values) => {
+      if (!Array.isArray(values) || values.length === 0) {
+        return;
+      }
+      const input = findInputById(targetId);
+      if (!input || input.dataset.allowMultiple !== 'true') {
+        return;
+      }
+      const existing = expandMultiValue(input, input.value || '');
+      const nextValues = existing.slice();
+      values.forEach((value) => {
+        const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+        if (text && !nextValues.includes(text)) {
+          nextValues.push(text);
+        }
+      });
+      input.value = nextValues.join(lineFeed);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
     const clearStatusTimer = () => {
       if (statusResetTimer) {
         clearTimeout(statusResetTimer);
@@ -849,6 +880,24 @@ const toArray = (collection) => {
       const previewSegments = [...base, ...buildArgumentSegments()];
       preview.textContent = previewSegments.map(quoteArgument).join(' ');
     };
+    const presetSelectors = form.querySelectorAll('.parameter-preset');
+    presetSelectors.forEach((select) => {
+      select.addEventListener('change', () => {
+        const targetId = select.dataset.target || '';
+        const selected = select.options[select.selectedIndex];
+        const rawValues = selected
+          ? safeParseJson(selected.dataset.values || '[]', [])
+          : [];
+        mergePresetValues(targetId, rawValues);
+        select.value = '';
+      });
+    });
+    const exampleButtons = form.querySelectorAll('.parameter-helper-chip');
+    exampleButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        mergePresetValues(button.dataset.target || '', [button.dataset.example || '']);
+      });
+    });
     parameterInputs.forEach((input) => {
       const eventName = input.type === 'checkbox' ? 'change' : 'input';
       input.addEventListener(eventName, updatePreview);

@@ -27,6 +27,8 @@ class ParameterSpec:
     allows_multiple: bool
     nargs: int
     default_bool: bool | None = None
+    examples: list[str] | None = None
+    presets: list[Any] | None = None
 
 
 @dataclass
@@ -142,6 +144,8 @@ def _extract_parameters(command: click.Command) -> list[ParameterSpec]:
                 allows_multiple=allows_multiple,
                 nargs=nargs,
                 default_bool=default_bool,
+                examples=None,
+                presets=None,
             )
         )
     return specs
