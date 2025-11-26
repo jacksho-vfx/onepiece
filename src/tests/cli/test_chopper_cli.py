@@ -576,6 +576,9 @@ def test_qc_render_accepts_guides_and_color_space(
 
     def fake_render_scene(**kwargs: object) -> str:
         captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
         return "ok"
 
     monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
@@ -718,6 +721,76 @@ def test_qc_render_enables_optional_elements(
     assert {"slate-text", "timecode", "studio-logo", "studio-logo-mark"}.issubset(
         object_ids
     )
+
+
+def test_qc_render_can_save_scene_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    saved_scene = tmp_path / "saved" / "scene.json"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--save-scene",
+            str(saved_scene),
+        ],
+    )
+
+    assert result.exit_code == 0
+    saved_payload = json.loads(saved_scene.read_text())
+    assert captured["payload"] == saved_payload
+
+
+def test_qc_render_includes_hash_and_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    output_dir = tmp_path / "qc_frames"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(output_dir),
+            "--save-scene",
+            str(tmp_path / "scene.json"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = captured["payload"]
+    expected_hash = chopper_app_module._hash_scene_payload(payload)
+    assert f"scene sha256: {expected_hash}" in result.output
+
+    qc_report = json.loads((output_dir / "qc_report.json").read_text())
+    assert qc_report["metadata"]["scene_hash"] == expected_hash
+    assert qc_report["scene"] == payload
 
 
 def test_render_accepts_guides_options(
