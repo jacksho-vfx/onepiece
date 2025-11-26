@@ -104,6 +104,11 @@
     background: rgba(17, 25, 40, 0.92);
     border-bottom: 1px solid var(--uta-border);
   }
+  .keyboard-shortcuts-hint {
+    margin: -0.35rem 1.5rem 1.25rem;
+    color: var(--uta-text-subtle);
+    font-size: 0.95rem;
+  }
   .tab-button {
     background: transparent;
     border: 1px solid var(--uta-border);
