@@ -793,6 +793,57 @@ def test_qc_render_includes_hash_and_report(
     assert qc_report["scene"] == payload
 
 
+def test_qc_batch_generates_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = tmp_path / "qc_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            [
+                {"name": "render-job", "scene": "demo"},
+                {"name": "compare-job", "first": "a", "second": "b"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured_render: dict[str, Any] = {}
+
+    def fake_qc_render(**kwargs: object) -> None:
+        captured_render.update(kwargs)
+
+    monkeypatch.setattr(chopper_app_module, "qc_render", fake_qc_render)
+
+    def fake_run_comparison(**kwargs: object) -> object:
+        return chopper_app_module._ComparisonOutcome(
+            first=Path(str(kwargs["first"])),
+            second=Path(str(kwargs["second"])),
+            output=Path(str(kwargs["output"])),
+            frame_results=[],
+            overall_mean=0.0,
+            overall_max=0.0,
+            total_pixels=0,
+            failure_messages=["over threshold"],
+        )
+
+    monkeypatch.setattr(chopper_app_module, "_run_comparison", fake_run_comparison)
+
+    runner = CliRunner()
+    output_dir = tmp_path / "batch"
+    result = runner.invoke(
+        app, ["qc-batch", str(manifest), "--output", str(output_dir)]
+    )
+
+    assert result.exit_code == 1
+    assert captured_render["output"] == output_dir / "render-job" / "frames"
+
+    report_path = output_dir / "qc_batch_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["summary"] == {"total": 2, "passed": 1, "failed": 1, "errors": 0}
+    task_types = {task["name"]: task["status"] for task in report["tasks"]}
+    assert task_types == {"render-job": "pass", "compare-job": "fail"}
+
+
 def test_render_accepts_guides_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -7,9 +7,10 @@ import hashlib
 import json
 import tempfile
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -965,6 +966,128 @@ def qc_render(
     typer.echo(f"{message} (scene sha256: {scene_hash})")
 
 
+@dataclass
+class _ComparisonOutcome:
+    first: Path
+    second: Path
+    output: Path
+    frame_results: list[_FrameResult]
+    overall_mean: float
+    overall_max: float
+    total_pixels: int
+    failure_messages: list[str]
+
+    @property
+    def status(self) -> str:
+        return "pass" if not self.failure_messages else "fail"
+
+
+def _run_comparison(
+    *,
+    first: Path,
+    second: Path,
+    output: Path,
+    report_formats: Sequence[str],
+    mean_threshold: float | None,
+    max_threshold: float | None,
+    per_frame_mean_threshold: float | None,
+    per_frame_max_threshold: float | None,
+    echo: Callable[[str], None] | None = typer.echo,
+    write_reports: bool = True,
+) -> _ComparisonOutcome:
+    echo_fn: Callable[[str], None] = echo or (lambda *_args, **_kwargs: None)
+    normalized_formats = _normalize_report_formats(report_formats)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_root = Path(tmpdir)
+        first_frames = _prepare_frames(first, temp_root / "first")
+        second_frames = _prepare_frames(second, temp_root / "second")
+
+        first_list = _collect_frames(first_frames)
+        second_list = _collect_frames(second_frames)
+
+        if len(first_list) != len(second_list):
+            raise typer.BadParameter(
+                "Frame directories must contain the same number of frames"
+            )
+
+        output.mkdir(parents=True, exist_ok=True)
+
+        total_delta = 0.0
+        total_pixels = 0
+        overall_max = 0.0
+        frame_stats: list[_FrameResult] = []
+        failed_frames: list[_FrameResult] = []
+
+        for left, right in zip(first_list, second_list):
+            if left.name != right.name:
+                raise typer.BadParameter("Frame names must match between directories")
+
+            diff_result = _write_diff(left, right, output)
+            _evaluate_frame_thresholds(
+                diff_result, per_frame_mean_threshold, per_frame_max_threshold
+            )
+            frame_pixels = diff_result.stats.pixel_count
+            total_delta += diff_result.stats.total_delta
+            total_pixels += frame_pixels
+            overall_max = max(overall_max, diff_result.stats.max_delta)
+            frame_stats.append(diff_result)
+            if diff_result.failures:
+                failed_frames.append(diff_result)
+
+            echo_fn(
+                f"{left.name}: mean delta {diff_result.stats.mean_delta:.2f}, "
+                f"max delta {diff_result.stats.max_delta:.2f}"
+            )
+
+        overall_mean = total_delta / total_pixels if total_pixels else 0.0
+        echo_fn(f"Overall: mean delta {overall_mean:.2f}, max delta {overall_max:.2f}")
+
+        failure_messages = _collect_failures(
+            overall_mean=overall_mean,
+            overall_max=overall_max,
+            failed_frames=failed_frames,
+            mean_threshold=mean_threshold,
+            max_threshold=max_threshold,
+            per_frame_mean_threshold=per_frame_mean_threshold,
+            per_frame_max_threshold=per_frame_max_threshold,
+        )
+        if failure_messages:
+            echo_fn("QC thresholds exceeded:")
+            for message in failure_messages:
+                echo_fn(f"- {message}")
+
+        if normalized_formats and write_reports:
+            report_payload = _build_report_payload(
+                first,
+                second,
+                output,
+                frame_stats,
+                overall_mean,
+                overall_max,
+                total_pixels,
+                failure_messages,
+                _build_threshold_summary(
+                    mean_threshold,
+                    max_threshold,
+                    per_frame_mean_threshold,
+                    per_frame_max_threshold,
+                ),
+            )
+            _write_reports(report_payload, normalized_formats)
+
+    return _ComparisonOutcome(
+        first=first,
+        second=second,
+        output=output,
+        frame_results=frame_stats,
+        overall_mean=overall_mean,
+        overall_max=overall_max,
+        total_pixels=total_pixels,
+        failure_messages=failure_messages,
+    )
+
+
 @app.command()
 def compare(
     first: Path = typer.Argument(
@@ -1018,93 +1141,22 @@ def compare(
 ) -> None:
     """Render and compare two scenes or directories of frames."""
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        temp_root = Path(tmpdir)
-        try:
-            first_frames = _prepare_frames(first, temp_root / "first")
-            second_frames = _prepare_frames(second, temp_root / "second")
-        except ChopperRenderError as exc:
-            raise typer.BadParameter(str(exc)) from exc
-
-        first_list = _collect_frames(first_frames)
-        second_list = _collect_frames(second_frames)
-
-        if len(first_list) != len(second_list):
-            raise typer.BadParameter(
-                "Frame directories must contain the same number of frames"
-            )
-
-        output.mkdir(parents=True, exist_ok=True)
-
-        report_formats = _normalize_report_formats(report_format)
-
-        total_delta = 0.0
-        total_pixels = 0
-        overall_max = 0.0
-        frame_stats: list[_FrameResult] = []
-        failed_frames: list[_FrameResult] = []
-
-        for left, right in zip(first_list, second_list):
-            if left.name != right.name:
-                raise typer.BadParameter("Frame names must match between directories")
-
-            diff_result = _write_diff(left, right, output)
-            _evaluate_frame_thresholds(
-                diff_result, per_frame_mean_threshold, per_frame_max_threshold
-            )
-            frame_pixels = diff_result.stats.pixel_count
-            total_delta += diff_result.stats.total_delta
-            total_pixels += frame_pixels
-            overall_max = max(overall_max, diff_result.stats.max_delta)
-            frame_stats.append(diff_result)
-            if diff_result.failures:
-                failed_frames.append(diff_result)
-
-            typer.echo(
-                f"{left.name}: mean delta {diff_result.stats.mean_delta:.2f}, "
-                f"max delta {diff_result.stats.max_delta:.2f}"
-            )
-
-        overall_mean = total_delta / total_pixels if total_pixels else 0.0
-        typer.echo(
-            f"Overall: mean delta {overall_mean:.2f}, max delta {overall_max:.2f}"
-        )
-
-        failure_messages = _collect_failures(
-            overall_mean=overall_mean,
-            overall_max=overall_max,
-            failed_frames=failed_frames,
+    try:
+        outcome = _run_comparison(
+            first=first,
+            second=second,
+            output=output,
+            report_formats=report_format,
             mean_threshold=mean_threshold,
             max_threshold=max_threshold,
             per_frame_mean_threshold=per_frame_mean_threshold,
             per_frame_max_threshold=per_frame_max_threshold,
         )
-        if failure_messages:
-            typer.echo("QC thresholds exceeded:")
-            for message in failure_messages:
-                typer.echo(f"- {message}")
+    except ChopperRenderError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
-        if report_formats:
-            report_payload = _build_report_payload(
-                first,
-                second,
-                output,
-                frame_stats,
-                overall_mean,
-                overall_max,
-                total_pixels,
-                failure_messages,
-                _build_threshold_summary(
-                    mean_threshold,
-                    max_threshold,
-                    per_frame_mean_threshold,
-                    per_frame_max_threshold,
-                ),
-            )
-            _write_reports(report_payload, report_formats)
-
-        if failure_messages:
-            raise typer.Exit(code=1)
+    if outcome.failure_messages:
+        raise typer.Exit(code=1)
 
 
 def _parse_frame_list(raw: str) -> list[int]:
@@ -1522,10 +1574,243 @@ def _write_qc_report(
     return report_path
 
 
+def _load_qc_batch_manifest(path: Path) -> list[Mapping[str, Any]]:
+    suffix = path.suffix.lower()
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise typer.BadParameter(f"Unable to read manifest {path}: {exc}") from exc
+
+    payload: Any
+    if suffix in {".yaml", ".yml"}:
+        try:
+            import yaml
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise typer.BadParameter(
+                "PyYAML is required to load YAML batch manifests."
+            ) from exc
+        payload = yaml.safe_load(content)
+    elif suffix == ".json":
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise typer.BadParameter(
+                f"Batch manifest {path} is not valid JSON: {exc}"
+            ) from exc
+    elif suffix == ".csv":
+        reader = csv.DictReader(content.splitlines())
+        payload = list(reader)
+    else:
+        raise typer.BadParameter(
+            "Batch manifest must be JSON, YAML, or CSV (got suffix " f"{suffix})."
+        )
+
+    entries: Any
+    if isinstance(payload, Mapping) and "tasks" in payload:
+        entries = payload["tasks"]
+    else:
+        entries = payload
+
+    if not isinstance(entries, list):
+        raise typer.BadParameter("Batch manifest must contain a list of task entries")
+
+    return entries
+
+
+def _resolve_manifest_path(value: Any, *, base_dir: Path, label: str) -> Path:
+    if isinstance(value, (str, Path)):
+        path = Path(value)
+        if not path.is_absolute():
+            path = base_dir / path
+        return path
+    raise typer.BadParameter(f"{label} must be a string or path")
+
+
+def _slugify_name(value: str, *, fallback: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-")
+    return candidate or fallback
+
+
+@app.command(name="qc-batch")
+def qc_batch(
+    manifest: Path = typer.Argument(
+        ..., help="Manifest describing QC render/compare tasks (YAML/JSON/CSV)."
+    ),
+    output: Path = typer.Option(
+        Path("qc_batch"),
+        "--output",
+        "-o",
+        help="Base directory for batch task outputs and the consolidated report.",
+    ),
+    report_format: list[str] = typer.Option(
+        ["json"],
+        "--report-format",
+        "-r",
+        help="Report formats (json, csv, html) for individual compare tasks.",
+        case_sensitive=False,
+    ),
+    mean_threshold: float | None = typer.Option(
+        None,
+        help="Overall mean delta threshold applied when a task does not override it.",
+    ),
+    max_threshold: float | None = typer.Option(
+        None,
+        help="Overall max delta threshold applied when a task does not override it.",
+    ),
+    per_frame_mean_threshold: float | None = typer.Option(
+        None,
+        help="Per-frame mean delta threshold applied when a task does not override it.",
+    ),
+    per_frame_max_threshold: float | None = typer.Option(
+        None,
+        help="Per-frame max delta threshold applied when a task does not override it.",
+    ),
+) -> None:
+    """Execute a QC manifest of renders and comparisons."""
+
+    entries = _load_qc_batch_manifest(manifest)
+    manifest_dir = manifest.parent
+    output.mkdir(parents=True, exist_ok=True)
+    default_formats = _normalize_report_formats(report_format)
+
+    tasks: list[dict[str, Any]] = []
+    failures_detected = False
+
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, Mapping):
+            raise typer.BadParameter("Each batch task must be a mapping of settings")
+
+        name = str(entry.get("name") or f"task-{index}")
+        slug = _slugify_name(name, fallback=f"task-{index}")
+        task_output = output / slug
+        task_record: dict[str, Any] = {"name": name}
+
+        if "scene" in entry:
+            task_record["type"] = "render"
+            if entry.get("scene") is not None:
+                task_record["scene"] = str(entry.get("scene"))
+            render_output = _resolve_manifest_path(
+                entry.get("output", task_output / "frames"),
+                base_dir=manifest_dir,
+                label=f"output for task {name!r}",
+            )
+            try:
+                qc_render(
+                    output=render_output,
+                    export=str(entry.get("format", "png")),
+                    fps=int(entry.get("fps", 24)),
+                    samples=int(entry.get("samples", 2)),
+                    downsample_filter=str(entry.get("filter", "box")),
+                    preset=str(entry.get("preset", "hd-1080")),
+                    resolution=entry.get("resolution"),
+                    aspect=entry.get("aspect"),
+                    slate_text=entry.get("slate_text"),
+                    timecode=entry.get("timecode"),
+                    studio_logo=bool(entry.get("studio_logo", False)),
+                )
+                task_record.update(
+                    {
+                        "status": "pass",
+                        "output": str(render_output),
+                    }
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                task_record.update({"status": "error", "error": str(exc)})
+                failures_detected = True
+        elif "first" in entry and "second" in entry:
+            task_record["type"] = "compare"
+            compare_output = _resolve_manifest_path(
+                entry.get("output", task_output / "diff"),
+                base_dir=manifest_dir,
+                label=f"output for task {name!r}",
+            )
+            task_formats_raw = entry.get("report_format", default_formats)
+            if isinstance(task_formats_raw, str):
+                task_formats_raw = [task_formats_raw]
+            task_formats = _normalize_report_formats(task_formats_raw)
+            task_mean_threshold = entry.get("mean_threshold", mean_threshold)
+            task_max_threshold = entry.get("max_threshold", max_threshold)
+            task_per_frame_mean = entry.get(
+                "per_frame_mean_threshold", per_frame_mean_threshold
+            )
+            task_per_frame_max = entry.get(
+                "per_frame_max_threshold", per_frame_max_threshold
+            )
+
+            try:
+                first_path = _resolve_manifest_path(
+                    entry["first"],
+                    base_dir=manifest_dir,
+                    label=f"first source for task {name!r}",
+                )
+                second_path = _resolve_manifest_path(
+                    entry["second"],
+                    base_dir=manifest_dir,
+                    label=f"second source for task {name!r}",
+                )
+                outcome = _run_comparison(
+                    first=first_path,
+                    second=second_path,
+                    output=compare_output,
+                    report_formats=task_formats,
+                    mean_threshold=task_mean_threshold,
+                    max_threshold=task_max_threshold,
+                    per_frame_mean_threshold=task_per_frame_mean,
+                    per_frame_max_threshold=task_per_frame_max,
+                )
+                task_record.update(
+                    {
+                        "status": outcome.status,
+                        "output": str(compare_output),
+                        "first": str(first_path),
+                        "second": str(second_path),
+                        "overall_mean": outcome.overall_mean,
+                        "overall_max": outcome.overall_max,
+                        "total_pixels": outcome.total_pixels,
+                        "failures": outcome.failure_messages,
+                    }
+                )
+                if outcome.failure_messages:
+                    failures_detected = True
+            except (ChopperRenderError, typer.BadParameter) as exc:
+                task_record.update({"status": "error", "error": str(exc)})
+                failures_detected = True
+        else:
+            raise typer.BadParameter(
+                "Each task must include either a 'scene' for qc-render or both "
+                "'first' and 'second' for comparisons."
+            )
+
+        tasks.append(task_record)
+
+    report_payload = {
+        "metadata": {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "manifest": str(manifest),
+            "output": str(output),
+        },
+        "summary": {
+            "total": len(tasks),
+            "passed": sum(1 for task in tasks if task.get("status") == "pass"),
+            "failed": sum(1 for task in tasks if task.get("status") == "fail"),
+            "errors": sum(1 for task in tasks if task.get("status") == "error"),
+        },
+        "tasks": tasks,
+    }
+
+    report_path = output / "qc_batch_report.json"
+    report_path.write_text(json.dumps(report_payload, indent=2), encoding="utf-8")
+    typer.echo(f"Batch report written to {report_path}")
+
+    if failures_detected:
+        raise typer.Exit(code=1)
+
+
 __all__ = [
     "app",
     "inspect",
     "render",
+    "qc_batch",
     "compare",
     "_load_scene",
 ]
