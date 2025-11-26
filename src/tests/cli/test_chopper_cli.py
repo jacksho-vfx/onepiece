@@ -550,6 +550,8 @@ def test_qc_render_invokes_render_scene(
             "2",
             "--worker-backend",
             "thread",
+            "--preset",
+            "uhd-2160",
         ],
     )
 
@@ -559,8 +561,8 @@ def test_qc_render_invokes_render_scene(
     assert captured["fps"] == 24
     payload = captured["payload"]
     assert isinstance(payload, dict)
-    assert payload["width"] == 1920
-    assert payload["height"] == 1080
+    assert payload["width"] == 3840
+    assert payload["height"] == 2160
     assert payload["frames"] == 1
     objects = payload["objects"]
     assert isinstance(objects, list)
@@ -602,6 +604,120 @@ def test_qc_render_accepts_guides_and_color_space(
     assert guides.opacity == 0.75
     assert guides.stroke_width == 2
     assert captured["color_space"] is chopper_renderer_module.ColorSpace.LINEAR
+
+
+def test_qc_render_supports_aspect_and_resolution_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--resolution",
+            "1280x720",
+            "--aspect",
+            "4:3",
+            "--slate-text",
+            "Episode 12",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = captured["payload"]
+    assert payload["width"] == 1280
+    assert payload["height"] == 960
+    object_ids = {obj["id"] for obj in payload["objects"]}
+    assert "slate-text" in object_ids
+
+
+def test_qc_render_accepts_template_and_saves_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    template_path = tmp_path / "qc_template.json"
+    template_payload = {"width": 640, "height": 480, "frames": 1, "objects": []}
+    template_path.write_text(json.dumps(template_payload), encoding="utf-8")
+
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    saved_template = tmp_path / "saved_template.json"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--template",
+            str(template_path),
+            "--save-template",
+            str(saved_template),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["payload"] == template_payload
+    assert json.loads(saved_template.read_text()) == template_payload
+
+
+def test_qc_render_enables_optional_elements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_render_scene(**kwargs: object) -> str:
+        captured.update(kwargs)
+        scene_path = kwargs["scene_path"]
+        assert isinstance(scene_path, Path)
+        captured["payload"] = json.loads(scene_path.read_text())
+        return "ok"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "qc-render",
+            "--output",
+            str(tmp_path / "qc_frames"),
+            "--slate-text",
+            "Pilot",
+            "--timecode",
+            "01:00:00:00",
+            "--studio-logo",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = captured["payload"]
+    object_ids = {obj["id"] for obj in payload["objects"]}
+    assert {"slate-text", "timecode", "studio-logo", "studio-logo-mark"}.issubset(
+        object_ids
+    )
 
 
 def test_render_accepts_guides_options(

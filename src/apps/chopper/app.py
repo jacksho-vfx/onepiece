@@ -114,7 +114,94 @@ def _parse_window_option(value: str | None, label: str) -> tuple[float, float] |
     return width, height
 
 
-def _build_qc_scene_payload(width: int = 1920, height: int = 1080) -> dict[str, Any]:
+QC_RESOLUTION_PRESETS: dict[str, tuple[int, int]] = {
+    "hd-1080": (1920, 1080),
+    "uhd-2160": (3840, 2160),
+    "scope-2k": (2048, 858),
+    "scope-4k": (4096, 1716),
+    "square-1k": (1024, 1024),
+    "vertical-1080": (1080, 1920),
+}
+
+ASPECT_PRESETS: dict[str, float] = {
+    "16:9": 16 / 9,
+    "4:3": 4 / 3,
+    "1:1": 1.0,
+    "2.39:1": 2.39,
+    "9:16": 9 / 16,
+}
+
+
+def _parse_resolution_value(value: str) -> tuple[int, int]:
+    match = re.match(r"^(?P<width>\d+)[xX](?P<height>\d+)$", value)
+    if not match:
+        raise typer.BadParameter(
+            "Resolution must be formatted as WIDTHxHEIGHT (for example 1920x1080)"
+        )
+    width = int(match.group("width"))
+    height = int(match.group("height"))
+    if width <= 0 or height <= 0:
+        raise typer.BadParameter(
+            "Resolution width and height must be greater than zero"
+        )
+    return width, height
+
+
+def _parse_aspect_value(value: str) -> float:
+    if value in ASPECT_PRESETS:
+        return ASPECT_PRESETS[value]
+
+    ratio_match = re.match(
+        r"^(?P<width>\d+(?:\.\d+)?):(?P<height>\d+(?:\.\d+)?)$", value
+    )
+    if ratio_match:
+        width = float(ratio_match.group("width"))
+        height = float(ratio_match.group("height"))
+        if width <= 0 or height <= 0:
+            raise typer.BadParameter("Aspect ratio parts must be greater than zero")
+        return width / height
+
+    available = ", ".join(sorted(ASPECT_PRESETS))
+    raise typer.BadParameter(
+        f"Unsupported aspect ratio {value!r}. Choose from presets: {available} or use W:H"
+    )
+
+
+def _load_qc_resolution_preset(name: str) -> tuple[int, int]:
+    preset = QC_RESOLUTION_PRESETS.get(name.lower())
+    if preset is None:
+        available = ", ".join(sorted(QC_RESOLUTION_PRESETS))
+        raise typer.BadParameter(
+            f"Unknown QC resolution preset {name!r}. Choose from: {available}"
+        )
+    return preset
+
+
+def _load_qc_scene_template(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:  # pragma: no cover - filesystem failures
+        raise typer.BadParameter(f"Unable to read template at {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter(
+            f"Template at {path} is not valid JSON: {exc}"
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise typer.BadParameter(
+            "QC template must contain a JSON object at the top level"
+        )
+    return payload
+
+
+def _build_qc_scene_payload(
+    *,
+    width: int = 1920,
+    height: int = 1080,
+    slate_text: str | None = None,
+    timecode: str | None = None,
+    include_studio_logo: bool = False,
+) -> dict[str, Any]:
     top_band_height = max(1, height // 4)
     bar_colors = ["#ef4444", "#f59e0b", "#eab308", "#10b981", "#0ea5e9", "#6366f1"]
     bar_width = width / len(bar_colors)
@@ -191,6 +278,82 @@ def _build_qc_scene_payload(width: int = 1920, height: int = 1080) -> dict[str, 
             },
         ]
     )
+
+    if slate_text:
+        objects.extend(
+            [
+                {
+                    "id": "slate-text",
+                    "type": "rectangle",
+                    "position": [
+                        slate_left + width * 0.05,
+                        slate_top + slate_height * 0.25,
+                    ],
+                    "size": [width * 0.7, slate_height * 0.18],
+                    "color": "#1f2937",
+                    "stroke_color": "#f8fafc",
+                    "stroke_width": 2,
+                    "label": slate_text,
+                },
+                {
+                    "id": "slate-subtitle",
+                    "type": "rectangle",
+                    "position": [
+                        slate_left + width * 0.05,
+                        slate_top + slate_height * 0.5,
+                    ],
+                    "size": [width * 0.6, slate_height * 0.12],
+                    "color": "#0f172a",
+                    "stroke_color": "#cbd5e1",
+                    "stroke_width": 2,
+                },
+            ]
+        )
+
+    if timecode:
+        objects.append(
+            {
+                "id": "timecode",
+                "type": "rectangle",
+                "position": [width * 0.33, slate_top + slate_height * 0.75],
+                "size": [width * 0.34, slate_height * 0.14],
+                "color": "#111827",
+                "stroke_color": "#f97316",
+                "stroke_width": 3,
+                "label": timecode,
+            }
+        )
+
+    if include_studio_logo:
+        logo_size = min(width, height) * 0.08
+        logo_left = width - logo_size * 1.5
+        logo_top = height * 0.08
+        objects.extend(
+            [
+                {
+                    "id": "studio-logo",
+                    "type": "circle",
+                    "position": [logo_left, logo_top],
+                    "size": [logo_size, logo_size],
+                    "color": "#0ea5e9",
+                    "stroke_color": "#e0f2fe",
+                    "stroke_width": 4,
+                },
+                {
+                    "id": "studio-logo-mark",
+                    "type": "polygon",
+                    "points": [
+                        [logo_left + logo_size * 0.5, logo_top + logo_size * 0.15],
+                        [logo_left + logo_size * 0.8, logo_top + logo_size * 0.5],
+                        [logo_left + logo_size * 0.5, logo_top + logo_size * 0.85],
+                        [logo_left + logo_size * 0.2, logo_top + logo_size * 0.5],
+                    ],
+                    "color": "#022c4e",
+                    "stroke_color": "#0ea5e9",
+                    "stroke_width": 3,
+                },
+            ]
+        )
 
     return {
         "width": width,
@@ -648,6 +811,54 @@ def qc_render(
         "--safe-window",
         help="Safe aperture width and height as 'width,height' or 'widthxheight'.",
     ),
+    preset: str = typer.Option(
+        "hd-1080",
+        "--preset",
+        "-p",
+        help=(
+            "QC resolution preset to use when building the scene. Presets: "
+            + ", ".join(sorted(QC_RESOLUTION_PRESETS))
+        ),
+    ),
+    resolution: str | None = typer.Option(
+        None,
+        "--resolution",
+        "-r",
+        help="Explicit resolution override as WIDTHxHEIGHT (overrides --preset).",
+    ),
+    aspect: str | None = typer.Option(
+        None,
+        "--aspect",
+        help=(
+            "Optional aspect ratio preset (e.g. 16:9, 4:3, 2.39:1, 9:16) "
+            "or custom W:H ratio."
+        ),
+    ),
+    slate_text: str | None = typer.Option(
+        None,
+        "--slate-text",
+        help="Add labelled slate bars to the QC scene with the provided text.",
+    ),
+    timecode: str | None = typer.Option(
+        None,
+        "--timecode",
+        help="Overlay a simple timecode bar with the supplied timecode string.",
+    ),
+    studio_logo: bool = typer.Option(
+        False,
+        "--studio-logo/--no-studio-logo",
+        help="Toggle a simple studio logo mark in the QC scene.",
+    ),
+    template: Path | None = typer.Option(
+        None,
+        "--template",
+        help="Load a QC template JSON file instead of the built-in payload.",
+    ),
+    save_template: Path | None = typer.Option(
+        None,
+        "--save-template",
+        help="Write the QC template used for rendering to this path.",
+    ),
 ) -> None:
     """Render a built-in QC scene without providing an input file."""
 
@@ -671,7 +882,28 @@ def qc_render(
         except SceneError as exc:
             raise typer.BadParameter(str(exc)) from exc
 
-    qc_scene_payload = _build_qc_scene_payload()
+    if template is not None:
+        qc_scene_payload = _load_qc_scene_template(template)
+    else:
+        width, height = _load_qc_resolution_preset(preset)
+        if resolution:
+            width, height = _parse_resolution_value(resolution)
+        if aspect:
+            aspect_ratio = _parse_aspect_value(aspect)
+            height = max(1, int(round(width / aspect_ratio)))
+
+        qc_scene_payload = _build_qc_scene_payload(
+            width=width,
+            height=height,
+            slate_text=slate_text,
+            timecode=timecode,
+            include_studio_logo=studio_logo,
+        )
+
+    if save_template:
+        save_template.write_text(
+            json.dumps(qc_scene_payload, indent=2), encoding="utf-8"
+        )
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
