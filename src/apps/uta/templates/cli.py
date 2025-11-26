@@ -198,8 +198,17 @@ def render_page(page: PageSpec, *, is_active: bool) -> str:
     return f"""
     <section id=\"{page_id}\" class=\"page {active_class}\">
       <div class=\"page-header\">
-        <h2>{escape(page.name.title())}</h2>
-        <p class=\"page-help\">{help_text}</p>
+        <div class=\"page-header-text\">
+          <h2>{escape(page.name.title())}</h2>
+          <p class=\"page-help\">{help_text}</p>
+        </div>
+        <div class=\"page-actions\" aria-label=\"Page filters\">
+          <button type=\"button\" class=\"filter-pill favourites-pill\" data-favourites-pill aria-pressed=\"false\" aria-label=\"Show favourite commands only\">
+            <span class=\"pill-icon\" aria-hidden=\"true\">★</span>
+            <span class=\"pill-label\">Favourites</span>
+          </button>
+          <span class=\"visually-hidden\" data-filter-status aria-live=\"polite\"></span>
+        </div>
       </div>
       {commands_html}
     </section>
