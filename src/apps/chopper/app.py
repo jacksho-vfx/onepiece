@@ -8,7 +8,7 @@ import tempfile
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -962,6 +962,34 @@ def compare(
         ),
         case_sensitive=False,
     ),
+    mean_threshold: float | None = typer.Option(
+        None,
+        help=(
+            "Fail the comparison if the overall mean delta exceeds this threshold. "
+            "Ignored when not provided."
+        ),
+    ),
+    max_threshold: float | None = typer.Option(
+        None,
+        help=(
+            "Fail the comparison if the overall max delta exceeds this threshold. "
+            "Ignored when not provided."
+        ),
+    ),
+    per_frame_mean_threshold: float | None = typer.Option(
+        None,
+        help=(
+            "Fail the comparison if any frame's mean delta exceeds this threshold. "
+            "Ignored when not provided."
+        ),
+    ),
+    per_frame_max_threshold: float | None = typer.Option(
+        None,
+        help=(
+            "Fail the comparison if any frame's max delta exceeds this threshold. "
+            "Ignored when not provided."
+        ),
+    ),
 ) -> None:
     """Render and compare two scenes or directories of frames."""
 
@@ -989,17 +1017,23 @@ def compare(
         total_pixels = 0
         overall_max = 0.0
         frame_stats: list[_FrameResult] = []
+        failed_frames: list[_FrameResult] = []
 
         for left, right in zip(first_list, second_list):
             if left.name != right.name:
                 raise typer.BadParameter("Frame names must match between directories")
 
             diff_result = _write_diff(left, right, output)
+            _evaluate_frame_thresholds(
+                diff_result, per_frame_mean_threshold, per_frame_max_threshold
+            )
             frame_pixels = diff_result.stats.pixel_count
             total_delta += diff_result.stats.total_delta
             total_pixels += frame_pixels
             overall_max = max(overall_max, diff_result.stats.max_delta)
             frame_stats.append(diff_result)
+            if diff_result.failures:
+                failed_frames.append(diff_result)
 
             typer.echo(
                 f"{left.name}: mean delta {diff_result.stats.mean_delta:.2f}, "
@@ -1011,6 +1045,20 @@ def compare(
             f"Overall: mean delta {overall_mean:.2f}, max delta {overall_max:.2f}"
         )
 
+        failure_messages = _collect_failures(
+            overall_mean=overall_mean,
+            overall_max=overall_max,
+            failed_frames=failed_frames,
+            mean_threshold=mean_threshold,
+            max_threshold=max_threshold,
+            per_frame_mean_threshold=per_frame_mean_threshold,
+            per_frame_max_threshold=per_frame_max_threshold,
+        )
+        if failure_messages:
+            typer.echo("QC thresholds exceeded:")
+            for message in failure_messages:
+                typer.echo(f"- {message}")
+
         if report_formats:
             report_payload = _build_report_payload(
                 first,
@@ -1020,8 +1068,18 @@ def compare(
                 overall_mean,
                 overall_max,
                 total_pixels,
+                failure_messages,
+                _build_threshold_summary(
+                    mean_threshold,
+                    max_threshold,
+                    per_frame_mean_threshold,
+                    per_frame_max_threshold,
+                ),
             )
             _write_reports(report_payload, report_formats)
+
+        if failure_messages:
+            raise typer.Exit(code=1)
 
 
 def _parse_frame_list(raw: str) -> list[int]:
@@ -1075,10 +1133,21 @@ class _DiffStats:
 
 
 class _FrameResult:
-    def __init__(self, name: str, stats: _DiffStats, diff_path: Path):
+    def __init__(
+        self,
+        name: str,
+        stats: _DiffStats,
+        diff_path: Path,
+        failures: Sequence[str] | None = None,
+    ):
         self.name = name
         self.stats = stats
         self.diff_path = diff_path
+        self.failures = list(failures or [])
+
+    @property
+    def status(self) -> str:
+        return "pass" if not self.failures else "fail"
 
 
 def _write_diff(left: Path, right: Path, output_dir: Path) -> _FrameResult:
@@ -1104,6 +1173,75 @@ def _write_diff(left: Path, right: Path, output_dir: Path) -> _FrameResult:
     return _FrameResult(left.stem, stats, diff_path)
 
 
+def _evaluate_frame_thresholds(
+    result: _FrameResult,
+    per_frame_mean_threshold: float | None,
+    per_frame_max_threshold: float | None,
+) -> None:
+    if (
+        per_frame_mean_threshold is not None
+        and result.stats.mean_delta > per_frame_mean_threshold
+    ):
+        result.failures.append(
+            f"Mean delta {result.stats.mean_delta:.2f} exceeds per-frame mean "
+            f"threshold {per_frame_mean_threshold}"
+        )
+
+    if (
+        per_frame_max_threshold is not None
+        and result.stats.max_delta > per_frame_max_threshold
+    ):
+        result.failures.append(
+            f"Max delta {result.stats.max_delta:.2f} exceeds per-frame max "
+            f"threshold {per_frame_max_threshold}"
+        )
+
+
+def _collect_failures(
+    *,
+    overall_mean: float,
+    overall_max: float,
+    failed_frames: Iterable[_FrameResult],
+    mean_threshold: float | None,
+    max_threshold: float | None,
+    per_frame_mean_threshold: float | None,
+    per_frame_max_threshold: float | None,
+) -> list[str]:
+    failures: list[str] = []
+
+    if mean_threshold is not None and overall_mean > mean_threshold:
+        failures.append(
+            f"Overall mean delta {overall_mean:.2f} exceeds threshold {mean_threshold}"
+        )
+
+    if max_threshold is not None and overall_max > max_threshold:
+        failures.append(
+            f"Overall max delta {overall_max:.2f} exceeds threshold {max_threshold}"
+        )
+
+    failed_frame_list = list(failed_frames)
+    if failed_frame_list:
+        failures.append(
+            f"{len(failed_frame_list)} frame(s) exceeded per-frame thresholds"
+        )
+
+    return failures
+
+
+def _build_threshold_summary(
+    mean_threshold: float | None,
+    max_threshold: float | None,
+    per_frame_mean_threshold: float | None,
+    per_frame_max_threshold: float | None,
+) -> dict[str, float | None]:
+    return {
+        "overall_mean_delta": mean_threshold,
+        "overall_max_delta": max_threshold,
+        "per_frame_mean_delta": per_frame_mean_threshold,
+        "per_frame_max_delta": per_frame_max_threshold,
+    }
+
+
 def _normalize_report_formats(values: Sequence[str]) -> list[str]:
     supported = {"json", "csv", "html"}
     normalized: list[str] = []
@@ -1126,6 +1264,8 @@ def _build_report_payload(
     overall_mean: float,
     overall_max: float,
     total_pixels: int,
+    failure_messages: Sequence[str],
+    thresholds: Mapping[str, float | None],
 ) -> dict[str, Any]:
     frames = [
         {
@@ -1135,11 +1275,13 @@ def _build_report_payload(
             "pixel_count": result.stats.pixel_count,
             "total_delta": result.stats.total_delta,
             "diff_image": str(output.joinpath(result.diff_path.name)),
+            "status": result.status,
+            "failures": result.failures,
         }
         for result in frame_results
     ]
 
-    status = "pass" if overall_max == 0 else "fail"
+    status = "pass" if not failure_messages else "fail"
     timestamp = datetime.now(timezone.utc).isoformat()
 
     return {
@@ -1155,6 +1297,11 @@ def _build_report_payload(
             "overall_max_delta": overall_max,
             "total_pixels": total_pixels,
             "frame_count": len(frames),
+            "thresholds": thresholds,
+            "failures": list(failure_messages),
+            "failed_frame_count": sum(
+                1 for frame in frames if frame.get("status") == "fail"
+            ),
         },
         "frames": frames,
     }
@@ -1189,11 +1336,19 @@ def _write_csv_report(payload: dict[str, Any]) -> None:
         "pixel_count",
         "total_delta",
         "diff_image",
+        "status",
+        "failures",
     ]
     with output_path.open("w", newline="", encoding="utf-8") as fp:
         writer = csv.DictWriter(fp, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(payload["frames"])
+        for frame in payload["frames"]:
+            writer.writerow(
+                {
+                    **frame,
+                    "failures": "; ".join(frame.get("failures", [])),
+                }
+            )
 
 
 def _write_html_report(payload: dict[str, Any]) -> None:
@@ -1209,6 +1364,8 @@ def _write_html_report(payload: dict[str, Any]) -> None:
             f"<td>{frame['pixel_count']}</td>"
             f"<td>{frame['total_delta']:.2f}</td>"
             f"<td>{frame['diff_image']}</td>"
+            f"<td>{frame.get('status', 'pass')}</td>"
+            f"<td>{'; '.join(frame.get('failures', []))}</td>"
             "</tr>"
         )
         for frame in payload["frames"]
@@ -1216,6 +1373,13 @@ def _write_html_report(payload: dict[str, Any]) -> None:
 
     metadata = payload["metadata"]
     summary = payload["summary"]
+    threshold_items = "\n".join(
+        f"<li>{key.replace('_', ' ').title()}: {value}</li>"
+        for key, value in summary.get("thresholds", {}).items()
+    )
+    failure_items = "\n".join(
+        f"<li>{failure}</li>" for failure in summary.get("failures", [])
+    )
     html_content = f"""
 <!DOCTYPE html>
 <html lang=\"en\">
@@ -1241,6 +1405,15 @@ def _write_html_report(payload: dict[str, Any]) -> None:
     <li>Overall max delta: {summary['overall_max_delta']:.2f}</li>
     <li>Total pixels: {summary['total_pixels']}</li>
     <li>Frame count: {summary['frame_count']}</li>
+    <li>Failed frames: {summary.get('failed_frame_count', 0)}</li>
+  </ul>
+  <h3>Thresholds</h3>
+  <ul>
+    {threshold_items}
+  </ul>
+  <h3>Failures</h3>
+  <ul>
+    {failure_items or '<li>None</li>'}
   </ul>
   <h2>Frames</h2>
   <table>
@@ -1252,6 +1425,8 @@ def _write_html_report(payload: dict[str, Any]) -> None:
         <th>Pixel count</th>
         <th>Total delta</th>
         <th>Diff image</th>
+        <th>Status</th>
+        <th>Failures</th>
       </tr>
     </thead>
     <tbody>
