@@ -7,16 +7,21 @@ const metricsFrameTime = byId('metrics-frame-time');
 const metricsGpu = byId('metrics-gpu');
 const metricsErrors = byId('metrics-errors');
 const riskCritical = byId('risk-critical');
+const riskStatus = byId('risk-status');
+const riskSort = byId('risk-sort');
+const riskFilter = byId('risk-filter');
 const costDelta = byId('cost-delta');
 const sequenceRows = byId('sequence-rows');
 const shotsRows = byId('shots-rows');
 const riskCards = byId('risk-cards');
+const riskLegend = byId('risk-legend');
 const costPerFrameBaseline = byId('cost-per-frame-baseline');
 const costPerFrameCurrent = byId('cost-per-frame-current');
 const costPerFrameDelta = byId('cost-per-frame-delta');
 const costContributors = byId('cost-contributors');
 const costTrendChartCanvas = byId('cost-trend-chart');
 const pnlBreakdownChartCanvas = byId('pnl-breakdown-chart');
+const riskHeatmapChartCanvas = byId('risk-heatmap-chart');
 const downloadSummaryButton = byId('download-summary');
 const shotsSequence = byId('shots-sequence');
 const shotsArtist = byId('shots-artist');
@@ -69,6 +74,32 @@ const formatDateTime = (value) => {
     }
 };
 
+const RISK_THRESHOLDS = {
+    critical: 85,
+    high: 65,
+    medium: 40,
+    low: 20,
+};
+
+const getRiskSeverity = (riskScore) => {
+    if (!Number.isFinite(riskScore)) {
+        return 'stable';
+    }
+    if (riskScore >= RISK_THRESHOLDS.critical) {
+        return 'critical';
+    }
+    if (riskScore >= RISK_THRESHOLDS.high) {
+        return 'high';
+    }
+    if (riskScore >= RISK_THRESHOLDS.medium) {
+        return 'medium';
+    }
+    if (riskScore >= RISK_THRESHOLDS.low) {
+        return 'low';
+    }
+    return 'stable';
+};
+
 const renderSequences = (sequences = []) => {
     sequenceRows.innerHTML = '';
     const fragment = document.createDocumentFragment();
@@ -105,20 +136,237 @@ const renderShots = (shots = []) => {
     shotsRows.appendChild(fragment);
 };
 
+const RISK_SEVERITY_META = {
+    critical: { label: 'Critical', badge: 'danger', description: 'Immediate intervention required' },
+    high: { label: 'High', badge: 'warning', description: 'Investigate promptly' },
+    medium: { label: 'Medium', badge: 'warning', description: 'Monitor and mitigate' },
+    low: { label: 'Low', badge: 'success', description: 'Within acceptable bounds' },
+    stable: { label: 'Stable', badge: 'success', description: 'Healthy performance' },
+};
+
 const renderRiskCards = (risks = []) => {
+    if (!riskCards) {
+        return;
+    }
     riskCards.innerHTML = '';
+
+    if (!Array.isArray(risks) || risks.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'No risk indicators available.';
+        riskCards.appendChild(empty);
+        return;
+    }
+
     const fragment = document.createDocumentFragment();
     risks.forEach((risk) => {
+        const severity = getRiskSeverity(risk?.risk_score);
+        const severityMeta = RISK_SEVERITY_META[severity] ?? RISK_SEVERITY_META.stable;
         const card = document.createElement('div');
-        card.className = 'risk-card';
+        card.className = `risk-card severity-${severity}`;
+        card.setAttribute('aria-label', `${severityMeta.label} risk for ${risk.sequence ?? 'sequence'} ${risk.shot_id ?? ''}`);
+
+        const drivers = Array.isArray(risk.drivers)
+            ? risk.drivers.join(', ')
+            : risk.drivers ?? 'No drivers provided';
+
+        const errorRate = formatNumber(risk.error_rate, { maximumFractionDigits: 1 });
+        const cacheStability = formatNumber(risk.cache_stability, { maximumFractionDigits: 1 });
+        const renderTime = formatNumber(risk.render_time_ms, { maximumFractionDigits: 0 });
+
         card.innerHTML = `
             <h3>${risk.sequence ?? '—'} ${risk.shot_id ?? ''}</h3>
-            <p>Risk score: <strong>${formatNumber(risk.risk_score, { maximumFractionDigits: 0 })}</strong></p>
-            <p>${risk.drivers ?? 'No drivers provided'}</p>
+            <p class="risk-score">
+                <span class="badge ${severityMeta.badge}">${severityMeta.label}</span>
+                Risk score: <strong>${formatNumber(risk.risk_score, { maximumFractionDigits: 0 })}</strong>
+            </p>
+            <p>
+                Render time: ${renderTime} ms · Error rate: ${errorRate}% · Cache stability: ${cacheStability}%
+            </p>
+            <p>${drivers}</p>
         `;
         fragment.appendChild(card);
     });
     riskCards.appendChild(fragment);
+};
+
+const renderRiskLegend = (risks = []) => {
+    if (!riskLegend) {
+        return;
+    }
+    riskLegend.innerHTML = '';
+    const severityOrder = ['critical', 'high', 'medium', 'low', 'stable'];
+    const fragment = document.createDocumentFragment();
+
+    severityOrder.forEach((level) => {
+        const meta = RISK_SEVERITY_META[level];
+        const count = risks.filter((risk) => getRiskSeverity(risk?.risk_score) === level).length;
+        const item = document.createElement('div');
+        item.className = 'risk-legend__item';
+        item.innerHTML = `
+            <span class="risk-legend__swatch severity-${level}" aria-hidden="true"></span>
+            <span>${meta.label}</span>
+            <span class="muted">(${count})</span>
+        `;
+        item.setAttribute('aria-label', `${meta.label} severity: ${count} shots`);
+        fragment.appendChild(item);
+    });
+
+    riskLegend.appendChild(fragment);
+};
+
+const updateRiskStatus = (risks = []) => {
+    if (!riskStatus) {
+        return;
+    }
+    if (!Array.isArray(risks) || risks.length === 0) {
+        riskStatus.className = 'badge success';
+        riskStatus.textContent = 'No risk indicators';
+        return;
+    }
+    const highest = risks.reduce((max, risk) => Math.max(max, Number(risk?.risk_score) || 0), 0);
+    const severity = getRiskSeverity(highest);
+    const meta = RISK_SEVERITY_META[severity];
+    const badgeClass = severity === 'critical' ? 'danger' : severity === 'high' ? 'warning' : 'success';
+    riskStatus.className = `badge ${badgeClass}`;
+    riskStatus.textContent = `${meta.label} risk window`;
+};
+
+const renderRiskHeatmapChart = (risks = []) => {
+    if (!riskHeatmapChartCanvas || typeof Chart === 'undefined') {
+        return;
+    }
+
+    const grouped = new Map();
+    risks.forEach((risk) => {
+        const key = risk.sequence ?? 'Unknown sequence';
+        const existing = grouped.get(key) ?? { total: 0, count: 0, critical: 0 };
+        const riskScore = Number(risk.risk_score) || 0;
+        grouped.set(key, {
+            total: existing.total + riskScore,
+            count: existing.count + 1,
+            critical: existing.critical + (getRiskSeverity(risk.risk_score) === 'critical' ? 1 : 0),
+        });
+    });
+
+    const labels = Array.from(grouped.keys());
+    const averages = labels.map((label) => {
+        const entry = grouped.get(label);
+        return entry && entry.count ? entry.total / entry.count : 0;
+    });
+    const criticalCounts = labels.map((label) => grouped.get(label)?.critical ?? 0);
+
+    if (labels.length === 0) {
+        labels.push('No data');
+        averages.push(0);
+        criticalCounts.push(0);
+    }
+
+    if (riskHeatmapChart) {
+        riskHeatmapChart.destroy();
+    }
+
+    riskHeatmapChart = new Chart(riskHeatmapChartCanvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Average risk score',
+                    data: averages,
+                    backgroundColor: 'rgba(248, 113, 113, 0.6)',
+                    borderColor: 'rgba(248, 113, 113, 0.9)',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Critical shots',
+                    data: criticalCounts,
+                    backgroundColor: 'rgba(249, 115, 22, 0.5)',
+                    borderColor: 'rgba(249, 115, 22, 0.85)',
+                    borderWidth: 1,
+                    yAxisID: 'y1',
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Average risk score' },
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Critical items' },
+                },
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            if (context.dataset.yAxisID === 'y1') {
+                                return `${context.parsed.y} critical shots`;
+                            }
+                            return `Average risk: ${formatNumber(context.parsed.y, { maximumFractionDigits: 1 })}`;
+                        },
+                    },
+                },
+                legend: {
+                    labels: {
+                        filter: (item, data) => data.datasets[item.datasetIndex].data.some((value) => value !== 0),
+                    },
+                },
+            },
+        },
+    });
+};
+
+const filterRiskIndicators = (risks = []) => {
+    const filterValue = riskFilter?.value ?? 'all';
+    const allowed = {
+        all: ['critical', 'high', 'medium', 'low', 'stable'],
+        critical: ['critical'],
+        high: ['critical', 'high'],
+        medium: ['critical', 'high', 'medium'],
+    };
+    const allowedSeverities = allowed[filterValue] ?? allowed.all;
+    return risks.filter((risk) => allowedSeverities.includes(getRiskSeverity(risk?.risk_score)));
+};
+
+const sortRiskIndicators = (risks = []) => {
+    const sort = riskSort?.value ?? 'desc';
+    const sorted = [...risks];
+    if (sort === 'asc') {
+        sorted.sort((a, b) => (Number(a?.risk_score) || 0) - (Number(b?.risk_score) || 0));
+        return sorted;
+    }
+    if (sort === 'sequence') {
+        sorted.sort((a, b) => {
+            const sequenceComparison = (a.sequence ?? '').localeCompare(b.sequence ?? '');
+            if (sequenceComparison !== 0) {
+                return sequenceComparison;
+            }
+            return (Number(b?.risk_score) || 0) - (Number(a?.risk_score) || 0);
+        });
+        return sorted;
+    }
+    if (sort === 'shot') {
+        sorted.sort((a, b) => (a.shot_id ?? '').localeCompare(b.shot_id ?? ''));
+        return sorted;
+    }
+    sorted.sort((a, b) => (Number(b?.risk_score) || 0) - (Number(a?.risk_score) || 0));
+    return sorted;
+};
+
+const applyRiskFilters = () => {
+    const filtered = sortRiskIndicators(filterRiskIndicators(riskHeatmapData));
+    renderRiskCards(filtered);
+    renderRiskLegend(filtered);
+    renderRiskHeatmapChart(filtered);
+    updateRiskStatus(filtered);
 };
 
 const renderCosts = (costs = {}) => {
@@ -141,6 +389,8 @@ const renderCosts = (costs = {}) => {
 
 let costTrendChart;
 let pnlBreakdownChart;
+let riskHeatmapChart;
+let riskHeatmapData = [];
 
 const buildTimelineSeries = (costs = {}) => {
     const series = costs.series?.timeline;
@@ -375,6 +625,32 @@ const populateFilters = async () => {
     }
 };
 
+const fetchRiskHeatmap = async (params) => {
+    if (riskStatus) {
+        riskStatus.textContent = 'Loading risk map…';
+    }
+    try {
+        const search = params?.toString ? params.toString() : '';
+        const url = search ? `./analytics/risk-heatmap?${search}` : './analytics/risk-heatmap';
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Failed to fetch risk heatmap');
+        }
+        const risks = await response.json();
+        riskHeatmapData = Array.isArray(risks) ? risks : [];
+        applyRiskFilters();
+        if (riskStatus) {
+            riskStatus.textContent = riskHeatmapData.length ? 'Updated' : 'No risk indicators';
+        }
+    } catch (error) {
+        console.error(error);
+        if (riskStatus) {
+            riskStatus.textContent = 'Unable to load risk heatmap';
+            riskStatus.className = 'badge warning';
+        }
+    }
+};
+
 const fetchSummary = async () => {
     summaryStatus.textContent = 'Refreshing data…';
     try {
@@ -409,6 +685,7 @@ const fetchSummary = async () => {
         renderRiskCards(summary.risk?.top_risks ?? []);
         renderCosts(summary.costs ?? {});
         renderCostCharts(costAnalytics ?? summary.costs ?? {});
+        fetchRiskHeatmap(params).catch(() => {});
         summaryStatus.textContent = 'Data refreshed';
     } catch (error) {
         console.error(error);
@@ -436,6 +713,14 @@ autoRefreshInterval.addEventListener('change', () => {
 refreshSummaryButton.addEventListener('click', () => {
     fetchSummary().catch(() => {});
 });
+
+if (riskSort) {
+    riskSort.addEventListener('change', applyRiskFilters);
+}
+
+if (riskFilter) {
+    riskFilter.addEventListener('change', applyRiskFilters);
+}
 
 const wrangler = {
     isOpen: false,
