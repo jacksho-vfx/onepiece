@@ -1122,6 +1122,8 @@ const toArray = (collection) => {
       return;
     }
     const cardsContainer = pipelinePage.querySelector('[data-pipeline-cards]');
+    const searchInput = pipelinePage.querySelector('[data-pipeline-search]');
+    const statusChips = pipelinePage.querySelector('[data-pipeline-status-chips]');
     const emptyState = pipelinePage.querySelector('[data-pipeline-empty]');
     const errorBox = pipelinePage.querySelector('[data-pipeline-error]');
     const refreshButton = pipelinePage.querySelector('[data-pipeline-refresh]');
@@ -1134,6 +1136,32 @@ const toArray = (collection) => {
     const NO_CREDENTIALS_CODE = 'no-credentials';
     let loaded = false;
     let loading = false;
+    let pipelinesCache = [];
+    let activeStatusFilter = 'all';
+
+    const normaliseStatus = (value) => {
+      if (typeof value !== 'string') {
+        return '';
+      }
+      return value.trim().toLowerCase();
+    };
+
+    const normaliseSeverity = (value) => {
+      const resolved = normaliseStatus(value);
+      if (!resolved) {
+        return 'info';
+      }
+      if (resolved.includes('error') || resolved.includes('fail')) {
+        return 'error';
+      }
+      if (resolved.includes('warn')) {
+        return 'warning';
+      }
+      if (resolved.includes('success') || resolved === 'ok' || resolved === 'succeeded') {
+        return 'success';
+      }
+      return resolved;
+    };
 
     const setStatus = (message, state) => {
       if (!statusElement) {
@@ -1165,6 +1193,58 @@ const toArray = (collection) => {
         return;
       }
       emptyState.hidden = hasContent;
+    };
+
+    const applyPipelineFilters = () => {
+      const query = searchInput && searchInput.value ? searchInput.value.trim().toLowerCase() : '';
+      let visibleCount = 0;
+      const cards = Array.from(cardsContainer.querySelectorAll('[data-pipeline-card]'));
+      cards.forEach((card) => {
+        const displayName = (card.dataset.displayName || card.dataset.name || '').toLowerCase();
+        const identifier = (card.dataset.identifier || '').toLowerCase();
+        const status = normaliseStatus(card.dataset.status) || 'unknown';
+        const matchesQuery = !query || displayName.includes(query) || identifier.includes(query);
+        const matchesStatus = activeStatusFilter === 'all' || status === activeStatusFilter;
+        const visible = matchesQuery && matchesStatus;
+        card.hidden = !visible;
+        if (visible) {
+          visibleCount += 1;
+        }
+      });
+      updateEmptyState(visibleCount > 0);
+      return visibleCount;
+    };
+
+    const renderStatusFilters = (pipelines) => {
+      if (!statusChips) {
+        return;
+      }
+      const statuses = new Set(
+        (pipelines || [])
+          .map((pipeline) => normaliseStatus(pipeline && (pipeline.status || pipeline.state || pipeline.pipeline_status)))
+          .filter((status) => Boolean(status)),
+      );
+      const options = ['all', ...Array.from(statuses).sort()];
+      if (!options.includes(activeStatusFilter)) {
+        activeStatusFilter = 'all';
+      }
+      statusChips.innerHTML = '';
+      options.forEach((status) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `pipeline-status-chip${status === activeStatusFilter ? ' is-active' : ''}`;
+        button.dataset.pipelineStatusChip = '';
+        button.dataset.status = status;
+        button.textContent = status === 'all' ? 'All statuses' : status;
+        button.addEventListener('click', () => {
+          activeStatusFilter = status;
+          Array.from(statusChips.querySelectorAll('[data-pipeline-status-chip]')).forEach((chip) => {
+            chip.classList.toggle('is-active', chip === button);
+          });
+          applyPipelineFilters();
+        });
+        statusChips.appendChild(button);
+      });
     };
 
     const buildHeaders = (needsJson = false) => {
@@ -1226,6 +1306,17 @@ const toArray = (collection) => {
       return date.toLocaleString();
     };
 
+    const getTimestampValue = (value) => {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+      return date.getTime();
+    };
+
     const renderEvents = (card, events) => {
       const section = card.querySelector('[data-pipeline-events]');
       const list = card.querySelector('[data-pipeline-event-list]');
@@ -1233,35 +1324,92 @@ const toArray = (collection) => {
         return;
       }
       list.innerHTML = '';
-      const entries = Array.isArray(events) ? events.slice() : [];
-      entries.sort((left, right) => {
-        const leftTime = new Date(left && left.timestamp).getTime();
-        const rightTime = new Date(right && right.timestamp).getTime();
-        if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
-        return 0;
-        }
-        if (Number.isNaN(leftTime)) {
-        return -1;
-        }
-        if (Number.isNaN(rightTime)) {
-        return 1;
-        }
-        return leftTime - rightTime;
-      });
+      const entries = Array.isArray(events) ? events.filter(Boolean) : [];
+      if (!entries.length) {
+        section.hidden = true;
+        return;
+      }
+      const runLookup = new Map();
       entries.forEach((event) => {
-        const item = document.createElement('li');
-        const status = document.createElement('strong');
-        status.textContent = (event && event.status) || 'unknown';
-        item.appendChild(status);
-        const timestamp = formatTimestamp(event && event.timestamp);
-        if (timestamp) {
-        const timeSpan = document.createElement('span');
-        timeSpan.textContent = ` • ${timestamp}`;
-        item.appendChild(timeSpan);
+        const runId =
+          (event && (event.run_id || event.runId || event.pipeline_run_id)) || card.dataset.lastRunId || 'latest';
+        if (!runLookup.has(runId)) {
+          runLookup.set(runId, []);
         }
+        runLookup.get(runId).push(event);
+      });
+
+      const runEntries = Array.from(runLookup.entries()).map(([runId, runEvents]) => {
+        const sorted = runEvents.slice().sort((left, right) => {
+          const leftTime = getTimestampValue(left && left.timestamp) || 0;
+          const rightTime = getTimestampValue(right && right.timestamp) || 0;
+          return leftTime - rightTime;
+        });
+        const latest = sorted[sorted.length - 1] || null;
+        return { runId, events: sorted, latestTimestamp: latest ? getTimestampValue(latest.timestamp) : null };
+      });
+
+      runEntries.sort((left, right) => {
+        const leftTime = left.latestTimestamp || 0;
+        const rightTime = right.latestTimestamp || 0;
+        return rightTime - leftTime;
+      });
+
+      runEntries.forEach(({ runId, events: runEvents, latestTimestamp }) => {
+        const item = document.createElement('li');
+        item.className = 'pipeline-event-run';
+
+        const header = document.createElement('div');
+        header.className = 'pipeline-event-run-header';
+        const title = document.createElement('span');
+        title.className = 'pipeline-event-run-title';
+        title.textContent = runId ? `Run ${runId}` : 'Latest run';
+        header.appendChild(title);
+        if (latestTimestamp !== null) {
+          const time = document.createElement('span');
+          time.className = 'pipeline-event-run-time';
+          time.textContent = formatTimestamp(latestTimestamp);
+          header.appendChild(time);
+        }
+        item.appendChild(header);
+
+        const runList = document.createElement('ul');
+        runList.className = 'pipeline-event-run-list';
+
+        runEvents.forEach((event) => {
+          const entry = document.createElement('li');
+          entry.className = 'pipeline-event-entry';
+          const severity = normaliseSeverity(event && (event.severity || event.level || event.status));
+          const badge = document.createElement('span');
+          badge.className = 'pipeline-event-badge';
+          badge.dataset.state = severity;
+          badge.textContent = severity;
+          entry.appendChild(badge);
+
+          const body = document.createElement('div');
+          body.className = 'pipeline-event-body';
+          const message =
+            (event && (event.message || event.detail || event.description || event.status)) || 'Pipeline event';
+          const messageEl = document.createElement('p');
+          messageEl.className = 'pipeline-event-message';
+          messageEl.textContent = message;
+          body.appendChild(messageEl);
+
+          const timestamp = formatTimestamp(event && event.timestamp);
+          if (timestamp) {
+            const meta = document.createElement('span');
+            meta.className = 'pipeline-event-meta';
+            meta.textContent = timestamp;
+            body.appendChild(meta);
+          }
+          runList.appendChild(entry);
+          entry.appendChild(body);
+        });
+
+        item.appendChild(runList);
         list.appendChild(item);
       });
-      section.hidden = entries.length === 0;
+      section.hidden = runEntries.length === 0;
     };
 
     const setRunStatus = (card, message, state) => {
@@ -1461,13 +1609,27 @@ const toArray = (collection) => {
       if (!card) {
         return null;
       }
+      const identifier = definition && definition.name ? definition.name : '';
+      const displayName = (definition && (definition.display_name || definition.name)) || 'Pipeline';
+      const statusValue = normaliseStatus(
+        definition && (definition.status || definition.state || definition.pipeline_status),
+      ) || 'unknown';
+      card.dataset.identifier = identifier;
+      card.dataset.name = identifier;
+      card.dataset.displayName = displayName;
+      card.dataset.status = statusValue;
       const nameElement = card.querySelector('[data-pipeline-name]');
       if (nameElement) {
-        nameElement.textContent = (definition && definition.display_name) || definition.name || 'Pipeline';
+        nameElement.textContent = displayName;
       }
       const identifierElement = card.querySelector('[data-pipeline-identifier]');
       if (identifierElement) {
-        identifierElement.textContent = definition && definition.name ? definition.name : '';
+        identifierElement.textContent = identifier;
+      }
+      const statusElement = card.querySelector('[data-pipeline-status-text]');
+      if (statusElement) {
+        statusElement.textContent = statusValue === 'unknown' ? 'Status: Unknown' : `Status: ${statusValue}`;
+        statusElement.dataset.state = statusValue;
       }
       const descriptionElement = card.querySelector('[data-pipeline-description]');
       const description = definition && typeof definition.description === 'string'
@@ -1475,9 +1637,9 @@ const toArray = (collection) => {
         : '';
       if (descriptionElement) {
         if (description) {
-        descriptionElement.textContent = description;
+          descriptionElement.textContent = description;
         } else {
-        descriptionElement.remove();
+          descriptionElement.remove();
         }
       }
       const parametersContainer = card.querySelector('[data-pipeline-parameters]');
@@ -1487,16 +1649,17 @@ const toArray = (collection) => {
 
     const renderPipelines = (pipelines) => {
       cardsContainer.innerHTML = '';
-      const definitions = Array.isArray(pipelines) ? pipelines : [];
-      definitions.forEach((definition) => {
+      pipelinesCache = Array.isArray(pipelines) ? pipelines.slice() : [];
+      pipelinesCache.forEach((definition) => {
         const built = buildCard(definition);
         if (!built) {
-        return;
+          return;
         }
         attachRunHandlers(built.card, definition, built.parameterNames);
         cardsContainer.appendChild(built.card);
       });
-      updateEmptyState(cardsContainer.children.length > 0);
+      renderStatusFilters(pipelinesCache);
+      applyPipelineFilters();
     };
 
     const loadPipelines = async () => {
@@ -1550,6 +1713,12 @@ const toArray = (collection) => {
       refreshButton.addEventListener('click', (event) => {
         event.preventDefault();
         ensureLoaded(true);
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        applyPipelineFilters();
       });
     }
 
