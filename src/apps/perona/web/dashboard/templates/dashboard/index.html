@@ -244,6 +244,83 @@
             <section class="card fade-in span-16">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
                     <div>
+                        <h2 class="heading-with-icon">Scenario backtests</h2>
+                        <p class="muted">Compare optimisation options against the baseline cost model</p>
+                    </div>
+                    <div class="badge" id="optimization-status">Waiting for input</div>
+                </div>
+                <div class="grid" style="gap: 1rem; margin-top: 1rem;">
+                    <form id="optimization-form" class="card" style="padding: 1rem; gap: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
+                        <div style="grid-column: span 2; min-width: 220px;">
+                            <label for="optimization-scenario-name">Scenario name</label>
+                            <input id="optimization-scenario-name" name="name" type="text" placeholder="e.g., Dual Hopper" required />
+                        </div>
+                        <div>
+                            <label for="optimization-gpu-count">GPU count</label>
+                            <input id="optimization-gpu-count" name="gpu_count" type="number" min="1" step="1" placeholder="80" />
+                        </div>
+                        <div>
+                            <label for="optimization-gpu-rate">GPU hourly rate</label>
+                            <input id="optimization-gpu-rate" name="gpu_hourly_rate" type="number" min="0" step="0.01" placeholder="7.4" />
+                        </div>
+                        <div>
+                            <label for="optimization-frame-scale">Frame time scale</label>
+                            <input id="optimization-frame-scale" name="frame_time_scale" type="number" min="0.1" step="0.05" value="1" />
+                        </div>
+                        <div>
+                            <label for="optimization-resolution-scale">Resolution scale</label>
+                            <input id="optimization-resolution-scale" name="resolution_scale" type="number" min="0.1" step="0.05" value="1" />
+                        </div>
+                        <div>
+                            <label for="optimization-sampling-scale">Sampling scale</label>
+                            <input id="optimization-sampling-scale" name="sampling_scale" type="number" min="0.1" step="0.05" value="1" />
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <label for="optimization-notes">Notes</label>
+                            <textarea id="optimization-notes" name="notes" rows="2" placeholder="Context for this scenario"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="refresh" type="submit">Add scenario</button>
+                            <button class="refresh" id="optimization-clear" type="button">Clear</button>
+                            <button class="refresh" id="optimization-run" type="button">Run backtest</button>
+                        </div>
+                    </form>
+                    <div class="card" style="padding: 1rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                            <h3 style="margin: 0;">Queued scenarios</h3>
+                            <span class="muted" id="optimization-queue-count">0 configured</span>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Scenario</th>
+                                        <th>GPU</th>
+                                        <th>Rate</th>
+                                        <th>Frame time</th>
+                                        <th>Resolution</th>
+                                        <th>Sampling</th>
+                                        <th>Notes</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="optimization-scenarios"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-card" style="margin-top: 1.25rem;">
+                    <div class="chart-card__header">
+                        <h3>Baseline vs. scenario cost</h3>
+                        <p class="muted">Total cost, savings/overruns, and key driver changes</p>
+                    </div>
+                    <canvas id="optimization-results-chart" aria-label="Scenario backtest results" role="img"></canvas>
+                    <div id="optimization-results" class="table-container" style="margin-top: 1rem;"></div>
+                </div>
+            </section>
+            <section class="card fade-in span-16">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                    <div>
                         <h2 class="heading-with-icon">Cost trends</h2>
                         <p class="muted">Baseline vs. current cost per frame and P&amp;L components</p>
                     </div>
