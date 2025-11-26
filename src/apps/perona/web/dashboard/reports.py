@@ -14,7 +14,7 @@ from libraries.analytics.perona.engine.models import get_currency_symbol
 
 from .routes.analytics import compute_costs_summary, compute_risk_summary
 from .routes.metrics import compute_metrics_summary
-from .routes.shots import compute_shots_summary
+from .routes.shots import compute_shots_summary, filter_lifecycles
 
 
 def _format_datetime(value: Any) -> str | None:
@@ -42,15 +42,23 @@ def _format_currency(
     return f"{sign}{symbol}{formatted}"
 
 
-def build_daily_summary(engine: PeronaEngine) -> dict[str, Any]:
+def build_daily_summary(
+    engine: PeronaEngine,
+    *,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> dict[str, Any]:
     """Assemble the structured data used by the daily export."""
 
     generated_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-    metrics = compute_metrics_summary(engine)
-    shots = compute_shots_summary(engine.shot_lifecycle())
+    metrics = compute_metrics_summary(engine, start_time=start_time, end_time=end_time)
+    lifecycles = filter_lifecycles(
+        engine.shot_lifecycle(), None, None, start_time, end_time
+    )
+    shots = compute_shots_summary(lifecycles)
     risk = compute_risk_summary(engine)
-    costs = compute_costs_summary(engine)
+    costs = compute_costs_summary(engine, start_time=start_time, end_time=end_time)
 
     averages = metrics.get("averages", {})
     latest_sample = metrics.get("latest_sample") or {}
@@ -60,6 +68,7 @@ def build_daily_summary(engine: PeronaEngine) -> dict[str, Any]:
         "average_frame_time_ms": averages.get("frame_time_ms", 0.0),
         "average_gpu_utilisation": averages.get("gpu_utilisation", 0.0),
         "average_error_count": averages.get("error_count", 0.0),
+        "timeline": metrics.get("timeline", []),
     }
     if latest_sample:
         metrics_section["latest_sample"] = {
@@ -139,6 +148,8 @@ def build_daily_summary(engine: PeronaEngine) -> dict[str, Any]:
 
     return {
         "generated_at": generated_at,
+        "window": metrics.get("window")
+        or {"from": start_time.isoformat() if start_time else None, "to": None},
         "metrics": metrics_section,
         "shots": shots_section,
         "risk": risk_section,

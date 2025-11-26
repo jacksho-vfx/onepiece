@@ -50,6 +50,12 @@
                         <p class="muted">Data window <span id="summary-generated">—</span></p>
                     </div>
                     <div class="controls">
+                        <label for="time-range">Time range</label>
+                        <select id="time-range">
+                            <option value="1h">Last hour</option>
+                            <option value="24h" selected>Last 24 hours</option>
+                            <option value="7d">Last 7 days</option>
+                        </select>
                         <label for="auto-refresh-interval">Auto refresh</label>
                         <select class="auto-refresh" id="auto-refresh-interval">
                             <option value="5000">Every 5 seconds</option>
@@ -112,6 +118,13 @@
                         </span>
                         <span class="value" id="cost-delta">—</span>
                     </div>
+                </div>
+                <div class="chart-card" style="margin-top: 1.5rem;">
+                    <div class="chart-card__header">
+                        <h3>Performance trends</h3>
+                        <p class="muted">FPS, frame time, and GPU utilisation across the selected window</p>
+                    </div>
+                    <canvas id="metrics-trend-chart" aria-label="Performance trend chart" role="img"></canvas>
                 </div>
                 <div class="table-card" style="margin-top: 1.75rem;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">

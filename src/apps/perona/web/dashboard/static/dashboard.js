@@ -41,6 +41,8 @@ const streamToggle = byId('stream-toggle');
 const streamBadge = byId('stream-badge');
 const streamStatus = byId('stream-status');
 const streamRows = byId('stream-rows');
+const timeRange = byId('time-range');
+const metricsTrendChartCanvas = byId('metrics-trend-chart');
 
 peronaVersion.textContent = document.body.dataset.version ?? 'unknown';
 
@@ -72,6 +74,31 @@ const formatDateTime = (value) => {
     } catch (error) {
         return value;
     }
+};
+
+const TIME_RANGE_WINDOWS = {
+    '1h': { durationMs: 60 * 60 * 1000, label: 'Last hour' },
+    '24h': { durationMs: 24 * 60 * 60 * 1000, label: 'Last 24 hours' },
+    '7d': { durationMs: 7 * 24 * 60 * 60 * 1000, label: 'Last 7 days' },
+};
+
+const getSelectedTimeRange = () => {
+    const selection = timeRange?.value || '24h';
+    const config = TIME_RANGE_WINDOWS[selection] ?? TIME_RANGE_WINDOWS['24h'];
+    const to = new Date();
+    const from = new Date(to.getTime() - config.durationMs);
+    return { from: from.toISOString(), to: to.toISOString(), label: config.label };
+};
+
+const applyTimeRangeParams = (params) => {
+    const range = getSelectedTimeRange();
+    if (range.from) {
+        params.set('from', range.from);
+    }
+    if (range.to) {
+        params.set('to', range.to);
+    }
+    return range;
 };
 
 const RISK_THRESHOLDS = {
@@ -390,6 +417,7 @@ const renderCosts = (costs = {}) => {
 let costTrendChart;
 let pnlBreakdownChart;
 let riskHeatmapChart;
+let metricsTrendChart;
 let riskHeatmapData = [];
 
 const buildTimelineSeries = (costs = {}) => {
@@ -436,6 +464,99 @@ const buildStackedSeries = (costs = {}) => {
     });
 
     return { labels, baseline, current, pnlDelta };
+};
+
+const renderMetricTrendChart = (timeline = []) => {
+    if (!metricsTrendChartCanvas || typeof Chart === 'undefined') {
+        return;
+    }
+
+    const points = Array.isArray(timeline) ? timeline : [];
+    const labels = points.map((point) => formatDateTime(point.timestamp));
+    const fpsData = points.map((point) => point.fps ?? 0);
+    const frameTimeData = points.map((point) => point.frame_time_ms ?? 0);
+    const gpuData = points.map((point) => point.gpu_utilisation ?? 0);
+
+    if (metricsTrendChart) {
+        metricsTrendChart.destroy();
+    }
+
+    metricsTrendChart = new Chart(metricsTrendChartCanvas, {
+        type: 'line',
+        data: {
+            labels: labels.length ? labels : ['No data'],
+            datasets: [
+                {
+                    label: 'FPS',
+                    data: labels.length ? fpsData : [0],
+                    borderColor: 'rgba(59, 130, 246, 0.8)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.25)',
+                    tension: 0.2,
+                    yAxisID: 'fps',
+                },
+                {
+                    label: 'Frame time (ms)',
+                    data: labels.length ? frameTimeData : [0],
+                    borderColor: 'rgba(234, 88, 12, 0.8)',
+                    backgroundColor: 'rgba(234, 88, 12, 0.2)',
+                    tension: 0.2,
+                    yAxisID: 'frameTime',
+                },
+                {
+                    label: 'GPU utilisation (%)',
+                    data: labels.length ? gpuData : [0],
+                    borderColor: 'rgba(34, 197, 94, 0.85)',
+                    backgroundColor: 'rgba(34, 197, 94, 0.25)',
+                    tension: 0.2,
+                    yAxisID: 'gpu',
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            stacked: false,
+            scales: {
+                fps: {
+                    type: 'linear',
+                    position: 'left',
+                    title: { display: true, text: 'FPS' },
+                },
+                frameTime: {
+                    type: 'linear',
+                    position: 'right',
+                    title: { display: true, text: 'Frame time (ms)' },
+                    grid: { drawOnChartArea: false },
+                },
+                gpu: {
+                    type: 'linear',
+                    position: 'right',
+                    offset: true,
+                    title: { display: true, text: 'GPU utilisation (%)' },
+                    grid: { drawOnChartArea: false },
+                    suggestedMin: 0,
+                    suggestedMax: 100,
+                },
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const value = context.parsed.y;
+                            if (context.dataset.label?.includes('Frame time')) {
+                                return `Frame time: ${formatNumber(value, { maximumFractionDigits: 1 })} ms`;
+                            }
+                            if (context.dataset.label?.includes('GPU')) {
+                                return `GPU utilisation: ${formatNumber(value, { maximumFractionDigits: 1 })}%`;
+                            }
+                            return `FPS: ${formatNumber(value, { maximumFractionDigits: 1 })}`;
+                        },
+                    },
+                },
+            },
+        },
+    });
 };
 
 const renderCostCharts = (costs = {}) => {
@@ -661,6 +782,7 @@ const fetchSummary = async () => {
         if (shotsArtist.value) {
             params.set('artist', shotsArtist.value);
         }
+        const range = applyTimeRangeParams(params);
         const [summaryResponse, costResponse] = await Promise.all([
             fetch(`./dashboard/summary?${params.toString()}`),
             fetch(`./analytics/costs?${params.toString()}`),
@@ -672,7 +794,10 @@ const fetchSummary = async () => {
 
         const summary = await summaryResponse.json();
         const costAnalytics = costResponse.ok ? await costResponse.json() : null;
-        summaryGenerated.textContent = summary.generated_at ?? 'Unknown';
+        const windowLabel = summary.window
+            ? `${formatDateTime(summary.window.from)} – ${formatDateTime(summary.window.to)}`
+            : `${formatDateTime(range.from)} – ${formatDateTime(range.to)}`;
+        summaryGenerated.textContent = windowLabel;
         metricsTotal.textContent = formatNumber(summary.metrics?.total_samples);
         metricsFps.textContent = formatNumber(summary.metrics?.average_fps, { maximumFractionDigits: 1 });
         metricsFrameTime.textContent = formatNumber(summary.metrics?.average_frame_time_ms, { maximumFractionDigits: 0 });
@@ -685,6 +810,7 @@ const fetchSummary = async () => {
         renderRiskCards(summary.risk?.top_risks ?? []);
         renderCosts(summary.costs ?? {});
         renderCostCharts(costAnalytics ?? summary.costs ?? {});
+        renderMetricTrendChart(summary.metrics?.timeline ?? []);
         fetchRiskHeatmap(params).catch(() => {});
         summaryStatus.textContent = 'Data refreshed';
     } catch (error) {
@@ -826,7 +952,9 @@ document.addEventListener('keydown', (event) => {
 
 const downloadDailyReport = async () => {
     try {
-        const response = await fetch('./reports/daily');
+        const params = new URLSearchParams();
+        applyTimeRangeParams(params);
+        const response = await fetch(`./reports/daily?${params.toString()}`);
         if (!response.ok) {
             throw new Error('Failed to download report');
         }
@@ -859,6 +987,7 @@ const loadShots = async () => {
         if (shotsArtist.value) {
             params.set('artist', shotsArtist.value);
         }
+        applyTimeRangeParams(params);
         const response = await fetch(`./shots?${params.toString()}`);
         if (!response.ok) {
             throw new Error('Failed to load shots');
@@ -879,6 +1008,13 @@ shotsArtist.addEventListener('change', () => {
     fetchSummary().catch(() => {});
     loadShots().catch(() => {});
 });
+
+if (timeRange) {
+    timeRange.addEventListener('change', () => {
+        fetchSummary().catch(() => {});
+        loadShots().catch(() => {});
+    });
+}
 
 const startMetricsStream = () => {
     if (!window.WebSocket) {
