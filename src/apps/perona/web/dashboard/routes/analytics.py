@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from statistics import fmean
 from typing import Any
 
@@ -58,7 +59,12 @@ def compute_risk_summary(engine: PeronaEngine) -> dict[str, Any]:
     }
 
 
-def compute_costs_summary(engine: PeronaEngine) -> dict[str, Any]:
+def compute_costs_summary(
+    engine: PeronaEngine,
+    *,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> dict[str, Any]:
     """Return key spend metrics combining baseline and current projections."""
 
     baseline_input = engine.baseline_cost_input
@@ -75,7 +81,9 @@ def compute_costs_summary(engine: PeronaEngine) -> dict[str, Any]:
     current_cost_per_frame = round(pnl_breakdown.current_cost / frame_count, 4)
     delta_cost_per_frame = round(current_cost_per_frame - baseline_cost_per_frame, 4)
 
-    samples = tuple(engine.stream_render_metrics())
+    samples = tuple(engine.stream_render_metrics(since=start_time))
+    if end_time is not None:
+        samples = tuple(sample for sample in samples if sample.timestamp <= end_time)
     timeline: list[dict[str, Any]] = []
     sequence_totals: dict[str, dict[str, float]] = {}
 
@@ -156,11 +164,13 @@ def risk_heatmap(
 
 @router.get("/costs")
 def costs_summary(
+    start_time: datetime | None = Query(None, alias="from"),
+    end_time: datetime | None = Query(None, alias="to"),
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> dict[str, Any]:
     """Return key spend metrics combining baseline and current projections."""
 
-    return compute_costs_summary(engine)
+    return compute_costs_summary(engine, start_time=start_time, end_time=end_time)
 
 
 @router.post("/cost/estimate", response_model=CostEstimate)

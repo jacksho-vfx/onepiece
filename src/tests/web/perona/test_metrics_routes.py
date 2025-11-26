@@ -231,6 +231,43 @@ def test_compute_metrics_summary_respects_windows() -> None:
     )
 
 
+def test_compute_metrics_summary_honours_explicit_time_range() -> None:
+    base_time = datetime(2024, 2, 1, 0, 0, 0)
+    metrics = [
+        EngineRenderMetric(
+            sequence="SQ%02d" % (index % 2),
+            shot_id=f"SHOT_{index:03d}",
+            timestamp=base_time + timedelta(minutes=index * 10),
+            fps=24.0 + index,
+            frame_time_ms=100.0 + index,
+            error_count=index % 2,
+            gpu_utilisation=0.4 + (index * 0.05),
+            cache_health=0.9,
+        )
+        for index in range(6)
+    ]
+
+    engine = PeronaEngine()
+    engine._render_log = tuple(metrics)
+
+    start_time = base_time + timedelta(minutes=10)
+    end_time = base_time + timedelta(minutes=40)
+
+    summary = dashboard_module.compute_metrics_summary(
+        engine, start_time=start_time, end_time=end_time
+    )
+
+    expected = [
+        sample for sample in metrics if start_time <= sample.timestamp <= end_time
+    ]
+
+    assert summary["total_samples"] == len(expected)
+    assert summary["timeline"]
+    assert summary["timeline"][0]["timestamp"] == expected[0].timestamp.isoformat()
+    assert summary["window"]["from"] == start_time.isoformat()
+    assert summary["window"]["to"] == end_time.isoformat()
+
+
 def test_compute_metrics_summary_handles_large_dataset_quickly() -> None:
     engine = PeronaEngine()
     base_time = datetime(2024, 1, 1, 0, 0, 0)

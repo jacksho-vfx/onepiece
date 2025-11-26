@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Annotated, Any, Sequence
 
 from fastapi import APIRouter, Depends, Query
 
@@ -125,32 +125,42 @@ def compute_shots_summary(
 
 @router.get("/lifecycle", response_model=list[Shot])
 def shots_lifecycle(
-    sequence: str | None = Query(None),
-    artist: str | None = Query(None),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
+    sequence: str | None = None,
+    artist: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query(alias="to")] = None,
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> list[Shot]:
     """Return lifecycle timelines for key monitored shots."""
 
+    start = start_date or from_
+    end = end_date or to
+
     lifecycles = filter_lifecycles(
-        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+        engine.shot_lifecycle(), sequence, artist, start, end
     )
     return [Shot.from_entity(item) for item in lifecycles]
 
 
 @router.get("/sequences", response_model=list[PeronaSequence])
 def shot_sequences(
-    sequence: str | None = Query(None),
-    artist: str | None = Query(None),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
+    sequence: str | None = None,
+    artist: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query(alias="to")] = None,
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> list[PeronaSequence]:
     """Return monitored shots grouped by sequence."""
 
+    start = start_date or from_
+    end = end_date or to
+
     lifecycles = filter_lifecycles(
-        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+        engine.shot_lifecycle(), sequence, artist, start, end
     )
     sequences = sequences_from_lifecycles(lifecycles)
     return list(sequences)
@@ -158,16 +168,21 @@ def shot_sequences(
 
 @router.get("")
 def shots_summary(
-    sequence: str | None = Query(None),
-    artist: str | None = Query(None),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
+    sequence: str | None = None,
+    artist: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query(alias="to")] = None,
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> dict[str, Any]:
     """Return aggregated production status for monitored shots."""
 
+    start = start_date or from_
+    end = end_date or to
+
     lifecycles = filter_lifecycles(
-        engine.shot_lifecycle(), sequence, artist, start_date, end_date
+        engine.shot_lifecycle(), sequence, artist, start, end
     )
     return compute_shots_summary(lifecycles)
 

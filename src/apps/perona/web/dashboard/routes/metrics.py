@@ -34,11 +34,13 @@ def compute_metrics_summary(
     *,
     sample_limit: int | None = None,
     window_seconds: int | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> dict[str, Any]:
     """Return aggregated statistics for recent render telemetry."""
 
-    cutoff: datetime | None = None
-    if window_seconds is not None:
+    cutoff: datetime | None = start_time
+    if cutoff is None and window_seconds is not None:
         latest_metric = engine.latest_render_metric()
         if latest_metric is not None:
             cutoff = latest_metric.timestamp - timedelta(seconds=window_seconds)
@@ -57,6 +59,9 @@ def compute_metrics_summary(
     latest_timestamp: datetime | None = None
 
     samples = tuple(engine.stream_render_metrics(limit=sample_limit, since=cutoff))
+
+    if end_time is not None:
+        samples = tuple(sample for sample in samples if sample.timestamp <= end_time)
 
     for sample in samples:
         total_samples += 1
@@ -87,6 +92,8 @@ def compute_metrics_summary(
             latest_timestamp = sample.timestamp
             latest_sample = sample
 
+    sorted_samples = sorted(samples, key=lambda sample: sample.timestamp)
+
     if total_samples == 0:
         return {
             "total_samples": 0,
@@ -98,6 +105,8 @@ def compute_metrics_summary(
             },
             "sequences": [],
             "latest_sample": None,
+            "timeline": [],
+            "window": {"from": cutoff.isoformat() if cutoff else None, "to": None},
         }
 
     overall_averages = {
@@ -127,11 +136,29 @@ def compute_metrics_summary(
             mode="json", by_alias=True
         )
 
+    window_start = cutoff or (sorted_samples[0].timestamp if sorted_samples else None)
+    window_end = end_time or latest_timestamp
+
+    timeline = [
+        {
+            "timestamp": sample.timestamp.isoformat(),
+            "fps": sample.fps,
+            "frame_time_ms": sample.frame_time_ms,
+            "gpu_utilisation": sample.gpu_utilisation,
+        }
+        for sample in sorted_samples
+    ]
+
     return {
         "total_samples": total_samples,
         "averages": overall_averages,
         "sequences": sequences_summary,
         "latest_sample": latest_payload,
+        "timeline": timeline,
+        "window": {
+            "from": window_start.isoformat() if window_start else None,
+            "to": window_end.isoformat() if window_end else None,
+        },
     }
 
 
@@ -246,12 +273,18 @@ def metrics_summary(
             ),
         ),
     ] = None,
+    start_time: Annotated[datetime | None, Query(alias="from")] = None,
+    end_time: Annotated[datetime | None, Query(alias="to")] = None,
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> dict[str, Any]:
     """Return aggregated statistics for recent render telemetry."""
 
     return compute_metrics_summary(
-        engine, sample_limit=sample_limit, window_seconds=window_seconds
+        engine,
+        sample_limit=sample_limit,
+        window_seconds=window_seconds,
+        start_time=start_time,
+        end_time=end_time,
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,21 +17,25 @@ router = APIRouter(tags=["reports"])
 
 @router.get("/dashboard/summary")
 def dashboard_summary(
+    from_: datetime | None = Query(None, alias="from"),
+    to: datetime | None = Query(None, alias="to"),
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> Any:
     """Return the aggregated data backing the refreshed dashboard UI."""
 
-    return report_utils.build_daily_summary(engine)
+    return report_utils.build_daily_summary(engine, start_time=from_, end_time=to)
 
 
 @router.get("/reports/daily")
 def daily_report(
     format: str = Query("csv"),
+    from_: datetime | None = Query(None, alias="from"),
+    to: datetime | None = Query(None, alias="to"),
     engine: PeronaEngine = Depends(dependencies.get_engine),
 ) -> StreamingResponse:
     """Generate a downloadable daily summary report in CSV or PDF format."""
 
-    summary = report_utils.build_daily_summary(engine)
+    summary = report_utils.build_daily_summary(engine, start_time=from_, end_time=to)
     fmt = format.lower()
     if fmt == "csv":
         payload = report_utils.render_daily_csv(summary)
