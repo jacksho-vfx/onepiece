@@ -85,6 +85,34 @@ def test_s3_delivery_provider_lists_manifests() -> None:
     assert latest["etag"] == "def456"
 
 
+def test_s3_delivery_provider_root_manifest_identity() -> None:
+    paginator = RecordingPaginator(
+        [
+            {
+                "Contents": [
+                    {
+                        "Key": "manifest.json",
+                        "LastModified": datetime(
+                            2024, 10, 1, 12, 0, tzinfo=timezone.utc
+                        ),
+                        "Size": 2048,
+                    }
+                ]
+            }
+        ]
+    )
+    provider = S3DeliveryProvider(
+        client=DummyClient(paginator),
+        bucket="deliveries-bucket",
+        prefix_template="{project}/",
+    )
+
+    deliveries = provider.list_deliveries("atlas")
+
+    assert deliveries[0]["delivery_id"] == "manifest"
+    assert deliveries[0]["name"] == "manifest"
+
+
 def test_s3_delivery_provider_requires_bucket() -> None:
     provider = S3DeliveryProvider(client=object(), bucket=None)
 
