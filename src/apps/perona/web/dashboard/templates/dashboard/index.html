@@ -179,7 +179,33 @@
                     </div>
                     <div class="badge warning" id="risk-status">Loading…</div>
                 </div>
-                <div class="risk-grid" id="risk-cards"></div>
+                <div class="risk-analytics">
+                    <div class="risk-controls" role="group" aria-label="Risk sorting and filtering">
+                        <label for="risk-sort">Sort</label>
+                        <select id="risk-sort">
+                            <option value="desc">Highest risk first</option>
+                            <option value="asc">Lowest risk first</option>
+                            <option value="sequence">By sequence</option>
+                            <option value="shot">By shot</option>
+                        </select>
+                        <label for="risk-filter">Filter</label>
+                        <select id="risk-filter">
+                            <option value="all">All severities</option>
+                            <option value="critical">Critical only</option>
+                            <option value="high">High and above</option>
+                            <option value="medium">Medium and above</option>
+                        </select>
+                    </div>
+                    <div class="risk-legend" id="risk-legend" aria-live="polite" aria-label="Risk severity legend"></div>
+                    <div class="risk-grid" id="risk-cards" aria-live="polite"></div>
+                    <div class="chart-card risk-chart">
+                        <div class="chart-card__header">
+                            <h3>Risk severity by sequence</h3>
+                            <p class="muted">Histogram of average risk scores and critical items</p>
+                        </div>
+                        <canvas id="risk-heatmap-chart" aria-label="Risk histogram" role="img"></canvas>
+                    </div>
+                </div>
             </section>
             <section class="card fade-in span-8">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
