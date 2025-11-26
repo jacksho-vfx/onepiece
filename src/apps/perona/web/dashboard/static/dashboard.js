@@ -48,6 +48,21 @@ const liveErrorChartCanvas = byId('live-error-chart');
 const liveFpsValue = byId('live-fps-value');
 const liveGpuValue = byId('live-gpu-value');
 const liveErrorsValue = byId('live-errors-value');
+const optimizationForm = byId('optimization-form');
+const optimizationRunButton = byId('optimization-run');
+const optimizationClearButton = byId('optimization-clear');
+const optimizationScenarioTable = byId('optimization-scenarios');
+const optimizationQueueCount = byId('optimization-queue-count');
+const optimizationStatus = byId('optimization-status');
+const optimizationResults = byId('optimization-results');
+const optimizationResultsChartCanvas = byId('optimization-results-chart');
+const optimizationScenarioName = byId('optimization-scenario-name');
+const optimizationGpuCount = byId('optimization-gpu-count');
+const optimizationGpuRate = byId('optimization-gpu-rate');
+const optimizationFrameScale = byId('optimization-frame-scale');
+const optimizationResolutionScale = byId('optimization-resolution-scale');
+const optimizationSamplingScale = byId('optimization-sampling-scale');
+const optimizationNotes = byId('optimization-notes');
 
 peronaVersion.textContent = document.body.dataset.version ?? 'unknown';
 
@@ -426,6 +441,320 @@ let metricsTrendChart;
 let riskHeatmapData = [];
 let livePerformanceChart;
 let liveErrorChart;
+let optimizationResultsChart;
+
+const optimizationState = {
+    scenarios: [],
+    baseline: null,
+    currency: 'USD',
+};
+
+const getScaleLabel = (value) => {
+    const numeric = Number.isFinite(value) ? value : 1;
+    return `${formatNumber(numeric * 100, { maximumFractionDigits: 0 })}% of baseline`;
+};
+
+const setOptimizationBadge = (message, tone = '') => {
+    if (!optimizationStatus) {
+        return;
+    }
+    optimizationStatus.textContent = message;
+    optimizationStatus.className = tone ? `badge ${tone}` : 'badge';
+};
+
+const resetOptimizationForm = () => {
+    if (!optimizationForm) {
+        return;
+    }
+    optimizationForm.reset();
+    if (optimizationFrameScale) {
+        optimizationFrameScale.value = '1';
+    }
+    if (optimizationResolutionScale) {
+        optimizationResolutionScale.value = '1';
+    }
+    if (optimizationSamplingScale) {
+        optimizationSamplingScale.value = '1';
+    }
+};
+
+const renderOptimizationQueue = () => {
+    if (!optimizationScenarioTable) {
+        return;
+    }
+
+    optimizationScenarioTable.innerHTML = '';
+    const configured = optimizationState.scenarios.length;
+    if (optimizationQueueCount) {
+        optimizationQueueCount.textContent = `${configured} configured`;
+    }
+
+    if (configured === 0) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = '<td colspan="8" class="muted">No scenarios queued.</td>';
+        optimizationScenarioTable.appendChild(emptyRow);
+        return;
+    }
+
+    optimizationState.scenarios.forEach((scenario, index) => {
+        const row = document.createElement('tr');
+        const gpuRate = Number.isFinite(scenario.gpu_hourly_rate)
+            ? formatCurrency(scenario.gpu_hourly_rate, optimizationState.currency)
+            : '—';
+        row.innerHTML = `
+            <td>${scenario.name}</td>
+            <td>${scenario.gpu_count ?? '—'}</td>
+            <td>${gpuRate}</td>
+            <td>${getScaleLabel(scenario.frame_time_scale)}</td>
+            <td>${getScaleLabel(scenario.resolution_scale)}</td>
+            <td>${getScaleLabel(scenario.sampling_scale)}</td>
+            <td>${scenario.notes ?? '—'}</td>
+            <td><button class="link-button" type="button" data-index="${index}">Remove</button></td>
+        `;
+        const removeButton = row.querySelector('button');
+        removeButton.addEventListener('click', () => {
+            optimizationState.scenarios.splice(index, 1);
+            renderOptimizationQueue();
+        });
+        optimizationScenarioTable.appendChild(row);
+    });
+};
+
+const parseOptimizationScenario = () => {
+    const name = (optimizationScenarioName?.value || '').trim() || `Scenario ${optimizationState.scenarios.length + 1}`;
+    const frameTimeScale = Number.parseFloat(optimizationFrameScale?.value ?? '1');
+    const resolutionScale = Number.parseFloat(optimizationResolutionScale?.value ?? '1');
+    const samplingScale = Number.parseFloat(optimizationSamplingScale?.value ?? '1');
+    const gpuCount = Number.parseInt(optimizationGpuCount?.value ?? '', 10);
+    const gpuHourlyRate = Number.parseFloat(optimizationGpuRate?.value ?? '');
+    const scenario = {
+        name,
+        frame_time_scale: Number.isFinite(frameTimeScale) ? frameTimeScale : 1,
+        resolution_scale: Number.isFinite(resolutionScale) ? resolutionScale : 1,
+        sampling_scale: Number.isFinite(samplingScale) ? samplingScale : 1,
+    };
+
+    if (Number.isFinite(gpuCount)) {
+        scenario.gpu_count = gpuCount;
+    }
+    if (Number.isFinite(gpuHourlyRate)) {
+        scenario.gpu_hourly_rate = gpuHourlyRate;
+    }
+    const notes = (optimizationNotes?.value || '').trim();
+    if (notes) {
+        scenario.notes = notes;
+    }
+    return scenario;
+};
+
+const renderOptimizationResultsChart = (baseline, scenarios = []) => {
+    if (!optimizationResultsChartCanvas || typeof Chart === 'undefined') {
+        return;
+    }
+
+    const labels = ['Baseline', ...scenarios.map((scenario) => scenario.name)];
+    const totalCosts = [baseline?.total_cost ?? 0, ...scenarios.map((scenario) => scenario.total_cost ?? 0)];
+    const savings = [0, ...scenarios.map((scenario) => (baseline ? baseline.total_cost - scenario.total_cost : 0))];
+
+    const savingsColors = savings.map((value) => (value >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(248, 113, 113, 0.7)'));
+
+    if (optimizationResultsChart) {
+        optimizationResultsChart.destroy();
+    }
+
+    optimizationResultsChart = new Chart(optimizationResultsChartCanvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Total cost',
+                    data: totalCosts,
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    borderColor: 'rgba(59, 130, 246, 0.9)',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Savings vs. baseline',
+                    data: savings,
+                    backgroundColor: savingsColors,
+                    borderColor: savingsColors,
+                    borderWidth: 1,
+                    yAxisID: 'y1',
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: baseline?.currency ? `Total cost (${baseline.currency})` : 'Total cost' },
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Savings (+) / Overruns (–)' },
+                },
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const value = context.parsed.y;
+                            if (context.dataset.label === 'Total cost') {
+                                return formatCurrency(value, baseline?.currency ?? 'USD');
+                            }
+                            const deltaLabel = value >= 0 ? 'Savings' : 'Overrun';
+                            return `${deltaLabel}: ${formatCurrency(value, baseline?.currency ?? 'USD')}`;
+                        },
+                    },
+                },
+            },
+        },
+    });
+};
+
+const renderDriverChanges = (baseline, scenario) => {
+    const drivers = [
+        {
+            label: 'Cost per frame',
+            baseline: baseline?.cost_per_frame,
+            scenario: scenario.cost_per_frame,
+            formatter: (value) => formatCurrency(value, baseline?.currency ?? 'USD'),
+        },
+        {
+            label: 'GPU hours',
+            baseline: baseline?.gpu_hours,
+            scenario: scenario.gpu_hours,
+            formatter: (value) => formatNumber(value, { maximumFractionDigits: 1 }),
+        },
+        {
+            label: 'Render hours',
+            baseline: baseline?.render_hours,
+            scenario: scenario.render_hours,
+            formatter: (value) => formatNumber(value, { maximumFractionDigits: 1 }),
+        },
+    ];
+
+    const list = document.createElement('ul');
+    list.style.paddingLeft = '1.25rem';
+    drivers.forEach((driver) => {
+        const delta = (driver.scenario ?? 0) - (driver.baseline ?? 0);
+        const direction = delta === 0 ? 'No change' : delta > 0 ? 'Increase' : 'Decrease';
+        const item = document.createElement('li');
+        item.innerHTML = `
+            <strong>${driver.label}</strong>: ${driver.formatter(driver.scenario ?? 0)}
+            <span class="muted">(${direction} ${delta === 0 ? '' : driver.formatter(delta)})</span>
+        `;
+        list.appendChild(item);
+    });
+    return list;
+};
+
+const renderOptimizationResultsSummary = (baseline, scenarios = []) => {
+    if (!optimizationResults) {
+        return;
+    }
+
+    optimizationResults.innerHTML = '';
+    if (!baseline) {
+        optimizationResults.innerHTML = '<p class="muted">Run a backtest to see results.</p>';
+        return;
+    }
+
+    if (!Array.isArray(scenarios) || scenarios.length === 0) {
+        optimizationResults.innerHTML = '<p class="muted">No scenarios returned.</p>';
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    scenarios.forEach((scenario) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '1rem';
+        const savings = Number.isFinite(scenario.savings_vs_baseline)
+            ? scenario.savings_vs_baseline
+            : (baseline.total_cost ?? 0) - (scenario.total_cost ?? 0);
+        const savingsPercent = Number.isFinite(scenario.savings_percent)
+            ? scenario.savings_percent
+            : baseline.total_cost
+              ? (savings / baseline.total_cost) * 100
+              : 0;
+        const savingsLabel = savings >= 0 ? 'Savings' : 'Overrun';
+        const badgeTone = savings >= 0 ? 'success' : 'warning';
+        card.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                <div>
+                    <h4 style="margin: 0;">${scenario.name}</h4>
+                    <p class="muted" style="margin: 0;">${scenario.notes || 'No notes provided.'}</p>
+                </div>
+                <span class="badge ${badgeTone}">${savingsLabel}</span>
+            </div>
+            <div class="stat-grid" style="margin-top: 0.5rem;">
+                <div class="stat">
+                    <span class="label">Total cost</span>
+                    <span class="value">${formatCurrency(scenario.total_cost, baseline.currency)}</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Savings vs. baseline</span>
+                    <span class="value">${formatCurrency(savings, baseline.currency)}</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Savings %</span>
+                    <span class="value">${formatNumber(savingsPercent, { maximumFractionDigits: 1 })}%</span>
+                </div>
+                <div class="stat">
+                    <span class="label">GPU hours</span>
+                    <span class="value">${formatNumber(scenario.gpu_hours, { maximumFractionDigits: 1 })}</span>
+                </div>
+            </div>
+        `;
+
+        const drivers = renderDriverChanges(baseline, scenario);
+        drivers.style.marginTop = '0.5rem';
+        card.appendChild(drivers);
+        fragment.appendChild(card);
+    });
+
+    optimizationResults.appendChild(fragment);
+};
+
+const runOptimizationBacktest = async () => {
+    if (!optimizationState.scenarios.length) {
+        setOptimizationBadge('Add at least one scenario to run a backtest.', 'warning');
+        return;
+    }
+
+    setOptimizationBadge('Running backtest…', 'warning');
+    try {
+        const payload = {
+            scenarios: optimizationState.scenarios,
+        };
+
+        const response = await fetch('./analytics/optimization/backtest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to run optimisation backtest');
+        }
+
+        const data = await response.json();
+        optimizationState.baseline = data.baseline ?? null;
+        optimizationState.currency = data.baseline?.currency ?? optimizationState.currency;
+        renderOptimizationResultsSummary(data.baseline, data.scenarios ?? []);
+        renderOptimizationResultsChart(data.baseline, data.scenarios ?? []);
+        setOptimizationBadge('Backtest updated', 'success');
+    } catch (error) {
+        console.error(error);
+        setOptimizationBadge('Unable to run backtest', 'danger');
+    }
+};
 
 const LIVE_SAMPLE_LIMIT = 180;
 
@@ -1026,6 +1355,32 @@ if (riskFilter) {
     riskFilter.addEventListener('change', applyRiskFilters);
 }
 
+if (optimizationForm) {
+    optimizationForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const scenario = parseOptimizationScenario();
+        optimizationState.scenarios.push(scenario);
+        renderOptimizationQueue();
+        resetOptimizationForm();
+        setOptimizationBadge('Scenario queued. Run backtest to compare.', 'success');
+    });
+}
+
+if (optimizationRunButton) {
+    optimizationRunButton.addEventListener('click', () => {
+        runOptimizationBacktest().catch(() => {});
+    });
+}
+
+if (optimizationClearButton) {
+    optimizationClearButton.addEventListener('click', () => {
+        optimizationState.scenarios = [];
+        renderOptimizationQueue();
+        resetOptimizationForm();
+        setOptimizationBadge('Scenarios cleared.', 'muted');
+    });
+}
+
 const wrangler = {
     isOpen: false,
     scripts: [],
@@ -1366,6 +1721,8 @@ const startMetricsStream = () => {
 fetchSummary().catch((error) => {
     console.error(error);
 });
+renderOptimizationQueue();
+setOptimizationBadge('Define scenarios to compare against baseline.', 'muted');
 populateFilters().catch(() => {});
 loadShots().catch(() => {});
 startMetricsStream();
