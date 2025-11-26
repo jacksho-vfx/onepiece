@@ -224,111 +224,197 @@ const toArray = (collection) => {
     const commandCards = Array.from(document.querySelectorAll('.command-card'));
     const searchInput = document.getElementById('command-search');
     const favouritesToggle = document.getElementById('favourites-toggle');
+    const favouritesPill = document.querySelector('[data-favourites-pill]');
+    const filterStatusRegion = document.querySelector('[data-filter-status]');
 
     const storage = {
-    get(key, fallback) {
-      try {
-        const raw = localStorage.getItem(key);
-        return raw === null ? fallback : raw;
-      } catch (error) {
-        console.warn('localStorage unavailable', error);
-        return fallback;
-      }
-    },
-    set(key, value) {
-      try {
-        localStorage.setItem(key, value);
-      } catch (error) {
-        console.warn('localStorage unavailable', error);
-      }
-    },
+      get(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw === null ? fallback : raw;
+        } catch (error) {
+          console.warn('localStorage unavailable', error);
+          return fallback;
+        }
+      },
+      set(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (error) {
+          console.warn('localStorage unavailable', error);
+        }
+      },
     };
 
     const FAVOURITES_KEY = 'uta:favourites';
     const SEARCH_KEY = 'uta:search';
     const FAVOURITES_FILTER_KEY = 'uta:filter:favourites';
 
-    const favouriteSet = (() => {
-    const raw = storage.get(FAVOURITES_KEY, '[]');
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.filter((item) => typeof item === 'string'));
+    const getInitialFavouritesFilterState = () => {
+      const url = new URL(window.location.href);
+      const urlFlag = url.searchParams.get('favourites');
+      if (urlFlag === 'true') {
+        return true;
       }
-    } catch (error) {
-      console.warn('Unable to parse favourites', error);
-    }
-    return new Set();
+      if (urlFlag === 'false') {
+        return false;
+      }
+      const storedFlag = storage.get(FAVOURITES_FILTER_KEY, 'false');
+      return storedFlag === 'true';
+    };
+
+    let favouritesFilterActive = getInitialFavouritesFilterState();
+    storage.set(FAVOURITES_FILTER_KEY, String(favouritesFilterActive));
+
+    const favouriteSet = (() => {
+      const raw = storage.get(FAVOURITES_KEY, '[]');
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return new Set(parsed.filter((item) => typeof item === 'string'));
+        }
+      } catch (error) {
+        console.warn('Unable to parse favourites', error);
+      }
+      return new Set();
     })();
 
     const persistFavourites = () => {
-    storage.set(FAVOURITES_KEY, JSON.stringify(Array.from(favouriteSet)));
+      storage.set(FAVOURITES_KEY, JSON.stringify(Array.from(favouriteSet)));
     };
 
     const updateFavouriteUI = (card, isFavourite) => {
-    const button = card.querySelector('.favourite-toggle');
-    const icon = button ? button.querySelector('.favourite-icon') : null;
-    card.classList.toggle('is-favourite', isFavourite);
-    if (button) {
-      button.setAttribute('aria-pressed', String(isFavourite));
-      button.classList.toggle('is-active', isFavourite);
-    }
-    if (icon) {
-      icon.textContent = isFavourite ? '★' : '☆';
-    }
+      const button = card.querySelector('.favourite-toggle');
+      const icon = button ? button.querySelector('.favourite-icon') : null;
+      card.classList.toggle('is-favourite', isFavourite);
+      if (button) {
+        button.setAttribute('aria-pressed', String(isFavourite));
+        button.classList.toggle('is-active', isFavourite);
+      }
+      if (icon) {
+        icon.textContent = isFavourite ? '★' : '☆';
+      }
+    };
+
+    const buildFavouritesFilterUrl = (isActive) => {
+      const url = new URL(window.location.href);
+      if (isActive) {
+        url.searchParams.set('favourites', 'true');
+      } else {
+        url.searchParams.delete('favourites');
+      }
+      return url;
+    };
+
+    const syncFavouritesFilterHistory = (isActive) => {
+      if (!window.history || typeof window.history.replaceState !== 'function') {
+        return;
+      }
+      const url = buildFavouritesFilterUrl(isActive);
+      const current = new URL(window.location.href);
+      if (
+        current.pathname === url.pathname &&
+        current.search === url.search &&
+        current.hash === url.hash
+      ) {
+        return;
+      }
+      window.history.replaceState({ favouritesOnly: isActive }, '', url);
+    };
+
+    const updateFavouritesFilterUI = (isActive) => {
+      if (favouritesToggle) {
+        favouritesToggle.checked = isActive;
+      }
+      if (favouritesPill) {
+        favouritesPill.classList.toggle('is-active', isActive);
+        favouritesPill.setAttribute('aria-pressed', String(isActive));
+        favouritesPill.setAttribute(
+          'aria-label',
+          isActive ? 'Favourites filter on. Showing favourites only.' : 'Show favourite commands only',
+        );
+      }
+    };
+
+    const announceFilterState = (isActive) => {
+      if (!filterStatusRegion) {
+        return;
+      }
+      filterStatusRegion.textContent = isActive
+        ? 'Favourites filter enabled. Showing favourite commands only.'
+        : 'Favourites filter disabled. Showing all commands.';
     };
 
     function applyFilter() {
-    const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
-    const favouritesOnly = favouritesToggle ? favouritesToggle.checked : false;
-    commandCards.forEach((card) => {
-      const keywords = card.dataset.keywords || '';
-      const matchesQuery = !query || keywords.includes(query);
-      const matchesFavourite = !favouritesOnly || card.classList.contains('is-favourite');
-      const visible = matchesQuery && matchesFavourite;
-      card.classList.toggle('is-hidden', !visible);
-      card.setAttribute('aria-hidden', String(!visible));
-    });
-    }
-
-    commandCards.forEach((card) => {
-    const id = card.dataset.commandId;
-    if (!id) {
-      return;
-    }
-    const isFavourite = favouriteSet.has(id);
-    updateFavouriteUI(card, isFavourite);
-    const button = card.querySelector('.favourite-toggle');
-    if (button) {
-      button.addEventListener('click', () => {
-        if (favouriteSet.has(id)) {
-        favouriteSet.delete(id);
-        } else {
-        favouriteSet.add(id);
-        }
-        persistFavourites();
-        updateFavouriteUI(card, favouriteSet.has(id));
-        applyFilter();
+      const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+      const favouritesOnly = favouritesFilterActive;
+      commandCards.forEach((card) => {
+        const keywords = card.dataset.keywords || '';
+        const matchesQuery = !query || keywords.includes(query);
+        const matchesFavourite = !favouritesOnly || card.classList.contains('is-favourite');
+        const visible = matchesQuery && matchesFavourite;
+        card.classList.toggle('is-hidden', !visible);
+        card.setAttribute('aria-hidden', String(!visible));
       });
     }
+
+    const setFavouritesFilter = (isActive, { announce = false } = {}) => {
+      const nextState = Boolean(isActive);
+      favouritesFilterActive = nextState;
+      storage.set(FAVOURITES_FILTER_KEY, String(nextState));
+      updateFavouritesFilterUI(nextState);
+      syncFavouritesFilterHistory(nextState);
+      if (announce) {
+        announceFilterState(nextState);
+      }
+      applyFilter();
+    };
+
+    updateFavouritesFilterUI(favouritesFilterActive);
+    announceFilterState(favouritesFilterActive);
+    syncFavouritesFilterHistory(favouritesFilterActive);
+
+    commandCards.forEach((card) => {
+      const id = card.dataset.commandId;
+      if (!id) {
+        return;
+      }
+      const isFavourite = favouriteSet.has(id);
+      updateFavouriteUI(card, isFavourite);
+      const button = card.querySelector('.favourite-toggle');
+      if (button) {
+        button.addEventListener('click', () => {
+          if (favouriteSet.has(id)) {
+            favouriteSet.delete(id);
+          } else {
+            favouriteSet.add(id);
+          }
+          persistFavourites();
+          updateFavouriteUI(card, favouriteSet.has(id));
+          applyFilter();
+        });
+      }
     });
 
     if (searchInput) {
-    const storedSearch = storage.get(SEARCH_KEY, '');
-    searchInput.value = storedSearch;
-    searchInput.addEventListener('input', () => {
-      storage.set(SEARCH_KEY, searchInput.value);
-      applyFilter();
-    });
+      const storedSearch = storage.get(SEARCH_KEY, '');
+      searchInput.value = storedSearch;
+      searchInput.addEventListener('input', () => {
+        storage.set(SEARCH_KEY, searchInput.value);
+        applyFilter();
+      });
     }
 
     if (favouritesToggle) {
-    const storedFlag = storage.get(FAVOURITES_FILTER_KEY, 'false');
-    favouritesToggle.checked = storedFlag === 'true';
-    favouritesToggle.addEventListener('change', () => {
-      storage.set(FAVOURITES_FILTER_KEY, String(favouritesToggle.checked));
-      applyFilter();
-    });
+      favouritesToggle.addEventListener('change', () => {
+        setFavouritesFilter(favouritesToggle.checked, { announce: true });
+      });
+    }
+
+    if (favouritesPill) {
+      favouritesPill.addEventListener('click', () => {
+        setFavouritesFilter(!favouritesFilterActive, { announce: true });
+      });
     }
 
     applyFilter();
