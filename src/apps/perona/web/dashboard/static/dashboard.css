@@ -405,6 +405,12 @@ tbody tr:last-child td {
     color: #fed7aa;
 }
 
+.badge.muted {
+    background: rgba(148, 163, 184, 0.15);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #e2e8f0;
+}
+
 .badge.danger {
     background: rgba(248, 113, 113, 0.18);
     border: 1px solid rgba(248, 113, 113, 0.35);

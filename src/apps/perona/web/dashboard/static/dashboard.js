@@ -43,6 +43,11 @@ const streamStatus = byId('stream-status');
 const streamRows = byId('stream-rows');
 const timeRange = byId('time-range');
 const metricsTrendChartCanvas = byId('metrics-trend-chart');
+const livePerformanceChartCanvas = byId('live-performance-chart');
+const liveErrorChartCanvas = byId('live-error-chart');
+const liveFpsValue = byId('live-fps-value');
+const liveGpuValue = byId('live-gpu-value');
+const liveErrorsValue = byId('live-errors-value');
 
 peronaVersion.textContent = document.body.dataset.version ?? 'unknown';
 
@@ -419,6 +424,179 @@ let pnlBreakdownChart;
 let riskHeatmapChart;
 let metricsTrendChart;
 let riskHeatmapData = [];
+let livePerformanceChart;
+let liveErrorChart;
+
+const LIVE_SAMPLE_LIMIT = 180;
+
+const getShortTimeLabel = (value) => {
+    if (!value) {
+        return '—';
+    }
+    try {
+        const date = new Date(value);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (error) {
+        return value;
+    }
+};
+
+const updateLiveSummary = (sample = {}) => {
+    if (liveFpsValue) {
+        liveFpsValue.textContent = formatNumber(sample.fps, { maximumFractionDigits: 1 });
+    }
+    if (liveGpuValue) {
+        liveGpuValue.textContent = formatNumber(sample.gpu_utilisation, { maximumFractionDigits: 0 });
+    }
+    if (liveErrorsValue) {
+        liveErrorsValue.textContent = formatNumber(sample.error_count, { maximumFractionDigits: 1 });
+    }
+};
+
+const renderLiveCharts = (samples = []) => {
+    if (typeof Chart === 'undefined') {
+        return;
+    }
+
+    const labels = samples.map((sample) => getShortTimeLabel(sample.timestamp));
+    const fpsData = samples.map((sample) => Number(sample.fps) || 0);
+    const frameTimeData = samples.map((sample) => Number(sample.frame_time_ms) || 0);
+    const gpuData = samples.map((sample) => Number(sample.gpu_utilisation) || 0);
+    const errorData = samples.map((sample) => Number(sample.error_count) || 0);
+
+    if (livePerformanceChartCanvas) {
+        if (!livePerformanceChart) {
+            livePerformanceChart = new Chart(livePerformanceChartCanvas, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ['Waiting for data'],
+                    datasets: [
+                        {
+                            label: 'FPS',
+                            data: labels.length ? fpsData : [0],
+                            borderColor: 'rgba(59, 130, 246, 0.85)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            tension: 0.25,
+                            yAxisID: 'fps',
+                        },
+                        {
+                            label: 'Frame time (ms)',
+                            data: labels.length ? frameTimeData : [0],
+                            borderColor: 'rgba(234, 88, 12, 0.85)',
+                            backgroundColor: 'rgba(234, 88, 12, 0.2)',
+                            tension: 0.25,
+                            yAxisID: 'frameTime',
+                        },
+                        {
+                            label: 'GPU utilisation (%)',
+                            data: labels.length ? gpuData : [0],
+                            borderColor: 'rgba(34, 197, 94, 0.9)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                            tension: 0.25,
+                            yAxisID: 'gpu',
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    stacked: false,
+                    scales: {
+                        fps: {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'FPS' },
+                            suggestedMin: 0,
+                        },
+                        frameTime: {
+                            type: 'linear',
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'Frame time (ms)' },
+                        },
+                        gpu: {
+                            type: 'linear',
+                            position: 'right',
+                            offset: true,
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'GPU utilisation (%)' },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                        },
+                    },
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.parsed.y;
+                                    if (context.dataset.label?.includes('Frame time')) {
+                                        return `Frame time: ${formatNumber(value, { maximumFractionDigits: 1 })} ms`;
+                                    }
+                                    if (context.dataset.label?.includes('GPU')) {
+                                        return `GPU utilisation: ${formatNumber(value, { maximumFractionDigits: 1 })}%`;
+                                    }
+                                    return `FPS: ${formatNumber(value, { maximumFractionDigits: 1 })}`;
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+        } else {
+            livePerformanceChart.data.labels = labels.length ? labels : ['Waiting for data'];
+            livePerformanceChart.data.datasets[0].data = labels.length ? fpsData : [0];
+            livePerformanceChart.data.datasets[1].data = labels.length ? frameTimeData : [0];
+            livePerformanceChart.data.datasets[2].data = labels.length ? gpuData : [0];
+            livePerformanceChart.update('none');
+        }
+    }
+
+    if (liveErrorChartCanvas) {
+        if (!liveErrorChart) {
+            liveErrorChart = new Chart(liveErrorChartCanvas, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ['Waiting for data'],
+                    datasets: [
+                        {
+                            label: 'Errors / sample',
+                            data: labels.length ? errorData : [0],
+                            borderColor: 'rgba(248, 113, 113, 0.9)',
+                            backgroundColor: 'rgba(248, 113, 113, 0.2)',
+                            tension: 0.25,
+                            fill: true,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Errors / sample' },
+                        },
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) =>
+                                    `Errors: ${formatNumber(context.parsed.y, { maximumFractionDigits: 2 })}`,
+                            },
+                        },
+                    },
+                },
+            });
+        } else {
+            liveErrorChart.data.labels = labels.length ? labels : ['Waiting for data'];
+            liveErrorChart.data.datasets[0].data = labels.length ? errorData : [0];
+            liveErrorChart.update('none');
+        }
+    }
+};
 
 const buildTimelineSeries = (costs = {}) => {
     const series = costs.series?.timeline;
@@ -1031,9 +1209,65 @@ const startMetricsStream = () => {
     let isPaused = false;
     let isConnected = false;
 
-    const setStatus = (badgeText, statusText) => {
-        streamBadge.textContent = badgeText;
-        streamStatus.textContent = statusText;
+    const liveSamples = [];
+
+    const setStatus = (badgeText, statusText, state = 'connecting') => {
+        const badgeClasses = {
+            live: 'badge success',
+            paused: 'badge muted',
+            connecting: 'badge warning',
+            offline: 'badge danger',
+        };
+        if (streamBadge) {
+            streamBadge.className = badgeClasses[state] ?? 'badge warning';
+            streamBadge.textContent = badgeText;
+        }
+        if (streamStatus) {
+            streamStatus.textContent = statusText;
+        }
+    };
+
+    const renderLiveRow = (sample) => {
+        const row = document.createElement('tr');
+        const gpuText = formatNumber(sample.gpu_utilisation, { maximumFractionDigits: 0 });
+        const errorsText = formatNumber(sample.error_count, { maximumFractionDigits: 1 });
+        row.innerHTML = `
+            <td>${sample.sequence ?? '—'}</td>
+            <td>${sample.shot_id ?? '—'}</td>
+            <td>${formatNumber(sample.fps, { maximumFractionDigits: 1 })}</td>
+            <td>${formatNumber(sample.frame_time_ms, { maximumFractionDigits: 0 })}</td>
+            <td>${gpuText}${gpuText === '—' ? '' : '%'}</td>
+            <td>${errorsText}</td>
+            <td>${formatDateTime(sample.timestamp)}</td>
+        `;
+        if (streamRows.firstChild) {
+            streamRows.insertBefore(row, streamRows.firstChild);
+        } else {
+            streamRows.appendChild(row);
+        }
+        const maxRows = 12;
+        while (streamRows.children.length > maxRows) {
+            streamRows.removeChild(streamRows.lastChild);
+        }
+    };
+
+    const processSample = (sample = {}) => {
+        const parsed = {
+            sequence: sample.sequence ?? '—',
+            shot_id: sample.shot_id ?? '—',
+            fps: Number(sample.fps) || 0,
+            frame_time_ms: Number(sample.frame_time_ms) || 0,
+            gpu_utilisation: Number(sample.gpu_utilisation ?? sample.gpu ?? sample.gpu_usage) || 0,
+            error_count: Number(sample.error_count ?? sample.errors) || 0,
+            timestamp: sample.timestamp ?? new Date().toISOString(),
+        };
+        liveSamples.push(parsed);
+        if (liveSamples.length > LIVE_SAMPLE_LIMIT) {
+            liveSamples.shift();
+        }
+        renderLiveRow(parsed);
+        updateLiveSummary(parsed);
+        renderLiveCharts(liveSamples);
     };
 
     const updateToggleText = () => {
@@ -1053,11 +1287,11 @@ const startMetricsStream = () => {
                 const pausedMessage = isConnected
                     ? 'Live stream paused.'
                     : 'Live stream paused. Waiting for connection…';
-                setStatus('Paused', pausedMessage);
+                setStatus('Paused', pausedMessage, 'paused');
             } else if (isConnected) {
-                setStatus('Live', 'Streaming live render metrics.');
+                setStatus('Live', 'Streaming live render metrics.', 'live');
             } else {
-                setStatus('Connecting', 'Attempting to open a WebSocket connection…');
+                setStatus('Connecting', 'Attempting to open a WebSocket connection…', 'connecting');
             }
         });
     }
@@ -1069,9 +1303,9 @@ const startMetricsStream = () => {
         socket = new WebSocket(url);
         isConnected = false;
         if (!isPaused) {
-            setStatus('Connecting', 'Attempting to open a WebSocket connection…');
+            setStatus('Connecting', 'Attempting to open a WebSocket connection…', 'connecting');
         } else {
-            setStatus('Paused', 'Live stream paused. Waiting for connection…');
+            setStatus('Paused', 'Live stream paused. Waiting for connection…', 'paused');
         }
 
         socket.addEventListener('open', () => {
@@ -1080,9 +1314,9 @@ const startMetricsStream = () => {
                 streamToggle.disabled = false;
             }
             if (isPaused) {
-                setStatus('Paused', 'Live stream paused.');
+                setStatus('Paused', 'Live stream paused.', 'paused');
             } else {
-                setStatus('Live', 'Streaming live render metrics.');
+                setStatus('Live', 'Streaming live render metrics.', 'live');
             }
         });
 
@@ -1092,23 +1326,7 @@ const startMetricsStream = () => {
             }
             try {
                 const sample = JSON.parse(event.data ?? '{}');
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${sample.sequence ?? '—'}</td>
-                    <td>${sample.shot_id ?? '—'}</td>
-                    <td>${formatNumber(sample.fps, { maximumFractionDigits: 1 })}</td>
-                    <td>${formatNumber(sample.frame_time_ms, { maximumFractionDigits: 0 })}</td>
-                    <td>${formatDateTime(sample.timestamp)}</td>
-                `;
-                if (streamRows.firstChild) {
-                    streamRows.insertBefore(row, streamRows.firstChild);
-                } else {
-                    streamRows.appendChild(row);
-                }
-                const maxRows = 12;
-                while (streamRows.children.length > maxRows) {
-                    streamRows.removeChild(streamRows.lastChild);
-                }
+                processSample(sample);
             } catch (error) {
                 console.error('Failed to render metrics sample', error);
             }
@@ -1128,13 +1346,13 @@ const startMetricsStream = () => {
             const pausedMessage = isPaused
                 ? 'Live stream paused. Reconnecting will resume updates…'
                 : 'Live stream disconnected. Reconnecting shortly…';
-            setStatus('Paused', pausedMessage);
+            setStatus(isPaused ? 'Paused' : 'Reconnecting', pausedMessage, isPaused ? 'paused' : 'connecting');
             scheduleReconnect();
         });
 
         socket.addEventListener('error', () => {
             isConnected = false;
-            setStatus('Offline', 'Unable to connect to the render feed.');
+            setStatus('Offline', 'Unable to connect to the render feed.', 'offline');
             if (streamToggle) {
                 streamToggle.disabled = true;
             }

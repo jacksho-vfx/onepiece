@@ -297,11 +297,43 @@
                                 <th>Shot</th>
                                 <th>FPS</th>
                                 <th>Frame time</th>
+                                <th>GPU</th>
+                                <th>Errors</th>
                                 <th>Timestamp</th>
                             </tr>
                         </thead>
                         <tbody id="stream-rows"></tbody>
                     </table>
+                </div>
+                <div class="stat-grid" style="margin-top: 1.5rem;">
+                    <div class="stat">
+                        <span class="label">Latest FPS</span>
+                        <span class="value" id="live-fps-value">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Latest GPU utilisation</span>
+                        <span class="value" id="live-gpu-value">—</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Latest errors / sample</span>
+                        <span class="value" id="live-errors-value">—</span>
+                    </div>
+                </div>
+                <div class="chart-grid" style="margin-top: 1rem;">
+                    <div class="chart-card">
+                        <div class="chart-card__header">
+                            <h3>Live performance</h3>
+                            <p class="muted">Rolling FPS, frame time, and GPU utilisation</p>
+                        </div>
+                        <canvas id="live-performance-chart" aria-label="Live performance sparkline" role="img"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card__header">
+                            <h3>Error cadence</h3>
+                            <p class="muted">Errors per sample across the live window</p>
+                        </div>
+                        <canvas id="live-error-chart" aria-label="Live errors sparkline" role="img"></canvas>
+                    </div>
                 </div>
             </section>
         </div>
