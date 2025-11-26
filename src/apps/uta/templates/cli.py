@@ -269,6 +269,14 @@ def render_command(command: CommandSpec) -> str:
           <div class=\"status-cluster\">
             <span class=\"progress-indicator\" aria-hidden=\"true\" hidden></span>
             <span class=\"status\" aria-live=\"polite\"></span>
+            <button type=\"button\" class=\"copy-executed-command\" disabled>
+              <span class=\"button-icon\" aria-hidden=\"true\">📑</span>
+              <span class=\"button-label\">Copy executed</span>
+            </button>
+            <button type=\"button\" class=\"download-output\" disabled>
+              <span class=\"button-icon\" aria-hidden=\"true\">⬇️</span>
+              <span class=\"button-label\">Download output</span>
+            </button>
           </div>
         </div>
       </form>

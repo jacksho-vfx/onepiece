@@ -662,8 +662,16 @@ const toArray = (collection) => {
       form.querySelectorAll('.command-parameter'),
     );
     const copyButton = form.querySelector('.copy-command');
+    const executedCopyButton = form.querySelector('.copy-executed-command');
+    const downloadOutputButton = form.querySelector('.download-output');
+    let lastInvocationText = '';
     let copyFeedbackTimer = null;
     let statusResetTimer = null;
+    const resolveBaseSegments = () => (
+      Array.isArray(baseSegments) && baseSegments.length
+        ? baseSegments
+        : ['onepiece', ...commandPath]
+    );
     const escapeId = (value) => {
       if (typeof CSS !== 'undefined' && CSS.escape) {
         return CSS.escape(value);
@@ -870,14 +878,40 @@ const toArray = (collection) => {
       });
       return segments;
     };
+    const buildInvocationSegments = () => {
+      const base = resolveBaseSegments();
+      return [...base, ...buildArgumentSegments()];
+    };
+    const updatePostRunButtons = (isBusy = false) => {
+      if (executedCopyButton) {
+        if (isBusy) {
+          executedCopyButton.disabled = true;
+          executedCopyButton.dataset.state = 'busy';
+        } else {
+          const ready = Boolean(lastInvocationText.trim());
+          executedCopyButton.disabled = !ready;
+          executedCopyButton.dataset.state = ready ? 'ready' : 'disabled';
+        }
+      }
+      if (downloadOutputButton) {
+        const outputReady =
+          !isBusy &&
+          output &&
+          !output.hidden &&
+          Boolean((output.textContent || '').trim());
+        downloadOutputButton.disabled = !outputReady;
+        downloadOutputButton.dataset.state = isBusy
+          ? 'busy'
+          : outputReady
+          ? 'ready'
+          : 'disabled';
+      }
+    };
     const updatePreview = () => {
       if (!preview) {
         return;
       }
-      const base = Array.isArray(baseSegments) && baseSegments.length
-        ? baseSegments
-        : ['onepiece', ...commandPath];
-      const previewSegments = [...base, ...buildArgumentSegments()];
+      const previewSegments = buildInvocationSegments();
       preview.textContent = previewSegments.map(quoteArgument).join(' ');
     };
     const presetSelectors = form.querySelectorAll('.parameter-preset');
@@ -903,6 +937,7 @@ const toArray = (collection) => {
       input.addEventListener(eventName, updatePreview);
     });
     updatePreview();
+    updatePostRunButtons(false);
     if (copyButton) {
       copyButton.addEventListener('click', async () => {
         if (!preview) {
@@ -927,6 +962,51 @@ const toArray = (collection) => {
         }
       });
     }
+    if (executedCopyButton) {
+      executedCopyButton.addEventListener('click', async () => {
+        if (!lastInvocationText.trim()) {
+          setTemporaryStatus('Run a command to capture the invocation', 'error');
+          return;
+        }
+        try {
+          await copyTextToClipboard(lastInvocationText);
+          setTemporaryStatus('Executed command copied', 'info');
+          executedCopyButton.dataset.state = 'ready';
+        } catch (error) {
+          const message = error && typeof error.message === 'string'
+            ? error.message
+            : 'Unable to copy executed command';
+          setTemporaryStatus(message, 'error');
+          executedCopyButton.dataset.state = 'disabled';
+        }
+      });
+    }
+    if (downloadOutputButton) {
+      downloadOutputButton.addEventListener('click', () => {
+        const outputText = output && typeof output.textContent === 'string'
+          ? output.textContent
+          : '';
+        if (!outputText.trim()) {
+          setTemporaryStatus('No output available to download', 'error');
+          downloadOutputButton.dataset.state = 'disabled';
+          return;
+        }
+        const blob = new Blob([outputText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const filename = `${commandPath.join('_') || 'command'}_output.txt`;
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+        setTemporaryStatus('Download started', 'info');
+        downloadOutputButton.dataset.state = 'ready';
+      });
+    }
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = form.querySelector('.run-command');
@@ -941,6 +1021,8 @@ const toArray = (collection) => {
         return;
       }
       const argumentSegments = buildArgumentSegments();
+      const invocationSegments = buildInvocationSegments();
+      lastInvocationText = invocationSegments.map(quoteArgument).join(' ');
       const extraArgsString = argumentSegments.map(quoteArgument).join(' ');
       clearStatusTimer();
       button.disabled = true;
@@ -949,6 +1031,7 @@ const toArray = (collection) => {
       status.textContent = 'Running…';
       status.dataset.state = 'running';
       status.removeAttribute('title');
+      updatePostRunButtons(true);
       if (progress) {
         progress.hidden = false;
       }
@@ -1012,6 +1095,7 @@ const toArray = (collection) => {
         status.dataset.state = 'error';
         status.removeAttribute('title');
         }
+        setTemporaryStatus('Run finished. Actions ready.', 'info');
       } catch (error) {
         const message = error && typeof error.message === 'string' ? error.message : 'Unexpected error';
         output.textContent = message;
@@ -1020,9 +1104,11 @@ const toArray = (collection) => {
         status.textContent = 'Request error';
         status.dataset.state = 'error';
         status.title = message;
+        setTemporaryStatus('Run finished with errors. Actions ready.', 'error');
       } finally {
         button.disabled = false;
         card.classList.remove('is-busy');
+        updatePostRunButtons(false);
         if (progress) {
         progress.hidden = true;
         }
