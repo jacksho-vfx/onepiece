@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import tempfile
 import re
@@ -859,6 +860,11 @@ def qc_render(
         "--save-template",
         help="Write the QC template used for rendering to this path.",
     ),
+    save_scene: Path | None = typer.Option(
+        None,
+        "--save-scene",
+        help="Write the generated QC scene JSON to this path before rendering.",
+    ),
 ) -> None:
     """Render a built-in QC scene without providing an input file."""
 
@@ -905,6 +911,12 @@ def qc_render(
             json.dumps(qc_scene_payload, indent=2), encoding="utf-8"
         )
 
+    if save_scene:
+        save_scene.parent.mkdir(parents=True, exist_ok=True)
+        save_scene.write_text(json.dumps(qc_scene_payload, indent=2), encoding="utf-8")
+
+    scene_hash = _hash_scene_payload(qc_scene_payload)
+
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
             scene_path = Path(temp_dir) / "qc_scene.json"
@@ -937,7 +949,20 @@ def qc_render(
     except ChopperRenderError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    typer.echo(message)
+    _write_qc_report(
+        output,
+        qc_scene_payload,
+        scene_hash,
+        scene_path=save_scene,
+        export_format=export,
+        fps=fps,
+        samples=samples,
+        filter_name=downsample_filter,
+        workers=workers,
+        worker_backend=worker_backend,
+    )
+
+    typer.echo(f"{message} (scene sha256: {scene_hash})")
 
 
 @app.command()
@@ -1438,6 +1463,63 @@ def _write_html_report(payload: dict[str, Any]) -> None:
 """
 
     output_path.write_text(html_content, encoding="utf-8")
+
+
+def _hash_scene_payload(payload: Mapping[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_qc_report(
+    output: Path,
+    payload: Mapping[str, Any],
+    scene_hash: str,
+    *,
+    scene_path: Path | None,
+    export_format: str,
+    fps: int,
+    samples: int,
+    filter_name: str,
+    workers: int | None,
+    worker_backend: str,
+) -> Path:
+    normalized_export = export_format.lower()
+    suffix = output.suffix.lower()
+    frame_formats = {"ppm", "png", "exr", "dpx"}
+    animation_suffixes = {".gif", ".mp4"}
+    frame_suffixes = {".ppm", ".png", ".exr", ".dpx"}
+
+    if suffix in animation_suffixes:
+        report_dir = output.parent
+    elif suffix in frame_suffixes:
+        report_dir = output
+    elif normalized_export in frame_formats:
+        report_dir = output
+    else:
+        report_dir = output.parent
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / "qc_report.json"
+
+    metadata: dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "scene_hash": scene_hash,
+        "scene_payload_path": str(scene_path) if scene_path else None,
+        "output": str(output),
+        "export_format": export_format,
+        "fps": fps,
+        "samples": samples,
+        "filter": filter_name,
+        "workers": workers,
+        "worker_backend": worker_backend,
+    }
+
+    report_payload = {
+        "metadata": metadata,
+        "scene": payload,
+    }
+
+    report_path.write_text(json.dumps(report_payload, indent=2), encoding="utf-8")
+    return report_path
 
 
 __all__ = [
