@@ -1,0 +1,139 @@
+body {
+    background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 38%),
+        radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.1), transparent 45%),
+        var(--op-page-bg);
+    color: var(--op-text);
+}
+
+.dashboard-shell {
+    width: min(1200px, 100%);
+    margin: 0 auto;
+    padding: 2.25rem 1.25rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.hero-card {
+    background: linear-gradient(160deg, rgba(56, 189, 248, 0.18), rgba(14, 165, 233, 0.08)), var(--op-surface);
+    border: 1px solid var(--op-border);
+    border-radius: 22px;
+    padding: 1.75rem;
+    box-shadow: var(--op-shadow);
+}
+
+.hero-card h1 {
+    margin: 0 0 0.5rem;
+    letter-spacing: 0.02em;
+}
+
+.hero-card p {
+    margin: 0;
+    max-width: 80ch;
+    color: var(--op-muted);
+}
+
+.dashboard-nav {
+    background: var(--op-surface);
+    border: 1px solid var(--op-border);
+    border-radius: 16px;
+    padding: 0.75rem 1rem;
+    box-shadow: var(--op-shadow);
+}
+
+.dashboard-nav ul {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.35rem;
+    padding: 0;
+    margin: 0;
+}
+
+.dashboard-nav a {
+    color: var(--op-text);
+    font-weight: 700;
+    padding: 0.4rem 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 10px;
+    transition: color 0.15s ease, background 0.15s ease, border 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.dashboard-nav a:hover,
+.dashboard-nav a:focus-visible {
+    color: var(--op-accent-strong);
+    text-decoration: none;
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.35);
+    outline: none;
+}
+
+.section-card {
+    background: var(--op-surface);
+    border: 1px solid var(--op-border);
+    border-radius: 18px;
+    padding: 1.25rem;
+    box-shadow: var(--op-shadow);
+}
+
+.section-card h2 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+
+.section-card p {
+    margin-top: 0;
+    color: var(--op-muted);
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.9rem;
+    margin-top: 1rem;
+}
+
+.metric-card {
+    background: var(--op-surface-alt);
+    border: 1px solid var(--op-border);
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: var(--op-shadow);
+}
+
+.metric-card h3 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+}
+
+.metric-card .metric-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.metric-card .metric-detail {
+    margin-top: 0.35rem;
+    color: var(--op-muted);
+}
+
+.table-section {
+    margin-top: 1.2rem;
+}
+
+.table-section .table-shell {
+    margin-top: 0.65rem;
+    border-radius: 14px;
+}
+
+.placeholder {
+    font-style: italic;
+    color: var(--op-muted);
+}
+
+small {
+    color: var(--op-muted);
+}

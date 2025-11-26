@@ -10,10 +10,12 @@ from urllib.parse import quote
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
+from apps.web_theme import get_theme_static_directory
 from ..ingest_adapter import (
     IngestRunDashboardFacade,
     get_ingest_dashboard_facade,
@@ -161,6 +163,18 @@ def get_delivery_service() -> DeliveryService:
 
 app = FastAPI(title="OnePiece Dashboard", version=TRAFALGAR_VERSION)
 _TEMPLATE_CACHE: str | None = None
+_THEME_STATIC_DIR = get_theme_static_directory()
+_DASHBOARD_STATIC_DIR = Path(__file__).parent / "static"
+app.mount(
+    "/theme",
+    StaticFiles(directory=_THEME_STATIC_DIR),
+    name="trafalgar-shared-theme",
+)
+app.mount(
+    "/dashboard/static",
+    StaticFiles(directory=_DASHBOARD_STATIC_DIR),
+    name="trafalgar-dashboard-static",
+)
 
 
 def discover_projects(shotgrid_service: ShotGridService | None = None) -> list[str]:

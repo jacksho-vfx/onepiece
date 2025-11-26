@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from apps.perona.version import PERONA_VERSION
+from apps.web_theme import get_theme_static_directory
 
 from . import dependencies
 from .routes import (
@@ -33,10 +34,16 @@ app = FastAPI(
 )
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
+_THEME_DIR = get_theme_static_directory()
 app.mount(
     "/dashboard/static",
     StaticFiles(directory=_STATIC_DIR),
     name="perona-dashboard-static",
+)
+app.mount(
+    "/theme",
+    StaticFiles(directory=_THEME_DIR),
+    name="perona-shared-theme",
 )
 
 app.include_router(system.router)

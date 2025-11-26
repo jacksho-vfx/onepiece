@@ -3,286 +3,203 @@
   <head>
     <meta charset="utf-8" />
     <title>OnePiece Dashboard</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --background-color: #f9fafb;
-        --text-color: #1f2933;
-        --muted-text-color: #52606d;
-        --link-color: #0b69a3;
-        --link-hover-color: #084c7a;
-        --surface-color: #ffffff;
-        --surface-alt-color: #f4f5f7;
-        --surface-stripe-color: #f9fafb;
-        --border-color: #d2d6dc;
-        --shadow-color: rgba(15, 23, 42, 0.12);
-        --code-background: #f1f5f9;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --background-color: #0f172a;
-          --text-color: #f1f5f9;
-          --muted-text-color: #cbd5f5;
-          --link-color: #60a5fa;
-          --link-hover-color: #93c5fd;
-          --surface-color: #111827;
-          --surface-alt-color: #1f2937;
-          --surface-stripe-color: #16213b;
-          --border-color: #374151;
-          --shadow-color: rgba(15, 23, 42, 0.6);
-          --code-background: #1f2937;
-        }
-      }
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        margin: 2rem;
-        line-height: 1.5;
-        background: var(--background-color);
-        color: var(--text-color);
-      }
-      h1 {
-        color: var(--text-color);
-        margin-bottom: 0.5rem;
-      }
-      nav ul {
-        list-style: none;
-        padding: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem 1.5rem;
-        margin-bottom: 2rem;
-      }
-      nav a {
-        color: var(--link-color);
-        text-decoration: none;
-        font-weight: 600;
-      }
-      nav a:hover {
-        text-decoration: underline;
-        color: var(--link-hover-color);
-      }
-      section {
-        margin-bottom: 2.5rem;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        max-width: 64rem;
-        background: var(--surface-color);
-        box-shadow: 0 1px 2px var(--shadow-color);
-      }
-      th, td {
-        padding: 0.75rem;
-        border: 1px solid var(--border-color);
-        text-align: left;
-        vertical-align: top;
-      }
-      th {
-        background-color: var(--surface-alt-color);
-        font-weight: 700;
-      }
-      tbody tr:nth-child(even) {
-        background-color: var(--surface-stripe-color);
-      }
-      .placeholder {
-        font-style: italic;
-        color: var(--muted-text-color);
-      }
-      code {
-        background: var(--code-background);
-        border-radius: 4px;
-        padding: 0.1rem 0.4rem;
-        font-size: 0.9em;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-        gap: 1rem;
-      }
-      .metric {
-        background: var(--surface-color);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1rem;
-        box-shadow: 0 1px 2px var(--shadow-color);
-      }
-      .metric h3 {
-        margin-top: 0;
-        margin-bottom: 0.25rem;
-        font-size: 1rem;
-        color: var(--text-color);
-      }
-      .metric p {
-        margin: 0;
-      }
-      .metric .metric-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-      }
-      .metric .metric-detail {
-        margin-top: 0.35rem;
-        font-size: 0.9rem;
-        color: var(--muted-text-color);
-      }
-    </style>
+    <link rel="stylesheet" href="{{BASE_PATH}}/theme/theme.css" />
+    <link rel="stylesheet" href="{{BASE_PATH}}/dashboard/static/dashboard.css" />
   </head>
   <body data-projects="{{PROJECTS_JSON}}" data-base-path="{{BASE_PATH}}">
-    <h1>OnePiece Production Dashboard</h1>
-    <p>Explore production health metrics aggregated from ShotGrid, reconciliation reports, and delivery manifests.</p>
-    <nav>
-      <ul>
-        {{NAV_ITEMS}}
-      </ul>
-    </nav>
+    <div class="dashboard-shell">
+      <section class="hero-card">
+        <h1>OnePiece Production Dashboard</h1>
+        <p>
+          Explore production health metrics aggregated from ShotGrid, reconciliation reports, and delivery manifests.
+        </p>
+      </section>
 
-    <section id="status-overview">
-      <h2>Overall status</h2>
-      <div class="grid" id="status-metrics">
-        <div class="metric"><h3>Projects</h3><p class="metric-value" id="metric-projects">–</p></div>
-        <div class="metric"><h3>Shots</h3><p class="metric-value" id="metric-shots">–</p></div>
-        <div class="metric"><h3>Versions</h3><p class="metric-value" id="metric-versions">–</p></div>
-        <div class="metric"><h3>Open errors</h3><p class="metric-value" id="metric-errors">–</p></div>
-        <div class="metric">
-          <h3>Render jobs</h3>
-          <p class="metric-value" id="metric-render-jobs">–</p>
-          <p class="metric-detail" id="metric-render-jobs-detail">Tracking submissions across all farms.</p>
-        </div>
-        <div class="metric">
-          <h3>Jobs by status</h3>
-          <p class="metric-value" id="metric-render-status-total">–</p>
-          <p class="metric-detail" id="metric-render-status-breakdown">No render status data yet.</p>
-        </div>
-        <div class="metric">
-          <h3>Jobs by farm</h3>
-          <p class="metric-value" id="metric-render-farm-total">–</p>
-          <p class="metric-detail" id="metric-render-farm-breakdown">No render farm data yet.</p>
-        </div>
-        <div class="metric">
-          <h3>Ingest runs (last 10)</h3>
-          <p class="metric-value" id="metric-ingest-total">–</p>
-          <p class="metric-detail" id="metric-ingest-breakdown">Successful: – • Failed: – • Running: –</p>
-        </div>
-        <div class="metric"><h3>Last ingest success</h3><p class="metric-value" id="metric-ingest-last-success">–</p></div>
-        <div class="metric"><h3>Failure streak</h3><p class="metric-value" id="metric-ingest-failure-streak">–</p></div>
-      </div>
-    </section>
+      <nav class="dashboard-nav" aria-label="Primary navigation">
+        <ul>
+          {{NAV_ITEMS}}
+        </ul>
+      </nav>
 
-    <section id="review-overview">
-      <h2>Review playlists</h2>
-      <p>
-        Aggregate playlist activity from the
-        <a id="review-api-link" href="#">review API</a> for deeper drill-downs.
-      </p>
-      <div class="grid" id="review-totals">
-        <div class="metric">
-          <h3>Projects</h3>
-          <p class="metric-value" id="review-total-projects">–</p>
-          <p class="metric-detail">Projects with playlists in scope.</p>
+      <section id="status-overview" class="section-card">
+        <div class="section-heading">
+          <h2>Overall status</h2>
+          <span class="badge">Live telemetry</span>
         </div>
-        <div class="metric">
-          <h3>Playlists</h3>
-          <p class="metric-value" id="review-total-playlists">–</p>
-          <p class="metric-detail">Total playlists retrieved from ShotGrid.</p>
+        <div class="metric-grid" id="status-metrics">
+          <div class="metric-card"><h3>Projects</h3><p class="metric-value" id="metric-projects">–</p></div>
+          <div class="metric-card"><h3>Shots</h3><p class="metric-value" id="metric-shots">–</p></div>
+          <div class="metric-card"><h3>Versions</h3><p class="metric-value" id="metric-versions">–</p></div>
+          <div class="metric-card"><h3>Open errors</h3><p class="metric-value" id="metric-errors">–</p></div>
+          <div class="metric-card">
+            <h3>Render jobs</h3>
+            <p class="metric-value" id="metric-render-jobs">–</p>
+            <p class="metric-detail" id="metric-render-jobs-detail">Tracking submissions across all farms.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Jobs by status</h3>
+            <p class="metric-value" id="metric-render-status-total">–</p>
+            <p class="metric-detail" id="metric-render-status-breakdown">No render status data yet.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Jobs by farm</h3>
+            <p class="metric-value" id="metric-render-farm-total">–</p>
+            <p class="metric-detail" id="metric-render-farm-breakdown">No render farm data yet.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Ingest runs (last 10)</h3>
+            <p class="metric-value" id="metric-ingest-total">–</p>
+            <p class="metric-detail" id="metric-ingest-breakdown">Successful: – • Failed: – • Running: –</p>
+          </div>
+          <div class="metric-card"><h3>Last ingest success</h3><p class="metric-value" id="metric-ingest-last-success">–</p></div>
+          <div class="metric-card"><h3>Failure streak</h3><p class="metric-value" id="metric-ingest-failure-streak">–</p></div>
         </div>
-        <div class="metric">
-          <h3>Clips</h3>
-          <p class="metric-value" id="review-total-clips">–</p>
-          <p class="metric-detail">Individual clips across all playlists.</p>
+      </section>
+
+      <section id="review-overview" class="section-card">
+        <div class="section-heading">
+          <div>
+            <h2>Review playlists</h2>
+            <p class="muted">
+              Aggregate playlist activity from the <a id="review-api-link" href="#">review API</a> for deeper drill-downs.
+            </p>
+          </div>
         </div>
-        <div class="metric">
-          <h3>Shots</h3>
-          <p class="metric-value" id="review-total-shots">–</p>
-          <p class="metric-detail">Unique shots represented in playlists.</p>
+        <div class="metric-grid" id="review-totals">
+          <div class="metric-card">
+            <h3>Projects</h3>
+            <p class="metric-value" id="review-total-projects">–</p>
+            <p class="metric-detail">Projects with playlists in scope.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Playlists</h3>
+            <p class="metric-value" id="review-total-playlists">–</p>
+            <p class="metric-detail">Total playlists retrieved from ShotGrid.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Clips</h3>
+            <p class="metric-value" id="review-total-clips">–</p>
+            <p class="metric-detail">Individual clips across all playlists.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Shots</h3>
+            <p class="metric-value" id="review-total-shots">–</p>
+            <p class="metric-detail">Unique shots represented in playlists.</p>
+          </div>
+          <div class="metric-card">
+            <h3>Duration</h3>
+            <p class="metric-value" id="review-total-duration">–</p>
+            <p class="metric-detail" id="review-total-duration-detail">Total runtime of reviewed clips.</p>
+          </div>
         </div>
-        <div class="metric">
-          <h3>Duration</h3>
-          <p class="metric-value" id="review-total-duration">–</p>
-          <p class="metric-detail" id="review-total-duration-detail">Total runtime of reviewed clips.</p>
+        <p id="review-projects-placeholder" class="placeholder">
+          No review playlist activity has been recorded yet.
+        </p>
+        <div class="table-shell" id="review-projects-table" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Playlists</th>
+                <th>Clips</th>
+                <th>Shots</th>
+                <th>Duration</th>
+                <th>API</th>
+              </tr>
+            </thead>
+            <tbody id="review-projects-body"></tbody>
+          </table>
         </div>
-      </div>
-      <p id="review-projects-placeholder" class="placeholder">
-        No review playlist activity has been recorded yet.
-      </p>
-      <table id="review-projects-table" hidden>
-        <thead>
-          <tr>
-            <th>Project</th>
-            <th>Playlists</th>
-            <th>Clips</th>
-            <th>Shots</th>
-            <th>Duration</th>
-            <th>API</th>
-          </tr>
-        </thead>
-        <tbody id="review-projects-body"></tbody>
-      </table>
-    </section>
+      </section>
 
-    <section id="project-summary">
-      <h2>Project status totals</h2>
-      <p id="project-summary-placeholder" class="placeholder">Select a project via the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to see per-project totals.</p>
-      <table id="project-summary-table" hidden>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Count</th>
-          </tr>
-        </thead>
-        <tbody id="project-summary-body"></tbody>
-      </table>
-    </section>
+      <section id="project-summary" class="section-card">
+        <div class="section-heading">
+          <div>
+            <h2>Project status totals</h2>
+            <p class="muted">
+              Select a project via the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to see per-project totals.
+            </p>
+          </div>
+        </div>
+        <div class="table-shell" id="project-summary-table" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="project-summary-body"></tbody>
+          </table>
+        </div>
+        <p id="project-summary-placeholder" class="placeholder">
+          Select a project via the <code>ONEPIECE_DASHBOARD_PROJECTS</code> environment variable to see per-project totals.
+        </p>
+      </section>
 
-    <section id="episode-breakdown">
-      <h2>Episode breakdown</h2>
-      <table id="episode-table">
-        <thead>
-          <tr>
-            <th>Episode</th>
-            <th>Shots</th>
-            <th>Versions</th>
-            <th>Status tally</th>
-          </tr>
-        </thead>
-        <tbody id="episode-body">
-          <tr class="placeholder"><td colspan="4">Episode statistics will appear here when a project is configured.</td></tr>
-        </tbody>
-      </table>
-    </section>
+      <section id="episode-breakdown" class="section-card">
+        <div class="section-heading">
+          <h2>Episode breakdown</h2>
+        </div>
+        <div class="table-shell">
+          <table id="episode-table">
+            <thead>
+              <tr>
+                <th>Episode</th>
+                <th>Shots</th>
+                <th>Versions</th>
+                <th>Status tally</th>
+              </tr>
+            </thead>
+            <tbody id="episode-body">
+              <tr class="placeholder"><td colspan="4">Episode statistics will appear here when a project is configured.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-    <section id="error-summary">
-      <h2>Reconciliation summary</h2>
-      <table id="error-table">
-        <thead>
-          <tr>
-            <th>Mismatch type</th>
-            <th>Path</th>
-            <th>Occurrences</th>
-            <th>Shots</th>
-          </tr>
-        </thead>
-        <tbody id="error-body">
-          <tr class="placeholder"><td colspan="4">No reconciliation data loaded yet.</td></tr>
-        </tbody>
-      </table>
-    </section>
+      <section id="error-summary" class="section-card">
+        <div class="section-heading">
+          <h2>Reconciliation summary</h2>
+        </div>
+        <div class="table-shell">
+          <table id="error-table">
+            <thead>
+              <tr>
+                <th>Mismatch type</th>
+                <th>Path</th>
+                <th>Occurrences</th>
+                <th>Shots</th>
+              </tr>
+            </thead>
+            <tbody id="error-body">
+              <tr class="placeholder"><td colspan="4">No reconciliation data loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-    <section id="deliveries">
-      <h2>Recent deliveries</h2>
-      <table id="deliveries-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Created</th>
-            <th>Manifest</th>
-            <th>Files</th>
-          </tr>
-        </thead>
-        <tbody id="deliveries-body">
-          <tr class="placeholder"><td colspan="4">Configure a project to see delivery manifests and file counts.</td></tr>
-        </tbody>
-      </table>
-    </section>
-
+      <section id="deliveries" class="section-card">
+        <div class="section-heading">
+          <h2>Recent deliveries</h2>
+        </div>
+        <div class="table-shell">
+          <table id="deliveries-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Created</th>
+                <th>Manifest</th>
+                <th>Files</th>
+              </tr>
+            </thead>
+            <tbody id="deliveries-body">
+              <tr class="placeholder"><td colspan="4">Configure a project to see delivery manifests and file counts.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
     <script>
       const basePath = document.body.dataset.basePath || '';
       function joinPath(base, path) {
