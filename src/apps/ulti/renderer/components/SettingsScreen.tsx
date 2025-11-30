@@ -46,6 +46,14 @@ type SettingsScreenProps = {
   onRequestRerunWizard: () => void;
 };
 
+type UpdateCheckResult = {
+  hasUpdate: boolean;
+  latestVersion?: string;
+  url?: string;
+  error?: string;
+  currentVersion?: string;
+};
+
 declare global {
   interface Window {
     electron: {
@@ -83,9 +91,23 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
+
+    const fetchVersions = async (): Promise<void> => {
+      try {
+        const versions = await window.electron.invoke<{ desktop: string; onepiece: string | null }>('version/get');
+        if (mounted) {
+          setDesktopVersion(versions.desktop);
+        }
+      } catch (err) {
+        console.error('Failed to load version info', err);
+      }
+    };
 
     const fetchConfig = async (): Promise<void> => {
       try {
@@ -132,6 +154,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       }
     };
 
+    void fetchVersions();
     void fetchConfig();
 
     return () => {
@@ -238,6 +261,26 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       setError(err instanceof Error ? err.message : 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheckForUpdates = async (): Promise<void> => {
+    setUpdateStatus(null);
+    setCheckingUpdate(true);
+
+    try {
+      const result = await window.electron.invoke<UpdateCheckResult>('updates/check');
+      setUpdateStatus(result);
+      if (result.currentVersion && !desktopVersion) {
+        setDesktopVersion(result.currentVersion);
+      }
+    } catch (err) {
+      setUpdateStatus({
+        hasUpdate: false,
+        error: err instanceof Error ? err.message : 'Unable to check for updates.',
+      });
+    } finally {
+      setCheckingUpdate(false);
     }
   };
 
@@ -495,6 +538,47 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
           {renderDccRow('unreal', 'Unreal Engine')}
         </section>
       </div>
+
+      <section className="op-card">
+        <h2>Updates</h2>
+        <p>Check for a newer version of OnePiece Studio Desktop.</p>
+        <div className="op-actions">
+          <button
+            type="button"
+            className="op-secondary"
+            onClick={() => void handleCheckForUpdates()}
+            disabled={checkingUpdate}
+          >
+            {checkingUpdate ? 'Checking…' : 'Check for updates'}
+          </button>
+        </div>
+        {updateStatus ? (
+          <div className="op-banner" style={{ marginTop: '1rem' }}>
+            {updateStatus.error ? (
+              <p className="op-banner-message">Could not check for updates.</p>
+            ) : updateStatus.hasUpdate ? (
+              <div>
+                <strong>New version available: v{updateStatus.latestVersion}</strong>
+                {updateStatus.url ? (
+                  <div>
+                    <button
+                      type="button"
+                      className="op-tertiary"
+                      onClick={() => void window.electron.invoke('open-url', { url: updateStatus.url })}
+                    >
+                      View release
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="op-banner-message">
+                You are up to date {desktopVersion ? `(v${desktopVersion})` : ''}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </section>
 
       <div className="op-actions">
         <button type="button" className="op-primary" onClick={() => void handleSave()} disabled={saving}>

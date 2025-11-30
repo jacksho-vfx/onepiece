@@ -4,6 +4,7 @@ import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
 import { registerVersionIpcHandlers } from './src/main/versionInfo';
+import { registerUpdateIpcHandlers } from './src/main/updateCheck';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -83,6 +84,7 @@ app.whenReady().then(() => {
   registerConfigIpcHandlers(ipcMain, app);
   registerEnvIpcHandlers(ipcMain);
   registerVersionIpcHandlers(ipcMain, app);
+  registerUpdateIpcHandlers(ipcMain, app);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;
     if (!url) {
