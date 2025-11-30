@@ -1,5 +1,5 @@
 import type { App, IpcMain } from 'electron';
-import { runCommand } from '../../pythonManager';
+import { runCommand } from './pythonManager';
 
 export function getDesktopVersion(app: App): string {
   return app.getVersion();
