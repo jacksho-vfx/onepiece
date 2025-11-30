@@ -3,8 +3,8 @@ import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
-import { registerVersionIpcHandlers } from './src/main/versionInfo';
-import { registerUpdateIpcHandlers } from './src/main/updateCheck';
+import { registerVersionIpcHandlers } from './versionInfo';
+import { registerUpdateIpcHandlers } from './updateCheck';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
