@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import type { App, IpcMain } from 'electron';
+import { generateOnepieceToml, installStarterKit, type WizardConfigInput } from './onepieceConfig';
 
 export interface DesktopConfig {
   hasCompletedWizard: boolean;
@@ -19,6 +20,11 @@ export interface DesktopConfig {
     secretAccessKey?: string;
     region?: string;
     defaultBucket?: string;
+  };
+  dccs?: {
+    maya?: { enabled: boolean; executablePath?: string };
+    blender?: { enabled: boolean; executablePath?: string };
+    unreal?: { enabled: boolean; executablePath?: string };
   };
 }
 
@@ -107,6 +113,7 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
     async (_event, updates: Partial<DesktopConfig>): Promise<DesktopConfig> => {
       const existing = await ensureDefaultConfig(app);
       const now = new Date().toISOString();
+      const hasNewlyCompletedWizard = !existing.hasCompletedWizard && updates.hasCompletedWizard === true;
 
       const updatedConfig: DesktopConfig = {
         ...existing,
@@ -120,6 +127,38 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
       } catch (error) {
         console.error('Error persisting updated desktop config:', error);
         throw error;
+      }
+
+      if (hasNewlyCompletedWizard && updatedConfig.projectRoot && updatedConfig.profile) {
+        const wizardInput: WizardConfigInput = {
+          profile: updatedConfig.profile,
+          projectRoot: updatedConfig.projectRoot,
+          pythonPath: updatedConfig.pythonPath,
+          shotgrid: updatedConfig.shotgrid,
+          aws: updatedConfig.aws,
+          dccs: updatedConfig.dccs,
+        };
+
+        const onepieceToml = generateOnepieceToml(wizardInput);
+        const configDestination = path.join(updatedConfig.projectRoot, 'onepiece.toml');
+
+        try {
+          await fs.mkdir(updatedConfig.projectRoot, { recursive: true });
+          await fs.writeFile(configDestination, onepieceToml, { encoding: 'utf-8', flag: 'wx' });
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === 'EEXIST') {
+            console.warn('onepiece.toml already exists at project root; skipping creation.');
+          } else {
+            console.error('Error writing onepiece.toml after wizard completion:', error);
+          }
+        }
+
+        try {
+          await installStarterKit(updatedConfig.profile, updatedConfig.projectRoot);
+        } catch (error) {
+          console.error('Error installing starter kit:', error);
+        }
       }
 
       return updatedConfig;
