@@ -11,6 +11,7 @@ interface DesktopConfig {
 
 type HomeScreenProps = {
   config?: DesktopConfig;
+  onViewLogs?: () => void;
 };
 
 interface ServiceSummary {
@@ -34,6 +35,12 @@ interface HealthCheckState {
   stdout: string;
   stderr: string;
   error?: string;
+}
+
+interface HealthCheckError {
+  title: string;
+  message: string;
+  suggestedAction?: string;
 }
 
 declare global {
@@ -73,7 +80,26 @@ const SERVICE_DEFINITIONS: ServiceDefinition[] = [
 
 const UTA_PORT = 8080;
 
-function HomeScreen({ config: initialConfig }: HomeScreenProps): JSX.Element {
+function formatDoctorOutput(
+  stdout: string,
+  stderr: string,
+  exitCode: number | null = null,
+): { isOk: boolean; summary: string } {
+  const isOk = exitCode === 0;
+  const trimmedError = stderr.trim();
+  const summary = isOk
+    ? 'All checks passed'
+    : trimmedError
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 1)
+        .join('') || 'Health check reported issues';
+
+  return { isOk, summary: summary || 'All checks passed' };
+}
+
+function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX.Element {
   const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [serviceError, setServiceError] = useState<string | null>(null);
@@ -83,6 +109,7 @@ function HomeScreen({ config: initialConfig }: HomeScreenProps): JSX.Element {
     stdout: '',
     stderr: '',
   });
+  const [error, setError] = useState<HealthCheckError | null>(null);
   const [serviceActions, setServiceActions] = useState<Record<ServiceKey, 'starting' | 'stopping' | null>>(() =>
     SERVICE_DEFINITIONS.reduce(
       (acc, definition) => ({
@@ -177,25 +204,45 @@ function HomeScreen({ config: initialConfig }: HomeScreenProps): JSX.Element {
 
   const runHealthCheck = async (): Promise<void> => {
     setHealthCheck({ running: true, exitCode: null, stdout: '', stderr: '' });
+    setError(null);
+
     try {
       const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
         'python/run-command',
         { args: ['-m', 'onepiece', 'doctor'] },
       );
+
+      const formatted = formatDoctorOutput(result.stdout, result.stderr, result.code);
+      const hasError = !formatted.isOk || result.code !== 0;
+
       setHealthCheck({
         running: false,
         exitCode: result.code,
         stdout: result.stdout,
         stderr: result.stderr,
       });
-    } catch (error) {
-      console.error('Health check failed to execute', error);
+
+      if (hasError) {
+        const firstStderrLine = result.stderr.split('\n').find((line) => line.trim());
+        setError({
+          title: 'Health check reported issues',
+          message: firstStderrLine ? firstStderrLine.trim().slice(0, 200) : formatted.summary,
+          suggestedAction: 'Open logs',
+        });
+      }
+    } catch (err) {
+      console.error('Health check failed to execute', err);
       setHealthCheck({
         running: false,
         exitCode: null,
         stdout: '',
         stderr: '',
         error: 'Failed to run health check.',
+      });
+      setError({
+        title: 'Health check failed to run',
+        message: err instanceof Error ? err.message : 'Unexpected error occurred.',
+        suggestedAction: 'Check your Python path in Settings',
       });
     }
   };
@@ -246,6 +293,26 @@ function HomeScreen({ config: initialConfig }: HomeScreenProps): JSX.Element {
 
   return (
     <div className="op-layout">
+      {error ? (
+        <div className="op-banner op-banner-error">
+          <div>
+            <strong>{error.title}</strong>
+            <p className="op-banner-message">{error.message}</p>
+          </div>
+          <div className="op-banner-actions">
+            <button type="button" className="op-secondary" onClick={() => onViewLogs?.()}>
+              View logs
+            </button>
+            <button type="button" className="op-primary" onClick={() => void runHealthCheck()}>
+              Retry health check
+            </button>
+            <button type="button" className="op-tertiary" onClick={() => setError(null)}>
+              Dismiss
+            </button>
+          </div>
+          {error.suggestedAction ? <p className="op-banner-hint">{error.suggestedAction}</p> : null}
+        </div>
+      ) : null}
       <header className="op-header">
         <div>
           <p className="op-eyebrow">OnePiece Studio Desktop</p>
