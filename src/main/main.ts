@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain } from 'electron';
 import path from 'path';
+import { registerPythonIpcHandlers } from './pythonManager';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -70,8 +71,11 @@ function createMainWindow(): void {
   });
 }
 
-// Create the window once Electron is ready.
-app.whenReady().then(createMainWindow);
+// Create the window and wire IPC handlers once Electron is ready.
+app.whenReady().then(() => {
+  registerPythonIpcHandlers(ipcMain);
+  createMainWindow();
+});
 
 // Quit the application when all windows are closed on platforms other than macOS.
 app.on('window-all-closed', () => {
