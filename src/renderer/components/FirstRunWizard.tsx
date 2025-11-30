@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 
@@ -26,6 +26,7 @@ interface WizardFormState {
   profile: ProfileOption;
   projectRoot: string;
   cacheLocation: string;
+  pythonPath: string;
   shotgrid: ShotgridConfig;
   aws: AwsConfig;
   dcc: Record<DccAppKey, DccConfig>;
@@ -73,6 +74,7 @@ const defaultFormState: WizardFormState = {
   profile: '',
   projectRoot: '',
   cacheLocation: '',
+  pythonPath: '',
   shotgrid: {
     url: '',
     scriptName: '',
@@ -99,8 +101,57 @@ declare global {
   }
 }
 
+type DetectedEnv = {
+  pythonPathGuess?: string;
+  dccs: Partial<Record<DccAppKey, string>>;
+};
+
 function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element {
   const [formData, setFormData] = useState<WizardFormState>(defaultFormState);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const detectEnv = async (): Promise<void> => {
+      try {
+        const env = await window.electron.invoke<DetectedEnv>('system/detect-env');
+
+        if (!isMounted || !env) {
+          return;
+        }
+
+        setFormData((prev) => {
+          const nextDcc = { ...prev.dcc };
+
+          (['maya', 'blender', 'unreal'] as DccAppKey[]).forEach((key) => {
+            const detectedPath = env.dccs?.[key];
+            const hasUserValue = prev.dcc[key].enabled || Boolean(prev.dcc[key].executablePath);
+
+            if (detectedPath && !hasUserValue) {
+              nextDcc[key] = {
+                enabled: true,
+                executablePath: detectedPath,
+              };
+            }
+          });
+
+          return {
+            ...prev,
+            pythonPath: prev.pythonPath || env.pythonPathGuess || '',
+            dcc: nextDcc,
+          };
+        });
+      } catch (error) {
+        console.error('Failed to detect environment', error);
+      }
+    };
+
+    void detectEnv();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const updateForm = <K extends keyof WizardFormState>(key: K, value: WizardFormState[K]): void => {
     setFormData((prev) => ({
@@ -237,6 +288,15 @@ function ProjectStorageStep({ error }: { error?: string }): JSX.Element {
           placeholder="/path/to/cache"
           value={formData.cacheLocation}
           onChange={(event) => updateForm('cacheLocation', event.target.value)}
+        />
+      </label>
+      <label className="op-field">
+        <span>Python path</span>
+        <input
+          type="text"
+          placeholder="/usr/bin/python3"
+          value={formData.pythonPath}
+          onChange={(event) => updateForm('pythonPath', event.target.value)}
         />
       </label>
       {error ? <p className="op-error">{error}</p> : null}
@@ -387,6 +447,10 @@ function SummaryStep({ onBack, onFinish, isSubmitting, error }: { onBack: () => 
           <p>{formData.cacheLocation || 'Not provided'}</p>
         </div>
         <div>
+          <h4>Python path</h4>
+          <p>{formData.pythonPath || 'Not provided'}</p>
+        </div>
+        <div>
           <h4>ShotGrid</h4>
           <p>{formData.shotgrid.url || 'Not provided'}</p>
           <p>{formData.shotgrid.scriptName || ''}</p>
@@ -463,6 +527,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
       profile: formData.profile || undefined,
       projectRoot: formData.projectRoot || undefined,
       cacheLocation: formData.cacheLocation || undefined,
+      pythonPath: formData.pythonPath || undefined,
       shotgrid:
         formData.shotgrid.url || formData.shotgrid.scriptName || formData.shotgrid.apiKey
           ? {
