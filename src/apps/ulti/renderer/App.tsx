@@ -4,6 +4,7 @@ import FirstRunWizard from './components/FirstRunWizard';
 import HomeScreen from './components/HomeScreen';
 import LogsPanel from './components/LogsPanel';
 import SettingsScreen from './components/SettingsScreen';
+import VersionFooter from './components/VersionFooter';
 
 type DesktopConfig = {
   hasCompletedWizard: boolean;
@@ -89,6 +90,7 @@ function App(): JSX.Element {
         {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
         {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
       </main>
+      <VersionFooter />
     </div>
   );
 }
