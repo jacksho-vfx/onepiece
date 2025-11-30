@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain } from 'electron';
 import path from 'path';
+import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
 
 // Detect whether we are running in development mode (served by Vite) or production
@@ -74,6 +75,7 @@ function createMainWindow(): void {
 // Create the window and wire IPC handlers once Electron is ready.
 app.whenReady().then(() => {
   registerPythonIpcHandlers(ipcMain);
+  registerConfigIpcHandlers(ipcMain, app);
   createMainWindow();
 });
 
