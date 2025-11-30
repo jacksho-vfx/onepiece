@@ -14,7 +14,7 @@ let mainWindow: BrowserWindow | null = null;
 /**
  * Create the primary application window.
  */
-function createMainWindow(): void {
+function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     title: 'OnePiece Studio Desktop',
     width: 1200,
@@ -71,11 +71,14 @@ function createMainWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  return mainWindow;
 }
 
 // Create the window and wire IPC handlers once Electron is ready.
 app.whenReady().then(() => {
-  registerPythonIpcHandlers(ipcMain);
+  const window = createMainWindow();
+  registerPythonIpcHandlers(ipcMain, window);
   registerConfigIpcHandlers(ipcMain, app);
   registerEnvIpcHandlers(ipcMain);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
@@ -85,7 +88,6 @@ app.whenReady().then(() => {
     }
     await shell.openExternal(url);
   });
-  createMainWindow();
 });
 
 // Quit the application when all windows are closed on platforms other than macOS.
