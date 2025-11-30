@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import type { IpcMain } from 'electron';
+import type { BrowserWindow, IpcMain, WebContents } from 'electron';
+import { createInterface } from 'readline';
 
 /**
  * Represents a running Python service process.
@@ -9,6 +10,14 @@ interface PythonService {
   id: string;
   name: string;
   process: ChildProcess;
+}
+
+export interface LogEntry {
+  serviceId: string;
+  serviceName: string;
+  stream: 'stdout' | 'stderr';
+  line: string;
+  timestamp: string;
 }
 
 /**
@@ -23,6 +32,55 @@ const pythonPath = process.env.ONEPIECE_PYTHON_PATH || 'python';
  * Track running Python services keyed by their generated id.
  */
 const services = new Map<string, PythonService>();
+const logBuffers = new Map<string, LogEntry[]>();
+const LOG_BUFFER_LIMIT = 200;
+
+let rendererWebContents: WebContents | null = null;
+
+function setRendererWebContents(webContents: WebContents): void {
+  rendererWebContents = webContents;
+}
+
+function appendLog(service: PythonService, stream: 'stdout' | 'stderr', line: string): void {
+  const entry: LogEntry = {
+    serviceId: service.id,
+    serviceName: service.name,
+    stream,
+    line,
+    timestamp: new Date().toISOString(),
+  };
+
+  const buffer = logBuffers.get(service.id) ?? [];
+  buffer.push(entry);
+  if (buffer.length > LOG_BUFFER_LIMIT) {
+    buffer.splice(0, buffer.length - LOG_BUFFER_LIMIT);
+  }
+  logBuffers.set(service.id, buffer);
+
+  if (rendererWebContents && !rendererWebContents.isDestroyed()) {
+    rendererWebContents.send('logs/append', entry);
+  }
+}
+
+function attachServiceLogging(service: PythonService): void {
+  if (service.process.stdout) {
+    const stdoutReader = createInterface({ input: service.process.stdout });
+    stdoutReader.on('line', (line) => appendLog(service, 'stdout', line));
+    service.process.stdout.on('close', () => stdoutReader.close());
+  }
+
+  if (service.process.stderr) {
+    const stderrReader = createInterface({ input: service.process.stderr });
+    stderrReader.on('line', (line) => appendLog(service, 'stderr', line));
+    service.process.stderr.on('close', () => stderrReader.close());
+  }
+}
+
+export function getRecentLogs(): LogEntry[] {
+  return Array.from(logBuffers.values())
+    .flat()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
 
 /**
  * Run a one-shot Python command and collect its output.
@@ -92,13 +150,17 @@ export function startService(name: string, args: string[]): Promise<{ id: string
     const service: PythonService = { id, name, process: child };
     services.set(id, service);
 
+    attachServiceLogging(service);
+
     child.on('error', (error) => {
       console.error(`Python service '${name}' encountered an error:`, error);
       services.delete(id);
+      logBuffers.delete(id);
     });
 
     child.on('exit', () => {
       services.delete(id);
+      logBuffers.delete(id);
     });
 
     resolve({ id });
@@ -149,8 +211,11 @@ export function listServices(): { id: string; name: string; pid: number }[] {
  * Register IPC handlers to expose Python management functions to the renderer.
  *
  * @param ipcMain Electron IpcMain instance used to register handlers.
+ * @param browserWindow Primary BrowserWindow used for sending log events.
  */
-export function registerPythonIpcHandlers(ipcMain: IpcMain): void {
+export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: BrowserWindow): void {
+  setRendererWebContents(browserWindow.webContents);
+
   ipcMain.handle(
     'python/run-command',
     async (_event, payload: string[] | { args: string[] }) =>
@@ -177,4 +242,6 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain): void {
   );
 
   ipcMain.handle('python/list-services', async () => listServices());
+
+  ipcMain.handle('logs/recent', async () => getRecentLogs());
 }
