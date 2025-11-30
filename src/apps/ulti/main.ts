@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } 
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
-import { registerEnvIpcHandlers } from '../../main/envDetection';
+import { registerEnvIpcHandlers } from './envDetection';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
