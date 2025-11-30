@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from 'electron';
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
@@ -76,6 +76,13 @@ function createMainWindow(): void {
 app.whenReady().then(() => {
   registerPythonIpcHandlers(ipcMain);
   registerConfigIpcHandlers(ipcMain, app);
+  ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
+    const url = typeof payload === 'string' ? payload : payload.url;
+    if (!url) {
+      throw new Error('No URL provided');
+    }
+    await shell.openExternal(url);
+  });
   createMainWindow();
 });
 
