@@ -9,6 +9,10 @@ interface DesktopConfig {
   projectRoot?: string;
 }
 
+type HomeScreenProps = {
+  config?: DesktopConfig;
+};
+
 interface ServiceSummary {
   id: string;
   name: string;
@@ -69,8 +73,8 @@ const SERVICE_DEFINITIONS: ServiceDefinition[] = [
 
 const UTA_PORT = 8080;
 
-function HomeScreen(): JSX.Element {
-  const [config, setConfig] = useState<DesktopConfig | null>(null);
+function HomeScreen({ config: initialConfig }: HomeScreenProps): JSX.Element {
+  const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [healthCheck, setHealthCheck] = useState<HealthCheckState>({
@@ -110,7 +114,9 @@ function HomeScreen(): JSX.Element {
   };
 
   useEffect(() => {
-    void fetchConfig();
+    if (!initialConfig) {
+      void fetchConfig();
+    }
     void fetchServices();
 
     const interval = setInterval(() => {
@@ -118,7 +124,13 @@ function HomeScreen(): JSX.Element {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [initialConfig]);
+
+  useEffect(() => {
+    if (initialConfig) {
+      setConfig(initialConfig);
+    }
+  }, [initialConfig]);
 
   const runningServicesByName = useMemo(() => {
     const map = new Map<string, ServiceSummary>();
