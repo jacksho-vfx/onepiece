@@ -3,6 +3,7 @@ import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
+import { registerVersionIpcHandlers } from './src/main/versionInfo';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -81,6 +82,7 @@ app.whenReady().then(() => {
   registerPythonIpcHandlers(ipcMain, window);
   registerConfigIpcHandlers(ipcMain, app);
   registerEnvIpcHandlers(ipcMain);
+  registerVersionIpcHandlers(ipcMain, app);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;
     if (!url) {
