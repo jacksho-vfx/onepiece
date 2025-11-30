@@ -7,6 +7,14 @@ interface DesktopConfig {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  quickActionPresets?: {
+    [projectName: string]: {
+      vendorIngest?: { sourcePath?: string };
+      dccPublish?: { dccType?: string; lastScenePath?: string };
+      renderSubmit?: { profileName?: string; lastFrameRange?: string };
+      clientDelivery?: { playlistName?: string; targetPath?: string };
+    };
+  };
   dccs?: {
     maya?: { enabled: boolean; executablePath?: string };
     blender?: { enabled: boolean; executablePath?: string };
@@ -288,6 +296,67 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
     }
   };
 
+  const getActiveProjectName = (): string | null => {
+    const projectName = quickActionForms.vendorIngest.project.trim();
+    return projectName || null;
+  };
+
+  const applyPresetForProject = (key: QuickActionKey, projectName: string): void => {
+    const preset = config?.quickActionPresets?.[projectName];
+    if (!preset) {
+      return;
+    }
+
+    setQuickActionForms((prev) => {
+      const nextForms: QuickActionForms = { ...prev };
+
+      switch (key) {
+        case 'vendorIngest': {
+          nextForms.vendorIngest = {
+            ...prev.vendorIngest,
+            project: prev.vendorIngest.project || projectName,
+            source: preset.vendorIngest?.sourcePath ?? prev.vendorIngest.source,
+          };
+          break;
+        }
+        case 'dccPublish': {
+          const presetDccType = preset.dccPublish?.dccType;
+          const resolvedDccType =
+            presetDccType && availableDccs.includes(presetDccType as QuickActionForms['dccPublish']['dccType'])
+              ? (presetDccType as QuickActionForms['dccPublish']['dccType'])
+              : prev.dccPublish.dccType;
+
+          nextForms.dccPublish = {
+            ...prev.dccPublish,
+            dccType: resolvedDccType,
+            scenePath: preset.dccPublish?.lastScenePath ?? prev.dccPublish.scenePath,
+          };
+          break;
+        }
+        case 'submitRender': {
+          nextForms.submitRender = {
+            ...prev.submitRender,
+            profileName: preset.renderSubmit?.profileName ?? prev.submitRender.profileName,
+            frameRange: preset.renderSubmit?.lastFrameRange ?? prev.submitRender.frameRange,
+          };
+          break;
+        }
+        case 'packageDelivery': {
+          nextForms.packageDelivery = {
+            ...prev.packageDelivery,
+            playlist: preset.clientDelivery?.playlistName ?? prev.packageDelivery.playlist,
+            target: preset.clientDelivery?.targetPath ?? prev.packageDelivery.target,
+          };
+          break;
+        }
+        default:
+          break;
+      }
+
+      return nextForms;
+    });
+  };
+
   const handleOpenQuickAction = (key: QuickActionKey): void => {
     setActiveQuickAction(key);
     setActionStatus({ state: 'idle', stdout: '', stderr: '' });
@@ -297,6 +366,11 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         ...prev,
         dccPublish: { ...prev.dccPublish, dccType: availableDccs[0] },
       }));
+    }
+
+    const projectName = getActiveProjectName();
+    if (projectName) {
+      applyPresetForProject(key, projectName);
     }
   };
 
@@ -395,6 +469,63 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         stderr: result.stderr,
         error: isSuccess ? undefined : `Command exited with code ${result.code}`,
       });
+
+      if (isSuccess) {
+        const projectName = getActiveProjectName();
+        if (projectName) {
+          const existingPresets = config?.quickActionPresets ?? {};
+          const existingProjectPreset = existingPresets[projectName] ?? {};
+          const projectPresetUpdate: NonNullable<DesktopConfig['quickActionPresets']>[string] = {
+            ...existingProjectPreset,
+          };
+
+          switch (activeQuickAction) {
+            case 'vendorIngest': {
+              projectPresetUpdate.vendorIngest = {
+                sourcePath: quickActionForms.vendorIngest.source,
+              };
+              break;
+            }
+            case 'dccPublish': {
+              projectPresetUpdate.dccPublish = {
+                dccType: quickActionForms.dccPublish.dccType,
+                lastScenePath: quickActionForms.dccPublish.scenePath,
+              };
+              break;
+            }
+            case 'submitRender': {
+              projectPresetUpdate.renderSubmit = {
+                profileName: quickActionForms.submitRender.profileName,
+                lastFrameRange: quickActionForms.submitRender.frameRange,
+              };
+              break;
+            }
+            case 'packageDelivery': {
+              projectPresetUpdate.clientDelivery = {
+                playlistName: quickActionForms.packageDelivery.playlist,
+                targetPath: quickActionForms.packageDelivery.target,
+              };
+              break;
+            }
+            default:
+              break;
+          }
+
+          const quickActionPresets = {
+            ...existingPresets,
+            [projectName]: projectPresetUpdate,
+          };
+
+          try {
+            const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+              quickActionPresets,
+            });
+            setConfig(updatedConfig);
+          } catch (saveError) {
+            console.error('Failed to persist quick action presets', saveError);
+          }
+        }
+      }
     } catch (err) {
       setActionStatus({
         state: 'error',
