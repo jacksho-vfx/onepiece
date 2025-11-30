@@ -1,0 +1,45 @@
+appId: com.onepiece.studio.desktop
+productName: "OnePiece Studio Desktop"
+
+# Use the compiled Electron/React output as the app contents.
+files:
+  - "dist/main/**/*"
+  - "dist/renderer/**/*"
+  - "package.json"
+  - "node_modules/**/*"
+  - "!**/*.map"
+
+# Where to read source assets from and where to place built artifacts.
+directories:
+  app: .
+  buildResources: build
+  output: release
+
+mac:
+  target:
+    - dmg
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage
+  category: Utility
+
+extraResources:
+  # Bundle a full Python runtime (or virtual environment) alongside the app.
+  # Place your interpreter and all required Python packages inside a top-level
+  # `python/` directory before invoking electron-builder. It will be copied into
+  # the packaged app's resources directory (e.g., Contents/Resources/python on
+  # macOS, resources/python on Windows/Linux).
+  #
+  # At runtime the Electron main process should point ONEPIECE_PYTHON_PATH to
+  # the interpreter inside this folder, for example:
+  #   path.join(process.resourcesPath, 'python', 'bin', 'python3') on macOS/Linux
+  #   path.join(process.resourcesPath, 'python', 'python.exe') on Windows
+  - from: python
+    to: python
+    filter:
+      - "**/*"
