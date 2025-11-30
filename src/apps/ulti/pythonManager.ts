@@ -151,10 +151,30 @@ export function listServices(): { id: string; name: string; pid: number }[] {
  * @param ipcMain Electron IpcMain instance used to register handlers.
  */
 export function registerPythonIpcHandlers(ipcMain: IpcMain): void {
-  ipcMain.handle('python/run-command', async (_event, args: string[]) => runCommand(args));
-  ipcMain.handle('python/start-service', async (_event, name: string, args: string[]) =>
-    startService(name, args),
+  ipcMain.handle(
+    'python/run-command',
+    async (_event, payload: string[] | { args: string[] }) =>
+      runCommand(Array.isArray(payload) ? payload : payload.args),
   );
-  ipcMain.handle('python/stop-service', async (_event, id: string) => stopService(id));
+
+  ipcMain.handle(
+    'python/start-service',
+    async (
+      _event,
+      payload: { name: string; args: string[] } | string,
+      args?: string[],
+    ) => {
+      if (typeof payload === 'string') {
+        return startService(payload, args ?? []);
+      }
+      return startService(payload.name, payload.args);
+    },
+  );
+
+  ipcMain.handle(
+    'python/stop-service',
+    async (_event, payload: string | { id: string }) => stopService(typeof payload === 'string' ? payload : payload.id),
+  );
+
   ipcMain.handle('python/list-services', async () => listServices());
 }
