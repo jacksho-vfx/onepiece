@@ -5,6 +5,7 @@ import HomeScreen from './components/HomeScreen';
 import LogsPanel from './components/LogsPanel';
 import SettingsScreen from './components/SettingsScreen';
 import VersionFooter from './components/VersionFooter';
+import { ThemeProvider } from './styles/ThemeContext';
 
 type DesktopConfig = {
   hasCompletedWizard: boolean;
@@ -62,36 +63,36 @@ function App(): JSX.Element {
     [],
   );
 
-  if (loading || !config) {
-    return <div className="op-loading">Loading...</div>;
-  }
-
-  if (!config.hasCompletedWizard) {
-    return <FirstRunWizard onComplete={() => void handleWizardComplete()} />;
-  }
-
   return (
-    <div className="op-app">
-      <nav className="op-nav">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={tab.id === selectedTab ? 'op-nav__item is-active' : 'op-nav__item'}
-            onClick={() => setSelectedTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-      <main className="op-content">
-        {selectedTab === 'home' && <HomeScreen config={config} />}
-        {selectedTab === 'logs' && <LogsPanel />}
-        {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-        {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
-      </main>
-      <VersionFooter />
-    </div>
+    <ThemeProvider>
+      {loading || !config ? (
+        <div className="op-loading">Loading...</div>
+      ) : !config.hasCompletedWizard ? (
+        <FirstRunWizard onComplete={() => void handleWizardComplete()} />
+      ) : (
+        <div className="op-app">
+          <nav className="op-nav">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={tab.id === selectedTab ? 'op-nav__item is-active' : 'op-nav__item'}
+                onClick={() => setSelectedTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+          <main className="op-content">
+            {selectedTab === 'home' && <HomeScreen config={config} />}
+            {selectedTab === 'logs' && <LogsPanel />}
+            {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
+            {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
+          </main>
+          <VersionFooter />
+        </div>
+      )}
+    </ThemeProvider>
   );
 }
 
