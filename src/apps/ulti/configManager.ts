@@ -10,6 +10,14 @@ export interface DesktopConfig {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  quickActionPresets?: {
+    [projectName: string]: {
+      vendorIngest?: { sourcePath?: string };
+      dccPublish?: { dccType?: string; lastScenePath?: string };
+      renderSubmit?: { profileName?: string; lastFrameRange?: string };
+      clientDelivery?: { playlistName?: string; targetPath?: string };
+    };
+  };
   shotgrid?: {
     url?: string;
     scriptName?: string;
@@ -115,9 +123,26 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
       const now = new Date().toISOString();
       const hasNewlyCompletedWizard = !existing.hasCompletedWizard && updates.hasCompletedWizard === true;
 
+      const mergedQuickActionPresets = (() => {
+        if (!updates.quickActionPresets) {
+          return existing.quickActionPresets;
+        }
+
+        const merged = { ...(existing.quickActionPresets ?? {}) };
+        for (const [projectName, preset] of Object.entries(updates.quickActionPresets)) {
+          const existingPreset = merged[projectName] ?? {};
+          merged[projectName] = {
+            ...existingPreset,
+            ...preset,
+          };
+        }
+        return merged;
+      })();
+
       const updatedConfig: DesktopConfig = {
         ...existing,
         ...updates,
+        quickActionPresets: mergedQuickActionPresets,
         createdAt: existing.createdAt || now,
         updatedAt: now,
       };
