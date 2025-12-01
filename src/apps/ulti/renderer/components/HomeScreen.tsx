@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ProjectOverview from './ProjectOverview';
 import { Button, Card, Modal, SectionHeader, StatusBadge, Tabs, TextInput, useToast } from './ui';
+import VendorIngestWizard from './workflows/VendorIngestWizard';
 import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
@@ -198,6 +199,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
     packageDelivery: { playlist: '', target: '' },
   });
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
+  const [showVendorIngestWizard, setShowVendorIngestWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
 
@@ -382,6 +384,11 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
 
   const handleOpenQuickAction = (key: QuickActionKey): void => {
     if (!currentProject) {
+      return;
+    }
+
+    if (key === 'vendorIngest') {
+      setShowVendorIngestWizard(true);
       return;
     }
 
@@ -681,25 +688,6 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
 
     const renderFields = (): JSX.Element => {
       switch (activeQuickAction) {
-        case 'vendorIngest':
-          return (
-            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
-              <TextInput
-                label="Source folder path"
-                placeholder="/path/to/vendor/drop"
-                value={quickActionForms.vendorIngest.source}
-                onChange={(event) => updateQuickActionForm('vendorIngest', 'source', event.target.value)}
-                required
-              />
-              <TextInput
-                label="Project/show name"
-                placeholder="Project identifier"
-                value={quickActionForms.vendorIngest.project}
-                onChange={(event) => updateQuickActionForm('vendorIngest', 'project', event.target.value)}
-                required
-              />
-            </div>
-          );
         case 'dccPublish':
           return (
             <div style={{ display: 'grid', gap: theme.spacing.sm }}>
@@ -1036,6 +1024,9 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
           {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
         </div>
         {renderQuickActionModal()}
+        {showVendorIngestWizard ? (
+          <VendorIngestWizard project={currentProject ?? undefined} onClose={() => setShowVendorIngestWizard(false)} />
+        ) : null}
     </div>
   );
 }
