@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Modal, SectionHeader, useToast } from './ui';
+import { Button, Card, Modal, SectionHeader, StatusBadge, TextInput, useToast } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
@@ -606,36 +606,38 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
     const actionState = serviceActions[definition.key];
 
     return (
-      <div key={definition.key} className="op-card op-service-card">
-        <div className="op-service-header">
-          <div>
-            <h3>{definition.name}</h3>
-            <p className="op-service-description">{definition.description}</p>
+      <Card key={definition.key}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.md }}>
+          <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+            <h3 style={{ margin: 0 }}>{definition.name}</h3>
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>{definition.description}</p>
           </div>
-          <span className={`op-status ${isRunning ? 'running' : 'stopped'}`}>
+          <StatusBadge status={isRunning ? 'running' : 'stopped'}>
             {isRunning ? 'Running' : 'Stopped'}
-          </span>
+          </StatusBadge>
         </div>
-        <div className="op-service-actions">
-          <button
-            type="button"
-            className="op-primary"
+
+        <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+          <Button
             onClick={() => void handleStart(definition)}
             disabled={isRunning || actionState === 'starting'}
+            isLoading={actionState === 'starting'}
           >
-            {actionState === 'starting' ? 'Starting…' : 'Start'}
-          </button>
-          <button
-            type="button"
-            className="op-secondary"
+            Start
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => void handleStop(definition)}
             disabled={!isRunning || actionState === 'stopping'}
+            isLoading={actionState === 'stopping'}
           >
-            {actionState === 'stopping' ? 'Stopping…' : 'Stop'}
-          </button>
+            Stop
+          </Button>
         </div>
-        {isRunning && running?.pid ? <p className="op-service-meta">PID: {running.pid}</p> : null}
-      </div>
+        {isRunning && running?.pid ? (
+          <p style={{ margin: 0, color: theme.colors.textMuted }}>PID: {running.pid}</p>
+        ) : null}
+      </Card>
     );
   };
 
@@ -656,32 +658,28 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
       switch (activeQuickAction) {
         case 'vendorIngest':
           return (
-            <div className="op-field-group">
-              <label className="op-field required">
-                <span>Source folder path</span>
-                <input
-                  type="text"
-                  value={quickActionForms.vendorIngest.source}
-                  onChange={(event) => updateQuickActionForm('vendorIngest', 'source', event.target.value)}
-                  placeholder="/path/to/vendor/drop"
-                />
-              </label>
-              <label className="op-field required">
-                <span>Project/show name</span>
-                <input
-                  type="text"
-                  value={quickActionForms.vendorIngest.project}
-                  onChange={(event) => updateQuickActionForm('vendorIngest', 'project', event.target.value)}
-                  placeholder="Project identifier"
-                />
-              </label>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <TextInput
+                label="Source folder path"
+                placeholder="/path/to/vendor/drop"
+                value={quickActionForms.vendorIngest.source}
+                onChange={(event) => updateQuickActionForm('vendorIngest', 'source', event.target.value)}
+                required
+              />
+              <TextInput
+                label="Project/show name"
+                placeholder="Project identifier"
+                value={quickActionForms.vendorIngest.project}
+                onChange={(event) => updateQuickActionForm('vendorIngest', 'project', event.target.value)}
+                required
+              />
             </div>
           );
         case 'dccPublish':
           return (
-            <div className="op-field-group">
-              <label className="op-field required">
-                <span>DCC type</span>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <label style={{ display: 'grid', gap: '0.35rem' }}>
+                <span style={{ fontWeight: theme.typography.fontWeightMedium }}>DCC type</span>
                 {availableDccs.length === 0 ? (
                   <p className="op-error">Enable a DCC in Settings to publish.</p>
                 ) : (
@@ -690,6 +688,12 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
                     onChange={(event) =>
                       updateQuickActionForm('dccPublish', 'dccType', event.target.value as QuickActionForms['dccPublish']['dccType'])
                     }
+                    style={{
+                      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                      borderRadius: theme.radii.md,
+                      border: `1px solid ${theme.colors.border}`,
+                      background: theme.colors.surfaceAlt,
+                    }}
                   >
                     <option value="">Select DCC</option>
                     {availableDccs.map((dcc) => (
@@ -700,61 +704,50 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
                   </select>
                 )}
               </label>
-              <label className="op-field required">
-                <span>Path to scene file</span>
-                <input
-                  type="text"
-                  value={quickActionForms.dccPublish.scenePath}
-                  onChange={(event) => updateQuickActionForm('dccPublish', 'scenePath', event.target.value)}
-                  placeholder="/path/to/scene.ext"
-                />
-              </label>
+              <TextInput
+                label="Path to scene file"
+                placeholder="/path/to/scene.ext"
+                value={quickActionForms.dccPublish.scenePath}
+                onChange={(event) => updateQuickActionForm('dccPublish', 'scenePath', event.target.value)}
+                required
+              />
             </div>
           );
         case 'submitRender':
           return (
-            <div className="op-field-group">
-              <label className="op-field required">
-                <span>Render profile name</span>
-                <input
-                  type="text"
-                  value={quickActionForms.submitRender.profileName}
-                  onChange={(event) => updateQuickActionForm('submitRender', 'profileName', event.target.value)}
-                  placeholder="profile-name"
-                />
-              </label>
-              <label className="op-field">
-                <span>Frame range (optional)</span>
-                <input
-                  type="text"
-                  value={quickActionForms.submitRender.frameRange}
-                  onChange={(event) => updateQuickActionForm('submitRender', 'frameRange', event.target.value)}
-                  placeholder="1001-1100 or 1,3,5"
-                />
-              </label>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <TextInput
+                label="Render profile name"
+                placeholder="profile-name"
+                value={quickActionForms.submitRender.profileName}
+                onChange={(event) => updateQuickActionForm('submitRender', 'profileName', event.target.value)}
+                required
+              />
+              <TextInput
+                label="Frame range (optional)"
+                placeholder="1001-1100 or 1,3,5"
+                value={quickActionForms.submitRender.frameRange}
+                onChange={(event) => updateQuickActionForm('submitRender', 'frameRange', event.target.value)}
+              />
             </div>
           );
         case 'packageDelivery':
           return (
-            <div className="op-field-group">
-              <label className="op-field required">
-                <span>Playlist / name</span>
-                <input
-                  type="text"
-                  value={quickActionForms.packageDelivery.playlist}
-                  onChange={(event) => updateQuickActionForm('packageDelivery', 'playlist', event.target.value)}
-                  placeholder="Playlist or version name"
-                />
-              </label>
-              <label className="op-field required">
-                <span>Target path or bucket</span>
-                <input
-                  type="text"
-                  value={quickActionForms.packageDelivery.target}
-                  onChange={(event) => updateQuickActionForm('packageDelivery', 'target', event.target.value)}
-                  placeholder="/deliveries/client-x or s3://bucket/path"
-                />
-              </label>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <TextInput
+                label="Playlist / name"
+                placeholder="Playlist or version name"
+                value={quickActionForms.packageDelivery.playlist}
+                onChange={(event) => updateQuickActionForm('packageDelivery', 'playlist', event.target.value)}
+                required
+              />
+              <TextInput
+                label="Target path or bucket"
+                placeholder="/deliveries/client-x or s3://bucket/path"
+                value={quickActionForms.packageDelivery.target}
+                onChange={(event) => updateQuickActionForm('packageDelivery', 'target', event.target.value)}
+                required
+              />
             </div>
           );
         default:
@@ -841,7 +834,7 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
   };
 
   return (
-    <div className="op-layout">
+    <div className="op-layout" style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
       {error ? (
         <div className="op-banner op-banner-error">
           <div>
@@ -849,15 +842,15 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
             <p className="op-banner-message">{error.message}</p>
           </div>
           <div className="op-banner-actions">
-            <button type="button" className="op-secondary" onClick={() => onViewLogs?.()}>
+            <Button variant="secondary" onClick={() => onViewLogs?.()}>
               View logs
-            </button>
-            <button type="button" className="op-primary" onClick={() => void runHealthCheck()}>
+            </Button>
+            <Button onClick={() => void runHealthCheck()} isLoading={healthCheck.running}>
               Retry health check
-            </button>
-            <button type="button" className="op-tertiary" onClick={() => setError(null)}>
+            </Button>
+            <Button variant="ghost" onClick={() => setError(null)}>
               Dismiss
-            </button>
+            </Button>
           </div>
           {error.suggestedAction ? <p className="op-banner-hint">{error.suggestedAction}</p> : null}
         </div>
@@ -871,9 +864,15 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         <Button onClick={openUtaDashboard}>Open Uta Dashboard</Button>
       </header>
 
-      <section className="op-grid">
-        <div className="op-card">
-          <h2>Current configuration</h2>
+      <SectionHeader title="Health & Status" subtitle="See your configuration and run workstation checks." />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: theme.spacing.lg,
+        }}
+      >
+        <Card title="Current configuration">
           {config ? (
             <dl className="op-definition-list">
               <div>
@@ -892,9 +891,9 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
           ) : (
             <p>Loading configuration…</p>
           )}
-        </div>
+        </Card>
 
-        <div className="op-card">
+        <Card>
           <SectionHeader
             title="Health check"
             subtitle="Validate your workstation with the OnePiece doctor."
@@ -905,9 +904,9 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
             }
           />
           {healthCheck.exitCode !== null && !healthCheck.running ? (
-            <div className={`op-badge ${healthCheck.exitCode === 0 ? 'success' : 'error'}`}>
+            <StatusBadge status={healthCheck.exitCode === 0 ? 'success' : 'error'}>
               {healthCheck.exitCode === 0 ? 'Doctor check passed' : 'Doctor check reported issues'}
-            </div>
+            </StatusBadge>
           ) : null}
           {healthCheck.error ? <p className="op-error">{healthCheck.error}</p> : null}
           <div className="op-log-output">
@@ -927,30 +926,30 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
               <p className="op-muted">Run the health check to see diagnostics.</p>
             ) : null}
           </div>
-        </div>
-      </section>
+        </Card>
+      </div>
 
-      <section className="op-card">
-        <SectionHeader
-          title="Quick Actions"
-          subtitle="Wrap important OnePiece CLI workflows in simple prompts."
-        />
-        <div className="op-quick-actions-grid">
+      <Card>
+        <SectionHeader title="Quick Actions" subtitle="Wrap important OnePiece CLI workflows in simple prompts." />
+        <div
+          style={{
+            display: 'grid',
+            gap: theme.spacing.md,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          }}
+        >
           {QUICK_ACTIONS.map((action) => (
-            <div key={action.key} className="op-quick-action">
-              <div>
-                <h3>{action.label}</h3>
-                <p className="op-muted">{action.description}</p>
-              </div>
-              <button type="button" className="op-primary" onClick={() => handleOpenQuickAction(action.key)}>
+            <Card key={action.key} title={action.label}>
+              <p style={{ margin: 0, color: theme.colors.textMuted }}>{action.description}</p>
+              <Button fullWidth onClick={() => handleOpenQuickAction(action.key)}>
                 Launch
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
         </div>
-      </section>
+      </Card>
 
-      <section>
+      <Card>
         <SectionHeader
           title="Services"
           subtitle="Start or stop the local stack components. Status is refreshed every 5 seconds."
@@ -961,10 +960,16 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
           }
         />
         {serviceError ? <p className="op-error">{serviceError}</p> : null}
-        <div className="op-service-grid">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: theme.spacing.md,
+          }}
+        >
           {SERVICE_DEFINITIONS.map((definition) => renderServiceStatus(definition))}
         </div>
-      </section>
+      </Card>
       {renderQuickActionModal()}
     </div>
   );

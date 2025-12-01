@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, SectionHeader } from './ui';
+import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo';
@@ -126,17 +126,11 @@ function DiagnosticsScreen(): JSX.Element {
     return 'failure';
   }, [doctorResult.exitCode, doctorResult.running]);
 
-  const statusColor = useMemo(() => {
-    if (doctorStatus === 'running') {
-      return '#f59e0b';
-    }
-    if (doctorStatus === 'success') {
-      return '#10b981';
-    }
-    if (doctorStatus === 'failure') {
-      return '#ef4444';
-    }
-    return '#6b7280';
+  const doctorLabel = useMemo(() => {
+    if (doctorStatus === 'idle') return 'Not run yet';
+    if (doctorStatus === 'running') return 'Running diagnostics...';
+    if (doctorStatus === 'success') return 'Checks passed';
+    return 'Issues detected';
   }, [doctorStatus]);
 
   const handleRunDoctor = async (): Promise<void> => {
@@ -260,26 +254,7 @@ function DiagnosticsScreen(): JSX.Element {
           }
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md, marginBottom: theme.spacing.sm }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: '12px',
-                height: '12px',
-                borderRadius: '9999px',
-                backgroundColor: statusColor,
-              }}
-            />
-            <span>
-              {doctorStatus === 'idle'
-                ? 'Not run yet'
-                : doctorStatus === 'running'
-                  ? 'Running diagnostics...'
-                  : doctorStatus === 'success'
-                    ? 'Checks passed'
-                    : 'Issues detected'}
-            </span>
-          </div>
+          <StatusBadge status={doctorStatus}>{doctorLabel}</StatusBadge>
           {doctorResult.exitCode !== null && <div>Exit code: {doctorResult.exitCode}</div>}
           {doctorResult.error && <div style={{ color: theme.colors.danger }}>{doctorResult.error}</div>}
         </div>
