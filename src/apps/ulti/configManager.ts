@@ -10,6 +10,8 @@ export interface DesktopConfig {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  currentProject?: string;
+  recentProjects?: { name: string; path: string; lastOpenedAt: string }[];
   quickActionPresets?: {
     [projectName: string]: {
       vendorIngest?: { sourcePath?: string };
@@ -123,6 +125,17 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
       const now = new Date().toISOString();
       const hasNewlyCompletedWizard = !existing.hasCompletedWizard && updates.hasCompletedWizard === true;
 
+      const mergedRecentProjects = (() => {
+        if (Object.prototype.hasOwnProperty.call(updates, 'recentProjects')) {
+          return updates.recentProjects;
+        }
+        return existing.recentProjects;
+      })();
+
+      const mergedCurrentProject = Object.prototype.hasOwnProperty.call(updates, 'currentProject')
+        ? updates.currentProject
+        : existing.currentProject;
+
       const mergedQuickActionPresets = (() => {
         if (!updates.quickActionPresets) {
           return existing.quickActionPresets;
@@ -143,6 +156,8 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
         ...existing,
         ...updates,
         quickActionPresets: mergedQuickActionPresets,
+        currentProject: mergedCurrentProject,
+        recentProjects: mergedRecentProjects,
         createdAt: existing.createdAt || now,
         updatedAt: now,
       };

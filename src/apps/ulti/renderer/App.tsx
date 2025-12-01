@@ -6,6 +6,7 @@ import LogsPanel from './components/LogsPanel';
 import SettingsScreen from './components/SettingsScreen';
 import VersionFooter from './components/VersionFooter';
 import AppShell from './components/layout/AppShell';
+import ProjectSwitcher from './components/ProjectSwitcher';
 import { ThemeProvider } from './styles/ThemeContext';
 import { ToasterProvider } from './components/ui';
 
@@ -16,6 +17,16 @@ type DesktopConfig = {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  currentProject?: string;
+  recentProjects?: { name: string; path: string; lastOpenedAt: string }[];
+  quickActionPresets?: {
+    [projectName: string]: {
+      vendorIngest?: { sourcePath?: string };
+      dccPublish?: { dccType?: string; lastScenePath?: string };
+      renderSubmit?: { profileName?: string; lastFrameRange?: string };
+      clientDelivery?: { playlistName?: string; targetPath?: string };
+    };
+  };
 };
 
 declare global {
@@ -26,21 +37,35 @@ declare global {
   }
 }
 
+type ProjectSelection = { name: string; path: string };
+
 function App(): JSX.Element {
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<'home' | 'logs' | 'diagnostics' | 'settings'>('home');
+  const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
+
+  const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
+    if (!nextConfig?.currentProject) {
+      return null;
+    }
+
+    const match = nextConfig.recentProjects?.find((project) => project.path === nextConfig.currentProject);
+    const nameFromPath = nextConfig.currentProject.split(/[\\/]/).pop() ?? nextConfig.currentProject;
+    return { name: match?.name ?? nameFromPath, path: nextConfig.currentProject };
+  }, []);
 
   const loadConfig = useCallback(async () => {
     try {
       const loadedConfig = await window.electron.invoke<DesktopConfig>('config/get');
       setConfig(loadedConfig);
+      setCurrentProject(deriveCurrentProject(loadedConfig));
     } catch (error) {
       console.error('Failed to load desktop config', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [deriveCurrentProject]);
 
   useEffect(() => {
     void loadConfig();
@@ -54,6 +79,33 @@ function App(): JSX.Element {
   const handleRequestRerunWizard = useCallback(() => {
     setConfig((prev) => (prev ? { ...prev, hasCompletedWizard: false } : prev));
   }, []);
+
+  const handleProjectChange = useCallback(
+    async (project: ProjectSelection | null) => {
+      if (!config) {
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const existingRecents = config.recentProjects ?? [];
+      const updatedRecents = project
+        ? [{ name: project.name, path: project.path, lastOpenedAt: now }, ...existingRecents.filter((p) => p.path !== project.path)]
+        : existingRecents;
+
+      try {
+        const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+          currentProject: project?.path,
+          recentProjects: updatedRecents,
+        });
+
+        setConfig(updatedConfig);
+        setCurrentProject(project ?? deriveCurrentProject(updatedConfig));
+      } catch (error) {
+        console.error('Failed to update desktop config with project selection', error);
+      }
+    },
+    [config, deriveCurrentProject],
+  );
 
   const tabs = useMemo(
     () => [
@@ -81,8 +133,9 @@ function App(): JSX.Element {
               onSelect: () => setSelectedTab(tab.id),
             }))}
             activeNavId={selectedTab}
+            projectSwitcher={<ProjectSwitcher config={config} onProjectChange={handleProjectChange} />}
           >
-            {selectedTab === 'home' && <HomeScreen config={config} />}
+            {selectedTab === 'home' && <HomeScreen config={config} currentProject={currentProject ?? undefined} />}
             {selectedTab === 'logs' && <LogsPanel />}
             {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
             {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
