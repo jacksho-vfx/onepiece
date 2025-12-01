@@ -7,6 +7,7 @@ import SettingsScreen from './components/SettingsScreen';
 import VersionFooter from './components/VersionFooter';
 import AppShell from './components/layout/AppShell';
 import { ThemeProvider } from './styles/ThemeContext';
+import { ToasterProvider } from './components/ui';
 
 type DesktopConfig = {
   hasCompletedWizard: boolean;
@@ -66,27 +67,29 @@ function App(): JSX.Element {
 
   return (
     <ThemeProvider>
-      {loading || !config ? (
-        <div className="op-loading">Loading...</div>
-      ) : !config.hasCompletedWizard ? (
-        <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
-          <FirstRunWizard onComplete={() => void handleWizardComplete()} />
-        </AppShell>
-      ) : (
-        <AppShell
-          navItems={tabs.map((tab) => ({
-            ...tab,
-            onSelect: () => setSelectedTab(tab.id),
-          }))}
-          activeNavId={selectedTab}
-        >
-          {selectedTab === 'home' && <HomeScreen config={config} />}
-          {selectedTab === 'logs' && <LogsPanel />}
-          {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-          {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
-          <VersionFooter />
-        </AppShell>
-      )}
+      <ToasterProvider>
+        {loading || !config ? (
+          <div className="op-loading">Loading...</div>
+        ) : !config.hasCompletedWizard ? (
+          <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
+            <FirstRunWizard onComplete={() => void handleWizardComplete()} />
+          </AppShell>
+        ) : (
+          <AppShell
+            navItems={tabs.map((tab) => ({
+              ...tab,
+              onSelect: () => setSelectedTab(tab.id),
+            }))}
+            activeNavId={selectedTab}
+          >
+            {selectedTab === 'home' && <HomeScreen config={config} />}
+            {selectedTab === 'logs' && <LogsPanel />}
+            {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
+            {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
+            <VersionFooter />
+          </AppShell>
+        )}
+      </ToasterProvider>
     </ThemeProvider>
   );
 }

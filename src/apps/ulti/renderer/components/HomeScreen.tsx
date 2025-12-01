@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Modal, SectionHeader, useToast } from './ui';
+import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
   hasCompletedWizard: boolean;
@@ -164,6 +166,8 @@ function formatDoctorOutput(
 }
 
 function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX.Element {
+  const theme = useTheme();
+  const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [serviceError, setServiceError] = useState<string | null>(null);
@@ -563,6 +567,12 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
           message: firstStderrLine ? firstStderrLine.trim().slice(0, 200) : formatted.summary,
           suggestedAction: 'Open logs',
         });
+        showToast({
+          kind: 'error',
+          message: formatted.summary,
+        });
+      } else {
+        showToast({ kind: 'success', message: 'Health check passed. Your workstation looks good.' });
       }
     } catch (err) {
       console.error('Health check failed to execute', err);
@@ -577,6 +587,10 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         title: 'Health check failed to run',
         message: err instanceof Error ? err.message : 'Unexpected error occurred.',
         suggestedAction: 'Check your Python path in Settings',
+      });
+      showToast({
+        kind: 'error',
+        message: 'Health check failed to run. Please review your Python path or logs.',
       });
     }
   };
@@ -749,58 +763,80 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
     };
 
     return (
-      <div className="op-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="quick-action-title">
-        <div className="op-modal">
-          <div className="op-modal__header">
-            <div>
-              <p className="op-eyebrow">Quick action</p>
-              <h3 id="quick-action-title">{action.label}</h3>
-              <p className="op-muted">{action.description}</p>
-            </div>
-            <button type="button" className="op-tertiary" onClick={handleCloseQuickAction}>
-              Close
-            </button>
-          </div>
+      <Modal
+        isOpen
+        onClose={handleCloseQuickAction}
+        title={action.label}
+        description={action.description}
+        primaryAction={{
+          label: isRunning ? 'Running…' : 'Run action',
+          onClick: () => void runQuickAction(),
+          disabled: !canRun || (activeQuickAction === 'dccPublish' && availableDccs.length === 0),
+          isLoading: isRunning,
+        }}
+        secondaryAction={{ label: 'Cancel', onClick: handleCloseQuickAction, disabled: isRunning, variant: 'secondary' }}
+      >
+        <div style={{ display: 'grid', gap: theme.spacing.md }}>
+          {renderFields()}
+          <div
+            style={{
+              background: theme.colors.surface,
+              border: `1px dashed ${theme.colors.border}`,
+              borderRadius: theme.radii.md,
+              padding: theme.spacing.sm,
+              display: 'grid',
+              gap: '0.35rem',
+            }}
+          >
+            {actionStatus.state === 'running' ? (
+              <p style={{ margin: 0, color: theme.colors.textMuted }}>Running…</p>
+            ) : null}
+            {actionStatus.state === 'success' ? (
+              <p style={{ margin: 0, color: theme.colors.success }}>Command completed successfully.</p>
+            ) : null}
+            {actionStatus.state === 'error' && actionStatus.error ? (
+              <p style={{ margin: 0, color: theme.colors.danger }}>{actionStatus.error}</p>
+            ) : null}
 
-          <div className="op-modal__body">
-            {renderFields()}
-            <div className="op-modal__status">
-              {actionStatus.state === 'running' ? <p className="op-muted">Running…</p> : null}
-              {actionStatus.state === 'success' ? <p className="op-success">Command completed successfully.</p> : null}
-              {actionStatus.state === 'error' && actionStatus.error ? (
-                <p className="op-error">{actionStatus.error}</p>
-              ) : null}
-
-              {actionStatus.stdout ? (
-                <div>
-                  <h4>Stdout</h4>
-                  <pre>{actionStatus.stdout}</pre>
-                </div>
-              ) : null}
-              {actionStatus.stderr ? (
-                <div>
-                  <h4>Stderr</h4>
-                  <pre>{actionStatus.stderr}</pre>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="op-modal__footer">
-            <button type="button" className="op-secondary" onClick={handleCloseQuickAction} disabled={isRunning}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="op-primary"
-              onClick={() => void runQuickAction()}
-              disabled={!canRun || (activeQuickAction === 'dccPublish' && availableDccs.length === 0)}
-            >
-              {isRunning ? 'Running…' : 'Run action'}
-            </button>
+            {actionStatus.stdout ? (
+              <div>
+                <h4 style={{ margin: '0 0 0.25rem' }}>Stdout</h4>
+                <pre
+                  style={{
+                    background: theme.colors.surfaceAlt,
+                    padding: theme.spacing.sm,
+                    borderRadius: theme.radii.sm,
+                    maxHeight: '220px',
+                    overflow: 'auto',
+                    margin: 0,
+                    border: `1px solid ${theme.colors.border}`,
+                  }}
+                >
+                  {actionStatus.stdout}
+                </pre>
+              </div>
+            ) : null}
+            {actionStatus.stderr ? (
+              <div>
+                <h4 style={{ margin: '0 0 0.25rem' }}>Stderr</h4>
+                <pre
+                  style={{
+                    background: theme.colors.surfaceAlt,
+                    padding: theme.spacing.sm,
+                    borderRadius: theme.radii.sm,
+                    maxHeight: '220px',
+                    overflow: 'auto',
+                    margin: 0,
+                    border: `1px solid ${theme.colors.border}`,
+                  }}
+                >
+                  {actionStatus.stderr}
+                </pre>
+              </div>
+            ) : null}
           </div>
         </div>
-      </div>
+      </Modal>
     );
   };
 
@@ -832,9 +868,7 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
           <h1>Home</h1>
           <p>Manage your local services, run diagnostics, and open dashboards.</p>
         </div>
-        <button type="button" className="op-primary" onClick={openUtaDashboard}>
-          Open Uta Dashboard
-        </button>
+        <Button onClick={openUtaDashboard}>Open Uta Dashboard</Button>
       </header>
 
       <section className="op-grid">
@@ -861,12 +895,15 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         </div>
 
         <div className="op-card">
-          <div className="op-card-header">
-            <h2>Health check</h2>
-            <button type="button" className="op-primary" onClick={() => void runHealthCheck()} disabled={healthCheck.running}>
-              {healthCheck.running ? 'Running…' : 'Run health check'}
-            </button>
-          </div>
+          <SectionHeader
+            title="Health check"
+            subtitle="Validate your workstation with the OnePiece doctor."
+            action={
+              <Button onClick={() => void runHealthCheck()} isLoading={healthCheck.running} disabled={healthCheck.running}>
+                {healthCheck.running ? 'Running…' : 'Run health check'}
+              </Button>
+            }
+          />
           {healthCheck.exitCode !== null && !healthCheck.running ? (
             <div className={`op-badge ${healthCheck.exitCode === 0 ? 'success' : 'error'}`}>
               {healthCheck.exitCode === 0 ? 'Doctor check passed' : 'Doctor check reported issues'}
@@ -894,12 +931,10 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
       </section>
 
       <section className="op-card">
-        <div className="op-card-header">
-          <div>
-            <h2>Quick Actions</h2>
-            <p>Wrap important OnePiece CLI workflows in simple prompts.</p>
-          </div>
-        </div>
+        <SectionHeader
+          title="Quick Actions"
+          subtitle="Wrap important OnePiece CLI workflows in simple prompts."
+        />
         <div className="op-quick-actions-grid">
           {QUICK_ACTIONS.map((action) => (
             <div key={action.key} className="op-quick-action">
@@ -916,15 +951,15 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
       </section>
 
       <section>
-        <div className="op-section-header">
-          <div>
-            <h2>Services</h2>
-            <p>Start or stop the local stack components. Status is refreshed every 5 seconds.</p>
-          </div>
-          <button type="button" className="op-secondary" onClick={() => void fetchServices()}>
-            Refresh status
-          </button>
-        </div>
+        <SectionHeader
+          title="Services"
+          subtitle="Start or stop the local stack components. Status is refreshed every 5 seconds."
+          action={
+            <Button variant="secondary" onClick={() => void fetchServices()}>
+              Refresh status
+            </Button>
+          }
+        />
         {serviceError ? <p className="op-error">{serviceError}</p> : null}
         <div className="op-service-grid">
           {SERVICE_DEFINITIONS.map((definition) => renderServiceStatus(definition))}

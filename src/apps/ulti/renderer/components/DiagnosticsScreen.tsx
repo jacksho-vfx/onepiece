@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Card, SectionHeader } from './ui';
+import { useTheme } from '../styles/ThemeContext';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo';
 
@@ -52,6 +54,7 @@ declare global {
 }
 
 function DiagnosticsScreen(): JSX.Element {
+  const theme = useTheme();
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [detectedEnv, setDetectedEnv] = useState<DetectedEnv | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -191,18 +194,27 @@ function DiagnosticsScreen(): JSX.Element {
   };
 
   const renderConfigValue = (value: string | undefined): string => value || 'Not set';
+  const summaryGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: '200px 1fr',
+    rowGap: '8px',
+    columnGap: theme.spacing.md,
+  } as const;
 
   if (loading) {
     return <div className="op-loading">Loading diagnostics...</div>;
   }
 
   return (
-    <div className="diagnostics-screen" style={{ padding: '24px', color: '#111827' }}>
-      <h1>Diagnostics</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
+      <SectionHeader
+        title="Diagnostics"
+        subtitle="Inspect your configuration, environment detection, and OnePiece doctor output."
+      />
 
-      <section style={{ marginTop: '16px' }}>
-        <h2>Configuration overview</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: '8px', columnGap: '12px' }}>
+      <Card>
+        <SectionHeader title="Configuration overview" />
+        <div style={summaryGridStyle}>
           <div>Profile</div>
           <div>{config?.profile ?? 'Not set'}</div>
 
@@ -218,11 +230,11 @@ function DiagnosticsScreen(): JSX.Element {
           <div>AWS configured</div>
           <div>{awsConfigured ? 'Yes' : 'No'}</div>
         </div>
-      </section>
+      </Card>
 
-      <section style={{ marginTop: '24px' }}>
-        <h2>Environment detection</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: '8px', columnGap: '12px' }}>
+      <Card>
+        <SectionHeader title="Environment detection" />
+        <div style={summaryGridStyle}>
           <div>Python path guess</div>
           <div>{detectedEnv?.pythonPathGuess ?? 'Not detected'}</div>
 
@@ -235,15 +247,20 @@ function DiagnosticsScreen(): JSX.Element {
           <div>Unreal</div>
           <div>{detectedEnv?.dccs?.unreal ?? 'Not detected'}</div>
         </div>
-      </section>
+      </Card>
 
-      <section style={{ marginTop: '24px' }}>
-        <h2>OnePiece doctor</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-          <button onClick={() => void handleRunDoctor()} disabled={doctorResult.running}>
-            {doctorResult.running ? 'Running...' : 'Run full diagnostics'}
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <Card>
+        <SectionHeader
+          title="OnePiece doctor"
+          subtitle="Run the doctor command to collect stdout and stderr diagnostics."
+          action={
+            <Button onClick={() => void handleRunDoctor()} isLoading={doctorResult.running} disabled={doctorResult.running}>
+              {doctorResult.running ? 'Running…' : 'Run full diagnostics'}
+            </Button>
+          }
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md, marginBottom: theme.spacing.sm }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
             <span
               style={{
                 display: 'inline-block',
@@ -264,29 +281,30 @@ function DiagnosticsScreen(): JSX.Element {
             </span>
           </div>
           {doctorResult.exitCode !== null && <div>Exit code: {doctorResult.exitCode}</div>}
-          {doctorResult.error && <div style={{ color: '#b91c1c' }}>{doctorResult.error}</div>}
+          {doctorResult.error && <div style={{ color: theme.colors.danger }}>{doctorResult.error}</div>}
         </div>
 
-        <div style={{ marginBottom: '12px' }}>
-          <button onClick={() => setShowStdout((prev) => !prev)} style={{ marginRight: '8px' }}>
+        <div style={{ marginBottom: theme.spacing.sm, display: 'flex', gap: theme.spacing.sm }}>
+          <Button variant="ghost" size="sm" onClick={() => setShowStdout((prev) => !prev)}>
             {showStdout ? 'Hide' : 'Show'} stdout
-          </button>
-          <button onClick={() => setShowStderr((prev) => !prev)}>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowStderr((prev) => !prev)}>
             {showStderr ? 'Hide' : 'Show'} stderr
-          </button>
+          </Button>
         </div>
 
         {showStdout && (
-          <div style={{ marginBottom: '12px' }}>
-            <h3>stdout</h3>
+          <div style={{ marginBottom: theme.spacing.sm }}>
+            <h3 style={{ margin: '0 0 0.35rem' }}>stdout</h3>
             <pre
               style={{
-                background: '#f3f4f6',
-                padding: '12px',
-                borderRadius: '6px',
+                background: theme.colors.surfaceAlt,
+                padding: theme.spacing.md,
+                borderRadius: theme.radii.md,
                 maxHeight: '240px',
                 overflow: 'auto',
                 whiteSpace: 'pre-wrap',
+                border: `1px solid ${theme.colors.border}`,
               }}
             >
               {doctorResult.stdout || 'No output yet.'}
@@ -295,27 +313,30 @@ function DiagnosticsScreen(): JSX.Element {
         )}
 
         {showStderr && (
-          <div style={{ marginBottom: '12px' }}>
-            <h3>stderr</h3>
+          <div style={{ marginBottom: theme.spacing.sm }}>
+            <h3 style={{ margin: '0 0 0.35rem' }}>stderr</h3>
             <pre
               style={{
-                background: '#fef2f2',
-                padding: '12px',
-                borderRadius: '6px',
+                background: theme.colors.surfaceAlt,
+                padding: theme.spacing.md,
+                borderRadius: theme.radii.md,
                 maxHeight: '240px',
                 overflow: 'auto',
                 whiteSpace: 'pre-wrap',
+                border: `1px solid ${theme.colors.border}`,
               }}
             >
               {doctorResult.stderr || 'No errors reported.'}
             </pre>
           </div>
         )}
-      </section>
+      </Card>
 
-      <div style={{ marginTop: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button onClick={() => void copySummary()}>Copy diagnostics summary</button>
-        {copyMessage && <span>{copyMessage}</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+        <Button variant="secondary" onClick={() => void copySummary()}>
+          Copy diagnostics summary
+        </Button>
+        {copyMessage && <span style={{ color: theme.colors.textMuted }}>{copyMessage}</span>}
       </div>
     </div>
   );
