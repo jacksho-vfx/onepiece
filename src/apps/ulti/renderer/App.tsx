@@ -5,6 +5,7 @@ import HomeScreen from './components/HomeScreen';
 import LogsPanel from './components/LogsPanel';
 import SettingsScreen from './components/SettingsScreen';
 import VersionFooter from './components/VersionFooter';
+import AppShell from './components/layout/AppShell';
 import { ThemeProvider } from './styles/ThemeContext';
 
 type DesktopConfig = {
@@ -68,29 +69,23 @@ function App(): JSX.Element {
       {loading || !config ? (
         <div className="op-loading">Loading...</div>
       ) : !config.hasCompletedWizard ? (
-        <FirstRunWizard onComplete={() => void handleWizardComplete()} />
+        <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
+          <FirstRunWizard onComplete={() => void handleWizardComplete()} />
+        </AppShell>
       ) : (
-        <div className="op-app">
-          <nav className="op-nav">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={tab.id === selectedTab ? 'op-nav__item is-active' : 'op-nav__item'}
-                onClick={() => setSelectedTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-          <main className="op-content">
-            {selectedTab === 'home' && <HomeScreen config={config} />}
-            {selectedTab === 'logs' && <LogsPanel />}
-            {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-            {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
-          </main>
+        <AppShell
+          navItems={tabs.map((tab) => ({
+            ...tab,
+            onSelect: () => setSelectedTab(tab.id),
+          }))}
+          activeNavId={selectedTab}
+        >
+          {selectedTab === 'home' && <HomeScreen config={config} />}
+          {selectedTab === 'logs' && <LogsPanel />}
+          {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
+          {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
           <VersionFooter />
-        </div>
+        </AppShell>
       )}
     </ThemeProvider>
   );
