@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Modal, SectionHeader, StatusBadge, TextInput, useToast } from './ui';
+import ProjectOverview from './ProjectOverview';
+import { Button, Card, Modal, SectionHeader, StatusBadge, Tabs, TextInput, useToast } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
@@ -198,6 +199,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
   });
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
+  const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
 
   const fetchConfig = async (): Promise<void> => {
     try {
@@ -856,6 +858,53 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
     );
   };
 
+  const renderQuickActionsCard = (): JSX.Element => (
+    <Card>
+      <SectionHeader title="Quick Actions" subtitle="Wrap important OnePiece CLI workflows in simple prompts." />
+      {!currentProject ? <p className="op-muted">Select a project to enable these actions.</p> : null}
+      <div
+        style={{
+          display: 'grid',
+          gap: theme.spacing.md,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        }}
+      >
+        {QUICK_ACTIONS.map((action) => (
+          <Card key={action.key} title={action.label}>
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>{action.description}</p>
+            <Button fullWidth onClick={() => handleOpenQuickAction(action.key)} disabled={quickActionsDisabled}>
+              Launch
+            </Button>
+          </Card>
+        ))}
+      </div>
+    </Card>
+  );
+
+  const renderServicesCard = (): JSX.Element => (
+    <Card>
+      <SectionHeader
+        title="Services"
+        subtitle="Start or stop the local stack components. Status is refreshed every 5 seconds."
+        action={
+          <Button variant="secondary" onClick={() => void fetchServices()}>
+            Refresh status
+          </Button>
+        }
+      />
+      {serviceError ? <p className="op-error">{serviceError}</p> : null}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: theme.spacing.md,
+        }}
+      >
+        {SERVICE_DEFINITIONS.map((definition) => renderServiceStatus(definition))}
+      </div>
+    </Card>
+  );
+
   return (
     <div className="op-layout" style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
       {error ? (
@@ -972,49 +1021,21 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
         </Card>
       </div>
 
-      <Card>
-        <SectionHeader title="Quick Actions" subtitle="Wrap important OnePiece CLI workflows in simple prompts." />
-        {!currentProject ? <p className="op-muted">Select a project to enable these actions.</p> : null}
-        <div
-          style={{
-            display: 'grid',
-            gap: theme.spacing.md,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          }}
-        >
-          {QUICK_ACTIONS.map((action) => (
-            <Card key={action.key} title={action.label}>
-              <p style={{ margin: 0, color: theme.colors.textMuted }}>{action.description}</p>
-              <Button fullWidth onClick={() => handleOpenQuickAction(action.key)} disabled={quickActionsDisabled}>
-                Launch
-              </Button>
-            </Card>
-          ))}
+        <div style={{ display: 'grid', gap: theme.spacing.md }}>
+          <Tabs
+            tabs={[
+              { id: 'overview', label: 'Overview' },
+              { id: 'services', label: 'Services' },
+              { id: 'quickActions', label: 'Quick Actions' },
+            ]}
+            activeTabId={activeTab}
+            onTabChange={(id) => setActiveTab(id as typeof activeTab)}
+          />
+          {activeTab === 'overview' ? <ProjectOverview project={currentProject} onViewLogs={onViewLogs} /> : null}
+          {activeTab === 'services' ? renderServicesCard() : null}
+          {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
         </div>
-      </Card>
-
-      <Card>
-        <SectionHeader
-          title="Services"
-          subtitle="Start or stop the local stack components. Status is refreshed every 5 seconds."
-          action={
-            <Button variant="secondary" onClick={() => void fetchServices()}>
-              Refresh status
-            </Button>
-          }
-        />
-        {serviceError ? <p className="op-error">{serviceError}</p> : null}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: theme.spacing.md,
-          }}
-        >
-          {SERVICE_DEFINITIONS.map((definition) => renderServiceStatus(definition))}
-        </div>
-      </Card>
-      {renderQuickActionModal()}
+        {renderQuickActionModal()}
     </div>
   );
 }

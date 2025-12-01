@@ -80,6 +80,10 @@ function App(): JSX.Element {
     setConfig((prev) => (prev ? { ...prev, hasCompletedWizard: false } : prev));
   }, []);
 
+  const handleViewLogs = useCallback(() => {
+    setSelectedTab('logs');
+  }, []);
+
   const handleProjectChange = useCallback(
     async (project: ProjectSelection | null) => {
       if (!config) {
@@ -135,7 +139,13 @@ function App(): JSX.Element {
             activeNavId={selectedTab}
             projectSwitcher={<ProjectSwitcher config={config} onProjectChange={handleProjectChange} />}
           >
-            {selectedTab === 'home' && <HomeScreen config={config} currentProject={currentProject ?? undefined} />}
+            {selectedTab === 'home' && (
+              <HomeScreen
+                config={config}
+                currentProject={currentProject ?? undefined}
+                onViewLogs={handleViewLogs}
+              />
+            )}
             {selectedTab === 'logs' && <LogsPanel />}
             {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
             {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
