@@ -3,4 +3,7 @@ export { default as TextInput } from './TextInput';
 export { default as Card } from './Card';
 export { default as Tabs } from './Tabs';
 export { default as StatusBadge } from './StatusBadge';
+export { default as Modal } from './Modal';
+export { default as SectionHeader } from './SectionHeader';
+export { ToasterProvider, useToast } from './Toaster';
 export * from './types';

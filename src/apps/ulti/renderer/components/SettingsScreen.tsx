@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button, SectionHeader } from './ui';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 type DccKey = 'maya' | 'blender' | 'unreal';
@@ -347,9 +348,9 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
           <h1>Settings</h1>
           <p>Update your configuration, integrations, and DCC preferences.</p>
         </div>
-        <button type="button" className="op-secondary" onClick={() => void handleSave()} disabled={saving}>
+        <Button variant="secondary" onClick={() => void handleSave()} isLoading={saving} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
       </header>
 
       {error ? (
@@ -375,7 +376,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
 
       <div className="op-grid">
         <section className="op-card">
-          <h2>Profile</h2>
+          <SectionHeader title="Profile" subtitle="Choose the desktop persona that best fits your usage." />
           <label className="op-field">
             <span>Usage profile</span>
             <select
@@ -392,7 +393,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
         </section>
 
         <section className="op-card">
-          <h2>Paths</h2>
+          <SectionHeader title="Paths" subtitle="Tell OnePiece where your project and Python live." />
           <div className="op-field-group">
             <label className="op-field required">
               <span>Project root</span>
@@ -419,7 +420,10 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
 
       <div className="op-grid">
         <section className="op-card">
-          <h2>Integrations</h2>
+          <SectionHeader
+            title="Integrations"
+            subtitle="Provide credentials for ShotGrid and AWS so workflows can connect."
+          />
           <div className="op-subsection">
             <h3>ShotGrid</h3>
             <div className="op-field-group">
@@ -532,7 +536,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
         </section>
 
         <section className="op-card">
-          <h2>DCCs</h2>
+          <SectionHeader title="DCCs" subtitle="Enable and point to your preferred digital content creation tools." />
           {renderDccRow('maya', 'Maya')}
           {renderDccRow('blender', 'Blender')}
           {renderDccRow('unreal', 'Unreal Engine')}
@@ -540,18 +544,20 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       </div>
 
       <section className="op-card">
-        <h2>Updates</h2>
-        <p>Check for a newer version of OnePiece Studio Desktop.</p>
-        <div className="op-actions">
-          <button
-            type="button"
-            className="op-secondary"
-            onClick={() => void handleCheckForUpdates()}
-            disabled={checkingUpdate}
-          >
-            {checkingUpdate ? 'Checking…' : 'Check for updates'}
-          </button>
-        </div>
+        <SectionHeader
+          title="Updates"
+          subtitle="Check for a newer version of OnePiece Studio Desktop."
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => void handleCheckForUpdates()}
+              isLoading={checkingUpdate}
+              disabled={checkingUpdate}
+            >
+              {checkingUpdate ? 'Checking…' : 'Check for updates'}
+            </Button>
+          }
+        />
         {updateStatus ? (
           <div className="op-banner" style={{ marginTop: '1rem' }}>
             {updateStatus.error ? (
@@ -581,12 +587,12 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       </section>
 
       <div className="op-actions">
-        <button type="button" className="op-primary" onClick={() => void handleSave()} disabled={saving}>
+        <Button onClick={() => void handleSave()} isLoading={saving} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
-        </button>
-        <button type="button" className="op-secondary" onClick={() => void confirmRerunWizard()}>
+        </Button>
+        <Button variant="secondary" onClick={() => void confirmRerunWizard()}>
           Re-run setup wizard
-        </button>
+        </Button>
       </div>
     </div>
   );
