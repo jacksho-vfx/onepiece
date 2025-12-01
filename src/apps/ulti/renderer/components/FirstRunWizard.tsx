@@ -1,4 +1,10 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import Card from './ui/Card';
+import SectionHeader from './ui/SectionHeader';
+import Button from './ui/Button';
+import TextInput from './ui/TextInput';
+import { designTokens, roleColors } from '../styles/designTokens';
+import { useTheme } from '../styles/ThemeContext';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 
@@ -201,16 +207,78 @@ const steps = [
   'Summary',
 ];
 
-function Stepper({ currentStep }: { currentStep: number }): JSX.Element {
+function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
+  const theme = useTheme();
+
   return (
-    <ol className="op-stepper">
+    <ol
+      aria-label="Wizard steps"
+      style={{
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+        gap: theme.spacing.sm,
+      }}
+    >
       {steps.map((label, index) => {
         const isActive = index === currentStep;
         const isComplete = index < currentStep;
+        const indicatorColor = isActive
+          ? theme.colors.primary
+          : isComplete
+            ? theme.colors.text
+            : theme.colors.textMuted;
+
         return (
-          <li key={label} className={`op-step ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`}>
-            <span className="op-step-index">{index + 1}</span>
-            <span className="op-step-label">{label}</span>
+          <li
+            key={label}
+            style={{
+              display: 'grid',
+              gap: '0.35rem',
+              alignItems: 'center',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.spacing.xs,
+                color: indicatorColor,
+                fontWeight: isActive ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
+                fontSize: theme.typography.fontSizeSm,
+                letterSpacing: '0.02em',
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '999px',
+                  background: indicatorColor,
+                  boxShadow: isActive ? theme.shadow.card : undefined,
+                }}
+              />
+              <span style={{ opacity: isActive || isComplete ? 1 : 0.8 }}>{label}</span>
+            </div>
+            <div
+              aria-hidden
+              style={{
+                height: '4px',
+                width: '100%',
+                borderRadius: theme.radii.xs,
+                background: isActive
+                  ? theme.colors.primary
+                  : isComplete
+                    ? theme.colors.borderStrong
+                    : theme.colors.border,
+                opacity: isActive ? 1 : 0.8,
+              }}
+            />
           </li>
         );
       })}
@@ -219,22 +287,27 @@ function Stepper({ currentStep }: { currentStep: number }): JSX.Element {
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
+  const theme = useTheme();
+
   return (
-    <div className="op-card">
-      <h2>Welcome to OnePiece Studio Desktop</h2>
-      <p>
-        This guided setup will capture your workflow preferences, project storage locations, and optional integrations so we can
-        configure the desktop experience for your studio.
-      </p>
-      <button type="button" onClick={onNext} className="op-primary">
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+        <h2 style={{ margin: 0, letterSpacing: '0.01em' }}>Welcome to OnePiece Studio Desktop</h2>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          This guided setup will capture your workflow preferences, project storage locations, and optional integrations so we can
+          configure the desktop experience for your studio.
+        </p>
+      </div>
+      <Button variant="primary" onClick={onNext} style={{ justifySelf: 'flex-start' }}>
         Get started
-      </button>
+      </Button>
     </div>
   );
 }
 
 function UsageProfileStep({ error }: { error?: string }): JSX.Element {
   const { formData, updateForm } = useWizardForm();
+  const theme = useTheme();
   const options: { label: string; value: ProfileOption }[] = [
     { label: 'Small VFX studio', value: 'vfx' },
     { label: 'Arch-viz studio', value: 'archviz' },
@@ -243,144 +316,161 @@ function UsageProfileStep({ error }: { error?: string }): JSX.Element {
   ];
 
   return (
-    <div className="op-card">
-      <h3>Tell us about your usage</h3>
-      <p>Choose the description that best fits your typical workload.</p>
-      <div className="op-radio-group">
-        {options.map((option) => (
-          <label key={option.value} className="op-radio">
-            <input
-              type="radio"
-              name="profile"
-              value={option.value}
-              checked={formData.profile === option.value}
-              onChange={() => updateForm('profile', option.value)}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+        <h3 style={{ margin: 0 }}>Tell us about your usage</h3>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          Choose the description that best fits your typical workload.
+        </p>
       </div>
-      {error ? <p className="op-error">{error}</p> : null}
+      <div
+        style={{
+          display: 'grid',
+          gap: theme.spacing.sm,
+        }}
+      >
+        {options.map((option) => {
+          const isSelected = formData.profile === option.value;
+          return (
+            <label
+              key={option.value}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: theme.spacing.sm,
+                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                borderRadius: theme.radii.md,
+                border: `1px solid ${isSelected ? theme.colors.borderStrong : theme.colors.border}`,
+                background: isSelected ? theme.colors.primarySoft : theme.colors.surfaceAlt,
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="radio"
+                name="profile"
+                value={option.value}
+                checked={isSelected}
+                onChange={() => updateForm('profile', option.value)}
+                style={{ accentColor: theme.colors.primary }}
+              />
+              <span style={{ fontWeight: isSelected ? theme.typography.fontWeightBold : undefined }}>{option.label}</span>
+            </label>
+          );
+        })}
+      </div>
+      {error ? (
+        <p style={{ margin: 0, color: theme.colors.danger, fontWeight: theme.typography.fontWeightMedium }}>{error}</p>
+      ) : null}
     </div>
   );
 }
 
 function ProjectStorageStep({ error }: { error?: string }): JSX.Element {
   const { formData, updateForm } = useWizardForm();
+  const theme = useTheme();
 
   return (
-    <div className="op-card">
-      <h3>Project root and cache</h3>
-      <p>Point OnePiece Studio Desktop at your primary project root and where you want cached assets to live.</p>
-      <label className="op-field">
-        <span>Project root *</span>
-        <input
-          type="text"
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+        <h3 style={{ margin: 0 }}>Project root and cache</h3>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          Point OnePiece Studio Desktop at your primary project root and where you want cached assets to live.
+        </p>
+      </div>
+      <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+        <TextInput
+          label="Project root *"
           placeholder="/path/to/projects"
           value={formData.projectRoot}
           onChange={(event) => updateForm('projectRoot', event.target.value)}
+          errorText={error}
         />
-      </label>
-      <label className="op-field">
-        <span>Cache location</span>
-        <input
-          type="text"
+        <TextInput
+          label="Cache location"
           placeholder="/path/to/cache"
           value={formData.cacheLocation}
           onChange={(event) => updateForm('cacheLocation', event.target.value)}
         />
-      </label>
-      <label className="op-field">
-        <span>Python path</span>
-        <input
-          type="text"
+        <TextInput
+          label="Python path"
           placeholder="/usr/bin/python3"
           value={formData.pythonPath}
           onChange={(event) => updateForm('pythonPath', event.target.value)}
         />
-      </label>
-      {error ? <p className="op-error">{error}</p> : null}
+      </div>
     </div>
   );
 }
 
 function IntegrationsStep(): JSX.Element {
   const { formData, updateNested } = useWizardForm();
+  const theme = useTheme();
 
   return (
-    <div className="op-card">
-      <h3>Integrations (optional)</h3>
-      <p>Provide ShotGrid and AWS credentials now or skip for later configuration.</p>
-      <div className="op-grid">
-        <div>
-          <h4>ShotGrid</h4>
-          <label className="op-field">
-            <span>Site URL</span>
-            <input
-              type="text"
-              placeholder="https://your-site.shotgrid.autodesk.com"
-              value={formData.shotgrid.url || ''}
-              onChange={(event) => updateNested('shotgrid', 'url', event.target.value)}
-            />
-          </label>
-          <label className="op-field">
-            <span>Script name</span>
-            <input
-              type="text"
-              placeholder="api-script"
-              value={formData.shotgrid.scriptName || ''}
-              onChange={(event) => updateNested('shotgrid', 'scriptName', event.target.value)}
-            />
-          </label>
-          <label className="op-field">
-            <span>API key</span>
-            <input
-              type="password"
-              placeholder="********"
-              value={formData.shotgrid.apiKey || ''}
-              onChange={(event) => updateNested('shotgrid', 'apiKey', event.target.value)}
-            />
-          </label>
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+        <h3 style={{ margin: 0 }}>Integrations (optional)</h3>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          Provide ShotGrid and AWS credentials now or skip for later configuration.
+        </p>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: theme.spacing.md,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        }}
+      >
+        <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+          <h4 style={{ margin: 0 }}>ShotGrid</h4>
+          <TextInput
+            label="Site URL"
+            placeholder="https://your-site.shotgrid.autodesk.com"
+            value={formData.shotgrid.url || ''}
+            onChange={(event) => updateNested('shotgrid', 'url', event.target.value)}
+          />
+          <TextInput
+            label="Script name"
+            placeholder="api-script"
+            value={formData.shotgrid.scriptName || ''}
+            onChange={(event) => updateNested('shotgrid', 'scriptName', event.target.value)}
+          />
+          <TextInput
+            label="API key"
+            placeholder="********"
+            type="password"
+            value={formData.shotgrid.apiKey || ''}
+            onChange={(event) => updateNested('shotgrid', 'apiKey', event.target.value)}
+          />
         </div>
-        <div>
-          <h4>AWS (optional)</h4>
-          <label className="op-field">
-            <span>Access key ID</span>
-            <input
-              type="text"
-              placeholder="AKIA..."
-              value={formData.aws.accessKeyId || ''}
-              onChange={(event) => updateNested('aws', 'accessKeyId', event.target.value)}
-            />
-          </label>
-          <label className="op-field">
-            <span>Secret access key</span>
-            <input
-              type="password"
-              placeholder="********"
-              value={formData.aws.secretAccessKey || ''}
-              onChange={(event) => updateNested('aws', 'secretAccessKey', event.target.value)}
-            />
-          </label>
-          <label className="op-field">
-            <span>Region</span>
-            <input
-              type="text"
-              placeholder="us-west-2"
-              value={formData.aws.region || ''}
-              onChange={(event) => updateNested('aws', 'region', event.target.value)}
-            />
-          </label>
-          <label className="op-field">
-            <span>Default bucket</span>
-            <input
-              type="text"
-              placeholder="studio-bucket"
-              value={formData.aws.defaultBucket || ''}
-              onChange={(event) => updateNested('aws', 'defaultBucket', event.target.value)}
-            />
-          </label>
-          <p className="op-note">Skip for now if you prefer to wire these later.</p>
+        <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+          <h4 style={{ margin: 0 }}>AWS (optional)</h4>
+          <TextInput
+            label="Access key ID"
+            placeholder="AKIA..."
+            value={formData.aws.accessKeyId || ''}
+            onChange={(event) => updateNested('aws', 'accessKeyId', event.target.value)}
+          />
+          <TextInput
+            label="Secret access key"
+            placeholder="********"
+            type="password"
+            value={formData.aws.secretAccessKey || ''}
+            onChange={(event) => updateNested('aws', 'secretAccessKey', event.target.value)}
+          />
+          <TextInput
+            label="Region"
+            placeholder="us-west-2"
+            value={formData.aws.region || ''}
+            onChange={(event) => updateNested('aws', 'region', event.target.value)}
+          />
+          <TextInput
+            label="Default bucket"
+            placeholder="studio-bucket"
+            value={formData.aws.defaultBucket || ''}
+            onChange={(event) => updateNested('aws', 'defaultBucket', event.target.value)}
+            helpText="Skip for now if you prefer to wire these later."
+          />
         </div>
       </div>
     </div>
@@ -389,6 +479,7 @@ function IntegrationsStep(): JSX.Element {
 
 function DccSelectionStep(): JSX.Element {
   const { formData, updateDcc } = useWizardForm();
+  const theme = useTheme();
   const dccOptions: { key: DccAppKey; label: string; placeholder: string }[] = [
     { key: 'maya', label: 'Maya', placeholder: '/usr/autodesk/maya2024/bin/maya' },
     { key: 'blender', label: 'Blender', placeholder: '/Applications/Blender.app/Contents/MacOS/Blender' },
@@ -396,30 +487,49 @@ function DccSelectionStep(): JSX.Element {
   ];
 
   return (
-    <div className="op-card">
-      <h3>Select your DCCs</h3>
-      <p>Choose which DCCs to surface in the desktop app and include paths when custom installs are required.</p>
-      <div className="op-grid">
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+        <h3 style={{ margin: 0 }}>Select your DCCs</h3>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          Choose which DCCs to surface in the desktop app and include paths when custom installs are required.
+        </p>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: theme.spacing.md,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        }}
+      >
         {dccOptions.map((option) => (
-          <div key={option.key} className="op-dcc">
-            <label className="op-checkbox">
+          <div
+            key={option.key}
+            style={{
+              display: 'grid',
+              gap: theme.spacing.sm,
+              padding: theme.spacing.sm,
+              borderRadius: theme.radii.md,
+              border: `1px solid ${theme.colors.border}`,
+              background: theme.colors.surfaceAlt,
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
               <input
                 type="checkbox"
                 checked={formData.dcc[option.key].enabled}
                 onChange={(event) => updateDcc(option.key, { enabled: event.target.checked })}
+                style={{ accentColor: theme.colors.primary }}
               />
-              <span>{option.label}</span>
+              <span style={{ fontWeight: theme.typography.fontWeightMedium }}>{option.label}</span>
             </label>
-            <label className="op-field">
-              <span>Executable path</span>
-              <input
-                type="text"
-                placeholder={option.placeholder}
-                value={formData.dcc[option.key].executablePath || ''}
-                onChange={(event) => updateDcc(option.key, { executablePath: event.target.value })}
-                disabled={!formData.dcc[option.key].enabled}
-              />
-            </label>
+            <TextInput
+              label="Executable path"
+              placeholder={option.placeholder}
+              value={formData.dcc[option.key].executablePath || ''}
+              onChange={(event) => updateDcc(option.key, { executablePath: event.target.value })}
+              disabled={!formData.dcc[option.key].enabled}
+              helpText="Provide only if a custom install path is needed."
+            />
           </div>
         ))}
       </div>
@@ -427,58 +537,86 @@ function DccSelectionStep(): JSX.Element {
   );
 }
 
-function SummaryStep({ onBack, onFinish, isSubmitting, error }: { onBack: () => void; onFinish: () => void; isSubmitting: boolean; error?: string; }): JSX.Element {
+function SummaryStep({
+  onBack,
+  onFinish,
+  isSubmitting,
+  error,
+}: {
+  onBack: () => void;
+  onFinish: () => void;
+  isSubmitting: boolean;
+  error?: string;
+}): JSX.Element {
   const { formData } = useWizardForm();
+  const theme = useTheme();
+
   return (
-    <div className="op-card">
-      <h3>Review your setup</h3>
-      <p>Confirm these details before we save your configuration.</p>
-      <div className="op-summary">
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+        <h3 style={{ margin: 0 }}>Review your setup</h3>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          Confirm these details before we save your configuration.
+        </p>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: theme.spacing.sm,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          background: theme.colors.surfaceAlt,
+          padding: theme.spacing.sm,
+          borderRadius: theme.radii.md,
+          border: `1px solid ${theme.colors.border}`,
+        }}
+      >
         <div>
-          <h4>Profile</h4>
-          <p>{formData.profile || 'Not selected'}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>Profile</h4>
+          <p style={{ margin: 0 }}>{formData.profile || 'Not selected'}</p>
         </div>
         <div>
-          <h4>Project root</h4>
-          <p>{formData.projectRoot || 'Not provided'}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>Project root</h4>
+          <p style={{ margin: 0 }}>{formData.projectRoot || 'Not provided'}</p>
         </div>
         <div>
-          <h4>Cache location</h4>
-          <p>{formData.cacheLocation || 'Not provided'}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>Cache location</h4>
+          <p style={{ margin: 0 }}>{formData.cacheLocation || 'Not provided'}</p>
         </div>
         <div>
-          <h4>Python path</h4>
-          <p>{formData.pythonPath || 'Not provided'}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>Python path</h4>
+          <p style={{ margin: 0 }}>{formData.pythonPath || 'Not provided'}</p>
         </div>
         <div>
-          <h4>ShotGrid</h4>
-          <p>{formData.shotgrid.url || 'Not provided'}</p>
-          <p>{formData.shotgrid.scriptName || ''}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>ShotGrid</h4>
+          <p style={{ margin: 0 }}>{formData.shotgrid.url || 'Not provided'}</p>
+          <p style={{ margin: 0 }}>{formData.shotgrid.scriptName || ''}</p>
         </div>
         <div>
-          <h4>AWS</h4>
-          <p>{formData.aws.accessKeyId || 'No access key'}</p>
-          <p>{formData.aws.region || ''}</p>
-          <p>{formData.aws.defaultBucket || ''}</p>
+          <h4 style={{ margin: '0 0 0.25rem' }}>AWS</h4>
+          <p style={{ margin: 0 }}>{formData.aws.accessKeyId || 'No access key'}</p>
+          <p style={{ margin: 0 }}>{formData.aws.region || ''}</p>
+          <p style={{ margin: 0 }}>{formData.aws.defaultBucket || ''}</p>
         </div>
         <div>
-          <h4>DCCs</h4>
+          <h4 style={{ margin: '0 0 0.25rem' }}>DCCs</h4>
           {(['maya', 'blender', 'unreal'] as DccAppKey[]).map((key) => (
-            <p key={key}>
+            <p key={key} style={{ margin: 0 }}>
               {key}: {formData.dcc[key].enabled ? 'Enabled' : 'Skipped'}
               {formData.dcc[key].executablePath ? ` (${formData.dcc[key].executablePath})` : ''}
             </p>
           ))}
         </div>
       </div>
-      {error ? <p className="op-error">{error}</p> : null}
-      <div className="op-actions">
-        <button type="button" onClick={onBack} className="op-secondary" disabled={isSubmitting}>
+      {error ? (
+        <p style={{ margin: 0, color: theme.colors.danger, fontWeight: theme.typography.fontWeightMedium }}>{error}</p>
+      ) : null}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
+        <Button variant="secondary" onClick={onBack} disabled={isSubmitting}>
           Back
-        </button>
-        <button type="button" onClick={onFinish} className="op-primary" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving...' : 'Finish setup'}
-        </button>
+        </Button>
+        <Button variant="primary" onClick={onFinish} isLoading={isSubmitting}>
+          Finish setup
+        </Button>
       </div>
     </div>
   );
@@ -489,6 +627,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { formData } = useWizardForm();
+  const theme = useTheme();
 
   const validateStep = (stepIndex: number): boolean => {
     const nextErrors: Record<string, string> = {};
@@ -561,26 +700,52 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
   };
 
   return (
-    <div className="op-wizard">
-      <Stepper currentStep={currentStep} />
-      {currentStep === 0 && <WelcomeStep onNext={goNext} />}
-      {currentStep === 1 && <UsageProfileStep error={errors.profile} />}
-      {currentStep === 2 && <ProjectStorageStep error={errors.projectRoot} />}
-      {currentStep === 3 && <IntegrationsStep />}
-      {currentStep === 4 && <DccSelectionStep />}
-      {currentStep === 5 && (
-        <SummaryStep onBack={goBack} onFinish={handleFinish} isSubmitting={isSubmitting} error={errors.submit} />
-      )}
-      {currentStep > 0 && currentStep < 5 ? (
-        <div className="op-actions">
-          <button type="button" onClick={goBack} className="op-secondary">
-            Back
-          </button>
-          <button type="button" onClick={goNext} className="op-primary">
-            Continue
-          </button>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: roleColors.background,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: designTokens.spacing.xl,
+        boxSizing: 'border-box',
+      }}
+    >
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: '800px',
+          display: 'grid',
+          gap: theme.spacing.lg,
+          padding: designTokens.spacing.xl,
+        }}
+      >
+        <SectionHeader
+          title="First-time setup"
+          subtitle="Follow the guided steps to configure your environment, storage, and integrations."
+        />
+        <StepIndicator currentStep={currentStep} />
+        <div style={{ display: 'grid', gap: theme.spacing.lg }}>
+          {currentStep === 0 && <WelcomeStep onNext={goNext} />}
+          {currentStep === 1 && <UsageProfileStep error={errors.profile} />}
+          {currentStep === 2 && <ProjectStorageStep error={errors.projectRoot} />}
+          {currentStep === 3 && <IntegrationsStep />}
+          {currentStep === 4 && <DccSelectionStep />}
+          {currentStep === 5 && (
+            <SummaryStep onBack={goBack} onFinish={handleFinish} isSubmitting={isSubmitting} error={errors.submit} />
+          )}
+          {currentStep > 0 && currentStep < 5 ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
+              <Button variant="secondary" onClick={goBack}>
+                Back
+              </Button>
+              <Button variant="primary" onClick={goNext}>
+                Continue
+              </Button>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </Card>
     </div>
   );
 }
