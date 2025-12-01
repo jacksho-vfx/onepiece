@@ -14,6 +14,7 @@ export type AppShellProps = {
   showNav?: boolean;
   headerTitle?: string;
   headerSubtitle?: string;
+  projectSwitcher?: React.ReactNode;
 };
 
 const backgroundLayer = `radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 38%),
@@ -29,6 +30,7 @@ function AppShell({
   showNav = true,
   headerTitle = 'OnePiece Studio Desktop',
   headerSubtitle,
+  projectSwitcher,
 }: AppShellProps): JSX.Element {
   return (
     <div
@@ -55,8 +57,16 @@ function AppShell({
           zIndex: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-          <div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
             <p
               style={{
                 margin: 0,
@@ -74,22 +84,25 @@ function AppShell({
               <p style={{ margin: '0.35rem 0 0', color: designTokens.colors.textMuted }}>{headerSubtitle}</p>
             ) : null}
           </div>
-          <div
-            aria-hidden
-            style={{
-              height: '48px',
-              minWidth: '48px',
-              borderRadius: designTokens.radii.lg,
-              background: `linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.2))`,
-              boxShadow: designTokens.shadow.card,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: designTokens.colors.text,
-              fontWeight: designTokens.typography.fontWeightBold,
-            }}
-          >
-            OP
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {projectSwitcher}
+            <div
+              aria-hidden
+              style={{
+                height: '48px',
+                minWidth: '48px',
+                borderRadius: designTokens.radii.lg,
+                background: `linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.2))`,
+                boxShadow: designTokens.shadow.card,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: designTokens.colors.text,
+                fontWeight: designTokens.typography.fontWeightBold,
+              }}
+            >
+              OP
+            </div>
           </div>
         </div>
 

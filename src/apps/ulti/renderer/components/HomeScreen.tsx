@@ -9,6 +9,8 @@ interface DesktopConfig {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  currentProject?: string;
+  recentProjects?: { name: string; path: string; lastOpenedAt: string }[];
   quickActionPresets?: {
     [projectName: string]: {
       vendorIngest?: { sourcePath?: string };
@@ -27,6 +29,7 @@ interface DesktopConfig {
 type HomeScreenProps = {
   config?: DesktopConfig;
   onViewLogs?: () => void;
+  currentProject?: { name: string; path: string };
 };
 
 interface ServiceSummary {
@@ -165,7 +168,7 @@ function formatDoctorOutput(
   return { isOk, summary: summary || 'All checks passed' };
 }
 
-function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX.Element {
+function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeScreenProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
@@ -235,6 +238,20 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
     }
   }, [initialConfig]);
 
+  useEffect(() => {
+    if (!currentProject) {
+      return;
+    }
+
+    setQuickActionForms((prev) => ({
+      ...prev,
+      vendorIngest: {
+        ...prev.vendorIngest,
+        project: prev.vendorIngest.project || currentProject.name,
+      },
+    }));
+  }, [currentProject]);
+
   const runningServicesByName = useMemo(() => {
     const map = new Map<string, ServiceSummary>();
     services.forEach((service) => {
@@ -301,7 +318,7 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
   };
 
   const getActiveProjectName = (): string | null => {
-    const projectName = quickActionForms.vendorIngest.project.trim();
+    const projectName = quickActionForms.vendorIngest.project.trim() || currentProject?.name || '';
     return projectName || null;
   };
 
@@ -362,6 +379,10 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
   };
 
   const handleOpenQuickAction = (key: QuickActionKey): void => {
+    if (!currentProject) {
+      return;
+    }
+
     setActiveQuickAction(key);
     setActionStatus({ state: 'idle', stdout: '', stderr: '' });
 
@@ -539,6 +560,8 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
       });
     }
   };
+
+  const quickActionsDisabled = !currentProject;
 
   const runHealthCheck = async (): Promise<void> => {
     setHealthCheck({ running: true, exitCode: null, stdout: '', stderr: '' });
@@ -864,6 +887,26 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
         <Button onClick={openUtaDashboard}>Open Uta Dashboard</Button>
       </header>
 
+      <Card>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: theme.spacing.md,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <p className="op-eyebrow">Project</p>
+            <h2 style={{ margin: 0 }}>{currentProject ? currentProject.name : 'No project selected'}</h2>
+            <p style={{ margin: '0.35rem 0 0', color: theme.colors.textMuted }}>
+              {currentProject ? currentProject.path : 'Select a project to enable these actions.'}
+            </p>
+          </div>
+        </div>
+      </Card>
+
       <SectionHeader title="Health & Status" subtitle="See your configuration and run workstation checks." />
       <div
         style={{
@@ -931,6 +974,7 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
 
       <Card>
         <SectionHeader title="Quick Actions" subtitle="Wrap important OnePiece CLI workflows in simple prompts." />
+        {!currentProject ? <p className="op-muted">Select a project to enable these actions.</p> : null}
         <div
           style={{
             display: 'grid',
@@ -941,7 +985,7 @@ function HomeScreen({ config: initialConfig, onViewLogs }: HomeScreenProps): JSX
           {QUICK_ACTIONS.map((action) => (
             <Card key={action.key} title={action.label}>
               <p style={{ margin: 0, color: theme.colors.textMuted }}>{action.description}</p>
-              <Button fullWidth onClick={() => handleOpenQuickAction(action.key)}>
+              <Button fullWidth onClick={() => handleOpenQuickAction(action.key)} disabled={quickActionsDisabled}>
                 Launch
               </Button>
             </Card>
