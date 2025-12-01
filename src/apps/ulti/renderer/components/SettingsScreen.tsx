@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Button, SectionHeader } from './ui';
+import { Button, Card, SectionHeader, TextInput, useToast } from './ui';
+import { useTheme } from '../styles/ThemeContext';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 type DccKey = 'maya' | 'blender' | 'unreal';
@@ -86,12 +87,13 @@ const defaultForm: FormState = {
 };
 
 function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Element {
+  const theme = useTheme();
+  const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckResult | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
@@ -170,7 +172,6 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
 
   const handleSave = async (): Promise<void> => {
     setError(null);
-    setSuccess(null);
 
     if (!form.projectRoot.trim()) {
       setError('Project root is required.');
@@ -248,7 +249,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
     }
 
     if (Object.keys(updates).length === 0) {
-      setSuccess('No changes to save.');
+      showToast({ kind: 'info', message: 'No changes to save.' });
       return;
     }
 
@@ -256,7 +257,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
     try {
       const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', updates);
       setConfig(updatedConfig);
-      setSuccess('Settings saved successfully.');
+      showToast({ kind: 'success', message: 'Settings saved' });
     } catch (err) {
       console.error('Failed to save settings', err);
       setError(err instanceof Error ? err.message : 'Failed to save settings.');
@@ -299,8 +300,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   };
 
   const renderDccRow = (key: DccKey, label: string): JSX.Element => (
-    <div className="op-field-group" key={key}>
-      <label className="op-checkbox">
+    <div key={key} style={{ display: 'grid', gap: theme.spacing.sm }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
         <input
           type="checkbox"
           checked={form.dccs[key].enabled}
@@ -316,23 +317,20 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
         />
         <span>{label} enabled</span>
       </label>
-      <label className="op-field">
-        <span>Executable path</span>
-        <input
-          type="text"
-          value={form.dccs[key].executablePath}
-          onChange={(event) =>
-            setForm((prev) => ({
-              ...prev,
-              dccs: {
-                ...prev.dccs,
-                [key]: { ...prev.dccs[key], executablePath: event.target.value },
-              },
-            }))
-          }
-          placeholder={`Path to ${label} executable`}
-        />
-      </label>
+      <TextInput
+        label="Executable path"
+        placeholder={`Path to ${label} executable`}
+        value={form.dccs[key].executablePath}
+        onChange={(event) =>
+          setForm((prev) => ({
+            ...prev,
+            dccs: {
+              ...prev.dccs,
+              [key]: { ...prev.dccs[key], executablePath: event.target.value },
+            },
+          }))
+        }
+      />
     </div>
   );
 
@@ -341,17 +339,11 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   }
 
   return (
-    <div className="op-layout">
-      <header className="op-header">
-        <div>
-          <p className="op-eyebrow">OnePiece Studio Desktop</p>
-          <h1>Settings</h1>
-          <p>Update your configuration, integrations, and DCC preferences.</p>
-        </div>
-        <Button variant="secondary" onClick={() => void handleSave()} isLoading={saving} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </header>
+    <div className="op-layout" style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
+      <SectionHeader
+        title="Settings"
+        subtitle="Update your configuration, integrations, and DCC preferences."
+      />
 
       {error ? (
         <div className="op-banner op-banner-error">
@@ -359,29 +351,32 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
             <strong>Something went wrong</strong>
             <p className="op-banner-message">{error}</p>
           </div>
-          <button type="button" className="op-tertiary" onClick={() => setError(null)}>
+          <Button variant="ghost" onClick={() => setError(null)}>
             Dismiss
-          </button>
+          </Button>
         </div>
       ) : null}
 
-      {success ? (
-        <div className="op-banner op-banner-success">
-          <p className="op-banner-message">{success}</p>
-          <button type="button" className="op-tertiary" onClick={() => setSuccess(null)}>
-            Dismiss
-          </button>
-        </div>
-      ) : null}
-
-      <div className="op-grid">
-        <section className="op-card">
-          <SectionHeader title="Profile" subtitle="Choose the desktop persona that best fits your usage." />
-          <label className="op-field">
-            <span>Usage profile</span>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: theme.spacing.lg,
+        }}
+      >
+        <Card title="Profile">
+          <label style={{ display: 'grid', gap: '0.35rem', color: theme.colors.text }}>
+            <span style={{ fontWeight: theme.typography.fontWeightMedium }}>Usage profile</span>
             <select
               value={form.profile}
               onChange={(event) => setForm((prev) => ({ ...prev, profile: event.target.value as ProfileOption }))}
+              style={{
+                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                borderRadius: theme.radii.md,
+                border: `1px solid ${theme.colors.border}`,
+                background: theme.colors.surfaceAlt,
+                color: theme.colors.text,
+              }}
             >
               <option value="">Select a profile</option>
               <option value="vfx">VFX studio</option>
@@ -390,46 +385,41 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
               <option value="demo">Demo / testing</option>
             </select>
           </label>
-        </section>
+        </Card>
 
-        <section className="op-card">
-          <SectionHeader title="Paths" subtitle="Tell OnePiece where your project and Python live." />
-          <div className="op-field-group">
-            <label className="op-field required">
-              <span>Project root</span>
-              <input
-                type="text"
-                value={form.projectRoot}
-                onChange={(event) => setForm((prev) => ({ ...prev, projectRoot: event.target.value }))}
-                placeholder="/path/to/your/project"
-                required
-              />
-            </label>
-            <label className="op-field">
-              <span>Python path (optional)</span>
-              <input
-                type="text"
-                value={form.pythonPath}
-                onChange={(event) => setForm((prev) => ({ ...prev, pythonPath: event.target.value }))}
-                placeholder="Path to python executable"
-              />
-            </label>
+        <Card title="Paths">
+          <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+            <TextInput
+              label="Project root"
+              value={form.projectRoot}
+              onChange={(event) => setForm((prev) => ({ ...prev, projectRoot: event.target.value }))}
+              placeholder="/path/to/your/project"
+              required
+            />
+            <TextInput
+              label="Python path (optional)"
+              value={form.pythonPath}
+              onChange={(event) => setForm((prev) => ({ ...prev, pythonPath: event.target.value }))}
+              placeholder="Path to python executable"
+            />
           </div>
-        </section>
+        </Card>
       </div>
 
-      <div className="op-grid">
-        <section className="op-card">
-          <SectionHeader
-            title="Integrations"
-            subtitle="Provide credentials for ShotGrid and AWS so workflows can connect."
-          />
-          <div className="op-subsection">
-            <h3>ShotGrid</h3>
-            <div className="op-field-group">
-              <label className="op-field">
-                <span>URL</span>
-                <input
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: theme.spacing.lg,
+        }}
+      >
+        <Card title="Integrations">
+          <div style={{ display: 'grid', gap: theme.spacing.lg }}>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <h3 style={{ margin: 0 }}>ShotGrid</h3>
+              <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+                <TextInput
+                  label="URL"
                   type="url"
                   value={form.shotgrid.url}
                   onChange={(event) =>
@@ -440,11 +430,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="https://your-site.shotgrid.autodesk.com"
                 />
-              </label>
-              <label className="op-field">
-                <span>Script name</span>
-                <input
-                  type="text"
+                <TextInput
+                  label="Script name"
                   value={form.shotgrid.scriptName}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -454,10 +441,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="Your script name"
                 />
-              </label>
-              <label className="op-field">
-                <span>API key</span>
-                <input
+                <TextInput
+                  label="API key"
                   type="password"
                   value={form.shotgrid.apiKey}
                   onChange={(event) =>
@@ -468,17 +453,14 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="Script API key"
                 />
-              </label>
+              </div>
             </div>
-          </div>
 
-          <div className="op-subsection">
-            <h3>AWS</h3>
-            <div className="op-field-group">
-              <label className="op-field">
-                <span>Access key ID</span>
-                <input
-                  type="text"
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <h3 style={{ margin: 0 }}>AWS</h3>
+              <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+                <TextInput
+                  label="Access key ID"
                   value={form.aws.accessKeyId}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -488,10 +470,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="AWS access key ID"
                 />
-              </label>
-              <label className="op-field">
-                <span>Secret access key</span>
-                <input
+                <TextInput
+                  label="Secret access key"
                   type="password"
                   value={form.aws.secretAccessKey}
                   onChange={(event) =>
@@ -502,11 +482,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="AWS secret access key"
                 />
-              </label>
-              <label className="op-field">
-                <span>Region</span>
-                <input
-                  type="text"
+                <TextInput
+                  label="Region"
                   value={form.aws.region}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -516,11 +493,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="us-west-2"
                 />
-              </label>
-              <label className="op-field">
-                <span>Default bucket</span>
-                <input
-                  type="text"
+                <TextInput
+                  label="Default bucket"
                   value={form.aws.defaultBucket}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -530,20 +504,24 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="my-bucket"
                 />
-              </label>
+              </div>
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="op-card">
-          <SectionHeader title="DCCs" subtitle="Enable and point to your preferred digital content creation tools." />
-          {renderDccRow('maya', 'Maya')}
-          {renderDccRow('blender', 'Blender')}
-          {renderDccRow('unreal', 'Unreal Engine')}
-        </section>
+        <Card title="DCCs">
+          <p style={{ margin: 0, color: theme.colors.textMuted }}>
+            Enable and point to your preferred digital content creation tools.
+          </p>
+          <div style={{ display: 'grid', gap: theme.spacing.md }}>
+            {renderDccRow('maya', 'Maya')}
+            {renderDccRow('blender', 'Blender')}
+            {renderDccRow('unreal', 'Unreal Engine')}
+          </div>
+        </Card>
       </div>
 
-      <section className="op-card">
+      <Card>
         <SectionHeader
           title="Updates"
           subtitle="Check for a newer version of OnePiece Studio Desktop."
@@ -563,17 +541,16 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
             {updateStatus.error ? (
               <p className="op-banner-message">Could not check for updates.</p>
             ) : updateStatus.hasUpdate ? (
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
                 <strong>New version available: v{updateStatus.latestVersion}</strong>
                 {updateStatus.url ? (
                   <div>
-                    <button
-                      type="button"
-                      className="op-tertiary"
+                    <Button
+                      variant="secondary"
                       onClick={() => void window.electron.invoke('open-url', { url: updateStatus.url })}
                     >
                       View release
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -584,9 +561,9 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
             )}
           </div>
         ) : null}
-      </section>
+      </Card>
 
-      <div className="op-actions">
+      <div style={{ display: 'flex', gap: theme.spacing.sm, justifyContent: 'flex-start' }}>
         <Button onClick={() => void handleSave()} isLoading={saving} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
         </Button>
