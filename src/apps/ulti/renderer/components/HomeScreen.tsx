@@ -3,6 +3,7 @@ import ProjectOverview from './ProjectOverview';
 import { Button, Card, Modal, SectionHeader, StatusBadge, Tabs, TextInput, useToast } from './ui';
 import VendorIngestWizard from './workflows/VendorIngestWizard';
 import DccPublishWizard from './workflows/DccPublishWizard';
+import DeliveryWizard from './workflows/DeliveryWizard';
 import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
@@ -202,6 +203,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
   const [showVendorIngestWizard, setShowVendorIngestWizard] = useState(false);
   const [showDccPublishWizard, setShowDccPublishWizard] = useState(false);
+  const [showDeliveryWizard, setShowDeliveryWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
 
@@ -396,6 +398,11 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
 
     if (key === 'dccPublish') {
       setShowDccPublishWizard(true);
+      return;
+    }
+
+    if (key === 'packageDelivery') {
+      setShowDeliveryWizard(true);
       return;
     }
 
@@ -1033,6 +1040,9 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
             enabledDccs={availableDccs}
             onClose={() => setShowDccPublishWizard(false)}
           />
+        ) : null}
+        {showDeliveryWizard ? (
+          <DeliveryWizard project={currentProject ?? undefined} onClose={() => setShowDeliveryWizard(false)} />
         ) : null}
     </div>
   );
