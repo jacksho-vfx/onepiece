@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ProjectOverview from './ProjectOverview';
 import { Button, Card, Modal, SectionHeader, StatusBadge, Tabs, TextInput, useToast } from './ui';
 import VendorIngestWizard from './workflows/VendorIngestWizard';
+import DccPublishWizard from './workflows/DccPublishWizard';
 import { useTheme } from '../styles/ThemeContext';
 
 interface DesktopConfig {
@@ -200,6 +201,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
   });
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
   const [showVendorIngestWizard, setShowVendorIngestWizard] = useState(false);
+  const [showDccPublishWizard, setShowDccPublishWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
 
@@ -392,15 +394,13 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
       return;
     }
 
+    if (key === 'dccPublish') {
+      setShowDccPublishWizard(true);
+      return;
+    }
+
     setActiveQuickAction(key);
     setActionStatus({ state: 'idle', stdout: '', stderr: '' });
-
-    if (key === 'dccPublish' && !quickActionForms.dccPublish.dccType && availableDccs[0]) {
-      setQuickActionForms((prev) => ({
-        ...prev,
-        dccPublish: { ...prev.dccPublish, dccType: availableDccs[0] },
-      }));
-    }
 
     const projectName = getActiveProjectName();
     if (projectName) {
@@ -1026,6 +1026,13 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
         {renderQuickActionModal()}
         {showVendorIngestWizard ? (
           <VendorIngestWizard project={currentProject ?? undefined} onClose={() => setShowVendorIngestWizard(false)} />
+        ) : null}
+        {showDccPublishWizard ? (
+          <DccPublishWizard
+            project={currentProject ?? undefined}
+            enabledDccs={availableDccs}
+            onClose={() => setShowDccPublishWizard(false)}
+          />
         ) : null}
     </div>
   );
