@@ -9,7 +9,7 @@ import {
   getConfigPath,
   saveConfig,
   type DesktopConfig,
-} from '../../../configManager';
+} from './configManager';
 
 async function copyFileIfExists(source: string, destination: string): Promise<boolean> {
   try {
@@ -171,8 +171,8 @@ export async function createConfigBundle(app: App): Promise<string> {
   const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onepiece-config-bundle-'));
 
   try {
-    await fs.writeFile(path.join(stagingDir, 'desktop-config.json'), JSON.stringify(config, null, 2), 'utf-8');
-    await copyFileIfExists(getConfigPath(app), path.join(stagingDir, 'desktop-config.raw.json'));
+    await fs.writeFile(path.join(stagingDir, 'main-config.json'), JSON.stringify(config, null, 2), 'utf-8');
+    await copyFileIfExists(getConfigPath(app), path.join(stagingDir, 'main-config.raw.json'));
 
     const projectRoot = resolveProjectRoot(config);
     if (projectRoot) {
@@ -198,9 +198,9 @@ export async function importConfigBundle(app: App, bundlePath: string): Promise<
   try {
     await unzipArchive(bundlePath, stagingDir);
 
-    const desktopConfigPath = path.join(stagingDir, 'desktop-config.json');
+    const desktopConfigPath = path.join(stagingDir, 'main-config.json');
     if (!(await pathExists(desktopConfigPath))) {
-      throw new Error('The bundle is missing desktop-config.json');
+      throw new Error('The bundle is missing main-config.json');
     }
 
     const importedConfig = JSON.parse(await fs.readFile(desktopConfigPath, 'utf-8')) as DesktopConfig;

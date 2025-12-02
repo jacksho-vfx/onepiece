@@ -1,4 +1,4 @@
-appId: com.onepiece.studio.desktop
+appId: com.onepiece.studio.main
 productName: "OnePiece Studio Desktop"
 
 # Use the compiled Electron/React output as the app contents.

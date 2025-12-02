@@ -69,7 +69,7 @@ function App(): JSX.Element {
       setCurrentProject(deriveCurrentProject(loadedConfig));
       return loadedConfig;
     } catch (error) {
-      console.error('Failed to load desktop config', error);
+      console.error('Failed to load main config', error);
       return null;
     } finally {
       setLoading(false);
@@ -126,7 +126,7 @@ function App(): JSX.Element {
         setConfig(updatedConfig);
         setCurrentProject(project ?? deriveCurrentProject(updatedConfig));
       } catch (error) {
-        console.error('Failed to update desktop config with project selection', error);
+        console.error('Failed to update main config with project selection', error);
       }
     },
     [config, deriveCurrentProject],
