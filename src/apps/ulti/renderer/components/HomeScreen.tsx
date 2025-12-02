@@ -6,6 +6,7 @@ import DccPublishWizard from './workflows/DccPublishWizard';
 import DeliveryWizard from './workflows/DeliveryWizard';
 import { useTheme } from '../styles/ThemeContext';
 import { useHelpContext } from './HelpContext';
+import { ProjectActivitySummary } from '../utils/nextStep';
 
 interface DesktopConfig {
   hasCompletedWizard: boolean;
@@ -35,6 +36,7 @@ type HomeScreenProps = {
   config?: DesktopConfig;
   onViewLogs?: () => void;
   onViewTasks?: () => void;
+  onViewDiagnostics?: () => void;
   currentProject?: { name: string; path: string };
 };
 
@@ -209,6 +211,10 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
   useHelpContext(activeTab === 'overview' ? 'home.overview' : null);
+  const projectActivitySummary = useMemo<ProjectActivitySummary>(
+    () => ({ ingests: 0, publishes: 0, renders: 0, deliveries: 0 }),
+    [],
+  );
 
   const fetchConfig = async (): Promise<void> => {
     try {
@@ -1059,7 +1065,18 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
             activeTabId={activeTab}
             onTabChange={(id) => setActiveTab(id as typeof activeTab)}
           />
-          {activeTab === 'overview' ? <ProjectOverview project={currentProject} onViewLogs={onViewLogs} /> : null}
+          {activeTab === 'overview' ? (
+            <ProjectOverview
+              project={currentProject}
+              onViewLogs={onViewLogs}
+              activitySummary={projectActivitySummary}
+              onOpenVendorIngest={() => handleOpenQuickAction('vendorIngest')}
+              onOpenDccPublish={() => handleOpenQuickAction('dccPublish')}
+              onOpenRenderSubmit={() => handleOpenQuickAction('submitRender')}
+              onOpenDelivery={() => handleOpenQuickAction('packageDelivery')}
+              onOpenDiagnostics={onViewDiagnostics}
+            />
+          ) : null}
           {activeTab === 'services' ? renderServicesCard() : null}
           {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
         </div>
