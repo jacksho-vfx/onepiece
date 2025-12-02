@@ -12,6 +12,12 @@ interface PythonService {
   process: ChildProcess;
 }
 
+export interface ServiceSummary {
+  id: string;
+  name: string;
+  pid: number;
+}
+
 export interface LogEntry {
   serviceId: string;
   serviceName: string;
@@ -34,6 +40,7 @@ const pythonPath = process.env.ONEPIECE_PYTHON_PATH || 'python';
 const services = new Map<string, PythonService>();
 const logBuffers = new Map<string, LogEntry[]>();
 const LOG_BUFFER_LIMIT = 200;
+const serviceListeners = new Set<(services: ServiceSummary[]) => void>();
 
 let rendererWebContents: WebContents | null = null;
 
@@ -74,6 +81,17 @@ function attachServiceLogging(service: PythonService): void {
     stderrReader.on('line', (line) => appendLog(service, 'stderr', line));
     service.process.stderr.on('close', () => stderrReader.close());
   }
+}
+
+function notifyServicesChanged(): void {
+  const summaries = listServices();
+  serviceListeners.forEach((listener) => {
+    try {
+      listener(summaries);
+    } catch (error) {
+      console.error('Failed to notify service listener', error);
+    }
+  });
 }
 
 export function getRecentLogs(): LogEntry[] {
@@ -152,15 +170,19 @@ export function startService(name: string, args: string[]): Promise<{ id: string
 
     attachServiceLogging(service);
 
+    notifyServicesChanged();
+
     child.on('error', (error) => {
       console.error(`Python service '${name}' encountered an error:`, error);
       services.delete(id);
       logBuffers.delete(id);
+      notifyServicesChanged();
     });
 
     child.on('exit', () => {
       services.delete(id);
       logBuffers.delete(id);
+      notifyServicesChanged();
     });
 
     resolve({ id });
@@ -199,12 +221,21 @@ export function stopService(id: string): Promise<void> {
  *
  * @returns A summary of running services with their ids, names, and PIDs.
  */
-export function listServices(): { id: string; name: string; pid: number }[] {
+export function listServices(): ServiceSummary[] {
   return Array.from(services.values()).map((service) => ({
     id: service.id,
     name: service.name,
     pid: service.process.pid ?? -1,
   }));
+}
+
+export function onServicesChanged(
+  listener: (services: ServiceSummary[]) => void,
+): () => void {
+  serviceListeners.add(listener);
+  return () => {
+    serviceListeners.delete(listener);
+  };
 }
 
 /**
