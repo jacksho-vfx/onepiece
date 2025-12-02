@@ -12,6 +12,7 @@ interface DesktopConfig {
   hasCompletedWizard: boolean;
   createdAt: string;
   updatedAt: string;
+  justOnboarded?: boolean;
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
@@ -38,6 +39,8 @@ type HomeScreenProps = {
   onViewTasks?: () => void;
   onViewDiagnostics?: () => void;
   currentProject?: { name: string; path: string };
+  autoOpenIngestOnMount?: boolean;
+  onAutoOpenIngestHandled?: () => void;
 };
 
 interface ServiceSummary {
@@ -176,7 +179,14 @@ function formatDoctorOutput(
   return { isOk, summary: summary || 'All checks passed' };
 }
 
-function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentProject }: HomeScreenProps): JSX.Element {
+function HomeScreen({
+  config: initialConfig,
+  onViewLogs,
+  onViewTasks,
+  currentProject,
+  autoOpenIngestOnMount,
+  onAutoOpenIngestHandled,
+}: HomeScreenProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
@@ -210,6 +220,9 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
   const [showDeliveryWizard, setShowDeliveryWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
+  const [ingestCompleted, setIngestCompleted] = useState(false);
+  const [showIngestReminder, setShowIngestReminder] = useState(false);
+  const [shouldAutoOpenIngest, setShouldAutoOpenIngest] = useState<boolean>(Boolean(autoOpenIngestOnMount));
   useHelpContext(activeTab === 'overview' ? 'home.overview' : null);
   const projectActivitySummary = useMemo<ProjectActivitySummary>(
     () => ({ ingests: 0, publishes: 0, renders: 0, deliveries: 0 }),
@@ -254,6 +267,23 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
       setConfig(initialConfig);
     }
   }, [initialConfig]);
+
+  useEffect(() => {
+    if (autoOpenIngestOnMount) {
+      setShouldAutoOpenIngest(true);
+    }
+  }, [autoOpenIngestOnMount]);
+
+  useEffect(() => {
+    if (!shouldAutoOpenIngest || !currentProject) {
+      return;
+    }
+
+    setShowVendorIngestWizard(true);
+    setShowIngestReminder(false);
+    setShouldAutoOpenIngest(false);
+    onAutoOpenIngestHandled?.();
+  }, [currentProject, onAutoOpenIngestHandled, shouldAutoOpenIngest]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -402,6 +432,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
 
     if (key === 'vendorIngest') {
       setShowVendorIngestWizard(true);
+      setShowIngestReminder(false);
       return;
     }
 
@@ -427,6 +458,18 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
   const handleCloseQuickAction = (): void => {
     setActiveQuickAction(null);
     setActionStatus({ state: 'idle', stdout: '', stderr: '' });
+  };
+
+  const handleVendorIngestComplete = (): void => {
+    setIngestCompleted(true);
+    setShowIngestReminder(false);
+  };
+
+  const handleVendorIngestClose = (): void => {
+    setShowVendorIngestWizard(false);
+    if (!ingestCompleted) {
+      setShowIngestReminder(true);
+    }
   };
 
   const updateQuickActionForm = <K extends QuickActionKey, F extends keyof QuickActionForms[K]>(
@@ -970,6 +1013,33 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
         <Button onClick={openUtaDashboard}>Open Uta Dashboard</Button>
       </header>
 
+      {showIngestReminder && !ingestCompleted ? (
+        <Card>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: theme.spacing.md,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '0.25rem' }}>
+              <p className="op-eyebrow">Next</p>
+              <p style={{ margin: 0 }}>Run a vendor ingest to bring your plates/assets into OnePiece.</p>
+            </div>
+            <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <Button onClick={() => handleOpenQuickAction('vendorIngest')} disabled={!currentProject}>
+                Run Vendor Ingest
+              </Button>
+              <Button variant="ghost" onClick={() => setShowIngestReminder(false)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div
           style={{
@@ -1084,7 +1154,8 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
         {showVendorIngestWizard ? (
           <VendorIngestWizard
             project={currentProject ?? undefined}
-            onClose={() => setShowVendorIngestWizard(false)}
+            onClose={handleVendorIngestClose}
+            onCompleted={handleVendorIngestComplete}
             onViewTasks={onViewTasks}
           />
         ) : null}

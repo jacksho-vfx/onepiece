@@ -16,6 +16,7 @@ type DesktopConfig = {
   hasCompletedWizard: boolean;
   createdAt: string;
   updatedAt: string;
+  justOnboarded?: boolean;
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
@@ -46,6 +47,7 @@ function App(): JSX.Element {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<'home' | 'tasks' | 'logs' | 'diagnostics' | 'settings'>('home');
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
+  const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
     if (!nextConfig?.currentProject) {
@@ -57,13 +59,15 @@ function App(): JSX.Element {
     return { name: match?.name ?? nameFromPath, path: nextConfig.currentProject };
   }, []);
 
-  const loadConfig = useCallback(async () => {
+  const loadConfig = useCallback(async (): Promise<DesktopConfig | null> => {
     try {
       const loadedConfig = await window.electron.invoke<DesktopConfig>('config/get');
       setConfig(loadedConfig);
       setCurrentProject(deriveCurrentProject(loadedConfig));
+      return loadedConfig;
     } catch (error) {
       console.error('Failed to load desktop config', error);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -75,7 +79,11 @@ function App(): JSX.Element {
 
   const handleWizardComplete = useCallback(async () => {
     setLoading(true);
-    await loadConfig();
+    const loadedConfig = await loadConfig();
+
+    if (loadedConfig && (loadedConfig.createdAt === loadedConfig.updatedAt || loadedConfig.justOnboarded)) {
+      setAutoOpenIngestOnMount(true);
+    }
   }, [loadConfig]);
 
   const handleRequestRerunWizard = useCallback(() => {
@@ -158,6 +166,8 @@ function App(): JSX.Element {
                   onViewTasks={handleViewTasks}
                   onViewLogs={handleViewLogs}
                   onViewDiagnostics={handleViewDiagnostics}
+                  autoOpenIngestOnMount={autoOpenIngestOnMount}
+                  onAutoOpenIngestHandled={() => setAutoOpenIngestOnMount(false)}
                 />
               )}
               {selectedTab === 'tasks' && <TaskList />}
