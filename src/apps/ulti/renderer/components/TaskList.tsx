@@ -143,6 +143,13 @@ function TaskList(): JSX.Element {
       />
 
       <Card>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          You will receive a desktop notification when tasks finish. Make sure notifications are
+          enabled for this app in your OS settings.
+        </p>
+      </Card>
+
+      <Card>
         <div
           style={{
             display: 'flex',

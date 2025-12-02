@@ -86,7 +86,7 @@ app.whenReady().then(() => {
   registerEnvIpcHandlers(ipcMain);
   registerVersionIpcHandlers(ipcMain, app);
   registerUpdateIpcHandlers(ipcMain, app);
-  registerTaskIpcHandlers(ipcMain, window);
+  registerTaskIpcHandlers(ipcMain, window, app);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;
     if (!url) {
