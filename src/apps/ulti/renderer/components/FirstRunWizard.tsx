@@ -3,6 +3,7 @@ import Card from './ui/Card';
 import SectionHeader from './ui/SectionHeader';
 import Button from './ui/Button';
 import TextInput from './ui/TextInput';
+import WizardStep from './ui/WizardStep';
 import { designTokens, roleColors } from '../styles/designTokens';
 import { useTheme } from '../styles/ThemeContext';
 
@@ -211,78 +212,85 @@ function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
   const theme = useTheme();
 
   return (
-    <ol
-      aria-label="Wizard steps"
-      style={{
-        listStyle: 'none',
-        padding: 0,
-        margin: 0,
-        display: 'grid',
-        gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
-        gap: theme.spacing.sm,
-      }}
-    >
-      {steps.map((label, index) => {
-        const isActive = index === currentStep;
-        const isComplete = index < currentStep;
-        const indicatorColor = isActive
-          ? theme.colors.primary
-          : isComplete
-            ? theme.colors.text
-            : theme.colors.textMuted;
+    <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
+          Step {currentStep + 1} of {steps.length}
+        </span>
+      </div>
+      <ol
+        aria-label="Wizard steps"
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+          gap: theme.spacing.sm,
+        }}
+      >
+        {steps.map((label, index) => {
+          const isActive = index === currentStep;
+          const isComplete = index < currentStep;
+          const indicatorColor = isActive
+            ? theme.colors.primary
+            : isComplete
+              ? theme.colors.text
+              : theme.colors.textMuted;
 
-        return (
-          <li
-            key={label}
-            style={{
-              display: 'grid',
-              gap: '0.35rem',
-              alignItems: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <div
+          return (
+            <li
+              key={label}
               style={{
-                display: 'flex',
+                display: 'grid',
+                gap: '0.35rem',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: theme.spacing.xs,
-                color: indicatorColor,
-                fontWeight: isActive ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
-                fontSize: theme.typography.fontSizeSm,
-                letterSpacing: '0.02em',
+                textAlign: 'center',
               }}
             >
-              <span
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: theme.spacing.xs,
+                  color: indicatorColor,
+                  fontWeight: isActive ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
+                  fontSize: theme.typography.fontSizeSm,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '999px',
+                    background: indicatorColor,
+                    boxShadow: isActive ? theme.shadow.card : undefined,
+                  }}
+                />
+                <span style={{ opacity: isActive || isComplete ? 1 : 0.8 }}>{label}</span>
+              </div>
+              <div
                 aria-hidden
                 style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '999px',
-                  background: indicatorColor,
-                  boxShadow: isActive ? theme.shadow.card : undefined,
+                  height: '4px',
+                  width: '100%',
+                  borderRadius: theme.radii.xs,
+                  background: isActive
+                    ? theme.colors.primary
+                    : isComplete
+                      ? theme.colors.borderStrong
+                      : theme.colors.border,
+                  opacity: isActive ? 1 : 0.8,
                 }}
               />
-              <span style={{ opacity: isActive || isComplete ? 1 : 0.8 }}>{label}</span>
-            </div>
-            <div
-              aria-hidden
-              style={{
-                height: '4px',
-                width: '100%',
-                borderRadius: theme.radii.xs,
-                background: isActive
-                  ? theme.colors.primary
-                  : isComplete
-                    ? theme.colors.borderStrong
-                    : theme.colors.border,
-                opacity: isActive ? 1 : 0.8,
-              }}
-            />
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -541,11 +549,13 @@ function SummaryStep({
   onBack,
   onFinish,
   isSubmitting,
+  canFinish,
   error,
 }: {
   onBack: () => void;
   onFinish: () => void;
   isSubmitting: boolean;
+  canFinish: boolean;
   error?: string;
 }): JSX.Element {
   const { formData } = useWizardForm();
@@ -614,7 +624,7 @@ function SummaryStep({
         <Button variant="secondary" onClick={onBack} disabled={isSubmitting}>
           Back
         </Button>
-        <Button variant="primary" onClick={onFinish} isLoading={isSubmitting}>
+        <Button variant="primary" onClick={onFinish} isLoading={isSubmitting} disabled={!canFinish}>
           Finish setup
         </Button>
       </div>
@@ -628,6 +638,27 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { formData } = useWizardForm();
   const theme = useTheme();
+
+  const canFinish = useMemo(
+    () => Boolean(formData.profile) && Boolean(formData.projectRoot.trim()),
+    [formData.profile, formData.projectRoot],
+  );
+
+  const stepIsValid = useMemo(() => {
+    if (currentStep === 1) {
+      return Boolean(formData.profile);
+    }
+
+    if (currentStep === 2) {
+      return Boolean(formData.projectRoot.trim());
+    }
+
+    if (currentStep === 5) {
+      return canFinish;
+    }
+
+    return true;
+  }, [canFinish, currentStep, formData.profile, formData.projectRoot]);
 
   const validateStep = (stepIndex: number): boolean => {
     const nextErrors: Record<string, string> = {};
@@ -690,6 +721,16 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
     try {
       await window.electron.invoke('config/save', { ...payload, hasCompletedWizard: true });
       await window.electron.invoke('config/get');
+
+      // Run a quick doctor check to surface obvious environment issues. This mirrors the diagnostics
+      // screen experience but keeps the UX inline with the wizard. Non-blocking: we still continue
+      // onboarding even if the doctor fails so users can recover later.
+      try {
+        await window.electron.invoke('python/run-command', { args: ['-m', 'onepiece', 'doctor'] });
+      } catch (doctorError) {
+        console.warn('onepiece doctor did not complete during setup', doctorError);
+      }
+
       onComplete();
     } catch (error) {
       setErrors({ submit: 'Failed to save configuration. Please try again.' });
@@ -698,6 +739,33 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Enter') {
+        if (currentStep === 5 && canFinish && !isSubmitting) {
+          event.preventDefault();
+          void handleFinish();
+          return;
+        }
+
+        if (currentStep >= 0 && currentStep < 5 && stepIsValid && !isSubmitting) {
+          event.preventDefault();
+          goNext();
+        }
+      }
+
+      if (event.key === 'Escape') {
+        if (currentStep > 0 && !isSubmitting) {
+          event.preventDefault();
+          goBack();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canFinish, currentStep, goBack, goNext, handleFinish, isSubmitting, stepIsValid]);
 
   return (
     <div
@@ -725,26 +793,34 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
           subtitle="Follow the guided steps to configure your environment, storage, and integrations."
         />
         <StepIndicator currentStep={currentStep} />
-        <div style={{ display: 'grid', gap: theme.spacing.lg }}>
-          {currentStep === 0 && <WelcomeStep onNext={goNext} />}
-          {currentStep === 1 && <UsageProfileStep error={errors.profile} />}
-          {currentStep === 2 && <ProjectStorageStep error={errors.projectRoot} />}
-          {currentStep === 3 && <IntegrationsStep />}
-          {currentStep === 4 && <DccSelectionStep />}
-          {currentStep === 5 && (
-            <SummaryStep onBack={goBack} onFinish={handleFinish} isSubmitting={isSubmitting} error={errors.submit} />
-          )}
-          {currentStep > 0 && currentStep < 5 ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
-              <Button variant="secondary" onClick={goBack}>
-                Back
-              </Button>
-              <Button variant="primary" onClick={goNext}>
-                Continue
-              </Button>
-            </div>
-          ) : null}
-        </div>
+        <WizardStep stepKey={currentStep}>
+          <div style={{ display: 'grid', gap: theme.spacing.lg }}>
+            {currentStep === 0 && <WelcomeStep onNext={goNext} />}
+            {currentStep === 1 && <UsageProfileStep error={errors.profile} />}
+            {currentStep === 2 && <ProjectStorageStep error={errors.projectRoot} />}
+            {currentStep === 3 && <IntegrationsStep />}
+            {currentStep === 4 && <DccSelectionStep />}
+            {currentStep === 5 && (
+              <SummaryStep
+                onBack={goBack}
+                onFinish={handleFinish}
+                isSubmitting={isSubmitting}
+                canFinish={canFinish}
+                error={errors.submit}
+              />
+            )}
+            {currentStep > 0 && currentStep < 5 ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
+                <Button variant="secondary" onClick={goBack} disabled={isSubmitting}>
+                  Back
+                </Button>
+                <Button variant="primary" onClick={goNext} disabled={isSubmitting || !stepIsValid}>
+                  Continue
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </WizardStep>
       </Card>
     </div>
   );

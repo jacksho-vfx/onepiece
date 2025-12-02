@@ -6,4 +6,5 @@ export { default as StatusBadge } from './StatusBadge';
 export { default as Modal } from './Modal';
 export { default as SectionHeader } from './SectionHeader';
 export { ToasterProvider, useToast } from './Toaster';
+export { default as WizardStep } from './WizardStep';
 export * from './types';
