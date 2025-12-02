@@ -9,6 +9,8 @@ export type ToastOptions = {
   kind?: ToastKind;
   message: string;
   durationMs?: number;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type ToastRecord = {
@@ -16,6 +18,8 @@ type ToastRecord = {
   kind: ToastKind;
   message: string;
   expiresAt: number;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type ToastContextValue = {
@@ -51,11 +55,11 @@ export function ToasterProvider({ children }: { children: React.ReactNode }): JS
   const theme = useTheme();
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
 
-  const showToast = ({ kind = 'info', message, durationMs = 4200 }: ToastOptions): void => {
+  const showToast = ({ kind = 'info', message, durationMs = 4200, actionLabel, onAction }: ToastOptions): void => {
     const id = Date.now() + Math.random();
     const expiresAt = Date.now() + durationMs;
 
-    setToasts((prev) => [...prev, { id, kind, message, expiresAt }]);
+    setToasts((prev) => [...prev, { id, kind, message, expiresAt, actionLabel, onAction }]);
 
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -115,7 +119,33 @@ export function ToasterProvider({ children }: { children: React.ReactNode }): JS
                 >
                   {toast.kind}
                 </span>
-                <span style={{ color: theme.colors.text }}>{toast.message}</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: theme.spacing.md,
+                  }}
+                >
+                  <span style={{ color: theme.colors.text, flex: 1 }}>{toast.message}</span>
+                  {toast.actionLabel && toast.onAction ? (
+                    <button
+                      type="button"
+                      onClick={toast.onAction}
+                      style={{
+                        border: `1px solid ${theme.colors.borderStrong}`,
+                        background: hexToRgba(theme.colors.surfaceAlt, 0.8),
+                        color: theme.colors.text,
+                        borderRadius: theme.radii.sm,
+                        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                        cursor: 'pointer',
+                        fontWeight: theme.typography.fontWeightMedium,
+                      }}
+                    >
+                      {toast.actionLabel}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
           })}
