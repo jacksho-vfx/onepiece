@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Card, Modal, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 
 interface DeliveryWizardProps {
   project?: { name: string; path: string };
   onClose(): void;
+  onCompleted?: () => void;
 }
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -134,9 +135,10 @@ function parsePreflight(stdout: string): PreflightResult {
   }
 }
 
-function DeliveryWizard({ project, onClose }: DeliveryWizardProps): JSX.Element {
+function DeliveryWizard({ project, onClose, onCompleted }: DeliveryWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
+  const hasCompletedRef = useRef(false);
 
   const [currentStep, setCurrentStep] = useState<WizardStep>(0);
   const [deliveryName, setDeliveryName] = useState('');
@@ -267,6 +269,15 @@ function DeliveryWizard({ project, onClose }: DeliveryWizardProps): JSX.Element 
     setDeliveryStatus('running');
     setDeliveryLogs('');
 
+    const handleComplete = (): void => {
+      if (hasCompletedRef.current) {
+        return;
+      }
+
+      hasCompletedRef.current = true;
+      onCompleted?.();
+    };
+
     try {
       const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>('python/run-command', {
         args: buildArgs('delivery'),
@@ -281,6 +292,14 @@ function DeliveryWizard({ project, onClose }: DeliveryWizardProps): JSX.Element 
       }
 
       setDeliveryStatus('success');
+      handleComplete();
+      showToast({
+        title: 'Delivery complete',
+        description: 'Delivery finished successfully.',
+        actionLabel: 'View in Overview',
+        onAction: handleComplete,
+        variant: 'success',
+      });
     } catch (error) {
       console.error('Failed to run delivery', error);
       setDeliveryStatus('error');

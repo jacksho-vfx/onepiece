@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button, Card, Modal, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 import { useHelpContext } from '../HelpContext';
@@ -9,6 +9,7 @@ interface DccPublishWizardProps {
   project?: { name: string; path: string };
   enabledDccs: EnabledDcc[];
   onClose(): void;
+  onCompleted?: () => void;
 }
 
 type PreflightStatus = 'idle' | 'running' | 'success' | 'error';
@@ -167,9 +168,10 @@ function parsePreflight(stdout: string): PreflightResult {
   }
 }
 
-function DccPublishWizard({ project, enabledDccs, onClose }: DccPublishWizardProps): JSX.Element {
+function DccPublishWizard({ project, enabledDccs, onClose, onCompleted }: DccPublishWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
+  const hasCompletedRef = useRef(false);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [dccType, setDccType] = useState<EnabledDcc | ''>(enabledDccs[0] ?? '');
@@ -244,6 +246,15 @@ function DccPublishWizard({ project, enabledDccs, onClose }: DccPublishWizardPro
     setPublishStatus('running');
     setPublishOutput({ stdout: '', stderr: '' });
 
+    const handleComplete = (): void => {
+      if (hasCompletedRef.current) {
+        return;
+      }
+
+      hasCompletedRef.current = true;
+      onCompleted?.();
+    };
+
     try {
       const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>('python/run-command', {
         args: ['-m', 'onepiece', 'dcc', 'publish', '--dcc', dccType, '--scene', scenePath, '--project-root', project.path],
@@ -258,7 +269,13 @@ function DccPublishWizard({ project, enabledDccs, onClose }: DccPublishWizardPro
       });
 
       if (isSuccess) {
-        showToast({ kind: 'success', message: 'DCC publish started' });
+        handleComplete();
+        showToast({
+          kind: 'success',
+          message: 'DCC publish complete',
+          actionLabel: 'View in Overview',
+          onAction: handleComplete,
+        });
       }
     } catch (error) {
       setPublishStatus('error');

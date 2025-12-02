@@ -223,6 +223,7 @@ function HomeScreen({
   const [ingestCompleted, setIngestCompleted] = useState(false);
   const [showIngestReminder, setShowIngestReminder] = useState(false);
   const [shouldAutoOpenIngest, setShouldAutoOpenIngest] = useState<boolean>(Boolean(autoOpenIngestOnMount));
+  const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
   useHelpContext(activeTab === 'overview' ? 'home.overview' : null);
   const projectActivitySummary = useMemo<ProjectActivitySummary>(
     () => ({ ingests: 0, publishes: 0, renders: 0, deliveries: 0 }),
@@ -460,9 +461,16 @@ function HomeScreen({
     setActionStatus({ state: 'idle', stdout: '', stderr: '' });
   };
 
+  const handleOverviewRefresh = (): void => {
+    setActiveTab('overview');
+    setOverviewRefreshKey((prev) => prev + 1);
+  };
+
   const handleVendorIngestComplete = (): void => {
     setIngestCompleted(true);
     setShowIngestReminder(false);
+    setShowVendorIngestWizard(false);
+    handleOverviewRefresh();
   };
 
   const handleVendorIngestClose = (): void => {
@@ -470,6 +478,16 @@ function HomeScreen({
     if (!ingestCompleted) {
       setShowIngestReminder(true);
     }
+  };
+
+  const handleDccPublishComplete = (): void => {
+    setShowDccPublishWizard(false);
+    handleOverviewRefresh();
+  };
+
+  const handleDeliveryComplete = (): void => {
+    setShowDeliveryWizard(false);
+    handleOverviewRefresh();
   };
 
   const updateQuickActionForm = <K extends QuickActionKey, F extends keyof QuickActionForms[K]>(
@@ -1145,6 +1163,7 @@ function HomeScreen({
               onOpenRenderSubmit={() => handleOpenQuickAction('submitRender')}
               onOpenDelivery={() => handleOpenQuickAction('packageDelivery')}
               onOpenDiagnostics={onViewDiagnostics}
+              refreshKey={overviewRefreshKey}
             />
           ) : null}
           {activeTab === 'services' ? renderServicesCard() : null}
@@ -1164,10 +1183,15 @@ function HomeScreen({
             project={currentProject ?? undefined}
             enabledDccs={availableDccs}
             onClose={() => setShowDccPublishWizard(false)}
+            onCompleted={handleDccPublishComplete}
           />
         ) : null}
         {showDeliveryWizard ? (
-          <DeliveryWizard project={currentProject ?? undefined} onClose={() => setShowDeliveryWizard(false)} />
+          <DeliveryWizard
+            project={currentProject ?? undefined}
+            onClose={() => setShowDeliveryWizard(false)}
+            onCompleted={handleDeliveryComplete}
+          />
         ) : null}
     </div>
   );
