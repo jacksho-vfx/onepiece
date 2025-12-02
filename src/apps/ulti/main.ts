@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from 'electron';
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
+import { registerConfigBundleIpcHandlers } from './desktop/src/main/configBundle';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
 import { registerVersionIpcHandlers } from './versionInfo';
@@ -84,6 +85,7 @@ app.whenReady().then(() => {
   const window = createMainWindow();
   registerPythonIpcHandlers(ipcMain, window);
   registerConfigIpcHandlers(ipcMain, app);
+  registerConfigBundleIpcHandlers(ipcMain, app, window);
   registerEnvIpcHandlers(ipcMain);
   registerVersionIpcHandlers(ipcMain, app);
   registerUpdateIpcHandlers(ipcMain, app);

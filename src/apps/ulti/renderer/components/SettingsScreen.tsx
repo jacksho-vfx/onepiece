@@ -100,6 +100,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckResult | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
+  const [exportingConfig, setExportingConfig] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
@@ -271,6 +272,26 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       setError(err instanceof Error ? err.message : 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportConfigBundle = async (): Promise<void> => {
+    setExportingConfig(true);
+
+    try {
+      const exportedPath = await window.electron.invoke<string>('config/export-bundle');
+      if (!exportedPath) {
+        throw new Error('No path was returned for the exported bundle.');
+      }
+      showToast({ kind: 'success', message: `Exported config to ${exportedPath}` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to export config bundle.';
+      showToast({
+        kind: message.toLowerCase().includes('cancel') ? 'info' : 'error',
+        message,
+      });
+    } finally {
+      setExportingConfig(false);
     }
   };
 
@@ -587,6 +608,28 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
             )}
           </div>
         ) : null}
+      </Card>
+
+      <Card>
+        <SectionHeader
+          title="Export studio config"
+          subtitle="Download a bundle containing your desktop and project configuration files."
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => void handleExportConfigBundle()}
+              isLoading={exportingConfig}
+              disabled={exportingConfig}
+            >
+              {exportingConfig ? 'Exporting…' : 'Export config'}
+            </Button>
+          }
+        />
+        <p style={{ marginTop: theme.spacing.md, color: theme.colors.textMuted }}>
+          Use this to share your setup with teammates or support. The bundle includes your desktop
+          preferences, the current project's <code>onepiece.toml</code>, and related configuration
+          files.
+        </p>
       </Card>
 
       <div style={{ display: 'flex', gap: theme.spacing.sm, justifyContent: 'flex-start' }}>
