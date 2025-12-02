@@ -1,0 +1,148 @@
+import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
+import type { App, BrowserWindow, IpcMain } from 'electron';
+import { dialog } from 'electron';
+import { ensureDefaultConfig, getConfigPath, type DesktopConfig } from '../../../configManager';
+
+async function copyFileIfExists(source: string, destination: string): Promise<boolean> {
+  try {
+    await fs.access(source);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.copyFile(source, destination);
+  return true;
+}
+
+async function copyDirectoryRecursive(source: string, destination: string): Promise<void> {
+  await fs.mkdir(destination, { recursive: true });
+  const entries = await fs.readdir(source, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyDirectoryRecursive(sourcePath, destinationPath);
+    } else if (entry.isFile()) {
+      await copyFileIfExists(sourcePath, destinationPath);
+    }
+    // TODO: Handle symlinks or other file types if the project configuration requires them.
+  }
+}
+
+async function copyDirectoryIfExists(source: string, destination: string): Promise<boolean> {
+  let stats: Awaited<ReturnType<typeof fs.stat>>;
+  try {
+    stats = await fs.stat(source);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+
+  if (!stats.isDirectory()) {
+    return false;
+  }
+
+  await copyDirectoryRecursive(source, destination);
+  return true;
+}
+
+function resolveProjectRoot(config: DesktopConfig): string | undefined {
+  if (config.projectRoot && config.projectRoot.trim()) {
+    return config.projectRoot.trim();
+  }
+
+  if (config.currentProject && config.currentProject.trim()) {
+    return config.currentProject.trim();
+  }
+
+  const recent = config.recentProjects?.find((project) => project.path?.trim());
+  return recent?.path?.trim();
+}
+
+async function zipDirectory(sourceDir: string): Promise<string> {
+  const zipPath = path.join(os.tmpdir(), `onepiece-config-bundle-${Date.now()}.zip`);
+
+  // TODO: Replace with a Node zip library (e.g. archiver) for better portability and streaming.
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('zip', ['-r', zipPath, '.'], { cwd: sourceDir });
+
+    let errorOutput = '';
+    child.stderr?.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(errorOutput || `Zip command failed with exit code ${code}`));
+      }
+    });
+  });
+
+  return zipPath;
+}
+
+export async function createConfigBundle(app: App): Promise<string> {
+  const config = await ensureDefaultConfig(app);
+  const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onepiece-config-bundle-'));
+
+  try {
+    await fs.writeFile(path.join(stagingDir, 'desktop-config.json'), JSON.stringify(config, null, 2), 'utf-8');
+    await copyFileIfExists(getConfigPath(app), path.join(stagingDir, 'desktop-config.raw.json'));
+
+    const projectRoot = resolveProjectRoot(config);
+    if (projectRoot) {
+      const projectDestination = path.join(stagingDir, 'project');
+      await fs.mkdir(projectDestination, { recursive: true });
+
+      await copyFileIfExists(path.join(projectRoot, 'onepiece.toml'), path.join(projectDestination, 'onepiece.toml'));
+      await copyDirectoryIfExists(path.join(projectRoot, 'profiles'), path.join(projectDestination, 'profiles'));
+      // TODO: Copy any additional starter-kit or project-level configuration files that need to be
+      // included in the export bundle once the file list is finalized.
+    }
+
+    const zipPath = await zipDirectory(stagingDir);
+    return zipPath;
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+  }
+}
+
+export function registerConfigBundleIpcHandlers(
+  ipcMain: IpcMain,
+  app: App,
+  window?: BrowserWindow,
+): void {
+  ipcMain.handle('config/export-bundle', async () => {
+    const bundlePath = await createConfigBundle(app);
+
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog(window, {
+        title: 'Export studio config bundle',
+        defaultPath: path.join(app.getPath('documents'), 'onepiece-config-bundle.zip'),
+        filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+      });
+
+      if (canceled || !filePath) {
+        throw new Error('Export cancelled');
+      }
+
+      await fs.copyFile(bundlePath, filePath);
+      return filePath;
+    } finally {
+      await fs.rm(bundlePath, { force: true });
+    }
+  });
+}
