@@ -8,6 +8,7 @@ import TaskList from './components/TaskList';
 import VersionFooter from './components/VersionFooter';
 import AppShell from './components/layout/AppShell';
 import ProjectSwitcher from './components/ProjectSwitcher';
+import ToolsScreen from './components/ToolsScreen';
 import { ThemeProvider } from './styles/ThemeContext';
 import { ToasterProvider } from './components/ui';
 import { HelpContextProvider } from './components/HelpContext';
@@ -45,7 +46,9 @@ type ProjectSelection = { name: string; path: string };
 function App(): JSX.Element {
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedTab, setSelectedTab] = useState<'home' | 'tasks' | 'logs' | 'diagnostics' | 'settings'>('home');
+  const [selectedTab, setSelectedTab] = useState<
+    'home' | 'tasks' | 'logs' | 'diagnostics' | 'tools' | 'settings'
+  >('home');
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
   const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
 
@@ -135,6 +138,7 @@ function App(): JSX.Element {
       { id: 'tasks' as const, label: 'Tasks' },
       { id: 'logs' as const, label: 'Logs' },
       { id: 'diagnostics' as const, label: 'Diagnostics' },
+      { id: 'tools' as const, label: 'Tools' },
       { id: 'settings' as const, label: 'Settings' },
     ],
     [],
@@ -173,6 +177,7 @@ function App(): JSX.Element {
               {selectedTab === 'tasks' && <TaskList />}
               {selectedTab === 'logs' && <LogsPanel />}
               {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
+              {selectedTab === 'tools' && <ToolsScreen project={currentProject ?? undefined} />}
               {selectedTab === 'settings' && (
                 <SettingsScreen
                   onRequestRerunWizard={handleRequestRerunWizard}

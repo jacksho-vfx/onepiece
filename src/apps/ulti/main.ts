@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } 
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerConfigBundleIpcHandlers } from './desktop/src/main/configBundle';
+import { registerFsExplorerIpcHandlers } from './fsExplorer';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
 import { registerVersionIpcHandlers } from './versionInfo';
@@ -90,6 +91,7 @@ app.whenReady().then(() => {
   registerVersionIpcHandlers(ipcMain, app);
   registerUpdateIpcHandlers(ipcMain, app);
   registerTaskIpcHandlers(ipcMain, window, app);
+  registerFsExplorerIpcHandlers(ipcMain);
   createTray(window);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;

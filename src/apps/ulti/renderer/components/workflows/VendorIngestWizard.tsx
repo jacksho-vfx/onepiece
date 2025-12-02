@@ -11,6 +11,7 @@ type VendorIngestWizardProps = {
   onClose: () => void;
   onCompleted?: () => void;
   onViewTasks?: () => void;
+  initialSourcePath?: string;
 };
 
 type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed';
@@ -272,6 +273,7 @@ function VendorIngestWizard({
   onClose,
   onCompleted,
   onViewTasks,
+  initialSourcePath,
 }: VendorIngestWizardProps): JSX.Element | null {
   const theme = useTheme();
   const { showToast } = useToast();
@@ -308,6 +310,17 @@ function VendorIngestWizard({
     setIngest(defaultIngestState);
     hasShownSuccessToast.current = false;
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    if (initialSourcePath !== undefined) {
+      setSourcePath(initialSourcePath);
+      setSourceError(null);
+    }
+  }, [initialSourcePath, isOpen]);
 
   const handleBrowseSource = async (): Promise<void> => {
     try {
