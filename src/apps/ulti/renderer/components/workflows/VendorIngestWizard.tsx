@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Modal, TextInput, useToast } from '../ui';
+import { Card, Modal, TextInput, WizardStep, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 import { useHelpContext } from '../HelpContext';
 
@@ -37,78 +37,85 @@ function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
   const theme = useTheme();
 
   return (
-    <ol
-      aria-label="Wizard steps"
-      style={{
-        listStyle: 'none',
-        padding: 0,
-        margin: 0,
-        display: 'grid',
-        gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
-        gap: theme.spacing.sm,
-      }}
-    >
-      {steps.map((label, index) => {
-        const isActive = index === currentStep;
-        const isComplete = index < currentStep;
-        const indicatorColor = isActive
-          ? theme.colors.primary
-          : isComplete
-            ? theme.colors.text
-            : theme.colors.textMuted;
+    <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
+          Step {currentStep + 1} of {steps.length}
+        </span>
+      </div>
+      <ol
+        aria-label="Wizard steps"
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+          gap: theme.spacing.sm,
+        }}
+      >
+        {steps.map((label, index) => {
+          const isActive = index === currentStep;
+          const isComplete = index < currentStep;
+          const indicatorColor = isActive
+            ? theme.colors.primary
+            : isComplete
+              ? theme.colors.text
+              : theme.colors.textMuted;
 
-        return (
-          <li
-            key={label}
-            style={{
-              display: 'grid',
-              gap: '0.35rem',
-              alignItems: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <div
+          return (
+            <li
+              key={label}
               style={{
-                display: 'flex',
+                display: 'grid',
+                gap: '0.35rem',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: theme.spacing.xs,
-                color: indicatorColor,
-                fontWeight: isActive ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
-                fontSize: theme.typography.fontSizeSm,
-                letterSpacing: '0.02em',
+                textAlign: 'center',
               }}
             >
-              <span
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: theme.spacing.xs,
+                  color: indicatorColor,
+                  fontWeight: isActive ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
+                  fontSize: theme.typography.fontSizeSm,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '999px',
+                    background: indicatorColor,
+                    boxShadow: isActive ? theme.shadow.card : undefined,
+                  }}
+                />
+                <span style={{ opacity: isActive || isComplete ? 1 : 0.8 }}>{label}</span>
+              </div>
+              <div
                 aria-hidden
                 style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '999px',
-                  background: indicatorColor,
-                  boxShadow: isActive ? theme.shadow.card : undefined,
+                  height: '4px',
+                  width: '100%',
+                  borderRadius: theme.radii.xs,
+                  background: isActive
+                    ? theme.colors.primary
+                    : isComplete
+                      ? theme.colors.borderStrong
+                      : theme.colors.border,
+                  opacity: isActive ? 1 : 0.8,
                 }}
               />
-              <span style={{ opacity: isActive || isComplete ? 1 : 0.8 }}>{label}</span>
-            </div>
-            <div
-              aria-hidden
-              style={{
-                height: '4px',
-                width: '100%',
-                borderRadius: theme.radii.xs,
-                background: isActive
-                  ? theme.colors.primary
-                  : isComplete
-                    ? theme.colors.borderStrong
-                    : theme.colors.border,
-                opacity: isActive ? 1 : 0.8,
-              }}
-            />
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -559,7 +566,7 @@ function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: Vend
     >
       <div style={{ display: 'grid', gap: theme.spacing.lg }}>
         <StepIndicator currentStep={currentStep} />
-        {renderStepContent()}
+        <WizardStep stepKey={currentStep}>{renderStepContent()}</WizardStep>
       </div>
     </Modal>
   );

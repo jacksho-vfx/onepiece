@@ -133,6 +133,16 @@ function DiagnosticsScreen(): JSX.Element {
     return 'Issues detected';
   }, [doctorStatus]);
 
+  const confettiPieces = useMemo(
+    () =>
+      Array.from({ length: 12 }).map((_, index) => ({
+        left: `${(index / 12) * 100}%`,
+        delay: `${index * 40}ms`,
+        rotation: `${(index % 6) * 12 - 30}deg`,
+      })),
+    [],
+  );
+
   const handleRunDoctor = async (): Promise<void> => {
     setDoctorResult((prev) => ({ ...prev, running: true, error: undefined }));
     setCopyMessage('');
@@ -258,6 +268,53 @@ function DiagnosticsScreen(): JSX.Element {
           {doctorResult.exitCode !== null && <div>Exit code: {doctorResult.exitCode}</div>}
           {doctorResult.error && <div style={{ color: theme.colors.danger }}>{doctorResult.error}</div>}
         </div>
+
+        {doctorStatus === 'success' ? (
+          <div
+            style={{
+              position: 'relative',
+              padding: theme.spacing.sm,
+              borderRadius: theme.radii.md,
+              background: theme.colors.primarySoft,
+              border: `1px solid ${theme.colors.borderStrong}`,
+              overflow: 'hidden',
+            }}
+          >
+            <style>{`
+              @keyframes op-confetti-fall {
+                0% { opacity: 0; transform: translateY(-6px) rotate(var(--rotation, 0deg)); }
+                25% { opacity: 1; }
+                100% { opacity: 0; transform: translateY(22px) rotate(var(--rotation, 0deg)); }
+              }
+            `}</style>
+            <p style={{ margin: 0, fontWeight: theme.typography.fontWeightMedium }}>
+              You're ready to run a show with OnePiece 🎉
+            </p>
+            <p style={{ margin: '0.2rem 0 0', color: theme.colors.textMuted }}>
+              Nice work—your environment checks came back green.
+            </p>
+            <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+              {confettiPieces.map((piece, index) => (
+                <span
+                  key={piece.left + index}
+                  style={{
+                    position: 'absolute',
+                    left: piece.left,
+                    top: '-4px',
+                    width: '6px',
+                    height: '12px',
+                    borderRadius: theme.radii.xs,
+                    background: index % 2 === 0 ? theme.colors.success : theme.colors.info,
+                    opacity: 0.95,
+                    animation: 'op-confetti-fall 1s ease-out',
+                    animationDelay: piece.delay,
+                    transform: `rotate(${piece.rotation})`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ marginBottom: theme.spacing.sm, display: 'flex', gap: theme.spacing.sm }}>
           <Button variant="ghost" size="sm" onClick={() => setShowStdout((prev) => !prev)}>

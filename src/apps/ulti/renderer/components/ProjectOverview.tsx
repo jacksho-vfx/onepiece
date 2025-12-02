@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 import { getNextStep, ProjectActivitySummary } from '../utils/nextStep';
@@ -60,6 +60,13 @@ function ProjectOverview({
   const [loading, setLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [statsWarning, setStatsWarning] = useState<string | null>(null);
+  const [highlightedStats, setHighlightedStats] = useState<Record<keyof ProjectStats, boolean>>({
+    ingests: false,
+    publishes: false,
+    renders: false,
+    deliveries: false,
+  });
+  const previousStatsRef = useRef<ProjectStats>(DEFAULT_STATS);
 
   const healthStatus = useMemo(() => {
     return warnings.length > 0 ? 'Warnings' : 'OK';
@@ -139,6 +146,33 @@ function ProjectOverview({
 
     void fetchProjectInfo();
   }, [fetchProjectInfo, project, refreshKey]);
+
+  useEffect(() => {
+    const previous = previousStatsRef.current;
+    const changedKeys = (Object.keys(stats) as (keyof ProjectStats)[]).filter(
+      (key) => stats[key] !== previous[key],
+    );
+
+    if (changedKeys.length === 0) {
+      previousStatsRef.current = stats;
+      return;
+    }
+
+    setHighlightedStats((prev) => ({ ...prev, ...Object.fromEntries(changedKeys.map((key) => [key, true])) }));
+    previousStatsRef.current = stats;
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedStats((prev) => {
+        const next = { ...prev };
+        changedKeys.forEach((key) => {
+          next[key] = false;
+        });
+        return next;
+      });
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [stats]);
 
   const summary = useMemo<ProjectActivitySummary>(() => {
     if (activitySummary) {
@@ -239,17 +273,31 @@ function ProjectOverview({
               gap: theme.spacing.md,
             }}
           >
-            {[
+            {[ 
               { label: 'Ingests', value: stats.ingests },
               { label: 'Publishes', value: stats.publishes },
               { label: 'Renders', value: stats.renders },
               { label: 'Deliveries', value: stats.deliveries },
-            ].map((item) => (
-              <div key={item.label} style={{ display: 'grid', gap: '0.35rem' }}>
-                <p style={{ margin: 0, color: theme.colors.textMuted }}>{item.label}</p>
-                <p style={{ margin: 0, fontSize: '1.8rem', fontWeight: theme.typography.fontWeightBold }}>{item.value}</p>
-              </div>
-            ))}
+            ].map((item) => {
+              const isHighlighted = highlightedStats[item.label.toLowerCase() as keyof ProjectStats];
+              return (
+                <div
+                  key={item.label}
+                  style={{
+                    display: 'grid',
+                    gap: '0.35rem',
+                    padding: isHighlighted ? `${theme.spacing.xs} ${theme.spacing.sm}` : 0,
+                    borderRadius: isHighlighted ? theme.radii.md : undefined,
+                    background: isHighlighted ? theme.colors.primarySoft : undefined,
+                    transition: 'background 320ms ease, transform 320ms ease, padding 160ms ease',
+                    transform: isHighlighted ? 'translateY(-2px)' : 'translateY(0)',
+                  }}
+                >
+                  <p style={{ margin: 0, color: theme.colors.textMuted }}>{item.label}</p>
+                  <p style={{ margin: 0, fontSize: '1.8rem', fontWeight: theme.typography.fontWeightBold }}>{item.value}</p>
+                </div>
+              );
+            })}
           </div>
         </Card>
 
