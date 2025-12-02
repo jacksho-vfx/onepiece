@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Card, Modal, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
+import { useHelpContext } from '../HelpContext';
 
 type EnabledDcc = 'maya' | 'blender' | 'unreal';
 
@@ -181,6 +182,8 @@ function DccPublishWizard({ project, enabledDccs, onClose }: DccPublishWizardPro
   const [publishLevel, setPublishLevel] = useState<'work-in-progress' | 'client-ready'>('work-in-progress');
   const [overwriteStrategy, setOverwriteStrategy] = useState<'safe' | 'overwrite'>('safe');
   const [showLogs, setShowLogs] = useState(false);
+
+  useHelpContext(currentStep === 1 ? 'wizard.dccPublish.preflight' : null);
 
   const canProceed = useMemo(() => Boolean(dccType && scenePath.trim()), [dccType, scenePath]);
   const hasIssues = preflightResult.issues.length > 0;

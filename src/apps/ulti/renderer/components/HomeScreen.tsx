@@ -5,6 +5,7 @@ import VendorIngestWizard from './workflows/VendorIngestWizard';
 import DccPublishWizard from './workflows/DccPublishWizard';
 import DeliveryWizard from './workflows/DeliveryWizard';
 import { useTheme } from '../styles/ThemeContext';
+import { useHelpContext } from './HelpContext';
 
 interface DesktopConfig {
   hasCompletedWizard: boolean;
@@ -207,6 +208,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentPro
   const [showDeliveryWizard, setShowDeliveryWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
+  useHelpContext(activeTab === 'overview' ? 'home.overview' : null);
 
   const fetchConfig = async (): Promise<void> => {
     try {

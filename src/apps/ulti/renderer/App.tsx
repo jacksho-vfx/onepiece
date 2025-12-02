@@ -10,6 +10,7 @@ import AppShell from './components/layout/AppShell';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import { ThemeProvider } from './styles/ThemeContext';
 import { ToasterProvider } from './components/ui';
+import { HelpContextProvider } from './components/HelpContext';
 
 type DesktopConfig = {
   hasCompletedWizard: boolean;
@@ -129,38 +130,40 @@ function App(): JSX.Element {
 
   return (
     <ThemeProvider>
-      <ToasterProvider>
-        {loading || !config ? (
-          <div className="op-loading">Loading...</div>
-        ) : !config.hasCompletedWizard ? (
-          <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
-            <FirstRunWizard onComplete={() => void handleWizardComplete()} />
-          </AppShell>
-        ) : (
-          <AppShell
-            navItems={tabs.map((tab) => ({
-              ...tab,
-              onSelect: () => setSelectedTab(tab.id),
-            }))}
-            activeNavId={selectedTab}
-            projectSwitcher={<ProjectSwitcher config={config} onProjectChange={handleProjectChange} />}
-          >
-            {selectedTab === 'home' && (
-              <HomeScreen
-                config={config}
-                currentProject={currentProject ?? undefined}
-                onViewTasks={handleViewTasks}
-                onViewLogs={handleViewLogs}
-              />
-            )}
-            {selectedTab === 'tasks' && <TaskList />}
-            {selectedTab === 'logs' && <LogsPanel />}
-            {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-            {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
-            <VersionFooter />
-          </AppShell>
-        )}
-      </ToasterProvider>
+      <HelpContextProvider>
+        <ToasterProvider>
+          {loading || !config ? (
+            <div className="op-loading">Loading...</div>
+          ) : !config.hasCompletedWizard ? (
+            <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
+              <FirstRunWizard onComplete={() => void handleWizardComplete()} />
+            </AppShell>
+          ) : (
+            <AppShell
+              navItems={tabs.map((tab) => ({
+                ...tab,
+                onSelect: () => setSelectedTab(tab.id),
+              }))}
+              activeNavId={selectedTab}
+              projectSwitcher={<ProjectSwitcher config={config} onProjectChange={handleProjectChange} />}
+            >
+              {selectedTab === 'home' && (
+                <HomeScreen
+                  config={config}
+                  currentProject={currentProject ?? undefined}
+                  onViewTasks={handleViewTasks}
+                  onViewLogs={handleViewLogs}
+                />
+              )}
+              {selectedTab === 'tasks' && <TaskList />}
+              {selectedTab === 'logs' && <LogsPanel />}
+              {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
+              {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
+              <VersionFooter />
+            </AppShell>
+          )}
+        </ToasterProvider>
+      </HelpContextProvider>
     </ThemeProvider>
   );
 }

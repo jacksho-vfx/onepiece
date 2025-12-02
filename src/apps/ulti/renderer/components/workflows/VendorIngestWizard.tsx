@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Modal, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
+import { useHelpContext } from '../HelpContext';
 
 interface VendorIngestWizardProps {
   project?: { name: string; path: string };
@@ -140,6 +141,9 @@ function VendorIngestWizard({ project, onClose, onViewTasks }: VendorIngestWizar
   const theme = useTheme();
   const { showToast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
+  useHelpContext(
+    currentStep === 0 ? 'wizard.vendorIngest.step1' : currentStep === 1 ? 'wizard.vendorIngest.step2' : null,
+  );
   const [sourcePath, setSourcePath] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [presetSource, setPresetSource] = useState<string | null>(null);

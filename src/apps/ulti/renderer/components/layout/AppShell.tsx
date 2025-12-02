@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { designTokens } from '../../styles/designTokens';
+import HelpSidebar from '../HelpSidebar';
+import { useHelpContext } from '../HelpContext';
 
 export type NavItem = {
   id: string;
@@ -32,6 +34,35 @@ function AppShell({
   headerSubtitle,
   projectSwitcher,
 }: AppShellProps): JSX.Element {
+  const { contextKey } = useHelpContext();
+  const [isCompactLayout, setIsCompactLayout] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1100 : false,
+  );
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = (): void => {
+      const compact = typeof window !== 'undefined' && window.innerWidth < 1100;
+      setIsCompactLayout(compact);
+
+      if (!compact) {
+        setIsSidebarOpen(true);
+      }
+    };
+
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const helpVisible = Boolean(contextKey);
+  const showSidebar = helpVisible && (!isCompactLayout || isSidebarOpen);
+
   return (
     <div
       style={{
@@ -155,12 +186,43 @@ function AppShell({
             width: 'min(1200px, 100%)',
             margin: '0 auto',
             padding: '2rem 1.5rem 2.5rem',
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
             gap: '1.25rem',
           }}
         >
-          {children}
+          {helpVisible && isCompactLayout ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen((prev) => !prev)}
+                aria-expanded={isSidebarOpen}
+                style={{
+                  border: `1px solid ${designTokens.colors.border}`,
+                  background: isSidebarOpen ? designTokens.colors.primarySoft : 'rgba(255,255,255,0.02)',
+                  color: designTokens.colors.text,
+                  padding: `${designTokens.spacing.sm} ${designTokens.spacing.md}`,
+                  borderRadius: designTokens.radii.md,
+                  cursor: 'pointer',
+                  boxShadow: designTokens.shadow.card,
+                  fontWeight: designTokens.typography.fontWeightMedium,
+                }}
+              >
+                {isSidebarOpen ? 'Hide help' : 'Show help'}
+              </button>
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: isCompactLayout ? 'column' : 'row',
+              gap: '1.5rem',
+              alignItems: 'flex-start',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+            {showSidebar ? <HelpSidebar contextKey={contextKey} /> : null}
+          </div>
         </div>
       </main>
     </div>
