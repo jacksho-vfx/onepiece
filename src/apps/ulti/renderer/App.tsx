@@ -51,6 +51,8 @@ function App(): JSX.Element {
   >('home');
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
   const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
+  const [showEnvironmentReportPrompt, setShowEnvironmentReportPrompt] = useState(false);
+  const [toolsFocus, setToolsFocus] = useState<'envProfile' | null>(null);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
     if (!nextConfig?.currentProject) {
@@ -87,6 +89,8 @@ function App(): JSX.Element {
     if (loadedConfig && (loadedConfig.createdAt === loadedConfig.updatedAt || loadedConfig.justOnboarded)) {
       setAutoOpenIngestOnMount(true);
     }
+
+    setShowEnvironmentReportPrompt(true);
   }, [loadConfig]);
 
   const handleRequestRerunWizard = useCallback(() => {
@@ -103,6 +107,12 @@ function App(): JSX.Element {
 
   const handleViewDiagnostics = useCallback(() => {
     setSelectedTab('diagnostics');
+  }, []);
+
+  const handleViewEnvironmentReport = useCallback(() => {
+    setSelectedTab('tools');
+    setToolsFocus('envProfile');
+    setShowEnvironmentReportPrompt(false);
   }, []);
 
   const handleProjectChange = useCallback(
@@ -170,6 +180,9 @@ function App(): JSX.Element {
                   onViewTasks={handleViewTasks}
                   onViewLogs={handleViewLogs}
                   onViewDiagnostics={handleViewDiagnostics}
+                  showEnvironmentReportPrompt={showEnvironmentReportPrompt}
+                  onViewEnvironmentReport={handleViewEnvironmentReport}
+                  onDismissEnvironmentReportPrompt={() => setShowEnvironmentReportPrompt(false)}
                   autoOpenIngestOnMount={autoOpenIngestOnMount}
                   onAutoOpenIngestHandled={() => setAutoOpenIngestOnMount(false)}
                 />
@@ -177,7 +190,13 @@ function App(): JSX.Element {
               {selectedTab === 'tasks' && <TaskList />}
               {selectedTab === 'logs' && <LogsPanel />}
               {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-              {selectedTab === 'tools' && <ToolsScreen project={currentProject ?? undefined} />}
+              {selectedTab === 'tools' && (
+                <ToolsScreen
+                  project={currentProject ?? undefined}
+                  focusSection={toolsFocus}
+                  onFocusHandled={() => setToolsFocus(null)}
+                />
+              )}
               {selectedTab === 'settings' && (
                 <SettingsScreen
                   onRequestRerunWizard={handleRequestRerunWizard}

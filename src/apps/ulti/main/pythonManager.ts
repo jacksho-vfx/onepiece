@@ -146,6 +146,18 @@ export function runCommand(
   });
 }
 
+export function runOnepieceInfo(additionalArgs: string[] = []): Promise<{ code: number; stdout: string; stderr: string }> {
+  const args = ['-m', 'onepiece', 'info', ...additionalArgs];
+  return runCommand(args);
+}
+
+export function runOnepieceProfile(
+  additionalArgs: string[] = [],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const args = ['-m', 'onepiece', 'profile', ...additionalArgs];
+  return runCommand(args);
+}
+
 /**
  * Start a long-running Python service process.
  *
@@ -275,4 +287,20 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
   ipcMain.handle('python/list-services', async () => listServices());
 
   ipcMain.handle('logs/recent', async () => getRecentLogs());
+
+  ipcMain.handle(
+    'onepiece/info',
+    async (_event, payload: { checkIntegrations?: boolean } = {}) => {
+      const args = payload.checkIntegrations ? ['--check-integrations'] : [];
+      return runOnepieceInfo(args);
+    },
+  );
+
+  ipcMain.handle(
+    'onepiece/profile',
+    async (_event, payload: { showSources?: boolean } = {}) => {
+      const args = payload.showSources ? ['--show-sources'] : [];
+      return runOnepieceProfile(args);
+    },
+  );
 }
