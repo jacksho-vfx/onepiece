@@ -1,9 +1,9 @@
 import https from 'https';
 import type { App, IpcMain } from 'electron';
 
-// Repository that hosts the desktop releases (owner/repo). Update this string if the
+// Repository that hosts the main releases (owner/repo). Update this string if the
 // release artifacts live elsewhere, or set ONEPIECE_DESKTOP_REPO in the environment.
-const DEFAULT_REPOSITORY = 'onepiece/studio-desktop';
+const DEFAULT_REPOSITORY = 'onepiece/studio-main';
 
 // Drop any leading "v" prefix and trim whitespace so we can compare versions reliably.
 function normalizeVersion(version: string): string {
@@ -28,7 +28,7 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-// Fetch the latest release tag for the desktop GitHub repository.
+// Fetch the latest release tag for the main GitHub repository.
 async function fetchLatestTag(repository: string): Promise<{ latestVersion?: string; url?: string; error?: string }> {
   const repoPath = repository || DEFAULT_REPOSITORY;
   const requestOptions: https.RequestOptions = {

@@ -41,7 +41,7 @@ export interface DesktopConfig {
 
 export function getConfigPath(app: App): string {
   const userDataPath = app.getPath('userData');
-  return path.join(userDataPath, 'desktop-config.json');
+  return path.join(userDataPath, 'main-config.json');
 }
 
 export async function loadConfig(app: App): Promise<DesktopConfig | null> {
@@ -51,7 +51,7 @@ export async function loadConfig(app: App): Promise<DesktopConfig | null> {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== 'ENOENT') {
-      console.error('Error accessing desktop config:', error);
+      console.error('Error accessing main config:', error);
     }
     return null;
   }
@@ -60,7 +60,7 @@ export async function loadConfig(app: App): Promise<DesktopConfig | null> {
     const content = await fs.readFile(configPath, 'utf-8');
     return JSON.parse(content) as DesktopConfig;
   } catch (error) {
-    console.error('Error reading desktop config:', error);
+    console.error('Error reading main config:', error);
     return null;
   }
 }
@@ -72,7 +72,7 @@ export async function saveConfig(app: App, config: DesktopConfig): Promise<void>
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
   } catch (error) {
-    console.error('Error saving desktop config:', error);
+    console.error('Error saving main config:', error);
     throw error;
   }
 }
@@ -99,7 +99,7 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
       try {
         await saveConfig(app, existing);
       } catch (error) {
-        console.error('Error persisting normalized desktop config:', error);
+        console.error('Error persisting normalized main config:', error);
       }
     }
     return existing;
@@ -116,7 +116,7 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
   try {
     await saveConfig(app, defaultConfig);
   } catch (error) {
-    console.error('Error saving default desktop config:', error);
+    console.error('Error saving default main config:', error);
   }
 
   return defaultConfig;
@@ -172,7 +172,7 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
       try {
         await saveConfig(app, updatedConfig);
       } catch (error) {
-        console.error('Error persisting updated desktop config:', error);
+        console.error('Error persisting updated main config:', error);
         throw error;
       }
 

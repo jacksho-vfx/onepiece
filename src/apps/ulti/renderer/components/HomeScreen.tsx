@@ -235,7 +235,7 @@ function HomeScreen({
       const loadedConfig = await window.electron.invoke<DesktopConfig>('config/get');
       setConfig(loadedConfig);
     } catch (error) {
-      console.error('Failed to load desktop config', error);
+      console.error('Failed to load main config', error);
     }
   };
 

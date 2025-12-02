@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from 'electron';
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
-import { registerConfigBundleIpcHandlers } from './desktop/src/main/configBundle';
+import { registerConfigBundleIpcHandlers } from './configBundle';
 import { registerFsExplorerIpcHandlers } from './fsExplorer';
 import { registerPythonIpcHandlers } from './pythonManager';
 import { registerEnvIpcHandlers } from './envDetection';
