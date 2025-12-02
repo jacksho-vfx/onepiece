@@ -4,7 +4,12 @@ import os from 'os';
 import path from 'path';
 import type { App, BrowserWindow, IpcMain } from 'electron';
 import { dialog } from 'electron';
-import { ensureDefaultConfig, getConfigPath, type DesktopConfig } from '../../../configManager';
+import {
+  ensureDefaultConfig,
+  getConfigPath,
+  saveConfig,
+  type DesktopConfig,
+} from '../../../configManager';
 
 async function copyFileIfExists(source: string, destination: string): Promise<boolean> {
   try {
@@ -66,6 +71,73 @@ function resolveProjectRoot(config: DesktopConfig): string | undefined {
   return recent?.path?.trim();
 }
 
+async function unzipArchive(zipPath: string, destination: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('unzip', ['-o', zipPath, '-d', destination]);
+
+    let errorOutput = '';
+    child.stderr?.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    child.on('error', reject);
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(errorOutput || `Unzip command failed with exit code ${code}`));
+      }
+    });
+  });
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function copyFileWithBackup(source: string, destination: string): Promise<void> {
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+
+  if (await pathExists(destination)) {
+    let backupPath = `${destination}.bak`;
+    let counter = 1;
+
+    while (await pathExists(backupPath)) {
+      backupPath = `${destination}.bak.${counter}`;
+      counter += 1;
+    }
+
+    await fs.rename(destination, backupPath);
+  }
+
+  await fs.copyFile(source, destination);
+}
+
+async function copyDirectoryWithBackup(source: string, destination: string): Promise<void> {
+  await fs.mkdir(destination, { recursive: true });
+  const entries = await fs.readdir(source, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyDirectoryWithBackup(sourcePath, destinationPath);
+    } else if (entry.isFile()) {
+      await copyFileWithBackup(sourcePath, destinationPath);
+    }
+  }
+}
+
 async function zipDirectory(sourceDir: string): Promise<string> {
   const zipPath = path.join(os.tmpdir(), `onepiece-config-bundle-${Date.now()}.zip`);
 
@@ -120,6 +192,59 @@ export async function createConfigBundle(app: App): Promise<string> {
   }
 }
 
+export async function importConfigBundle(app: App, bundlePath: string): Promise<void> {
+  const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onepiece-config-import-'));
+
+  try {
+    await unzipArchive(bundlePath, stagingDir);
+
+    const desktopConfigPath = path.join(stagingDir, 'desktop-config.json');
+    if (!(await pathExists(desktopConfigPath))) {
+      throw new Error('The bundle is missing desktop-config.json');
+    }
+
+    const importedConfig = JSON.parse(await fs.readFile(desktopConfigPath, 'utf-8')) as DesktopConfig;
+    const existingConfig = await ensureDefaultConfig(app);
+
+    const mergedConfig: DesktopConfig = {
+      ...existingConfig,
+      ...importedConfig,
+      pythonPath: existingConfig.pythonPath,
+      dccs: existingConfig.dccs,
+      projectRoot: existingConfig.projectRoot ?? importedConfig.projectRoot,
+      currentProject: existingConfig.currentProject ?? importedConfig.currentProject,
+      recentProjects: existingConfig.recentProjects ?? importedConfig.recentProjects,
+      createdAt: existingConfig.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const projectBundlePath = path.join(stagingDir, 'project');
+    const targetProjectRoot = resolveProjectRoot(mergedConfig) ?? resolveProjectRoot(importedConfig);
+
+    if (await pathExists(projectBundlePath)) {
+      if (!targetProjectRoot) {
+        console.warn('Project files found in bundle, but no project root is configured. Skipping copy.');
+      } else {
+        await fs.mkdir(targetProjectRoot, { recursive: true });
+
+        const bundledToml = path.join(projectBundlePath, 'onepiece.toml');
+        if (await pathExists(bundledToml)) {
+          await copyFileWithBackup(bundledToml, path.join(targetProjectRoot, 'onepiece.toml'));
+        }
+
+        const bundledProfiles = path.join(projectBundlePath, 'profiles');
+        if (await pathExists(bundledProfiles)) {
+          await copyDirectoryWithBackup(bundledProfiles, path.join(targetProjectRoot, 'profiles'));
+        }
+      }
+    }
+
+    await saveConfig(app, mergedConfig);
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+  }
+}
+
 export function registerConfigBundleIpcHandlers(
   ipcMain: IpcMain,
   app: App,
@@ -144,5 +269,21 @@ export function registerConfigBundleIpcHandlers(
     } finally {
       await fs.rm(bundlePath, { force: true });
     }
+  });
+
+  ipcMain.handle('config/import-bundle', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Import studio config bundle',
+      properties: ['openFile'],
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+    });
+
+    if (canceled || !filePaths?.length) {
+      throw new Error('Import cancelled');
+    }
+
+    const bundlePath = filePaths[0];
+    await importConfigBundle(app, bundlePath);
+    return true;
   });
 }

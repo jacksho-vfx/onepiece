@@ -158,7 +158,12 @@ function App(): JSX.Element {
               {selectedTab === 'tasks' && <TaskList />}
               {selectedTab === 'logs' && <LogsPanel />}
               {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
-              {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}
+              {selectedTab === 'settings' && (
+                <SettingsScreen
+                  onRequestRerunWizard={handleRequestRerunWizard}
+                  onConfigImported={loadConfig}
+                />
+              )}
               <VersionFooter />
             </AppShell>
           )}

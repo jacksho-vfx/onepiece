@@ -48,6 +48,7 @@ type FormState = {
 
 type SettingsScreenProps = {
   onRequestRerunWizard: () => void;
+  onConfigImported?: () => Promise<void> | void;
 };
 
 type UpdateCheckResult = {
@@ -101,6 +102,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckResult | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [exportingConfig, setExportingConfig] = useState<boolean>(false);
+  const [importingConfig, setImportingConfig] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
@@ -292,6 +294,24 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       });
     } finally {
       setExportingConfig(false);
+    }
+  };
+
+  const handleImportConfigBundle = async (): Promise<void> => {
+    setImportingConfig(true);
+
+    try {
+      await window.electron.invoke('config/import-bundle');
+      showToast({ kind: 'success', message: 'Imported studio configuration. Please restart the app.' });
+      await onConfigImported?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import config bundle.';
+      showToast({
+        kind: message.toLowerCase().includes('cancel') ? 'info' : 'error',
+        message,
+      });
+    } finally {
+      setImportingConfig(false);
     }
   };
 
@@ -615,14 +635,24 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
           title="Export studio config"
           subtitle="Download a bundle containing your desktop and project configuration files."
           action={
-            <Button
-              variant="secondary"
-              onClick={() => void handleExportConfigBundle()}
-              isLoading={exportingConfig}
-              disabled={exportingConfig}
-            >
-              {exportingConfig ? 'Exporting…' : 'Export config'}
-            </Button>
+            <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+              <Button
+                variant="secondary"
+                onClick={() => void handleImportConfigBundle()}
+                isLoading={importingConfig}
+                disabled={importingConfig || exportingConfig}
+              >
+                {importingConfig ? 'Importing…' : 'Import config'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void handleExportConfigBundle()}
+                isLoading={exportingConfig}
+                disabled={exportingConfig || importingConfig}
+              >
+                {exportingConfig ? 'Exporting…' : 'Export config'}
+              </Button>
+            </div>
           }
         />
         <p style={{ marginTop: theme.spacing.md, color: theme.colors.textMuted }}>
