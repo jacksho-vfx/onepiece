@@ -38,9 +38,12 @@ type HomeScreenProps = {
   onViewLogs?: () => void;
   onViewTasks?: () => void;
   onViewDiagnostics?: () => void;
+  onViewEnvironmentReport?: () => void;
   currentProject?: { name: string; path: string };
   autoOpenIngestOnMount?: boolean;
   onAutoOpenIngestHandled?: () => void;
+  showEnvironmentReportPrompt?: boolean;
+  onDismissEnvironmentReportPrompt?: () => void;
 };
 
 interface ServiceSummary {
@@ -183,9 +186,13 @@ function HomeScreen({
   config: initialConfig,
   onViewLogs,
   onViewTasks,
+  onViewDiagnostics,
+  onViewEnvironmentReport,
   currentProject,
   autoOpenIngestOnMount,
   onAutoOpenIngestHandled,
+  showEnvironmentReportPrompt,
+  onDismissEnvironmentReportPrompt,
 }: HomeScreenProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
@@ -1030,6 +1037,31 @@ function HomeScreen({
         </div>
         <Button onClick={openUtaDashboard}>Open Uta Dashboard</Button>
       </header>
+
+      {showEnvironmentReportPrompt ? (
+        <Card>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: theme.spacing.md,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '0.25rem' }}>
+              <p className="op-eyebrow">Setup complete</p>
+              <p style={{ margin: 0 }}>View your environment report to verify integrations and profile resolution.</p>
+            </div>
+            <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <Button onClick={() => onViewEnvironmentReport?.()}>View environment report</Button>
+              <Button variant="ghost" onClick={() => onDismissEnvironmentReportPrompt?.()}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {showIngestReminder && !ingestCompleted ? (
         <Card>
