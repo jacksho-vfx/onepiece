@@ -7,6 +7,7 @@ interface VendorIngestWizardProps {
   project?: { name: string; path: string };
   onClose(): void;
   onViewTasks?: () => void;
+  onCompleted?: () => void;
 }
 
 interface DesktopConfig {
@@ -137,7 +138,7 @@ function parsePreflight(stdout: string): { fileCount?: number; issues: Preflight
   return { fileCount, issues };
 }
 
-function VendorIngestWizard({ project, onClose, onViewTasks }: VendorIngestWizardProps): JSX.Element {
+function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: VendorIngestWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
@@ -282,6 +283,8 @@ function VendorIngestWizard({ project, onClose, onViewTasks }: VendorIngestWizar
         stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
         stderr: '',
       });
+
+      onCompleted?.();
 
       showToast({
         kind: 'info',
