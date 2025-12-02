@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 import { getNextStep, ProjectActivitySummary } from '../utils/nextStep';
@@ -11,20 +11,29 @@ type ProjectActivity = {
   description?: string;
 };
 
-type ProjectInfo = {
-  shots?: number;
-  assets?: number;
-  ingests?: number;
-  publishes?: number;
-  renders?: number;
-  deliveries?: number;
-  recentActivity?: ProjectActivity[];
+type ProjectStats = {
+  ingests: number;
+  publishes: number;
+  renders: number;
+  deliveries: number;
+};
+
+type ProjectInfoResponse = {
+  project?: string;
+  stats?: Partial<ProjectStats>;
+  recent_activity?: ProjectActivity[];
   warnings?: string[];
+};
+
+const DEFAULT_STATS: ProjectStats = {
+  ingests: 0,
+  publishes: 0,
+  renders: 0,
+  deliveries: 0,
 };
 
 interface ProjectOverviewProps {
   project?: ProjectSelection;
-  onViewLogs?: () => void;
   activitySummary?: ProjectActivitySummary;
   onOpenVendorIngest?: () => void;
   onOpenDccPublish?: () => void;
@@ -35,7 +44,6 @@ interface ProjectOverviewProps {
 
 function ProjectOverview({
   project,
-  onViewLogs,
   activitySummary,
   onOpenVendorIngest,
   onOpenDccPublish,
@@ -44,72 +52,99 @@ function ProjectOverview({
   onOpenDiagnostics,
 }: ProjectOverviewProps): JSX.Element {
   const theme = useTheme();
-  const [info, setInfo] = useState<ProjectInfo | null>(null);
+  const [stats, setStats] = useState<ProjectStats>(DEFAULT_STATS);
+  const [recentActivity, setRecentActivity] = useState<ProjectActivity[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
+  const [statsWarning, setStatsWarning] = useState<string | null>(null);
 
   const healthStatus = useMemo(() => {
-    const warnings = info?.warnings ?? [];
     return warnings.length > 0 ? 'Warnings' : 'OK';
-  }, [info?.warnings]);
+  }, [warnings]);
 
-  useEffect(() => {
+  const normalizeStats = useCallback((input?: Partial<ProjectStats>): ProjectStats => {
+    return {
+      ingests: Number(input?.ingests ?? DEFAULT_STATS.ingests) || 0,
+      publishes: Number(input?.publishes ?? DEFAULT_STATS.publishes) || 0,
+      renders: Number(input?.renders ?? DEFAULT_STATS.renders) || 0,
+      deliveries: Number(input?.deliveries ?? DEFAULT_STATS.deliveries) || 0,
+    };
+  }, []);
+
+  const resetOverview = useCallback(() => {
+    setStats(DEFAULT_STATS);
+    setRecentActivity([]);
+    setWarnings([]);
+    setStatsWarning(null);
+    setHasFetched(false);
+    setLoading(false);
+  }, []);
+
+  const fetchProjectInfo = useCallback(async (): Promise<void> => {
     if (!project) {
-      setInfo(null);
-      setError(null);
+      resetOverview();
       return;
     }
 
-    const fetchProjectInfo = async (): Promise<void> => {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setStatsWarning(null);
 
-      try {
-        const result = await window.electron.invoke<{ code: number; stdout?: string; stderr?: string }>(
-          'python/run-command',
-          { args: ['-m', 'onepiece', 'project-info', '--root', project.path] },
-        );
+    try {
+      const result = await window.electron.invoke<{ code: number; stdout?: string; stderr?: string }>(
+        'python/run-command',
+        {
+          // TODO: Replace this call with the finalized CLI once `python -m onepiece project-info` exists.
+          args: ['-m', 'onepiece', 'project-info', '--root', project.path, '--format', 'json'],
+        },
+      );
 
-        if (result.code !== 0) {
-          throw new Error(`project-info exited with code ${result.code}`);
-        }
-
-        const output = result.stdout ?? '';
-        try {
-          const parsed = JSON.parse(output) as ProjectInfo;
-          setInfo(parsed);
-        } catch (parseError) {
-          // TODO: Adjust parsing if the project-info command output differs from this assumption.
-          console.error('Failed to parse project-info output', parseError, output);
-          setError('Received unexpected project overview data.');
-          setInfo(null);
-        }
-      } catch (err) {
-        console.error('Failed to fetch project overview', err);
-        setError('Unable to load project overview.');
-        setInfo(null);
-      } finally {
-        setLoading(false);
+      if (result.code !== 0) {
+        throw new Error(`project-info exited with code ${result.code}`);
       }
-    };
+
+      const output = result.stdout ?? '';
+      if (!output.trim()) {
+        throw new Error('project-info returned no data');
+      }
+
+      const parsed = JSON.parse(output) as ProjectInfoResponse;
+
+      const normalizedStats = normalizeStats(parsed.stats);
+      const normalizedActivity = Array.isArray(parsed.recent_activity) ? parsed.recent_activity : [];
+      const normalizedWarnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
+
+      setStats(normalizedStats);
+      setRecentActivity(normalizedActivity);
+      setWarnings(normalizedWarnings);
+      setStatsWarning(parsed.stats ? null : 'Project stats unavailable');
+    } catch (err) {
+      console.error('Failed to fetch project overview stats', err);
+      setStats(DEFAULT_STATS);
+      setRecentActivity([]);
+      setWarnings([]);
+      setStatsWarning('Project stats unavailable');
+    } finally {
+      setHasFetched(true);
+      setLoading(false);
+    }
+  }, [normalizeStats, project, resetOverview]);
+
+  useEffect(() => {
+    if (project) {
+      setHasFetched(false);
+    }
 
     void fetchProjectInfo();
-  }, [project]);
+  }, [fetchProjectInfo, project]);
 
   const summary = useMemo<ProjectActivitySummary>(() => {
-    const inferredSummary: ProjectActivitySummary = {
-      ingests: info?.ingests ?? 0,
-      publishes: info?.publishes ?? 0,
-      renders: info?.renders ?? 0,
-      deliveries: info?.deliveries ?? 0,
-    };
-
     if (activitySummary) {
       return activitySummary;
     }
 
-    return inferredSummary;
-  }, [activitySummary, info?.deliveries, info?.ingests, info?.publishes, info?.renders]);
+    return stats;
+  }, [activitySummary, stats]);
 
   const nextStep = useMemo(() => getNextStep(summary), [summary]);
 
@@ -146,19 +181,7 @@ function ProjectOverview({
     );
   }
 
-  if (error) {
-    return (
-      <Card title="Project overview">
-        <p style={{ margin: 0, color: theme.colors.danger }}>{error}</p>
-        <p style={{ margin: '0.35rem 0', color: theme.colors.textMuted }}>
-          Check your logs for more details or retry in a moment.
-        </p>
-        <Button variant="secondary" onClick={() => onViewLogs?.()}>View logs</Button>
-      </Card>
-    );
-  }
-
-  if (loading || !info) {
+  if (!hasFetched && loading) {
     return (
       <Card title="Project overview">
         <p style={{ margin: 0, color: theme.colors.textMuted }}>Loading project overview…</p>
@@ -166,7 +189,6 @@ function ProjectOverview({
     );
   }
 
-  const { shots = 0, assets = 0, deliveries = 0, warnings = [], recentActivity = [] } = info;
   const activities = recentActivity.slice(0, 5);
   const hasHandler = useMemo(() => {
     switch (nextStep.step) {
@@ -190,6 +212,14 @@ function ProjectOverview({
       <SectionHeader
         title="Project overview"
         subtitle="Review key stats and recent operations for this project."
+        action={
+          <>
+            {statsWarning ? <StatusBadge status="Warning">{statsWarning}</StatusBadge> : null}
+            <Button variant="secondary" size="sm" isLoading={loading} onClick={() => void fetchProjectInfo()}>
+              Refresh
+            </Button>
+          </>
+        }
       />
 
       <div
@@ -207,14 +237,17 @@ function ProjectOverview({
               gap: theme.spacing.md,
             }}
           >
-            {[{ label: 'Shots', value: shots }, { label: 'Assets', value: assets }, { label: 'Deliveries', value: deliveries }].map(
-              (item) => (
-                <div key={item.label} style={{ display: 'grid', gap: '0.35rem' }}>
-                  <p style={{ margin: 0, color: theme.colors.textMuted }}>{item.label}</p>
-                  <p style={{ margin: 0, fontSize: '1.8rem', fontWeight: theme.typography.fontWeightBold }}>{item.value}</p>
-                </div>
-              ),
-            )}
+            {[
+              { label: 'Ingests', value: stats.ingests },
+              { label: 'Publishes', value: stats.publishes },
+              { label: 'Renders', value: stats.renders },
+              { label: 'Deliveries', value: stats.deliveries },
+            ].map((item) => (
+              <div key={item.label} style={{ display: 'grid', gap: '0.35rem' }}>
+                <p style={{ margin: 0, color: theme.colors.textMuted }}>{item.label}</p>
+                <p style={{ margin: 0, fontSize: '1.8rem', fontWeight: theme.typography.fontWeightBold }}>{item.value}</p>
+              </div>
+            ))}
           </div>
         </Card>
 
