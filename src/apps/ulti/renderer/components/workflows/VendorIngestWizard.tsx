@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, Modal, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 import { useHelpContext } from '../HelpContext';
@@ -141,6 +141,7 @@ function parsePreflight(stdout: string): { fileCount?: number; issues: Preflight
 function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: VendorIngestWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
+  const hasCompletedRef = useRef(false);
   const [currentStep, setCurrentStep] = useState(0);
   useHelpContext(
     currentStep === 0 ? 'wizard.vendorIngest.step1' : currentStep === 1 ? 'wizard.vendorIngest.step2' : null,
@@ -271,6 +272,15 @@ function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: Vend
     setIngestStatus('running');
     setIngestOutput({ stdout: '', stderr: '' });
 
+    const handleComplete = (): void => {
+      if (hasCompletedRef.current) {
+        return;
+      }
+
+      hasCompletedRef.current = true;
+      onCompleted?.();
+    };
+
     try {
       const label = project.name ? `Vendor ingest for ${project.name}` : 'Vendor ingest';
       const taskId = await window.electron.invoke<string>('tasks/create', {
@@ -283,14 +293,13 @@ function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: Vend
         stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
         stderr: '',
       });
-
-      onCompleted?.();
+      handleComplete();
 
       showToast({
-        kind: 'info',
-        message: `Task started: ${label}`,
-        actionLabel: onViewTasks ? 'View tasks' : undefined,
-        onAction: onViewTasks,
+        kind: 'success',
+        message: 'Vendor ingest complete',
+        actionLabel: 'View in Overview',
+        onAction: handleComplete,
       });
     } catch (error) {
       setIngestStatus('error');

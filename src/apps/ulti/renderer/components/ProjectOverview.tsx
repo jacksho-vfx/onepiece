@@ -40,6 +40,7 @@ interface ProjectOverviewProps {
   onOpenRenderSubmit?: () => void;
   onOpenDelivery?: () => void;
   onOpenDiagnostics?: () => void;
+  refreshKey?: number;
 }
 
 function ProjectOverview({
@@ -50,6 +51,7 @@ function ProjectOverview({
   onOpenRenderSubmit,
   onOpenDelivery,
   onOpenDiagnostics,
+  refreshKey,
 }: ProjectOverviewProps): JSX.Element {
   const theme = useTheme();
   const [stats, setStats] = useState<ProjectStats>(DEFAULT_STATS);
@@ -136,7 +138,7 @@ function ProjectOverview({
     }
 
     void fetchProjectInfo();
-  }, [fetchProjectInfo, project]);
+  }, [fetchProjectInfo, project, refreshKey]);
 
   const summary = useMemo<ProjectActivitySummary>(() => {
     if (activitySummary) {
