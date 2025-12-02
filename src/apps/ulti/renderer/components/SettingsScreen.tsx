@@ -27,6 +27,7 @@ type DesktopConfig = {
   hasCompletedWizard: boolean;
   createdAt: string;
   updatedAt: string;
+  enableNotifications?: boolean;
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
@@ -42,6 +43,7 @@ type FormState = {
   shotgrid: Required<ShotgridConfig>;
   aws: Required<AwsConfig>;
   dccs: Record<DccKey, DccConfig>;
+  enableNotifications: boolean;
 };
 
 type SettingsScreenProps = {
@@ -84,6 +86,7 @@ const defaultForm: FormState = {
     blender: { enabled: false, executablePath: '' },
     unreal: { enabled: false, executablePath: '' },
   },
+  enableNotifications: true,
 };
 
 function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Element {
@@ -122,6 +125,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
           profile: loaded.profile ?? '',
           projectRoot: loaded.projectRoot ?? '',
           pythonPath: loaded.pythonPath ?? '',
+          enableNotifications: loaded.enableNotifications ?? true,
           shotgrid: {
             url: loaded.shotgrid?.url ?? '',
             scriptName: loaded.shotgrid?.scriptName ?? '',
@@ -246,6 +250,10 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
 
     if (Object.keys(changedDccs).length > 0) {
       updates.dccs = { ...config.dccs, ...changedDccs };
+    }
+
+    if ((config.enableNotifications ?? true) !== form.enableNotifications) {
+      updates.enableNotifications = form.enableNotifications;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -402,6 +410,24 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
               onChange={(event) => setForm((prev) => ({ ...prev, pythonPath: event.target.value }))}
               placeholder="Path to python executable"
             />
+          </div>
+        </Card>
+
+        <Card title="Notifications">
+          <div style={{ display: 'grid', gap: theme.spacing.md }}>
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>
+              Enable desktop notifications when background tasks complete.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+              <input
+                type="checkbox"
+                checked={form.enableNotifications}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, enableNotifications: event.target.checked }))
+                }
+              />
+              <span>Desktop notifications for task completion</span>
+            </label>
           </div>
         </Card>
       </div>

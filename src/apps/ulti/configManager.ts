@@ -7,6 +7,7 @@ export interface DesktopConfig {
   hasCompletedWizard: boolean;
   createdAt: string;
   updatedAt: string;
+  enableNotifications?: boolean;
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
@@ -89,6 +90,11 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
       needsSave = true;
     }
 
+    if (existing.enableNotifications === undefined) {
+      existing.enableNotifications = true;
+      needsSave = true;
+    }
+
     if (needsSave) {
       try {
         await saveConfig(app, existing);
@@ -104,6 +110,7 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
     hasCompletedWizard: false,
     createdAt: now,
     updatedAt: now,
+    enableNotifications: true,
   };
 
   try {
