@@ -303,4 +303,21 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
       return runOnepieceProfile(args);
     },
   );
+
+  ipcMain.handle(
+    'onepiece/dcc-open-shot',
+    async (_event, payload: { scenePath: string; dcc?: string }) => {
+      if (!payload?.scenePath) {
+        throw new Error('Scene path is required to open a shot.');
+      }
+
+      const args = ['-m', 'onepiece', 'dcc', 'open-shot', '--scene', payload.scenePath];
+
+      if (payload.dcc) {
+        args.push('--dcc', payload.dcc);
+      }
+
+      return runCommand(args);
+    },
+  );
 }
