@@ -1,46 +1,144 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Modal, TextInput, WizardStep, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 import { useHelpContext } from '../HelpContext';
+import { Button, Card, Modal, SectionHeader, StatusBadge, TextInput, useToast } from '../ui';
 
-interface VendorIngestWizardProps {
-  project?: { name: string; path: string };
-  onClose(): void;
-  onViewTasks?: () => void;
+type WizardStep = 1 | 2 | 3 | 4;
+
+type VendorIngestWizardProps = {
+  isOpen: boolean;
+  project?: { name: string; path: string } | null;
+  onClose: () => void;
   onCompleted?: () => void;
-}
+  onViewTasks?: () => void;
+};
 
-interface DesktopConfig {
-  quickActionPresets?: {
-    [projectName: string]: {
-      vendorIngest?: { sourcePath?: string };
-    };
-  };
-}
+type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 
-interface PreflightIssue {
-  level: 'warning' | 'error';
-  message: string;
-}
+type Task = {
+  id: string;
+  label: string;
+  status: TaskStatus;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  exitCode?: number;
+};
 
-interface PreflightResult {
-  fileCount?: number;
-  issues: PreflightIssue[];
+type PreflightState = {
+  status: 'idle' | 'running' | 'succeeded' | 'failed';
+  files?: number;
+  folders?: number;
+  totalSize?: string;
+  warnings: string[];
+  blockingIssues: string[];
   rawOutput?: string;
   stderr?: string;
   error?: string;
+};
+
+type IngestState = {
+  taskId?: string;
+  status: TaskStatus | 'idle';
+  logs: string[];
+  error?: string;
+  startedAt?: string;
+};
+
+declare global {
+  interface Window {
+    electron: {
+      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
+      on?: (channel: string, listener: (_event: unknown, payload: Task[] | Task) => void) => () => void;
+    };
+  }
 }
 
-const steps = ['Source folder', 'Preflight', 'Run ingest'];
+const stepLabels = ['Source', 'Preflight', 'Review', 'Ingest'];
 
-function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
+const defaultPreflightState: PreflightState = {
+  status: 'idle',
+  warnings: [],
+  blockingIssues: [],
+};
+
+const defaultIngestState: IngestState = {
+  status: 'idle',
+  logs: [],
+};
+
+const formatCount = (value?: number): string => {
+  if (typeof value === 'number') {
+    return value.toLocaleString();
+  }
+
+  return 'N/A';
+};
+
+const formatDateTime = (value?: string): string => {
+  if (!value) {
+    return '—';
+  }
+
+  return new Date(value).toLocaleString();
+};
+
+const parsePreflightOutput = (stdout: string, stderr: string): Omit<PreflightState, 'status'> => {
+  const warnings: string[] = [];
+  const blockingIssues: string[] = [];
+  let files: number | undefined;
+  let folders: number | undefined;
+  let totalSize: string | undefined;
+
+  try {
+    const parsed = JSON.parse(stdout);
+    files = parsed.files ?? parsed.fileCount;
+    folders = parsed.folders ?? parsed.folderCount;
+    totalSize = parsed.totalSize ?? parsed.size;
+    if (Array.isArray(parsed.warnings)) {
+      warnings.push(...parsed.warnings.map((item: unknown) => String(item)));
+    }
+    if (Array.isArray(parsed.blockingIssues)) {
+      blockingIssues.push(...parsed.blockingIssues.map((item: unknown) => String(item)));
+    }
+  } catch (error) {
+    const fileMatch = stdout.match(/(\d+)\s+files?/i);
+    const folderMatch = stdout.match(/(\d+)\s+folders?/i);
+    const sizeMatch = stdout.match(/(\d+(?:\.\d+)?)\s*(gb|tb|mb)/i);
+
+    files = fileMatch ? Number(fileMatch[1]) : undefined;
+    folders = folderMatch ? Number(folderMatch[1]) : undefined;
+    totalSize = sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : undefined;
+
+    stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const lower = line.toLowerCase();
+        if (lower.startsWith('warning') || lower.includes('warning:')) {
+          warnings.push(line.replace(/^(warning:?)\s*/i, ''));
+        } else if (lower.startsWith('error') || lower.includes('failed')) {
+          blockingIssues.push(line.replace(/^(error:?)\s*/i, ''));
+        }
+      });
+
+    if (!blockingIssues.length && stderr.trim()) {
+      blockingIssues.push(...stderr.trim().split('\n').map((line) => line.trim()));
+    }
+  }
+
+  return { files, folders, totalSize, warnings, blockingIssues, rawOutput: stdout, stderr };
+};
+
+function StepIndicator({ currentStep }: { currentStep: WizardStep }): JSX.Element {
   const theme = useTheme();
 
   return (
     <div style={{ display: 'grid', gap: theme.spacing.xs }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
-          Step {currentStep + 1} of {steps.length}
+          Step {currentStep} of {stepLabels.length}
         </span>
       </div>
       <ol
@@ -50,13 +148,14 @@ function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
           padding: 0,
           margin: 0,
           display: 'grid',
-          gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+          gridTemplateColumns: `repeat(${stepLabels.length}, minmax(0, 1fr))`,
           gap: theme.spacing.sm,
         }}
       >
-        {steps.map((label, index) => {
-          const isActive = index === currentStep;
-          const isComplete = index < currentStep;
+        {stepLabels.map((label, index) => {
+          const stepNumber = (index + 1) as WizardStep;
+          const isActive = currentStep === stepNumber;
+          const isComplete = currentStep > stepNumber;
           const indicatorColor = isActive
             ? theme.colors.primary
             : isComplete
@@ -119,287 +218,472 @@ function StepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
   );
 }
 
-function parsePreflight(stdout: string): { fileCount?: number; issues: PreflightIssue[] } {
-  const fileCountMatch = stdout.match(/(\d+)\s+(?:files?|items?)/i);
-  const fileCount = fileCountMatch ? Number(fileCountMatch[1]) : undefined;
+function NotesField({
+  label,
+  value,
+  placeholder,
+  onChange,
+  helpText,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  helpText?: string;
+  onChange: (value: string) => void;
+}): JSX.Element {
+  const theme = useTheme();
 
-  const issues: PreflightIssue[] = stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const lower = line.toLowerCase();
-
-      if (lower.includes('error') || lower.includes('fail') || lower.includes('missing')) {
-        return { level: 'error', message: line } as PreflightIssue;
-      }
-
-      if (lower.includes('warning') || lower.includes('warn') || lower.includes('issue')) {
-        return { level: 'warning', message: line } as PreflightIssue;
-      }
-
-      return null;
-    })
-    .filter((value): value is PreflightIssue => Boolean(value));
-
-  return { fileCount, issues };
+  return (
+    <label style={{ display: 'grid', gap: '0.35rem', width: '100%' }}>
+      <span
+        style={{
+          fontWeight: theme.typography.fontWeightMedium,
+          color: theme.colors.text,
+          fontSize: theme.typography.fontSizeSm,
+        }}
+      >
+        {label}
+      </span>
+      <textarea
+        rows={4}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        style={{
+          background: theme.colors.surfaceAlt,
+          color: theme.colors.text,
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.radii.md,
+          padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+          fontSize: theme.typography.fontSizeBase,
+          fontFamily: theme.typography.fontFamily,
+          resize: 'vertical',
+          minHeight: '120px',
+        }}
+      />
+      {helpText ? <span style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>{helpText}</span> : null}
+    </label>
+  );
 }
 
-function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: VendorIngestWizardProps): JSX.Element {
+function VendorIngestWizard({
+  isOpen,
+  project,
+  onClose,
+  onCompleted,
+  onViewTasks,
+}: VendorIngestWizardProps): JSX.Element | null {
   const theme = useTheme();
   const { showToast } = useToast();
-  const hasCompletedRef = useRef(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  useHelpContext(
-    currentStep === 0 ? 'wizard.vendorIngest.step1' : currentStep === 1 ? 'wizard.vendorIngest.step2' : null,
-  );
+  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [sourcePath, setSourcePath] = useState('');
+  const [deliveryName, setDeliveryName] = useState('');
+  const [notes, setNotes] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
-  const [presetSource, setPresetSource] = useState<string | null>(null);
-  const [preflightStatus, setPreflightStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
-  const [preflightResult, setPreflightResult] = useState<PreflightResult>({ issues: [] });
-  const [ingestStatus, setIngestStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
-  const [ingestOutput, setIngestOutput] = useState<{ stdout: string; stderr: string; error?: string }>(
-    {
-      stdout: '',
-      stderr: '',
-    },
+  const [preflight, setPreflight] = useState<PreflightState>(defaultPreflightState);
+  const [ingest, setIngest] = useState<IngestState>(defaultIngestState);
+  const hasShownSuccessToast = useRef(false);
+  const previousIngestStatus = useRef<IngestState['status']>('idle');
+
+  useHelpContext(
+    isOpen
+      ? currentStep === 1
+        ? 'wizard.vendorIngest.step1'
+        : currentStep === 2
+          ? 'wizard.vendorIngest.step2'
+          : currentStep === 3
+            ? 'wizard.vendorIngest.step3'
+            : 'wizard.vendorIngest.step4'
+      : null,
   );
 
   useEffect(() => {
-    if (!project?.name) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadPreset = async (): Promise<void> => {
-      try {
-        const config = await window.electron.invoke<DesktopConfig>('config/get');
-        if (!isMounted || !config?.quickActionPresets?.[project.name]?.vendorIngest) {
-          return;
-        }
-
-        const presetValue = config.quickActionPresets[project.name].vendorIngest?.sourcePath ?? null;
-        setPresetSource(presetValue);
-        setSourcePath((prev) => prev || presetValue || '');
-      } catch (error) {
-        console.error('Failed to load vendor ingest preset', error);
-      }
-    };
-
-    void loadPreset();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [project?.name]);
-
-  useEffect(() => {
-    if (sourceError && sourcePath.trim()) {
-      setSourceError(null);
-    }
-  }, [sourceError, sourcePath]);
-
-  const handleStartPreflight = async (): Promise<void> => {
-    if (!sourcePath.trim()) {
-      setSourceError('Please provide a source folder path.');
-      return;
-    }
-
-    if (!project?.path) {
-      setSourceError('Select a project to continue.');
+    if (!isOpen) {
       return;
     }
 
     setCurrentStep(1);
-    setPreflightStatus('running');
-    setPreflightResult({ issues: [] });
+    setSourceError(null);
+    setPreflight(defaultPreflightState);
+    setIngest(defaultIngestState);
+    hasShownSuccessToast.current = false;
+  }, [isOpen]);
 
+  const handleBrowseSource = async (): Promise<void> => {
     try {
-      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
-        'python/run-command',
-        { args: ['-m', 'onepiece', 'ingest-preflight', '--source', sourcePath, '--project-root', project.path] },
-      );
-
-      const parsed = parsePreflight(result.stdout);
-      setPreflightResult({
-        ...parsed,
-        rawOutput: result.stdout,
-        stderr: result.stderr,
-        error: result.code === 0 ? undefined : `Preflight exited with code ${result.code}`,
-      });
-      setPreflightStatus(result.code === 0 ? 'success' : 'error');
+      // TODO: wire up a real folder picker IPC
+      const result = await window.electron.invoke<string | undefined>('dialog/open-folder');
+      if (result) {
+        setSourcePath(result);
+        setSourceError(null);
+      }
     } catch (error) {
-      setPreflightStatus('error');
-      setPreflightResult({ issues: [], error: error instanceof Error ? error.message : 'Preflight failed.' });
+      console.warn('Folder picker not implemented yet', error);
     }
   };
 
-  const hasSevereIssues = useMemo(
-    () => preflightResult.issues.some((issue) => issue.level === 'error'),
-    [preflightResult.issues],
-  );
-
-  const preflightSummary = useMemo(() => {
-    if (preflightStatus === 'running') {
-      return 'Running preflight checks…';
-    }
-
-    if (preflightStatus === 'error') {
-      return preflightResult.error ?? 'Preflight reported issues.';
-    }
-
-    const issueCount = preflightResult.issues.length;
-    const fileCountText = preflightResult.fileCount ? `${preflightResult.fileCount} files scanned` : 'Files scanned';
-
-    if (issueCount === 0) {
-      return `${fileCountText} — no issues found.`;
-    }
-
-    const warnings = preflightResult.issues.filter((issue) => issue.level === 'warning').length;
-    const errors = preflightResult.issues.filter((issue) => issue.level === 'error').length;
-
-    const pieces: string[] = [];
-    if (warnings) {
-      pieces.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
-    }
-    if (errors) {
-      pieces.push(`${errors} error${errors === 1 ? '' : 's'}`);
-    }
-
-    return `${fileCountText} — ${pieces.join(' and ')}`;
-  }, [preflightResult.error, preflightResult.fileCount, preflightResult.issues, preflightStatus]);
-
-  const handleConfirmIngest = async (): Promise<void> => {
+  const runPreflight = async (): Promise<void> => {
     if (!project?.path) {
       return;
     }
 
-    setIngestStatus('running');
-    setIngestOutput({ stdout: '', stderr: '' });
-
-    const handleComplete = (): void => {
-      if (hasCompletedRef.current) {
-        return;
-      }
-
-      hasCompletedRef.current = true;
-      onCompleted?.();
-    };
+    setPreflight({ ...defaultPreflightState, status: 'running' });
+    setCurrentStep(2);
 
     try {
-      const label = project.name ? `Vendor ingest for ${project.name}` : 'Vendor ingest';
+      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
+        'python/run-command',
+        {
+          args: ['-m', 'onepiece', 'ingest-preflight', '--source', sourcePath, '--project-root', project.path],
+        },
+      );
+
+      const parsed = parsePreflightOutput(result.stdout, result.stderr);
+      const status = result.code === 0 ? 'succeeded' : 'failed';
+
+      setPreflight({
+        status,
+        ...parsed,
+        error: status === 'failed' ? `Preflight exited with code ${result.code}` : undefined,
+      });
+    } catch (error) {
+      setPreflight({
+        ...defaultPreflightState,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Preflight failed.',
+      });
+    }
+  };
+
+  const refreshTask = async (taskId: string): Promise<void> => {
+    try {
+      const tasks = await window.electron.invoke<Task[]>('tasks/list');
+      const match = tasks.find((task) => task.id === taskId);
+
+      if (match) {
+        setIngest((prev) => ({
+          ...prev,
+          status: match.status,
+          taskId,
+          startedAt: prev.startedAt ?? match.startedAt,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to refresh task state', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!ingest.taskId) {
+      return undefined;
+    }
+
+    const unsubscribe = window.electron.on?.('tasks/updated', (_event, payload: Task[] | Task) => {
+      const tasks = Array.isArray(payload) ? payload : [payload];
+      const match = tasks.find((task) => task.id === ingest.taskId);
+      if (match) {
+        setIngest((prev) => ({
+          ...prev,
+          status: match.status,
+          taskId: ingest.taskId,
+          startedAt: prev.startedAt ?? match.startedAt,
+        }));
+      }
+    });
+
+    const interval = window.setInterval(() => {
+      void refreshTask(ingest.taskId as string);
+    }, 4000);
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      window.clearInterval(interval);
+    };
+  }, [ingest.taskId]);
+
+  useEffect(() => {
+    if (ingest.status === 'succeeded' && !hasShownSuccessToast.current) {
+      hasShownSuccessToast.current = true;
+
+      showToast({
+        kind: 'success',
+        message: `Vendor ingest complete for "${deliveryName || sourcePath}"`,
+        actionLabel: 'Open overview',
+        onAction: () => {
+          onCompleted?.();
+          onClose();
+        },
+      });
+    }
+  }, [deliveryName, ingest.status, onClose, onCompleted, showToast, sourcePath]);
+
+  useEffect(() => {
+    if (ingest.status === previousIngestStatus.current || ingest.status === 'idle') {
+      return;
+    }
+
+    previousIngestStatus.current = ingest.status;
+    setIngest((prev) => ({
+      ...prev,
+      logs: [
+        ...prev.logs,
+        ingest.status === 'succeeded'
+          ? 'Ingest completed successfully.'
+          : ingest.status === 'failed'
+            ? 'Ingest failed. View the Tasks tab for full details.'
+            : 'Ingest running…',
+      ],
+    }));
+  }, [ingest.status]);
+
+  const startIngest = async (): Promise<void> => {
+    if (!project?.path) {
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    setCurrentStep(4);
+    setIngest({ status: 'running', logs: ['Starting ingest…'], startedAt });
+
+    try {
+      const label = `Vendor ingest – ${project?.name ?? 'Unknown project'}`;
       const taskId = await window.electron.invoke<string>('tasks/create', {
         label,
         args: ['-m', 'onepiece', 'ingest', '--source', sourcePath, '--project-root', project.path],
       });
 
-      setIngestStatus('success');
-      setIngestOutput({
-        stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
-        stderr: '',
+      setIngest({
+        status: 'running',
+        taskId,
+        logs: [`Task created (id: ${taskId}).`, 'Monitoring progress…'],
+        startedAt,
       });
-      handleComplete();
 
-      showToast({
-        kind: 'success',
-        message: 'Vendor ingest complete',
-        actionLabel: 'View in Overview',
-        onAction: handleComplete,
-      });
+      await refreshTask(taskId);
     } catch (error) {
-      setIngestStatus('error');
-      setIngestOutput({ stdout: '', stderr: '', error: error instanceof Error ? error.message : 'Failed to run ingest.' });
+      setIngest({
+        status: 'failed',
+        logs: [],
+        error: error instanceof Error ? error.message : 'Failed to start ingest.',
+      });
     }
   };
 
+  const canProceedFromSource = Boolean(project && sourcePath.trim());
+  const preflightHasWarnings = preflight.warnings.length > 0;
+  const preflightHasBlockingIssues = preflight.blockingIssues.length > 0;
+
+  const handleSourceNext = (): void => {
+    if (!project) {
+      return;
+    }
+
+    if (!sourcePath.trim()) {
+      setSourceError('Please select a source folder.');
+      return;
+    }
+
+    void runPreflight();
+  };
+
+  const preflightSummary = useMemo(() => {
+    if (preflight.status === 'running') {
+      return 'Scanning files, checking naming and expected structure…';
+    }
+
+    if (preflight.status === 'failed') {
+      return preflight.error ?? 'Preflight failed';
+    }
+
+    const files = formatCount(preflight.files);
+    const folders = formatCount(preflight.folders);
+    return `${files} files across ${folders} folders`;
+  }, [preflight.error, preflight.files, preflight.folders, preflight.status]);
+
+  const ingestStatusLabel = useMemo(() => {
+    switch (ingest.status) {
+      case 'running':
+        return 'Running';
+      case 'succeeded':
+        return 'Succeeded';
+      case 'failed':
+        return 'Failed';
+      case 'pending':
+        return 'Pending';
+      default:
+        return 'Idle';
+    }
+  }, [ingest.status]);
+
   const renderSourceStep = (): JSX.Element => (
-    <div style={{ display: 'grid', gap: theme.spacing.sm }}>
-      <TextInput
-        label="Source folder"
-        placeholder="/path/to/vendor/drop (folder picker coming soon)"
-        value={sourcePath}
-        onChange={(event) => setSourcePath(event.target.value)}
-        required
-        error={sourceError ?? undefined}
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <SectionHeader
+        title="Choose source folder"
+        subtitle="Pick the folder where your vendor has delivered plates, textures, or assets."
       />
-      {project?.name ? (
-        <Card title="Project preset" subtitle={`Saved for ${project.name}`}>
-          {presetSource ? (
-            <p style={{ margin: 0 }}>Last used source: {presetSource}</p>
+      <Card>
+        <div style={{ display: 'grid', gap: theme.spacing.md }}>
+          <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <TextInput
+                    label="Source folder"
+                    placeholder="\\\\server\\show\\vendor\\delivery_2025_12_01"
+                    value={sourcePath}
+                    onChange={(event) => setSourcePath(event.target.value)}
+                    onBlur={() => {
+                      if (!sourcePath.trim()) {
+                        setSourceError('Please select a source folder.');
+                      }
+                    }}
+                    errorText={sourceError ?? undefined}
+                    helpText="This is the top-level folder containing the files you want to ingest. Subfolders will be scanned automatically."
+                    required
+                  />
+                </div>
+                <Button variant="secondary" onClick={() => void handleBrowseSource()}>
+                  Browse…
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {project ? (
+            <Card title="Project">
+              <div style={{ display: 'grid', gap: '0.25rem' }}>
+                <strong>{project.name}</strong>
+                <p style={{ margin: 0, color: theme.colors.textMuted }}>This ingest will be attached to this project.</p>
+              </div>
+            </Card>
           ) : (
-            <p style={{ margin: 0, color: theme.colors.textMuted }}>No saved source path for this project yet.</p>
+            <Card>
+              <div style={{ display: 'grid', gap: theme.spacing.xs }}>
+                <p style={{ margin: 0, fontWeight: theme.typography.fontWeightBold }}>No project selected</p>
+                <p style={{ margin: 0, color: theme.colors.textMuted }}>
+                  Select or create a project before running a vendor ingest. This helps OnePiece keep your deliveries
+                  organised.
+                </p>
+                <div>
+                  <Button variant="secondary" onClick={onClose}>
+                    Go to project selection
+                  </Button>
+                </div>
+              </div>
+            </Card>
           )}
-        </Card>
-      ) : null}
+
+          <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+            <TextInput
+              label="Delivery name (optional)"
+              placeholder="Vendor_XY_Plates_v002"
+              value={deliveryName}
+              onChange={(event) => setDeliveryName(event.target.value)}
+              helpText="Used for tracking this delivery in logs and dashboards."
+            />
+            <NotesField
+              label="Notes (optional)"
+              value={notes}
+              placeholder="Hero plates for seq 010, colour corrected, includes mattes."
+              helpText="Add any context you want to remember when reviewing this ingest later."
+              onChange={setNotes}
+            />
+          </div>
+        </div>
+      </Card>
+      <p style={{ margin: 0, color: theme.colors.textMuted }}>
+        Ingest will continue even if you close this window.
+      </p>
     </div>
   );
 
   const renderPreflightStep = (): JSX.Element => (
     <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <SectionHeader title="Preflight checks" subtitle="Analysing your source folder and project structure." />
       <Card>
-        <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-            <span
-              aria-hidden
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '999px',
-                background:
-                  preflightStatus === 'success'
-                    ? theme.colors.success
-                    : preflightStatus === 'running'
-                      ? theme.colors.info
-                      : theme.colors.danger,
-              }}
-            />
-            <strong>{preflightStatus === 'success' ? 'Preflight completed' : 'Preflight'}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md }}>
+          <div style={{ display: 'grid', gap: '0.35rem' }}>
+            <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
+              <StatusBadge
+                status={
+                  preflight.status === 'succeeded'
+                    ? preflightHasWarnings
+                      ? 'Warnings found'
+                      : 'All checks passed'
+                    : preflight.status === 'failed'
+                      ? 'Preflight failed'
+                      : 'Running'
+                }
+              >
+                {preflight.status === 'running'
+                  ? 'Running checks'
+                  : preflight.status === 'failed'
+                    ? 'Preflight failed'
+                    : preflightHasWarnings
+                      ? 'Warnings found'
+                      : 'All checks passed'}
+              </StatusBadge>
+              <span style={{ color: theme.colors.textMuted }}>{preflightSummary}</span>
+            </div>
+            {preflight.status === 'running' ? (
+              <div style={{ color: theme.colors.textMuted, display: 'grid', gap: '0.25rem' }}>
+                <span>Scanning files, checking naming and expected structure…</span>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: theme.colors.textMuted }}>
+                  <li>Checking file count and types…</li>
+                  <li>Checking naming conventions…</li>
+                  <li>Checking for missing or duplicate frames…</li>
+                </ul>
+              </div>
+            ) : null}
           </div>
-          <p style={{ margin: 0, color: theme.colors.textMuted }}>{preflightSummary}</p>
+          {preflight.status !== 'running' ? (
+            <Button variant="secondary" onClick={() => void runPreflight()}>
+              Run preflight again
+            </Button>
+          ) : null}
         </div>
       </Card>
 
-      {preflightStatus === 'running' ? <p style={{ margin: 0 }}>Running checks…</p> : null}
-
-      {preflightResult.issues.length ? (
-        <Card title="Detected issues">
-          <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: '0.35rem' }}>
-            {preflightResult.issues.map((issue, index) => (
-              <li key={`${issue.level}-${index}`} style={{ color: issue.level === 'error' ? theme.colors.danger : undefined }}>
-                <span style={{ fontWeight: theme.typography.fontWeightMedium, textTransform: 'capitalize' }}>
-                  {issue.level}
-                </span>
-                : {issue.message}
-              </li>
-            ))}
-          </ul>
-          {hasSevereIssues ? (
-            <p style={{ margin: '0.5rem 0 0', color: theme.colors.danger }}>
-              Fix the errors above or go back to adjust the source before ingesting.
-            </p>
-          ) : null}
+      {preflight.status === 'succeeded' ? (
+        <Card title="Summary">
+          <dl className="op-definition-list">
+            <div>
+              <dt>Files scanned</dt>
+              <dd>{formatCount(preflight.files)}</dd>
+            </div>
+            <div>
+              <dt>Folders</dt>
+              <dd>{formatCount(preflight.folders)}</dd>
+            </div>
+            <div>
+              <dt>Total size</dt>
+              <dd>{preflight.totalSize ?? 'N/A'}</dd>
+            </div>
+          </dl>
+          <p style={{ margin: 0, color: theme.colors.textMuted }}>
+            {preflightHasWarnings
+              ? 'You can still run the ingest, but we recommend reviewing these warnings and fixing them where possible.'
+              : 'We didn’t find any blocking issues. Minor warnings may still be present — review them below.'}
+          </p>
         </Card>
       ) : null}
 
-      {preflightResult.rawOutput ? (
-        <details>
-          <summary style={{ cursor: 'pointer' }}>View raw preflight output</summary>
-          <pre
-            style={{
-              marginTop: theme.spacing.sm,
-              padding: theme.spacing.sm,
-              background: theme.colors.surfaceAlt,
-              borderRadius: theme.radii.sm,
-              border: `1px solid ${theme.colors.border}`,
-              maxHeight: '320px',
-              overflow: 'auto',
-            }}
-          >
-            {preflightResult.rawOutput}
-          </pre>
-          {preflightResult.stderr ? (
+      {preflight.status === 'failed' ? (
+        <Card title="Blocking issues">
+          {preflight.blockingIssues.length ? (
+            <ul style={{ margin: 0, paddingLeft: '1.1rem', color: theme.colors.danger }}>
+              {preflight.blockingIssues.map((warning, index) => (
+                <li key={`${warning}-${index}`}>{warning}</li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ margin: 0, color: theme.colors.danger }}>
+              We found one or more issues that would cause this ingest to fail.
+            </p>
+          )}
+          {preflight.stderr ? (
             <pre
               style={{
                 marginTop: theme.spacing.sm,
@@ -407,166 +691,259 @@ function VendorIngestWizard({ project, onClose, onViewTasks, onCompleted }: Vend
                 background: theme.colors.surfaceAlt,
                 borderRadius: theme.radii.sm,
                 border: `1px solid ${theme.colors.border}`,
-                maxHeight: '320px',
                 overflow: 'auto',
+                maxHeight: '240px',
               }}
             >
-              {preflightResult.stderr}
+              {preflight.stderr}
             </pre>
           ) : null}
-        </details>
+        </Card>
       ) : null}
+
+      {preflightHasWarnings ? (
+        <Card title="Warnings">
+          <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'grid', gap: '0.35rem' }}>
+            {preflight.warnings.map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        preflight.status === 'succeeded' && (
+          <Card>
+            <p style={{ margin: 0 }}>No warnings found.</p>
+          </Card>
+        )
+      )}
     </div>
   );
 
-  const renderConfirmStep = (): JSX.Element => (
+  const renderReviewStep = (): JSX.Element => (
     <div style={{ display: 'grid', gap: theme.spacing.md }}>
-      <Card title="Ready to ingest">
+      <SectionHeader title="Review & confirm" subtitle="Check the summary below, then start the ingest." />
+      <Card title="Summary">
         <dl className="op-definition-list">
           <div>
             <dt>Project</dt>
-            <dd>{project?.name ?? 'Unknown project'}</dd>
+            <dd>{project?.name ?? 'Not set'}</dd>
           </div>
           <div>
-            <dt>Project path</dt>
-            <dd>{project?.path ?? 'N/A'}</dd>
+            <dt>Project root</dt>
+            <dd>{project?.path ?? 'Not set'}</dd>
           </div>
           <div>
-            <dt>Source</dt>
+            <dt>Source folder</dt>
             <dd>{sourcePath}</dd>
           </div>
           <div>
-            <dt>Preflight</dt>
-            <dd>{preflightSummary}</dd>
+            <dt>Delivery name</dt>
+            <dd>{deliveryName || 'Not set'}</dd>
+          </div>
+          <div>
+            <dt>Notes</dt>
+            <dd>{notes || 'None'}</dd>
+          </div>
+          <div>
+            <dt>Files</dt>
+            <dd>{preflight.files ? `${formatCount(preflight.files)}${preflight.totalSize ? ` • ${preflight.totalSize}` : ''}` : 'N/A'}</dd>
+          </div>
+          <div>
+            <dt>Warnings</dt>
+            <dd>
+              {preflight.warnings.length ? (
+                <details>
+                  <summary>{preflight.warnings.length} warning(s)</summary>
+                  <ul style={{ margin: `${theme.spacing.xs} 0 0`, paddingLeft: '1.1rem' }}>
+                    {preflight.warnings.map((warning, index) => (
+                      <li key={`${warning}-${index}`}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : (
+                'None'
+              )}
+            </dd>
           </div>
         </dl>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          {preflight.warnings.length
+            ? 'You can still proceed, but these warnings may cause issues down the line. Consider addressing them before running major work on this delivery.'
+            : 'Everything looks ready. You can start the ingest when you’re ready.'}
+        </p>
       </Card>
+    </div>
+  );
 
-      <Card title="Ingest status">
-        {ingestStatus === 'idle' ? <p style={{ margin: 0 }}>Ready to start.</p> : null}
-        {ingestStatus === 'running' ? <p style={{ margin: 0 }}>Ingest is running…</p> : null}
-        {ingestStatus === 'success' ? (
-          <p style={{ margin: 0, color: theme.colors.success }}>Ingest completed successfully.</p>
-        ) : null}
-        {ingestStatus === 'error' ? (
-          <p style={{ margin: 0, color: theme.colors.danger }}>{ingestOutput.error ?? 'Ingest failed.'}</p>
-        ) : null}
-
-        {ingestOutput.stdout ? (
-          <div style={{ marginTop: theme.spacing.sm }}>
-            <h4 style={{ margin: '0 0 0.25rem' }}>Stdout</h4>
-            <pre
-              style={{
-                background: theme.colors.surfaceAlt,
-                padding: theme.spacing.sm,
-                borderRadius: theme.radii.sm,
-                maxHeight: '220px',
-                overflow: 'auto',
-                margin: 0,
-                border: `1px solid ${theme.colors.border}`,
-              }}
-            >
-              {ingestOutput.stdout}
-            </pre>
+  const renderIngestStep = (): JSX.Element => (
+    <div style={{ display: 'grid', gap: theme.spacing.md }}>
+      <SectionHeader title="Ingest in progress" subtitle="You can keep working while we ingest your delivery." />
+      <Card>
+        <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.md }}>
+            <div style={{ display: 'grid', gap: '0.25rem' }}>
+              <span style={{ color: theme.colors.textMuted }}>Task:</span>
+              <strong>{`Vendor ingest – ${project?.name ?? 'Unknown project'}`}</strong>
+              <span style={{ color: theme.colors.textMuted }}>
+                Started: {formatDateTime(ingest.startedAt)}
+              </span>
+            </div>
+            <StatusBadge status={ingestStatusLabel}>{ingestStatusLabel}</StatusBadge>
           </div>
-        ) : null}
 
-        {ingestOutput.stderr ? (
-          <div style={{ marginTop: theme.spacing.sm }}>
-            <h4 style={{ margin: '0 0 0.25rem' }}>Stderr</h4>
-            <pre
-              style={{
-                background: theme.colors.surfaceAlt,
-                padding: theme.spacing.sm,
-                borderRadius: theme.radii.sm,
-                maxHeight: '220px',
-                overflow: 'auto',
-                margin: 0,
-                border: `1px solid ${theme.colors.border}`,
-              }}
-            >
-              {ingestOutput.stderr}
-            </pre>
+          <div style={{ background: theme.colors.surfaceAlt, borderRadius: theme.radii.sm, padding: theme.spacing.sm }}>
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>Recent activity</p>
+            <div style={{ display: 'grid', gap: '0.25rem', marginTop: theme.spacing.xs }}>
+              {ingest.logs.length ? (
+                ingest.logs.slice(-6).map((log, index) => (
+                  <span key={`${log}-${index}`} style={{ color: theme.colors.text }}>
+                    {log}
+                  </span>
+                ))
+              ) : (
+                <span style={{ color: theme.colors.textMuted }}>
+                  {ingest.status === 'failed'
+                    ? 'The ingest stopped with an error. Check the details below.'
+                    : 'Waiting for task updates…'}
+                </span>
+              )}
+            </div>
           </div>
-        ) : null}
+
+          {ingest.status === 'failed' && ingest.error ? (
+            <Card>
+              <p style={{ margin: 0, color: theme.colors.danger }}>
+                The ingest stopped with an error. Check the details below and fix any issues before trying again.
+              </p>
+              <pre
+                style={{
+                  marginTop: theme.spacing.sm,
+                  padding: theme.spacing.sm,
+                  background: theme.colors.surfaceAlt,
+                  borderRadius: theme.radii.sm,
+                  border: `1px solid ${theme.colors.border}`,
+                  overflow: 'auto',
+                  maxHeight: '240px',
+                }}
+              >
+                {ingest.error}
+              </pre>
+            </Card>
+          ) : null}
+
+          <p style={{ margin: 0, color: theme.colors.textMuted }}>
+            You can close this window at any time. The ingest will continue in the background. Check the Tasks tab for
+            full progress.
+          </p>
+        </div>
       </Card>
     </div>
   );
 
   const primaryAction = useMemo(() => {
-    switch (currentStep) {
-      case 0:
-        return {
-          label: 'Run preflight',
-          onClick: () => void handleStartPreflight(),
-          disabled: !sourcePath.trim() || !project?.path,
-        };
-      case 1:
-        if (preflightStatus === 'running') {
-          return {
-            label: 'Running…',
-            onClick: () => undefined,
-            disabled: true,
-          };
-        }
+    if (!isOpen) {
+      return { label: 'Close', onClick: onClose };
+    }
 
+    switch (currentStep) {
+      case 1:
         return {
-          label: 'Continue to ingest',
-          onClick: () => setCurrentStep(2),
-          disabled: preflightStatus !== 'success' || hasSevereIssues,
+          label: 'Next',
+          onClick: handleSourceNext,
+          disabled: !canProceedFromSource,
         };
       case 2:
-      default:
-        if (ingestStatus === 'success') {
-          return { label: 'Close', onClick: onClose };
-        }
-
         return {
-          label: ingestStatus === 'running' ? 'Running…' : 'Run ingest',
-          onClick: () => void handleConfirmIngest(),
-          disabled: ingestStatus === 'running',
-          isLoading: ingestStatus === 'running',
+          label: preflight.status === 'running' ? 'Running…' : 'Continue',
+          onClick: () => setCurrentStep(3),
+          disabled: preflight.status !== 'succeeded',
+        };
+      case 3:
+        return {
+          label: 'Run ingest',
+          onClick: () => void startIngest(),
+          disabled: ingest.status === 'running',
+        };
+      case 4:
+      default:
+        return {
+          label: ingest.status === 'succeeded' ? 'Back to overview' : 'Close',
+          onClick: () => {
+            if (ingest.status === 'succeeded') {
+              onCompleted?.();
+            }
+            onClose();
+          },
         };
     }
-  }, [currentStep, hasSevereIssues, ingestStatus, onClose, preflightStatus, project?.path, sourcePath]);
+  }, [canProceedFromSource, currentStep, ingest.status, isOpen, onClose, onCompleted, preflight.status]);
 
   const secondaryAction = useMemo(() => {
-    if (currentStep === 0) {
-      return { label: 'Cancel', onClick: onClose, variant: 'secondary' as const };
+    if (!isOpen) {
+      return undefined;
     }
 
-    return {
-      label: 'Back',
-      onClick: () => setCurrentStep((prev) => Math.max(0, prev - 1)),
-      variant: 'secondary' as const,
-      disabled: preflightStatus === 'running' || ingestStatus === 'running',
-    };
-  }, [currentStep, ingestStatus, onClose, preflightStatus]);
+    switch (currentStep) {
+      case 1:
+        return { label: 'Cancel', onClick: onClose, variant: 'secondary' as const };
+      case 2:
+      case 3:
+        return {
+          label: 'Back',
+          onClick: () => setCurrentStep((prev) => (prev > 1 ? ((prev - 1) as WizardStep) : prev)),
+          variant: 'secondary' as const,
+          disabled: preflight.status === 'running' || ingest.status === 'running',
+        };
+      case 4:
+        return onViewTasks
+          ? {
+              label: 'View tasks',
+              onClick: onViewTasks,
+              variant: 'secondary' as const,
+            }
+          : undefined;
+      default:
+        return undefined;
+    }
+  }, [currentStep, ingest.status, isOpen, onClose, onViewTasks, preflight.status]);
 
   const renderStepContent = (): JSX.Element => {
     switch (currentStep) {
-      case 0:
-        return renderSourceStep();
       case 1:
-        return renderPreflightStep();
+        return renderSourceStep();
       case 2:
+        return renderPreflightStep();
+      case 3:
+        return renderReviewStep();
+      case 4:
       default:
-        return renderConfirmStep();
+        return renderIngestStep();
     }
   };
 
   return (
     <Modal
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title="Vendor ingest"
-      description="Validate a drop folder, review warnings, and ingest into your project."
+      description="Bring external deliveries into your project in a controlled, repeatable way."
       primaryAction={primaryAction}
       secondaryAction={secondaryAction}
     >
       <div style={{ display: 'grid', gap: theme.spacing.lg }}>
+        <div style={{ display: 'grid', gap: '0.25rem' }}>
+          <h3 style={{ margin: 0 }}>Vendor ingest</h3>
+          <p style={{ margin: 0, color: theme.colors.textMuted }}>
+            Bring external deliveries into your project in a controlled, repeatable way.
+          </p>
+        </div>
         <StepIndicator currentStep={currentStep} />
-        <WizardStep stepKey={currentStep}>{renderStepContent()}</WizardStep>
+        {renderStepContent()}
+        {currentStep === 4 && ingest.status === 'running' ? (
+          <p style={{ margin: 0, color: theme.colors.warning }}>
+            Ingest will continue in the background even if you close this window.
+          </p>
+        ) : null}
       </div>
     </Modal>
   );
