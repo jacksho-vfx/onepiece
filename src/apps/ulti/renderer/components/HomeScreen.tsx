@@ -215,7 +215,7 @@ function HomeScreen({
     packageDelivery: { playlist: '', target: '' },
   });
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
-  const [showVendorIngestWizard, setShowVendorIngestWizard] = useState(false);
+  const [isVendorIngestOpen, setVendorIngestOpen] = useState(false);
   const [showDccPublishWizard, setShowDccPublishWizard] = useState(false);
   const [showDeliveryWizard, setShowDeliveryWizard] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
@@ -280,7 +280,7 @@ function HomeScreen({
       return;
     }
 
-    setShowVendorIngestWizard(true);
+    setVendorIngestOpen(true);
     setShowIngestReminder(false);
     setShouldAutoOpenIngest(false);
     onAutoOpenIngestHandled?.();
@@ -427,13 +427,13 @@ function HomeScreen({
   };
 
   const handleOpenQuickAction = (key: QuickActionKey): void => {
-    if (!currentProject) {
+    if (key === 'vendorIngest') {
+      setVendorIngestOpen(true);
+      setShowIngestReminder(false);
       return;
     }
 
-    if (key === 'vendorIngest') {
-      setShowVendorIngestWizard(true);
-      setShowIngestReminder(false);
+    if (!currentProject) {
       return;
     }
 
@@ -469,12 +469,12 @@ function HomeScreen({
   const handleVendorIngestComplete = (): void => {
     setIngestCompleted(true);
     setShowIngestReminder(false);
-    setShowVendorIngestWizard(false);
+    setVendorIngestOpen(false);
     handleOverviewRefresh();
   };
 
   const handleVendorIngestClose = (): void => {
-    setShowVendorIngestWizard(false);
+    setVendorIngestOpen(false);
     if (!ingestCompleted) {
       setShowIngestReminder(true);
     }
@@ -1047,7 +1047,7 @@ function HomeScreen({
               <p style={{ margin: 0 }}>Run a vendor ingest to bring your plates/assets into OnePiece.</p>
             </div>
             <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-              <Button onClick={() => handleOpenQuickAction('vendorIngest')} disabled={!currentProject}>
+              <Button onClick={() => handleOpenQuickAction('vendorIngest')}>
                 Run Vendor Ingest
               </Button>
               <Button variant="ghost" onClick={() => setShowIngestReminder(false)}>
@@ -1170,14 +1170,13 @@ function HomeScreen({
           {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
         </div>
         {renderQuickActionModal()}
-        {showVendorIngestWizard ? (
-          <VendorIngestWizard
-            project={currentProject ?? undefined}
-            onClose={handleVendorIngestClose}
-            onCompleted={handleVendorIngestComplete}
-            onViewTasks={onViewTasks}
-          />
-        ) : null}
+        <VendorIngestWizard
+          isOpen={isVendorIngestOpen}
+          project={currentProject ?? null}
+          onClose={handleVendorIngestClose}
+          onCompleted={handleVendorIngestComplete}
+          onViewTasks={onViewTasks}
+        />
         {showDccPublishWizard ? (
           <DccPublishWizard
             project={currentProject ?? undefined}
