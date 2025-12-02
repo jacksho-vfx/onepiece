@@ -33,6 +33,7 @@ interface DesktopConfig {
 type HomeScreenProps = {
   config?: DesktopConfig;
   onViewLogs?: () => void;
+  onViewTasks?: () => void;
   currentProject?: { name: string; path: string };
 };
 
@@ -172,7 +173,7 @@ function formatDoctorOutput(
   return { isOk, summary: summary || 'All checks passed' };
 }
 
-function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeScreenProps): JSX.Element {
+function HomeScreen({ config: initialConfig, onViewLogs, onViewTasks, currentProject }: HomeScreenProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopConfig | null>(initialConfig ?? null);
@@ -464,6 +465,30 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
     }
   };
 
+  const buildQuickActionLabel = (key: QuickActionKey): string => {
+    switch (key) {
+      case 'vendorIngest': {
+        const { source, project } = quickActionForms.vendorIngest;
+        const projectName = project || currentProject?.name;
+        return projectName ? `Vendor ingest for ${projectName} (${source})` : `Vendor ingest (${source})`;
+      }
+      case 'dccPublish': {
+        const { dccType, scenePath } = quickActionForms.dccPublish;
+        return `Publish ${scenePath || 'scene'} (${dccType || 'dcc'})`;
+      }
+      case 'submitRender': {
+        const { profileName } = quickActionForms.submitRender;
+        return `Render submit (${profileName || 'profile'})`;
+      }
+      case 'packageDelivery': {
+        const { playlist } = quickActionForms.packageDelivery;
+        return `Delivery package (${playlist || 'playlist'})`;
+      }
+      default:
+        return 'Background task';
+    }
+  };
+
   const isQuickActionValid = (key: QuickActionKey): boolean => {
     switch (key) {
       case 'vendorIngest': {
@@ -498,73 +523,79 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
     setActionStatus({ state: 'running', stdout: '', stderr: '' });
 
     try {
-      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
-        'python/run-command',
-        { args: buildQuickActionArgs(activeQuickAction) },
-      );
+      const label = buildQuickActionLabel(activeQuickAction);
+      const args = buildQuickActionArgs(activeQuickAction);
 
-      const isSuccess = result.code === 0;
-      setActionStatus({
-        state: isSuccess ? 'success' : 'error',
-        stdout: result.stdout,
-        stderr: result.stderr,
-        error: isSuccess ? undefined : `Command exited with code ${result.code}`,
+      const taskId = await window.electron.invoke<string>('tasks/create', {
+        label,
+        args,
       });
 
-      if (isSuccess) {
-        const projectName = getActiveProjectName();
-        if (projectName) {
-          const existingPresets = config?.quickActionPresets ?? {};
-          const existingProjectPreset = existingPresets[projectName] ?? {};
-          const projectPresetUpdate: NonNullable<DesktopConfig['quickActionPresets']>[string] = {
-            ...existingProjectPreset,
-          };
+      setActionStatus({
+        state: 'success',
+        stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
+        stderr: '',
+      });
 
-          switch (activeQuickAction) {
-            case 'vendorIngest': {
-              projectPresetUpdate.vendorIngest = {
-                sourcePath: quickActionForms.vendorIngest.source,
-              };
-              break;
-            }
-            case 'dccPublish': {
-              projectPresetUpdate.dccPublish = {
-                dccType: quickActionForms.dccPublish.dccType,
-                lastScenePath: quickActionForms.dccPublish.scenePath,
-              };
-              break;
-            }
-            case 'submitRender': {
-              projectPresetUpdate.renderSubmit = {
-                profileName: quickActionForms.submitRender.profileName,
-                lastFrameRange: quickActionForms.submitRender.frameRange,
-              };
-              break;
-            }
-            case 'packageDelivery': {
-              projectPresetUpdate.clientDelivery = {
-                playlistName: quickActionForms.packageDelivery.playlist,
-                targetPath: quickActionForms.packageDelivery.target,
-              };
-              break;
-            }
-            default:
-              break;
+      showToast({
+        kind: 'info',
+        message: `Task started: ${label}`,
+        actionLabel: onViewTasks ? 'View tasks' : undefined,
+        onAction: onViewTasks,
+      });
+
+      const projectName = getActiveProjectName();
+      if (projectName) {
+        const existingPresets = config?.quickActionPresets ?? {};
+        const existingProjectPreset = existingPresets[projectName] ?? {};
+        const projectPresetUpdate: NonNullable<DesktopConfig['quickActionPresets']>[string] = {
+          ...existingProjectPreset,
+        };
+
+        switch (activeQuickAction) {
+          case 'vendorIngest': {
+            projectPresetUpdate.vendorIngest = {
+              sourcePath: quickActionForms.vendorIngest.source,
+            };
+            break;
           }
-
-          const quickActionPresets = {
-            ...existingPresets,
-            [projectName]: projectPresetUpdate,
-          };
-
-          try {
-            const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
-              quickActionPresets,
-            });
-            setConfig(updatedConfig);
-          } catch (saveError) {
-            console.error('Failed to persist quick action presets', saveError);
+          case 'dccPublish': {
+            projectPresetUpdate.dccPublish = {
+              dccType: quickActionForms.dccPublish.dccType,
+              lastScenePath: quickActionForms.dccPublish.scenePath,
+            };
+            break;
           }
+          case 'submitRender': {
+            projectPresetUpdate.renderSubmit = {
+              profileName: quickActionForms.submitRender.profileName,
+              lastFrameRange: quickActionForms.submitRender.frameRange,
+            };
+            break;
+          }
+          case 'packageDelivery': {
+            projectPresetUpdate.clientDelivery = {
+              playlistName: quickActionForms.packageDelivery.playlist,
+              targetPath: quickActionForms.packageDelivery.target,
+            };
+            break;
+          }
+          default:
+            break;
+        }
+
+        const quickActionPresets = {
+          ...existingPresets,
+          [projectName]: projectPresetUpdate,
+        };
+
+        try {
+          const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+            quickActionPresets,
+          });
+          setConfig(updatedConfig);
+        } catch (saveError) {
+          console.error('Failed to persist quick action presets', saveError);
         }
       }
     } catch (err) {
@@ -572,7 +603,7 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
         state: 'error',
         stdout: '',
         stderr: '',
-        error: err instanceof Error ? err.message : 'Failed to run command.',
+        error: err instanceof Error ? err.message : 'Failed to start task.',
       });
     }
   };
@@ -1032,7 +1063,11 @@ function HomeScreen({ config: initialConfig, onViewLogs, currentProject }: HomeS
         </div>
         {renderQuickActionModal()}
         {showVendorIngestWizard ? (
-          <VendorIngestWizard project={currentProject ?? undefined} onClose={() => setShowVendorIngestWizard(false)} />
+          <VendorIngestWizard
+            project={currentProject ?? undefined}
+            onClose={() => setShowVendorIngestWizard(false)}
+            onViewTasks={onViewTasks}
+          />
         ) : null}
         {showDccPublishWizard ? (
           <DccPublishWizard

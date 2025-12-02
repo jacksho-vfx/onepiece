@@ -4,6 +4,7 @@ import FirstRunWizard from './components/FirstRunWizard';
 import HomeScreen from './components/HomeScreen';
 import LogsPanel from './components/LogsPanel';
 import SettingsScreen from './components/SettingsScreen';
+import TaskList from './components/TaskList';
 import VersionFooter from './components/VersionFooter';
 import AppShell from './components/layout/AppShell';
 import ProjectSwitcher from './components/ProjectSwitcher';
@@ -42,7 +43,7 @@ type ProjectSelection = { name: string; path: string };
 function App(): JSX.Element {
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedTab, setSelectedTab] = useState<'home' | 'logs' | 'diagnostics' | 'settings'>('home');
+  const [selectedTab, setSelectedTab] = useState<'home' | 'tasks' | 'logs' | 'diagnostics' | 'settings'>('home');
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
@@ -84,6 +85,10 @@ function App(): JSX.Element {
     setSelectedTab('logs');
   }, []);
 
+  const handleViewTasks = useCallback(() => {
+    setSelectedTab('tasks');
+  }, []);
+
   const handleProjectChange = useCallback(
     async (project: ProjectSelection | null) => {
       if (!config) {
@@ -114,6 +119,7 @@ function App(): JSX.Element {
   const tabs = useMemo(
     () => [
       { id: 'home' as const, label: 'Home' },
+      { id: 'tasks' as const, label: 'Tasks' },
       { id: 'logs' as const, label: 'Logs' },
       { id: 'diagnostics' as const, label: 'Diagnostics' },
       { id: 'settings' as const, label: 'Settings' },
@@ -143,9 +149,11 @@ function App(): JSX.Element {
               <HomeScreen
                 config={config}
                 currentProject={currentProject ?? undefined}
+                onViewTasks={handleViewTasks}
                 onViewLogs={handleViewLogs}
               />
             )}
+            {selectedTab === 'tasks' && <TaskList />}
             {selectedTab === 'logs' && <LogsPanel />}
             {selectedTab === 'diagnostics' && <DiagnosticsScreen />}
             {selectedTab === 'settings' && <SettingsScreen onRequestRerunWizard={handleRequestRerunWizard} />}

@@ -5,6 +5,7 @@ import { useTheme } from '../../styles/ThemeContext';
 interface VendorIngestWizardProps {
   project?: { name: string; path: string };
   onClose(): void;
+  onViewTasks?: () => void;
 }
 
 interface DesktopConfig {
@@ -135,7 +136,7 @@ function parsePreflight(stdout: string): { fileCount?: number; issues: Preflight
   return { fileCount, issues };
 }
 
-function VendorIngestWizard({ project, onClose }: VendorIngestWizardProps): JSX.Element {
+function VendorIngestWizard({ project, onClose, onViewTasks }: VendorIngestWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
@@ -266,21 +267,24 @@ function VendorIngestWizard({ project, onClose }: VendorIngestWizardProps): JSX.
     setIngestOutput({ stdout: '', stderr: '' });
 
     try {
-      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>('python/run-command', {
+      const label = project.name ? `Vendor ingest for ${project.name}` : 'Vendor ingest';
+      const taskId = await window.electron.invoke<string>('tasks/create', {
+        label,
         args: ['-m', 'onepiece', 'ingest', '--source', sourcePath, '--project-root', project.path],
       });
 
-      const isSuccess = result.code === 0;
-      setIngestStatus(isSuccess ? 'success' : 'error');
+      setIngestStatus('success');
       setIngestOutput({
-        stdout: result.stdout,
-        stderr: result.stderr,
-        error: isSuccess ? undefined : `Ingest exited with code ${result.code}`,
+        stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
+        stderr: '',
       });
 
-      if (isSuccess) {
-        showToast({ kind: 'success', message: 'Vendor ingest completed' });
-      }
+      showToast({
+        kind: 'info',
+        message: `Task started: ${label}`,
+        actionLabel: onViewTasks ? 'View tasks' : undefined,
+        onAction: onViewTasks,
+      });
     } catch (error) {
       setIngestStatus('error');
       setIngestOutput({ stdout: '', stderr: '', error: error instanceof Error ? error.message : 'Failed to run ingest.' });
