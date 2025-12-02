@@ -90,6 +90,10 @@ function App(): JSX.Element {
     setSelectedTab('tasks');
   }, []);
 
+  const handleViewDiagnostics = useCallback(() => {
+    setSelectedTab('diagnostics');
+  }, []);
+
   const handleProjectChange = useCallback(
     async (project: ProjectSelection | null) => {
       if (!config) {
@@ -153,6 +157,7 @@ function App(): JSX.Element {
                   currentProject={currentProject ?? undefined}
                   onViewTasks={handleViewTasks}
                   onViewLogs={handleViewLogs}
+                  onViewDiagnostics={handleViewDiagnostics}
                 />
               )}
               {selectedTab === 'tasks' && <TaskList />}
