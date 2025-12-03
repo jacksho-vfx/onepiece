@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { shell, type IpcMain } from 'electron';
+import { dialog, shell, type IpcMain, type OpenDialogOptions } from 'electron';
 
 export type FsNode = {
   path: string;
@@ -111,5 +111,40 @@ export function registerFsExplorerIpcHandlers(ipcMain: IpcMain): void {
 
     await openInOs(resolved);
     return true;
+  });
+
+  ipcMain.handle('dialog/open-file', async (_event, options?: OpenDialogOptions) => {
+    const properties = new Set(options?.properties ?? []);
+    properties.add('openFile');
+
+    const dialogOptions: OpenDialogOptions = {
+      properties: Array.from(properties),
+      ...options,
+    };
+
+    const { canceled, filePaths } = await dialog.showOpenDialog(dialogOptions);
+    if (canceled || !filePaths?.length) {
+      return null;
+    }
+
+    return filePaths[0];
+  });
+
+  ipcMain.handle('dialog/open-folder', async (_event, options?: OpenDialogOptions) => {
+    const properties = new Set(options?.properties ?? []);
+    properties.add('openDirectory');
+    properties.add('createDirectory');
+
+    const dialogOptions: OpenDialogOptions = {
+      properties: Array.from(properties),
+      ...options,
+    };
+
+    const { canceled, filePaths } = await dialog.showOpenDialog(dialogOptions);
+    if (canceled || !filePaths?.length) {
+      return null;
+    }
+
+    return filePaths[0];
   });
 }

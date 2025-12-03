@@ -222,6 +222,20 @@ export async function detectEnvironment(): Promise<{
   };
 }
 
+function getCurrentUsername(): string | null {
+  try {
+    const userInfo = os.userInfo();
+    if (userInfo.username) {
+      return userInfo.username;
+    }
+  } catch (error) {
+    console.warn('Unable to determine current username', error);
+  }
+
+  return process.env.USER || process.env.USERNAME || null;
+}
+
 export function registerEnvIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('system/detect-env', async () => detectEnvironment());
+  ipcMain.handle('system/get-username', async () => getCurrentUsername());
 }
