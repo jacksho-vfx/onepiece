@@ -39,6 +39,7 @@ type HomeScreenProps = {
   onViewTasks?: () => void;
   onViewDiagnostics?: () => void;
   onViewEnvironmentReport?: () => void;
+  onOpenShotgridOps?: () => void;
   currentProject?: { name: string; path: string };
   autoOpenIngestOnMount?: boolean;
   onAutoOpenIngestHandled?: () => void;
@@ -188,6 +189,7 @@ function HomeScreen({
   onViewTasks,
   onViewDiagnostics,
   onViewEnvironmentReport,
+  onOpenShotgridOps,
   currentProject,
   autoOpenIngestOnMount,
   onAutoOpenIngestHandled,
@@ -1222,6 +1224,7 @@ function HomeScreen({
             project={currentProject ?? undefined}
             onClose={() => setShowDeliveryWizard(false)}
             onCompleted={handleDeliveryComplete}
+            onOpenShotgridOps={onOpenShotgridOps}
           />
         ) : null}
     </div>

@@ -5,22 +5,28 @@ import DccShotLauncher, { type ShotReference } from './tools/DccShotLauncher';
 import { Card, SectionHeader } from './ui';
 import AnimationToolsPanel from './tools/AnimationToolsPanel';
 import AwsSyncTool from './tools/AwsSyncTool';
+import ShotgridOpsPanel from './tools/ShotgridOpsPanel';
 
 type ProjectSelection = { name: string; path: string };
 
 type ToolsScreenProps = {
   project?: ProjectSelection | null;
-  focusSection?: 'envProfile' | null;
+  focusSection?: 'envProfile' | 'shotgrid' | null;
   onFocusHandled?: () => void;
   shots?: ShotReference[];
 };
 
 function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScreenProps): JSX.Element {
   const envProfileRef = useRef<HTMLDivElement | null>(null);
+  const shotgridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (focusSection === 'envProfile' && envProfileRef.current) {
       envProfileRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      onFocusHandled?.();
+    }
+    if (focusSection === 'shotgrid' && shotgridRef.current) {
+      shotgridRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       onFocusHandled?.();
     }
   }, [focusSection, onFocusHandled]);
@@ -40,6 +46,14 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
         subtitle="Debug animation scenes, clean them up, and trigger playblasts."
       />
       <AnimationToolsPanel />
+
+      <SectionHeader
+        title="ShotGrid"
+        subtitle="Package playlists, seed new shows, and deliver approved Versions without leaving the desktop."
+      />
+      <div ref={shotgridRef}>
+        <ShotgridOpsPanel />
+      </div>
 
       <SectionHeader title="Project Tools" subtitle="Inspect and manage your project files." />
       <div

@@ -1,11 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Card, Modal, StatusBadge, TextInput, WizardStep as WizardStepContainer, useToast } from '../ui';
+import { Button, Card, Modal, StatusBadge, TextInput, WizardStep as WizardStepContainer, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 
 interface DeliveryWizardProps {
   project?: { name: string; path: string };
   onClose(): void;
   onCompleted?: () => void;
+  onOpenShotgridOps?: () => void;
 }
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -142,7 +143,7 @@ function parsePreflight(stdout: string): PreflightResult {
   }
 }
 
-function DeliveryWizard({ project, onClose, onCompleted }: DeliveryWizardProps): JSX.Element {
+function DeliveryWizard({ project, onClose, onCompleted, onOpenShotgridOps }: DeliveryWizardProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const hasCompletedRef = useRef(false);
@@ -612,7 +613,22 @@ function DeliveryWizard({ project, onClose, onCompleted }: DeliveryWizardProps):
       secondaryAction={{ label: 'Back', onClick: handleBack, disabled: currentStep === 0 }}
     >
       <div style={{ display: 'grid', gap: theme.spacing.lg }}>
-        <StepIndicator currentStep={currentStep} />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: theme.spacing.sm,
+            flexWrap: 'wrap',
+          }}
+        >
+          <StepIndicator currentStep={currentStep} />
+          {onOpenShotgridOps ? (
+            <Button variant="ghost" size="sm" onClick={() => onOpenShotgridOps()}>
+              Open advanced ShotGrid operations
+            </Button>
+          ) : null}
+        </div>
         {!hasProject ? <p className="op-error">No project selected. Set a project to continue.</p> : null}
         <WizardStepContainer stepKey={currentStep}>{renderStep()}</WizardStepContainer>
       </div>
