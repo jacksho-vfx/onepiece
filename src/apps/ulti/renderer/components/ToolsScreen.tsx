@@ -5,7 +5,7 @@ import DccShotLauncher, { type ShotReference } from './tools/DccShotLauncher';
 import { Card, SectionHeader } from './ui';
 import AnimationToolsPanel from './tools/AnimationToolsPanel';
 import AwsSyncTool from './tools/AwsSyncTool';
-import ShotgridOpsPanel from './tools/ShotgridOpsPanel';
+import DeliveryPanel from './tools/DeliveryPanel';
 import PeronaPanel from './tools/PeronaPanel';
 import PipelineRunnerPanel from './tools/PipelineRunnerPanel';
 import ChopperPlayground from './tools/ChopperPlayground';
@@ -67,11 +67,11 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
       <AnimationToolsPanel />
 
       <SectionHeader
-        title="ShotGrid"
+        title="ShotGrid & Delivery"
         subtitle="Package playlists, seed new shows, and deliver approved Versions without leaving the desktop."
       />
       <div ref={shotgridRef}>
-        <ShotgridOpsPanel />
+        <DeliveryPanel />
       </div>
 
       <SectionHeader title="Project Tools" subtitle="Inspect and manage your project files." />

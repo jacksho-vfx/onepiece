@@ -43,20 +43,19 @@ type DeliveryTaskState = {
   isStarting: boolean;
 };
 
-function ShotgridOpsPanel(): JSX.Element {
+function DeliveryPanel(): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'showSetup' | 'packagePlaylist' | 'deliver'>('showSetup');
 
-  const [showSetupForm, setShowSetupForm] = useState({ csvPath: '', showName: '', showCode: '' });
+  const [showSetupForm, setShowSetupForm] = useState({ csvPath: '', project: '', template: '' });
   const [showSetupState, setShowSetupState] = useState<ShotgridResult>({ running: false, result: null });
 
   const [packageForm, setPackageForm] = useState({
     project: '',
     playlist: '',
     destination: '',
-    remotePath: '',
     recipient: 'client',
   });
   const [packageState, setPackageState] = useState<PlaylistTaskState>({ isStarting: false });
@@ -64,8 +63,10 @@ function ShotgridOpsPanel(): JSX.Element {
   const [deliverForm, setDeliverForm] = useState({
     project: '',
     playlistOrEpisodes: '',
-    destination: '',
-    bucket: '',
+    outputFolder: '',
+    context: '',
+    archiveName: '',
+    manifest: '',
   });
   const [deliverState, setDeliverState] = useState<DeliveryTaskState>({ isStarting: false });
 
@@ -140,8 +141,8 @@ function ShotgridOpsPanel(): JSX.Element {
   };
 
   const handleRunShowSetup = async (): Promise<void> => {
-    if (!showSetupForm.csvPath.trim() || !(showSetupForm.showName.trim() || showSetupForm.showCode.trim())) {
-      setShowSetupState({ running: false, result: null, error: 'CSV path and a show name or code are required.' });
+    if (!showSetupForm.csvPath.trim() || !showSetupForm.project.trim()) {
+      setShowSetupState({ running: false, result: null, error: 'CSV path and project are required.' });
       return;
     }
 
@@ -149,8 +150,8 @@ function ShotgridOpsPanel(): JSX.Element {
 
     const payload = {
       csvPath: showSetupForm.csvPath.trim(),
-      project: showSetupForm.showName.trim() || showSetupForm.showCode.trim(),
-      template: showSetupForm.showCode.trim() || undefined,
+      project: showSetupForm.project.trim(),
+      template: showSetupForm.template.trim() || undefined,
     };
 
     try {
@@ -200,29 +201,26 @@ function ShotgridOpsPanel(): JSX.Element {
   };
 
   const deriveDeliveryOutput = (): string => {
-    const destination = deliverForm.destination.trim();
+    const destination = deliverForm.outputFolder.trim();
     if (!destination) {
       return '';
     }
 
-    if (/\.zip$/i.test(destination)) {
-      return destination;
-    }
-
-    const safeName = (deliverForm.playlistOrEpisodes || deliverForm.project || 'delivery')
+    const archiveName = (deliverForm.archiveName || deliverForm.playlistOrEpisodes || deliverForm.project || 'delivery')
       .trim()
       .replace(/\s+/g, '_')
       .toLowerCase();
+
     const normalizedDestination = destination.endsWith('/') || destination.endsWith('\\')
       ? destination.slice(0, -1)
       : destination;
 
-    return `${normalizedDestination}/${safeName || 'delivery'}.zip`;
+    return `${normalizedDestination}/${archiveName || 'delivery'}.zip`;
   };
 
   const handleStartDelivery = async (): Promise<void> => {
-    if (!deliverForm.project.trim() || !deliverForm.bucket.trim() || !deliverForm.destination.trim()) {
-      setDeliverState({ isStarting: false, error: 'Project, destination, and S3 bucket are required.' });
+    if (!deliverForm.project.trim() || !deliverForm.context.trim() || !deliverForm.outputFolder.trim()) {
+      setDeliverState({ isStarting: false, error: 'Project, output folder, and delivery context are required.' });
       return;
     }
 
@@ -235,9 +233,10 @@ function ShotgridOpsPanel(): JSX.Element {
 
     const payload = {
       project: deliverForm.project.trim(),
-      context: deliverForm.bucket.trim(),
+      context: deliverForm.context.trim(),
       output: deriveDeliveryOutput(),
       episodes: episodes.length ? episodes : undefined,
+      manifest: deliverForm.manifest.trim() || undefined,
     };
 
     try {
@@ -262,17 +261,17 @@ function ShotgridOpsPanel(): JSX.Element {
           required
         />
         <TextInput
-          label="Show name"
+          label="Project name"
           placeholder="Frost Giant"
-          value={showSetupForm.showName}
-          onChange={(event) => setShowSetupForm((prev) => ({ ...prev, showName: event.target.value }))}
+          value={showSetupForm.project}
+          onChange={(event) => setShowSetupForm((prev) => ({ ...prev, project: event.target.value }))}
           required
         />
         <TextInput
-          label="Show code"
+          label="Template (optional)"
           placeholder="FG"
-          value={showSetupForm.showCode}
-          onChange={(event) => setShowSetupForm((prev) => ({ ...prev, showCode: event.target.value }))}
+          value={showSetupForm.template}
+          onChange={(event) => setShowSetupForm((prev) => ({ ...prev, template: event.target.value }))}
         />
       </div>
 
@@ -314,33 +313,27 @@ function ShotgridOpsPanel(): JSX.Element {
             onChange={(event) => setPackageForm((prev) => ({ ...prev, playlist: event.target.value }))}
             required
           />
-          <TextInput
-            label="Project"
-            placeholder="Frost Giant"
-            value={packageForm.project}
-            onChange={(event) => setPackageForm((prev) => ({ ...prev, project: event.target.value }))}
-            required
-          />
-          <TextInput
-            label="Output folder"
-            placeholder="/projects/deliveries/playlist_package"
-            value={packageForm.destination}
-            onChange={(event) => setPackageForm((prev) => ({ ...prev, destination: event.target.value }))}
-          />
-          <TextInput
-            label="MediaShuttle / S3 path (optional)"
-            placeholder="s3://client-bucket/review"
-            value={packageForm.remotePath}
-            onChange={(event) => setPackageForm((prev) => ({ ...prev, remotePath: event.target.value }))}
-            description="Optional note for operators. The CLI packages the playlist locally."
-          />
-          <TextInput
-            label="Recipient"
-            placeholder="client"
-            value={packageForm.recipient}
-            onChange={(event) => setPackageForm((prev) => ({ ...prev, recipient: event.target.value }))}
-            description="Use client or vendor to mirror the CLI flag."
-          />
+        <TextInput
+          label="Project"
+          placeholder="Frost Giant"
+          value={packageForm.project}
+          onChange={(event) => setPackageForm((prev) => ({ ...prev, project: event.target.value }))}
+          required
+        />
+        <TextInput
+          label="Output folder"
+          placeholder="/projects/deliveries/playlist_package"
+          value={packageForm.destination}
+          onChange={(event) => setPackageForm((prev) => ({ ...prev, destination: event.target.value }))}
+          description="CLI builds the MediaShuttle-friendly package in this directory."
+        />
+        <TextInput
+          label="Recipient"
+          placeholder="client"
+          value={packageForm.recipient}
+          onChange={(event) => setPackageForm((prev) => ({ ...prev, recipient: event.target.value }))}
+          description="Use client or vendor to mirror the CLI flag."
+        />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
@@ -378,10 +371,10 @@ function ShotgridOpsPanel(): JSX.Element {
             required
           />
           <TextInput
-            label="Destination folder"
+            label="Output folder"
             placeholder="/projects/deliveries/client_out"
-            value={deliverForm.destination}
-            onChange={(event) => setDeliverForm((prev) => ({ ...prev, destination: event.target.value }))}
+            value={deliverForm.outputFolder}
+            onChange={(event) => setDeliverForm((prev) => ({ ...prev, outputFolder: event.target.value }))}
             required
             description="A ZIP archive will be created inside this folder."
           />
@@ -391,12 +384,26 @@ function ShotgridOpsPanel(): JSX.Element {
             </p>
           ) : null}
           <TextInput
-            label="S3 bucket"
+            label="Archive name (optional)"
+            placeholder="client_preview_v001"
+            value={deliverForm.archiveName}
+            onChange={(event) => setDeliverForm((prev) => ({ ...prev, archiveName: event.target.value }))}
+            description="Defaults to playlist filter or project name if left blank."
+          />
+          <TextInput
+            label="Delivery context (S3 bucket)"
             placeholder="vendor_out"
-            value={deliverForm.bucket}
-            onChange={(event) => setDeliverForm((prev) => ({ ...prev, bucket: event.target.value }))}
+            value={deliverForm.context}
+            onChange={(event) => setDeliverForm((prev) => ({ ...prev, context: event.target.value }))}
             required
-            description="Used as the delivery context when syncing to S3."
+            description="Used as the --context flag; maps to s3://<context>/<project>."
+          />
+          <TextInput
+            label="Manifest output (optional)"
+            placeholder="/projects/deliveries/client_out/manifest"
+            value={deliverForm.manifest}
+            onChange={(event) => setDeliverForm((prev) => ({ ...prev, manifest: event.target.value }))}
+            description="Write manifest.json/csv alongside the archive instead of inside it."
           />
         </div>
 
@@ -429,8 +436,8 @@ function ShotgridOpsPanel(): JSX.Element {
     <Card>
       <div style={{ display: 'grid', gap: theme.spacing.lg }}>
         <SectionHeader
-          title="ShotGrid operations"
-          subtitle="Wrap common ShotGrid CLI workflows in an operator-friendly UI."
+          title="ShotGrid & Delivery"
+          subtitle="Seed shows, package playlists, and trigger delivery uploads using the existing CLIs."
         />
 
         <Tabs
@@ -449,4 +456,4 @@ function ShotgridOpsPanel(): JSX.Element {
   );
 }
 
-export default ShotgridOpsPanel;
+export default DeliveryPanel;
