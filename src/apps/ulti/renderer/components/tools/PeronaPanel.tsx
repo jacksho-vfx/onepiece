@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Card, SectionHeader, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
-import { normalizeCostInsights, type CostInsightsResponse } from '../../utils/perona';
+import {
+  normalizeCostInsights,
+  type CostInsightsResponse,
+  type NormalizedCostInsight,
+} from '../../utils/perona';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = '8065';
@@ -18,13 +22,15 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
 
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
-  const [reload, setReload] = useState(false);
-  const [logLevel, setLogLevel] = useState('info');
+  const [settingsPath, setSettingsPath] = useState('');
   const [isStartingDashboard, setIsStartingDashboard] = useState(false);
+  const [isStoppingDashboard, setIsStoppingDashboard] = useState(false);
   const [dashboardStarted, setDashboardStarted] = useState(false);
+  const [dashboardServiceId, setDashboardServiceId] = useState<string | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
 
-  const [insights, setInsights] = useState<string[]>([]);
+  const [insights, setInsights] = useState<NormalizedCostInsight[]>([]);
+  const [rawInsights, setRawInsights] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
@@ -40,26 +46,28 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
     const normalizedHost = host.trim() || DEFAULT_HOST;
     const portNumber = Number.parseInt(port, 10);
     const normalizedPort = Number.isFinite(portNumber) ? portNumber : Number(DEFAULT_PORT);
-    const normalizedLogLevel = logLevel.trim() || undefined;
+    const normalizedSettingsPath = settingsPath.trim() || undefined;
 
     setIsStartingDashboard(true);
     setDashboardError(null);
     try {
-      await window.electron.invoke('perona/web-dashboard', {
+      const response = await window.electron.invoke<{ id?: string }>('perona/web-dashboard', {
         host: normalizedHost,
         port: normalizedPort,
-        reload,
-        logLevel: normalizedLogLevel,
+        settingsPath: normalizedSettingsPath,
       });
+      setDashboardServiceId(response?.id ?? null);
       setDashboardStarted(true);
       showToast({
         title: 'Perona dashboard starting',
-        description: `Serving at ${dashboardUrl}`,
+        description: `Perona dashboard starting on ${dashboardUrl}`,
         variant: 'success',
       });
     } catch (error) {
       console.error('Failed to start Perona dashboard', error);
       setDashboardError('Unable to start Perona dashboard.');
+      setDashboardServiceId(null);
+      setDashboardStarted(false);
       showToast({
         title: 'Dashboard failed to start',
         description: 'Check your Python environment and try again.',
@@ -67,6 +75,30 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
       });
     } finally {
       setIsStartingDashboard(false);
+    }
+  };
+
+  const handleStopDashboard = async (): Promise<void> => {
+    if (!dashboardServiceId) {
+      setDashboardStarted(false);
+      return;
+    }
+
+    setIsStoppingDashboard(true);
+    try {
+      await window.electron.invoke('python/stop-service', { id: dashboardServiceId });
+      setDashboardStarted(false);
+      setDashboardServiceId(null);
+      showToast({ title: 'Perona dashboard stopped', description: 'Background service stopped.', variant: 'success' });
+    } catch (error) {
+      console.error('Failed to stop Perona dashboard', error);
+      showToast({
+        title: 'Could not stop dashboard',
+        description: 'Please check running services and try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsStoppingDashboard(false);
     }
   };
 
@@ -87,15 +119,17 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
       });
 
       const normalized = normalizeCostInsights(response);
-      setInsights(normalized);
+      setInsights(normalized.recommendations);
+      setRawInsights(normalized.rawText);
       setLastFetchedAt(new Date().toISOString());
 
-      if (normalized.length === 0) {
+      if (normalized.recommendations.length === 0 && !normalized.rawText) {
         setInsightsError('No insights available yet.');
       }
     } catch (error) {
       console.error('Failed to fetch Perona cost insights', error);
       setInsights([]);
+      setRawInsights(null);
       setInsightsError('Unable to fetch cost insights.');
     } finally {
       setInsightsLoading(false);
@@ -112,11 +146,15 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
             action={
               <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
                 <Button onClick={() => void handleStartDashboard()} isLoading={isStartingDashboard}>
-                  {dashboardStarted ? 'Restart dashboard' : 'Start Perona dashboard'}
+                  Start Perona dashboard
                 </Button>
                 {dashboardStarted ? (
-                  <Button variant="secondary" onClick={() => void handleOpenDashboard()}>
-                    Open dashboard in browser
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleStopDashboard()}
+                    isLoading={isStoppingDashboard}
+                  >
+                    Stop dashboard
                   </Button>
                 ) : null}
               </div>
@@ -138,26 +176,23 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
               onChange={(event) => setPort(event.target.value)}
             />
             <TextInput
-              label="Log level"
-              value={logLevel}
-              onChange={(event) => setLogLevel(event.target.value)}
-              helpText="Optional log verbosity (e.g. info, debug)."
+              label="Settings path"
+              value={settingsPath}
+              placeholder="Optional path to a settings file"
+              onChange={(event) => setSettingsPath(event.target.value)}
             />
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
-            <input
-              type="checkbox"
-              checked={reload}
-              onChange={(event) => setReload(event.target.checked)}
-              style={{ width: '1rem', height: '1rem' }}
-            />
-            <span style={{ color: theme.colors.text }}>Enable reload mode</span>
-          </label>
-
-          <p style={{ margin: 0, color: theme.colors.textMuted }}>
-            {`The dashboard will start on ${dashboardUrl}. Keep this window open to maintain the service.`}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>
+              {`The dashboard will start on ${dashboardUrl}. Keep this window open to maintain the service.`}
+            </p>
+            {dashboardStarted ? (
+              <Button variant="secondary" onClick={() => void handleOpenDashboard()}>
+                Open in browser
+              </Button>
+            ) : null}
+          </div>
           {dashboardError ? <p style={{ color: theme.colors.danger }}>{dashboardError}</p> : null}
         </div>
 
@@ -178,11 +213,37 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
           ) : null}
           {insightsError ? <p style={{ color: theme.colors.warning }}>{insightsError}</p> : null}
           {insights.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'grid', gap: theme.spacing.xs }}>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
               {insights.map((insight, index) => (
-                <li key={`${insight}-${index}`}>{insight}</li>
+                <div
+                  key={`${insight.title}-${index}`}
+                  style={{
+                    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                    borderRadius: theme.radii.sm,
+                    border: `1px solid ${theme.colors.border}`,
+                    background: theme.colors.surface,
+                  }}
+                >
+                  <p style={{ margin: 0, fontWeight: theme.typography.fontWeightMedium }}>{insight.title}</p>
+                  {insight.summary ? (
+                    <p style={{ margin: 0, color: theme.colors.textMuted }}>{insight.summary}</p>
+                  ) : null}
+                </div>
               ))}
-            </ul>
+            </div>
+          ) : rawInsights ? (
+            <pre
+              style={{
+                margin: 0,
+                background: theme.colors.surfaceAlt,
+                borderRadius: theme.radii.sm,
+                border: `1px solid ${theme.colors.border}`,
+                padding: theme.spacing.sm,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {rawInsights}
+            </pre>
           ) : (
             <p style={{ margin: 0, color: theme.colors.textMuted }}>Run cost insights to see recommendations.</p>
           )}

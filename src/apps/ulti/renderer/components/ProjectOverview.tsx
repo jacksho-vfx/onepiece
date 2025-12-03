@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 import { getNextStep, ProjectActivitySummary } from '../utils/nextStep';
-import { normalizeCostInsights, type CostInsightsResponse } from '../utils/perona';
+import {
+  normalizeCostInsights,
+  type CostInsightsResponse,
+  type NormalizedCostInsight,
+} from '../utils/perona';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -41,6 +45,8 @@ interface ProjectOverviewProps {
   onOpenRenderSubmit?: () => void;
   onOpenDelivery?: () => void;
   onOpenDiagnostics?: () => void;
+  onOpenPeronaTools?: () => void;
+  peronaConfigured?: boolean;
   refreshKey?: number;
 }
 
@@ -52,6 +58,8 @@ function ProjectOverview({
   onOpenRenderSubmit,
   onOpenDelivery,
   onOpenDiagnostics,
+  onOpenPeronaTools,
+  peronaConfigured,
   refreshKey,
 }: ProjectOverviewProps): JSX.Element {
   const theme = useTheme();
@@ -68,7 +76,8 @@ function ProjectOverview({
     deliveries: false,
   });
   const previousStatsRef = useRef<ProjectStats>(DEFAULT_STATS);
-  const [costInsights, setCostInsights] = useState<string[]>([]);
+  const [costInsights, setCostInsights] = useState<NormalizedCostInsight[]>([]);
+  const [rawCostInsights, setRawCostInsights] = useState<string | null>(null);
   const [costInsightsError, setCostInsightsError] = useState<string | null>(null);
   const [costInsightsLoading, setCostInsightsLoading] = useState(false);
 
@@ -163,14 +172,16 @@ function ProjectOverview({
       });
 
       const normalized = normalizeCostInsights(response);
-      setCostInsights(normalized);
+      setCostInsights(normalized.recommendations);
+      setRawCostInsights(normalized.rawText);
 
-      if (normalized.length === 0) {
+      if (normalized.recommendations.length === 0 && !normalized.rawText) {
         setCostInsightsError('No cost recommendations available yet.');
       }
     } catch (error) {
       console.error('Failed to fetch Perona cost insights', error);
       setCostInsights([]);
+      setRawCostInsights(null);
       setCostInsightsError('Unable to load cost recommendations');
     } finally {
       setCostInsightsLoading(false);
@@ -368,6 +379,19 @@ function ProjectOverview({
           </div>
         </Card>
 
+        {peronaConfigured ? (
+          <Card title="Cost insights">
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              <p style={{ margin: 0, color: theme.colors.textMuted }}>
+                Launch the Perona tools to start the dashboard or fetch more detailed insights.
+              </p>
+              <Button variant="secondary" onClick={onOpenPeronaTools}>
+                Open in Perona tools
+              </Button>
+            </div>
+          </Card>
+        ) : null}
+
         <Card title="Cost recommendations">
           {costInsightsLoading ? (
             <p style={{ margin: 0, color: theme.colors.textMuted }}>Fetching cost insights…</p>
@@ -377,18 +401,46 @@ function ProjectOverview({
             <p style={{ margin: 0, color: theme.colors.warning }}>{costInsightsError}</p>
           ) : null}
 
-          {!costInsightsLoading && costInsights.length === 0 && !costInsightsError ? (
+          {!costInsightsLoading && costInsights.length === 0 && !rawCostInsights && !costInsightsError ? (
             <p style={{ margin: 0, color: theme.colors.textMuted }}>
               Run Perona cost insights to see recommendations for this project.
             </p>
           ) : null}
 
           {costInsights.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'grid', gap: theme.spacing.xs }}>
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
               {costInsights.slice(0, 6).map((insight, index) => (
-                <li key={`${insight}-${index}`}>{insight}</li>
+                <div
+                  key={`${insight.title}-${index}`}
+                  style={{
+                    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                    borderRadius: theme.radii.sm,
+                    border: `1px solid ${theme.colors.border}`,
+                    background: theme.colors.surface,
+                  }}
+                >
+                  <p style={{ margin: 0, fontWeight: theme.typography.fontWeightMedium }}>{insight.title}</p>
+                  {insight.summary ? (
+                    <p style={{ margin: 0, color: theme.colors.textMuted }}>{insight.summary}</p>
+                  ) : null}
+                </div>
               ))}
-            </ul>
+            </div>
+          ) : null}
+
+          {!costInsightsLoading && costInsights.length === 0 && rawCostInsights ? (
+            <pre
+              style={{
+                margin: 0,
+                background: theme.colors.surfaceAlt,
+                borderRadius: theme.radii.sm,
+                border: `1px solid ${theme.colors.border}`,
+                padding: theme.spacing.sm,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {rawCostInsights}
+            </pre>
           ) : null}
         </Card>
       </div>

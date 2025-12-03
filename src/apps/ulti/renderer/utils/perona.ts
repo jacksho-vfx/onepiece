@@ -3,27 +3,38 @@ export type CostInsightsResponse = {
   stdout?: string | null;
   stderr?: string | null;
   code?: number;
+  rawText?: string | null;
 };
 
-const toInsightStrings = (input: unknown[]): string[] => {
-  return input
-    .map((item) => {
-      if (typeof item === 'string') {
-        return item;
-      }
+export type NormalizedCostInsight = { title: string; summary?: string | null };
 
-      try {
-        return JSON.stringify(item);
-      } catch {
-        return String(item);
-      }
-    })
-    .filter((value) => Boolean(value?.trim())) as string[];
+export type NormalizedCostInsights = {
+  recommendations: NormalizedCostInsight[];
+  rawText: string | null;
 };
 
-const extractInsightArray = (value: unknown): string[] | null => {
+const cleanText = (value?: string | number | null): string | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = typeof value === 'string' ? value : String(value);
+  const trimmed = text.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+};
+
+const tryParseJson = (candidate: string): unknown | null => {
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    console.warn('Failed to parse cost insights JSON', error);
+    return null;
+  }
+};
+
+const pickInsightArray = (value: unknown): unknown[] | null => {
   if (Array.isArray(value)) {
-    return toInsightStrings(value);
+    return value;
   }
 
   if (value && typeof value === 'object') {
@@ -31,40 +42,68 @@ const extractInsightArray = (value: unknown): string[] | null => {
     const candidate = typed.recommendations ?? typed.insights ?? typed.suggestions;
 
     if (Array.isArray(candidate)) {
-      return toInsightStrings(candidate as unknown[]);
+      return candidate as unknown[];
     }
   }
 
   return null;
 };
 
-export const normalizeCostInsights = (response: CostInsightsResponse): string[] => {
-  const { insights, stdout } = response ?? {};
-
-  const fromInsights = extractInsightArray(insights);
-  if (fromInsights) {
-    return fromInsights;
+const normalizeRecommendation = (value: unknown, index: number): NormalizedCostInsight => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return { title: trimmed || `Insight ${index + 1}`, summary: trimmed || undefined };
   }
 
-  const text = stdout?.trim();
-  if (!text) {
-    return [];
+  if (value && typeof value === 'object') {
+    const typed = value as Record<string, unknown>;
+    const titleCandidate = typed.title ?? typed.name ?? typed.id;
+    const title = cleanText(titleCandidate) || `Insight ${index + 1}`;
+    const summary =
+      cleanText(typed.summary as string) ||
+      cleanText(typed.description as string) ||
+      cleanText(typed.detail as string) ||
+      cleanText(typed.reason as string) ||
+      null;
+
+    return { title, summary };
   }
 
-  if (text.startsWith('{') || text.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(text);
-      const parsedInsights = extractInsightArray(parsed);
-      if (parsedInsights) {
-        return parsedInsights;
-      }
-    } catch (error) {
-      console.warn('Failed to parse cost insights JSON from stdout', error);
+  const fallback = String(value ?? `Insight ${index + 1}`).trim();
+  return { title: fallback || `Insight ${index + 1}`, summary: fallback || undefined };
+};
+
+export const normalizeCostInsights = (response: CostInsightsResponse): NormalizedCostInsights => {
+  const rawText = cleanText(response?.rawText ?? response?.stdout);
+
+  const insightsArray = pickInsightArray(response?.insights);
+  if (insightsArray) {
+    return {
+      recommendations: insightsArray.map(normalizeRecommendation),
+      rawText,
+    };
+  }
+
+  if (rawText && (rawText.startsWith('{') || rawText.startsWith('['))) {
+    const parsed = tryParseJson(rawText);
+    const parsedArray = pickInsightArray(parsed);
+    if (parsedArray) {
+      return {
+        recommendations: parsedArray.map(normalizeRecommendation),
+        rawText,
+      };
     }
   }
 
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  if (rawText) {
+    const recommendations = rawText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line, index) => ({ title: line, summary: line || `Insight ${index + 1}` }));
+
+    return { recommendations, rawText };
+  }
+
+  return { recommendations: [], rawText: null };
 };
