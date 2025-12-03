@@ -3,6 +3,7 @@ import ProjectExplorer from './tools/ProjectExplorer';
 import EnvProfileTool from './tools/EnvProfileTool';
 import DccShotLauncher, { type ShotReference } from './tools/DccShotLauncher';
 import { Card, SectionHeader } from './ui';
+import AnimationToolsPanel from './tools/AnimationToolsPanel';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -32,6 +33,12 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
         />
         <EnvProfileTool />
       </div>
+
+      <SectionHeader
+        title="Animation tools"
+        subtitle="Debug animation scenes, clean them up, and trigger playblasts."
+      />
+      <AnimationToolsPanel />
 
       <SectionHeader title="Project Tools" subtitle="Inspect and manage your project files." />
       <div

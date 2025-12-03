@@ -305,6 +305,153 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
   );
 
   ipcMain.handle(
+    'onepiece/animation-debug',
+    async (_event, payload: { sceneName: string }) => {
+      const sceneName = payload?.sceneName?.trim();
+
+      if (!sceneName) {
+        throw new Error('Scene name is required to debug animation.');
+      }
+
+      const args = ['-m', 'onepiece', 'dcc', 'animation', 'debug-animation', '--scene-name', sceneName];
+
+      return runCommand(args);
+    },
+  );
+
+  ipcMain.handle(
+    'onepiece/animation-cleanup',
+    async (
+      _event,
+      payload: { sceneName: string; keepUnusedReferences?: boolean; keepNamespaces?: boolean },
+    ) => {
+      const sceneName = payload?.sceneName?.trim();
+
+      if (!sceneName) {
+        throw new Error('Scene name is required to clean up a scene.');
+      }
+
+      const args = ['-m', 'onepiece', 'dcc', 'animation', 'cleanup-scene'];
+
+      if (payload.keepUnusedReferences) {
+        args.push('--keep-unused-references');
+      }
+
+      if (payload.keepNamespaces) {
+        args.push('--keep-namespaces');
+      }
+
+      return runCommand(args);
+    },
+  );
+
+  ipcMain.handle(
+    'onepiece/animation-playblast',
+    async (
+      _event,
+      payload: {
+        project: string;
+        sequence?: string | null;
+        shot: string;
+        artist: string;
+        camera: string;
+        version: number;
+        outputDirectory: string;
+        format?: string;
+        codec?: string;
+        width?: number;
+        height?: number;
+        frameStart?: number | null;
+        frameEnd?: number | null;
+        description?: string | null;
+        includeAudio?: boolean;
+      },
+    ) => {
+      const {
+        project,
+        sequence,
+        shot,
+        artist,
+        camera,
+        version,
+        outputDirectory,
+        format,
+        codec,
+        width,
+        height,
+        frameStart,
+        frameEnd,
+        description,
+        includeAudio,
+      } = payload ?? {};
+
+      if (!project || !shot || !artist || !camera || !outputDirectory) {
+        throw new Error('Project, shot, artist, camera, and output directory are required for playblasts.');
+      }
+
+      if (frameStart !== undefined || frameEnd !== undefined) {
+        if (frameStart == null || frameEnd == null) {
+          throw new Error('Both frameStart and frameEnd must be provided together.');
+        }
+      }
+
+      const args = [
+        '-m',
+        'onepiece',
+        'dcc',
+        'animation',
+        'playblast',
+        '--project',
+        project,
+        '--shot',
+        shot,
+        '--artist',
+        artist,
+        '--camera',
+        camera,
+        '--version',
+        String(version),
+        '--output-directory',
+        outputDirectory,
+      ];
+
+      if (sequence) {
+        args.push('--sequence', sequence);
+      }
+
+      if (format) {
+        args.push('--format', format);
+      }
+
+      if (codec) {
+        args.push('--codec', codec);
+      }
+
+      if (width) {
+        args.push('--width', String(width));
+      }
+
+      if (height) {
+        args.push('--height', String(height));
+      }
+
+      if (frameStart != null && frameEnd != null) {
+        args.push('--frame-start', String(frameStart), '--frame-end', String(frameEnd));
+      }
+
+      if (description) {
+        args.push('--description', description);
+      }
+
+      if (includeAudio) {
+        args.push('--include-audio');
+      }
+
+      return runCommand(args);
+    },
+  );
+
+  ipcMain.handle(
     'onepiece/dcc-open-shot',
     async (_event, payload: { scenePath: string; dcc?: string }) => {
       if (!payload?.scenePath) {
