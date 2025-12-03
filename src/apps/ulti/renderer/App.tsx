@@ -59,7 +59,7 @@ function App(): JSX.Element {
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
   const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
   const [showEnvironmentReportPrompt, setShowEnvironmentReportPrompt] = useState(false);
-  const [toolsFocus, setToolsFocus] = useState<'envProfile' | null>(null);
+  const [toolsFocus, setToolsFocus] = useState<'envProfile' | 'shotgrid' | null>(null);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
     if (!nextConfig?.currentProject) {
@@ -120,6 +120,11 @@ function App(): JSX.Element {
     setSelectedTab('tools');
     setToolsFocus('envProfile');
     setShowEnvironmentReportPrompt(false);
+  }, []);
+
+  const handleOpenShotgridOps = useCallback(() => {
+    setSelectedTab('tools');
+    setToolsFocus('shotgrid');
   }, []);
 
   const handleProjectChange = useCallback(
@@ -192,6 +197,7 @@ function App(): JSX.Element {
                   onDismissEnvironmentReportPrompt={() => setShowEnvironmentReportPrompt(false)}
                   autoOpenIngestOnMount={autoOpenIngestOnMount}
                   onAutoOpenIngestHandled={() => setAutoOpenIngestOnMount(false)}
+                  onOpenShotgridOps={handleOpenShotgridOps}
                 />
               )}
               {selectedTab === 'tasks' && <TaskList />}
