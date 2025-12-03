@@ -305,6 +305,10 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
           This guided setup will capture your workflow preferences, project storage locations, and optional integrations so we can
           configure the desktop experience for your studio.
         </p>
+        <p style={{ margin: 0, color: theme.colors.textMuted }}>
+          You can always experiment safely in the Tools tab using the Chopper Playground to inspect and render sample scenes without
+          touching a DCC.
+        </p>
       </div>
       <Button variant="primary" onClick={onNext} style={{ justifySelf: 'flex-start' }}>
         Get started

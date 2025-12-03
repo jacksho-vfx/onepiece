@@ -8,6 +8,7 @@ import AwsSyncTool from './tools/AwsSyncTool';
 import ShotgridOpsPanel from './tools/ShotgridOpsPanel';
 import PeronaPanel from './tools/PeronaPanel';
 import PipelineRunnerPanel from './tools/PipelineRunnerPanel';
+import ChopperPlayground from './tools/ChopperPlayground';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -96,6 +97,8 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
         <ProjectExplorer project={project ?? null} />
 
         <AwsSyncTool />
+
+        <ChopperPlayground />
       </div>
     </div>
   );
