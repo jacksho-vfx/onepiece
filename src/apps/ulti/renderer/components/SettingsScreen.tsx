@@ -34,6 +34,13 @@ type DesktopConfig = {
   shotgrid?: ShotgridConfig;
   aws?: AwsConfig;
   dccs?: Record<DccKey, DccConfig>;
+  awsSyncPresets?: {
+    id: string;
+    name: string;
+    direction: 'from' | 'to';
+    localPath: string;
+    bucketUrl: string;
+  }[];
 };
 
 type FormState = {

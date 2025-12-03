@@ -9,6 +9,7 @@ import { registerVersionIpcHandlers } from './versionInfo';
 import { registerUpdateIpcHandlers } from './updateCheck';
 import { registerTaskIpcHandlers } from './taskManager';
 import { createTray } from './tray';
+import { registerAwsSyncIpcHandlers } from './awsSync';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -92,6 +93,7 @@ app.whenReady().then(() => {
   registerUpdateIpcHandlers(ipcMain, app);
   registerTaskIpcHandlers(ipcMain, window, app);
   registerFsExplorerIpcHandlers(ipcMain);
+  registerAwsSyncIpcHandlers(ipcMain, window);
   createTray(window);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;

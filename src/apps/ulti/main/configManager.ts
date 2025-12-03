@@ -21,6 +21,13 @@ export interface DesktopConfig {
       clientDelivery?: { playlistName?: string; targetPath?: string };
     };
   };
+  awsSyncPresets?: {
+    id: string;
+    name: string;
+    direction: 'from' | 'to';
+    localPath: string;
+    bucketUrl: string;
+  }[];
   shotgrid?: {
     url?: string;
     scriptName?: string;

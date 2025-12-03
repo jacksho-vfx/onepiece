@@ -4,6 +4,7 @@ import EnvProfileTool from './tools/EnvProfileTool';
 import DccShotLauncher, { type ShotReference } from './tools/DccShotLauncher';
 import { Card, SectionHeader } from './ui';
 import AnimationToolsPanel from './tools/AnimationToolsPanel';
+import AwsSyncTool from './tools/AwsSyncTool';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -57,6 +58,8 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
         </Card>
 
         <ProjectExplorer project={project ?? null} />
+
+        <AwsSyncTool />
       </div>
     </div>
   );
