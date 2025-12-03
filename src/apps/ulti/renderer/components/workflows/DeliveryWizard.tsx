@@ -625,7 +625,7 @@ function DeliveryWizard({ project, onClose, onCompleted, onOpenShotgridOps }: De
           <StepIndicator currentStep={currentStep} />
           {onOpenShotgridOps ? (
             <Button variant="ghost" size="sm" onClick={() => onOpenShotgridOps()}>
-              Open advanced ShotGrid operations
+              Open advanced delivery tools
             </Button>
           ) : null}
         </div>
