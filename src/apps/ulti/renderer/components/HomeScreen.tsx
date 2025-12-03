@@ -22,7 +22,21 @@ interface DesktopConfig {
     [projectName: string]: {
       vendorIngest?: { sourcePath?: string };
       dccPublish?: { dccType?: string; lastScenePath?: string };
-      renderSubmit?: { profileName?: string; lastFrameRange?: string };
+      renderSubmit?: {
+        profileName?: string;
+        lastFrameRange?: string;
+        lastScenePath?: string;
+        lastOutputPath?: string;
+        farm?: string;
+        dcc?: string;
+        priority?: number;
+        chunkSize?: number;
+        optimize?: boolean;
+        farmQueueDepth?: number;
+        farmAverageFrameMs?: number;
+        refreshCapabilities?: boolean;
+        user?: string;
+      };
       clientDelivery?: { playlistName?: string; targetPath?: string };
     };
   };
@@ -84,6 +98,17 @@ interface QuickActionForms {
   submitRender: {
     profileName: string;
     frameRange: string;
+    scenePath: string;
+    outputPath: string;
+    dcc: string;
+    farm: string;
+    priority: string;
+    chunkSize: string;
+    user: string;
+    refreshCapabilities: boolean;
+    optimize: boolean;
+    farmQueueDepth: string;
+    farmAverageFrameMs: string;
   };
   packageDelivery: {
     playlist: string;
@@ -183,6 +208,8 @@ function formatDoctorOutput(
   return { isOk, summary: summary || 'All checks passed' };
 }
 
+const getBasename = (filePath: string): string => filePath.trim().split(/[\\/]/).pop() || filePath;
+
 function HomeScreen({
   config: initialConfig,
   onViewLogs,
@@ -220,7 +247,21 @@ function HomeScreen({
   const [quickActionForms, setQuickActionForms] = useState<QuickActionForms>({
     vendorIngest: { source: '', project: '' },
     dccPublish: { dccType: '', scenePath: '' },
-    submitRender: { profileName: '', frameRange: '' },
+    submitRender: {
+      profileName: '',
+      frameRange: '',
+      scenePath: '',
+      outputPath: '',
+      dcc: '',
+      farm: 'mock',
+      priority: '',
+      chunkSize: '',
+      user: '',
+      refreshCapabilities: false,
+      optimize: true,
+      farmQueueDepth: '',
+      farmAverageFrameMs: '',
+    },
     packageDelivery: { playlist: '', target: '' },
   });
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null);
@@ -416,6 +457,33 @@ function HomeScreen({
             ...prev.submitRender,
             profileName: preset.renderSubmit?.profileName ?? prev.submitRender.profileName,
             frameRange: preset.renderSubmit?.lastFrameRange ?? prev.submitRender.frameRange,
+            scenePath: preset.renderSubmit?.lastScenePath ?? prev.submitRender.scenePath,
+            outputPath: preset.renderSubmit?.lastOutputPath ?? prev.submitRender.outputPath,
+            farm: preset.renderSubmit?.farm ?? prev.submitRender.farm,
+            dcc: preset.renderSubmit?.dcc ?? prev.submitRender.dcc,
+            priority:
+              preset.renderSubmit?.priority !== undefined
+                ? String(preset.renderSubmit.priority)
+                : prev.submitRender.priority,
+            chunkSize:
+              preset.renderSubmit?.chunkSize !== undefined
+                ? String(preset.renderSubmit.chunkSize)
+                : prev.submitRender.chunkSize,
+            optimize:
+              preset.renderSubmit?.optimize !== undefined
+                ? preset.renderSubmit.optimize
+                : prev.submitRender.optimize,
+            farmQueueDepth:
+              preset.renderSubmit?.farmQueueDepth !== undefined
+                ? String(preset.renderSubmit.farmQueueDepth)
+                : prev.submitRender.farmQueueDepth,
+            farmAverageFrameMs:
+              preset.renderSubmit?.farmAverageFrameMs !== undefined
+                ? String(preset.renderSubmit.farmAverageFrameMs)
+                : prev.submitRender.farmAverageFrameMs,
+            refreshCapabilities:
+              preset.renderSubmit?.refreshCapabilities ?? prev.submitRender.refreshCapabilities,
+            user: preset.renderSubmit?.user ?? prev.submitRender.user,
           };
           break;
         }
@@ -524,15 +592,7 @@ function HomeScreen({
         return ['-m', 'onepiece', 'dcc', 'publish', '--dcc', dccType, '--scene', scenePath];
       }
       case 'submitRender': {
-        const { profileName, frameRange } = quickActionForms.submitRender;
-        const args = ['-m', 'onepiece', 'render', 'submit', '--profile', profileName];
-        const trimmedRange = frameRange.trim();
-
-        if (trimmedRange) {
-          args.push('--frames', trimmedRange);
-        }
-
-        return args;
+        return [];
       }
       case 'packageDelivery': {
         const { playlist, target } = quickActionForms.packageDelivery;
@@ -555,8 +615,11 @@ function HomeScreen({
         return `Publish ${scenePath || 'scene'} (${dccType || 'dcc'})`;
       }
       case 'submitRender': {
-        const { profileName } = quickActionForms.submitRender;
-        return `Render submit (${profileName || 'profile'})`;
+        const { scenePath, frameRange, farm } = quickActionForms.submitRender;
+        const sceneDisplay = scenePath ? getBasename(scenePath) : 'scene';
+        const frameDisplay = frameRange?.trim() || 'default frames';
+        const farmDisplay = farm ? ` via ${farm}` : '';
+        return `Render submit (${sceneDisplay} – ${frameDisplay}${farmDisplay})`;
       }
       case 'packageDelivery': {
         const { playlist } = quickActionForms.packageDelivery;
@@ -565,6 +628,70 @@ function HomeScreen({
       default:
         return 'Background task';
     }
+  };
+
+  const parseOptionalNumber = (value: string): number | undefined => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    if (Number.isNaN(parsed)) {
+      throw new Error('Please enter numeric values for numeric render options.');
+    }
+
+    return parsed;
+  };
+
+  const buildRenderSubmitPayload = (): {
+    dcc: string;
+    scene: string;
+    frames?: string;
+    output: string;
+    farm?: string;
+    priority?: number;
+    chunkSize?: number;
+    user?: string;
+    refreshCapabilities: boolean;
+    profileName?: string;
+    optimize: boolean;
+    farmQueueDepth?: number;
+    farmAverageFrameMs?: number;
+  } => {
+    const {
+      dcc,
+      scenePath,
+      frameRange,
+      outputPath,
+      farm,
+      priority,
+      chunkSize,
+      user,
+      refreshCapabilities,
+      profileName,
+      optimize,
+      farmQueueDepth,
+      farmAverageFrameMs,
+    } = quickActionForms.submitRender;
+
+    const frames = frameRange.trim() ? frameRange.trim() : undefined;
+
+    return {
+      dcc: dcc.trim(),
+      scene: scenePath.trim(),
+      frames,
+      output: outputPath.trim(),
+      farm: farm.trim(),
+      priority: parseOptionalNumber(priority),
+      chunkSize: parseOptionalNumber(chunkSize),
+      user: user.trim() || undefined,
+      refreshCapabilities,
+      profileName: profileName.trim() || undefined,
+      optimize,
+      farmQueueDepth: parseOptionalNumber(farmQueueDepth),
+      farmAverageFrameMs: parseOptionalNumber(farmAverageFrameMs),
+    };
   };
 
   const isQuickActionValid = (key: QuickActionKey): boolean => {
@@ -578,7 +705,11 @@ function HomeScreen({
         return Boolean(scenePath.trim() && dccType && availableDccs.includes(dccType));
       }
       case 'submitRender':
-        return Boolean(quickActionForms.submitRender.profileName.trim());
+        return Boolean(
+          quickActionForms.submitRender.dcc.trim() &&
+            quickActionForms.submitRender.scenePath.trim() &&
+            quickActionForms.submitRender.outputPath.trim(),
+        );
       case 'packageDelivery': {
         const { playlist, target } = quickActionForms.packageDelivery;
         return Boolean(playlist.trim() && target.trim());
@@ -602,22 +733,42 @@ function HomeScreen({
 
     try {
       const label = buildQuickActionLabel(activeQuickAction);
-      const args = buildQuickActionArgs(activeQuickAction);
+      let taskId: string | null = null;
+      let successMessage = `Background task created. Track progress in the Tasks tab.`;
+      let toastMessage = `Task started: ${label}`;
+      let toastKind: 'info' | 'success' = 'info';
 
-      const taskId = await window.electron.invoke<string>('tasks/create', {
-        label,
-        args,
-      });
+      if (activeQuickAction === 'submitRender') {
+        const payload = buildRenderSubmitPayload();
+        taskId = await window.electron.invoke<string>('onepiece/render-submit', {
+          ...payload,
+          label,
+        });
+        successMessage = taskId
+          ? `Render submitted (task id: ${taskId}). Track progress in the Tasks tab.`
+          : 'Render submitted. Track progress in the Tasks tab.';
+        toastMessage = 'Render submitted';
+        toastKind = 'success';
+      } else {
+        const args = buildQuickActionArgs(activeQuickAction);
+        taskId = await window.electron.invoke<string>('tasks/create', {
+          label,
+          args,
+        });
+        successMessage = taskId
+          ? `Background task created (id: ${taskId}). Track progress in the Tasks tab.`
+          : 'Background task created. Track progress in the Tasks tab.';
+      }
 
       setActionStatus({
         state: 'success',
-        stdout: `Background task created (id: ${taskId}). Track progress in the Tasks tab.`,
+        stdout: successMessage,
         stderr: '',
       });
 
       showToast({
-        kind: 'info',
-        message: `Task started: ${label}`,
+        kind: toastKind,
+        message: toastMessage,
         actionLabel: onViewTasks ? 'View tasks' : undefined,
         onAction: onViewTasks,
       });
@@ -648,6 +799,17 @@ function HomeScreen({
             projectPresetUpdate.renderSubmit = {
               profileName: quickActionForms.submitRender.profileName,
               lastFrameRange: quickActionForms.submitRender.frameRange,
+              lastScenePath: quickActionForms.submitRender.scenePath,
+              lastOutputPath: quickActionForms.submitRender.outputPath,
+              farm: quickActionForms.submitRender.farm,
+              dcc: quickActionForms.submitRender.dcc,
+              priority: parseOptionalNumber(quickActionForms.submitRender.priority),
+              chunkSize: parseOptionalNumber(quickActionForms.submitRender.chunkSize),
+              optimize: quickActionForms.submitRender.optimize,
+              farmQueueDepth: parseOptionalNumber(quickActionForms.submitRender.farmQueueDepth),
+              farmAverageFrameMs: parseOptionalNumber(quickActionForms.submitRender.farmAverageFrameMs),
+              refreshCapabilities: quickActionForms.submitRender.refreshCapabilities,
+              user: quickActionForms.submitRender.user,
             };
             break;
           }
@@ -846,18 +1008,100 @@ function HomeScreen({
           return (
             <div style={{ display: 'grid', gap: theme.spacing.sm }}>
               <TextInput
-                label="Render profile name"
-                placeholder="profile-name"
-                value={quickActionForms.submitRender.profileName}
-                onChange={(event) => updateQuickActionForm('submitRender', 'profileName', event.target.value)}
+                label="DCC"
+                placeholder="houdini / maya / unreal"
+                value={quickActionForms.submitRender.dcc}
+                onChange={(event) => updateQuickActionForm('submitRender', 'dcc', event.target.value)}
                 required
               />
               <TextInput
-                label="Frame range (optional)"
-                placeholder="1001-1100 or 1,3,5"
-                value={quickActionForms.submitRender.frameRange}
-                onChange={(event) => updateQuickActionForm('submitRender', 'frameRange', event.target.value)}
+                label="Scene file"
+                placeholder="/path/to/scene.ext"
+                value={quickActionForms.submitRender.scenePath}
+                onChange={(event) => updateQuickActionForm('submitRender', 'scenePath', event.target.value)}
+                required
               />
+              <TextInput
+                label="Output directory"
+                placeholder="/path/to/renders"
+                value={quickActionForms.submitRender.outputPath}
+                onChange={(event) => updateQuickActionForm('submitRender', 'outputPath', event.target.value)}
+                required
+              />
+              <div style={{ display: 'grid', gap: theme.spacing.xs, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                <TextInput
+                  label="Frame range (optional)"
+                  placeholder="1001-1100 or 1,3,5"
+                  value={quickActionForms.submitRender.frameRange}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'frameRange', event.target.value)}
+                />
+                <TextInput
+                  label="Farm"
+                  placeholder="mock"
+                  value={quickActionForms.submitRender.farm}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'farm', event.target.value)}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: theme.spacing.xs, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                <TextInput
+                  label="Profile (optional)"
+                  placeholder="Profile name"
+                  value={quickActionForms.submitRender.profileName}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'profileName', event.target.value)}
+                />
+                <TextInput
+                  label="User (optional)"
+                  placeholder="Override submitting user"
+                  value={quickActionForms.submitRender.user}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'user', event.target.value)}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: theme.spacing.xs, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <TextInput
+                  label="Priority (optional)"
+                  placeholder="e.g. 50"
+                  value={quickActionForms.submitRender.priority}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'priority', event.target.value)}
+                />
+                <TextInput
+                  label="Chunk size (optional)"
+                  placeholder="Frames per chunk"
+                  value={quickActionForms.submitRender.chunkSize}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'chunkSize', event.target.value)}
+                />
+                <TextInput
+                  label="Farm queue depth (optional)"
+                  placeholder="Recent queue depth"
+                  value={quickActionForms.submitRender.farmQueueDepth}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'farmQueueDepth', event.target.value)}
+                />
+                <TextInput
+                  label="Avg frame ms (optional)"
+                  placeholder="Average frame time in ms"
+                  value={quickActionForms.submitRender.farmAverageFrameMs}
+                  onChange={(event) => updateQuickActionForm('submitRender', 'farmAverageFrameMs', event.target.value)}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: theme.spacing.xs, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+                  <input
+                    type="checkbox"
+                    checked={quickActionForms.submitRender.optimize}
+                    onChange={(event) => updateQuickActionForm('submitRender', 'optimize', event.target.checked)}
+                  />
+                  <span>Optimize priority/chunk sizing</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+                  <input
+                    type="checkbox"
+                    checked={quickActionForms.submitRender.refreshCapabilities}
+                    onChange={(event) =>
+                      updateQuickActionForm('submitRender', 'refreshCapabilities', event.target.checked)
+                    }
+                  />
+                  <span>Refresh capabilities</span>
+                </label>
+              </div>
             </div>
           );
         case 'packageDelivery':
