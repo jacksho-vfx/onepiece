@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
+import EnvProfileTool from './tools/EnvProfileTool';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo';
 
@@ -252,6 +253,8 @@ function DiagnosticsScreen(): JSX.Element {
           <div>{detectedEnv?.dccs?.unreal ?? 'Not detected'}</div>
         </div>
       </Card>
+
+      <EnvProfileTool />
 
       <Card>
         <SectionHeader

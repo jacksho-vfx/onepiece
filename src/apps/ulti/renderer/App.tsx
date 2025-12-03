@@ -89,7 +89,7 @@ function App(): JSX.Element {
     void loadConfig();
   }, [loadConfig]);
 
-  const handleWizardComplete = useCallback(async () => {
+  const handleWizardComplete = useCallback(async (options?: { openEnvironmentReport?: boolean }) => {
     setLoading(true);
     const loadedConfig = await loadConfig();
 
@@ -97,7 +97,12 @@ function App(): JSX.Element {
       setAutoOpenIngestOnMount(true);
     }
 
-    setShowEnvironmentReportPrompt(true);
+    setShowEnvironmentReportPrompt(!options?.openEnvironmentReport);
+
+    if (options?.openEnvironmentReport) {
+      setSelectedTab('tools');
+      setToolsFocus('envProfile');
+    }
   }, [loadConfig]);
 
   const handleRequestRerunWizard = useCallback(() => {
@@ -173,10 +178,10 @@ function App(): JSX.Element {
           {loading || !config ? (
             <div className="op-loading">Loading...</div>
           ) : !config.hasCompletedWizard ? (
-            <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
-              <FirstRunWizard onComplete={() => void handleWizardComplete()} />
-            </AppShell>
-          ) : (
+              <AppShell showNav={false} headerSubtitle="Get set up in a few quick steps">
+                <FirstRunWizard onComplete={(options) => void handleWizardComplete(options)} />
+              </AppShell>
+            ) : (
             <AppShell
               navItems={tabs.map((tab) => ({
                 ...tab,

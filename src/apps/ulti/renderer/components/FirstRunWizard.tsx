@@ -74,7 +74,7 @@ function useWizardForm(): WizardContextValue {
 }
 
 type FirstRunWizardProps = {
-  onComplete: () => void;
+  onComplete: (options?: { openEnvironmentReport?: boolean }) => void;
 };
 
 const defaultFormState: WizardFormState = {
@@ -557,7 +557,7 @@ function SummaryStep({
   error,
 }: {
   onBack: () => void;
-  onFinish: () => void;
+  onFinish: (options?: { openEnvironmentReport?: boolean }) => void;
   isSubmitting: boolean;
   canFinish: boolean;
   error?: string;
@@ -624,13 +624,35 @@ function SummaryStep({
       {error ? (
         <p style={{ margin: 0, color: theme.colors.danger, fontWeight: theme.typography.fontWeightMedium }}>{error}</p>
       ) : null}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
-        <Button variant="secondary" onClick={onBack} disabled={isSubmitting}>
-          Back
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: theme.spacing.sm,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Button
+          variant="ghost"
+          onClick={() => onFinish({ openEnvironmentReport: true })}
+          disabled={isSubmitting}
+        >
+          View environment report
         </Button>
-        <Button variant="primary" onClick={onFinish} isLoading={isSubmitting} disabled={!canFinish}>
-          Finish setup
-        </Button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
+          <Button variant="secondary" onClick={onBack} disabled={isSubmitting}>
+            Back
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => onFinish()}
+            isLoading={isSubmitting}
+            disabled={!canFinish}
+          >
+            Finish setup
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -689,7 +711,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
     setCurrentStep((prev) => Math.max(0, prev - 1));
   };
 
-  const handleFinish = async (): Promise<void> => {
+  const handleFinish = async (options?: { openEnvironmentReport?: boolean }): Promise<void> => {
     if (!validateStep(5)) {
       return;
     }
@@ -735,7 +757,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
         console.warn('onepiece doctor did not complete during setup', doctorError);
       }
 
-      onComplete();
+      onComplete(options);
     } catch (error) {
       setErrors({ submit: 'Failed to save configuration. Please try again.' });
       console.error('Error saving configuration', error);
