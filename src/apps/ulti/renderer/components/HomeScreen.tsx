@@ -7,6 +7,7 @@ import DeliveryWizard from './workflows/DeliveryWizard';
 import { useTheme } from '../styles/ThemeContext';
 import { useHelpContext } from './HelpContext';
 import { ProjectActivitySummary } from '../utils/nextStep';
+import SubmitRenderModal from './tools/SubmitRenderModal';
 
 interface DesktopConfig {
   hasCompletedWizard: boolean;
@@ -268,6 +269,7 @@ function HomeScreen({
   const [isVendorIngestOpen, setVendorIngestOpen] = useState(false);
   const [showDccPublishWizard, setShowDccPublishWizard] = useState(false);
   const [showDeliveryWizard, setShowDeliveryWizard] = useState(false);
+  const [isSubmitRenderModalOpen, setSubmitRenderModalOpen] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ state: 'idle', stdout: '', stderr: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'services' | 'quickActions'>('overview');
   const [ingestCompleted, setIngestCompleted] = useState(false);
@@ -420,6 +422,15 @@ function HomeScreen({
     return projectName || null;
   };
 
+  const defaultRenderProfile = useMemo(() => {
+    const projectName = quickActionForms.vendorIngest.project.trim() || currentProject?.name || '';
+    if (!projectName) {
+      return undefined;
+    }
+
+    return config?.quickActionPresets?.[projectName]?.renderSubmit?.profileName;
+  }, [config?.quickActionPresets, currentProject?.name, quickActionForms.vendorIngest.project]);
+
   const applyPresetForProject = (key: QuickActionKey, projectName: string): void => {
     const preset = config?.quickActionPresets?.[projectName];
     if (!preset) {
@@ -522,6 +533,10 @@ function HomeScreen({
     if (key === 'packageDelivery') {
       setShowDeliveryWizard(true);
       return;
+    }
+
+    if (key === 'submitRender') {
+      setSubmitRenderModalOpen(true);
     }
 
     setActiveQuickAction(key);
@@ -645,19 +660,13 @@ function HomeScreen({
   };
 
   const buildRenderSubmitPayload = (): {
-    dcc: string;
+    profile?: string;
     scene: string;
-    frames?: string;
+    frames: string;
     output: string;
-    farm?: string;
-    priority?: number;
-    chunkSize?: number;
     user?: string;
-    refreshCapabilities: boolean;
-    profileName?: string;
-    optimize: boolean;
-    farmQueueDepth?: number;
-    farmAverageFrameMs?: number;
+    priority?: number;
+    extraArgs?: string[];
   } => {
     const {
       dcc,
@@ -675,22 +684,48 @@ function HomeScreen({
       farmAverageFrameMs,
     } = quickActionForms.submitRender;
 
-    const frames = frameRange.trim() ? frameRange.trim() : undefined;
+    const frames = frameRange.trim();
+    const extraArgs: string[] = [];
+
+    if (dcc.trim()) {
+      extraArgs.push('--dcc', dcc.trim());
+    }
+
+    if (farm.trim()) {
+      extraArgs.push('--farm', farm.trim());
+    }
+
+    const parsedChunkSize = parseOptionalNumber(chunkSize);
+    if (parsedChunkSize !== undefined) {
+      extraArgs.push('--chunk-size', String(parsedChunkSize));
+    }
+
+    const parsedFarmQueueDepth = parseOptionalNumber(farmQueueDepth);
+    if (parsedFarmQueueDepth !== undefined) {
+      extraArgs.push('--farm-queue-depth', String(parsedFarmQueueDepth));
+    }
+
+    const parsedFarmAverageFrameMs = parseOptionalNumber(farmAverageFrameMs);
+    if (parsedFarmAverageFrameMs !== undefined) {
+      extraArgs.push('--farm-average-frame-ms', String(parsedFarmAverageFrameMs));
+    }
+
+    if (refreshCapabilities) {
+      extraArgs.push('--refresh-capabilities');
+    }
+
+    if (!optimize) {
+      extraArgs.push('--no-optimize');
+    }
 
     return {
-      dcc: dcc.trim(),
+      profile: profileName.trim() || undefined,
       scene: scenePath.trim(),
       frames,
       output: outputPath.trim(),
-      farm: farm.trim(),
       priority: parseOptionalNumber(priority),
-      chunkSize: parseOptionalNumber(chunkSize),
       user: user.trim() || undefined,
-      refreshCapabilities,
-      profileName: profileName.trim() || undefined,
-      optimize,
-      farmQueueDepth: parseOptionalNumber(farmQueueDepth),
-      farmAverageFrameMs: parseOptionalNumber(farmAverageFrameMs),
+      extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
     };
   };
 
@@ -708,7 +743,8 @@ function HomeScreen({
         return Boolean(
           quickActionForms.submitRender.dcc.trim() &&
             quickActionForms.submitRender.scenePath.trim() &&
-            quickActionForms.submitRender.outputPath.trim(),
+            quickActionForms.submitRender.outputPath.trim() &&
+            quickActionForms.submitRender.frameRange.trim(),
         );
       case 'packageDelivery': {
         const { playlist, target } = quickActionForms.packageDelivery;
@@ -1438,21 +1474,28 @@ function HomeScreen({
               activitySummary={projectActivitySummary}
               onOpenVendorIngest={() => handleOpenQuickAction('vendorIngest')}
               onOpenDccPublish={() => handleOpenQuickAction('dccPublish')}
-              onOpenRenderSubmit={() => handleOpenQuickAction('submitRender')}
+              onOpenRenderSubmit={() => setSubmitRenderModalOpen(true)}
               onOpenDelivery={() => handleOpenQuickAction('packageDelivery')}
               onOpenDiagnostics={onViewDiagnostics}
               refreshKey={overviewRefreshKey}
             />
           ) : null}
-          {activeTab === 'services' ? renderServicesCard() : null}
-          {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
-        </div>
-        {renderQuickActionModal()}
-        <VendorIngestWizard
-          isOpen={isVendorIngestOpen}
-          project={currentProject ?? null}
-          onClose={handleVendorIngestClose}
-          onCompleted={handleVendorIngestComplete}
+        {activeTab === 'services' ? renderServicesCard() : null}
+        {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
+      </div>
+      {renderQuickActionModal()}
+      <SubmitRenderModal
+        isOpen={isSubmitRenderModalOpen}
+        onClose={() => setSubmitRenderModalOpen(false)}
+        project={currentProject ?? undefined}
+        defaultProfile={defaultRenderProfile}
+        onViewTasks={onViewTasks}
+      />
+      <VendorIngestWizard
+        isOpen={isVendorIngestOpen}
+        project={currentProject ?? null}
+        onClose={handleVendorIngestClose}
+        onCompleted={handleVendorIngestComplete}
           onViewTasks={onViewTasks}
         />
         {showDccPublishWizard ? (

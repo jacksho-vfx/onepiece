@@ -3,63 +3,37 @@ import path from 'path';
 import { createTask } from './taskManager';
 
 type RenderSubmitPayload = {
-  label?: string;
-  dcc: string;
+  profile?: string;
   scene: string;
-  frames?: string;
+  frames: string;
   output: string;
-  farm?: string;
-  priority?: number;
-  chunkSize?: number;
   user?: string;
-  refreshCapabilities?: boolean;
-  profileName?: string;
-  optimize?: boolean;
-  farmQueueDepth?: number;
-  farmAverageFrameMs?: number;
+  priority?: number;
+  extraArgs?: string[];
+  label?: string;
 };
 
 function buildRenderSubmitArgs(payload: RenderSubmitPayload): string[] {
-  const args = ['-m', 'onepiece', 'render', 'submit', '--dcc', payload.dcc, '--scene', payload.scene, '--output', payload.output];
+  const args = ['-m', 'onepiece', 'render', 'submit'];
 
-  if (payload.frames?.trim()) {
-    args.push('--frames', payload.frames.trim());
+  if (payload.profile?.trim()) {
+    args.push('--profile', payload.profile.trim());
   }
 
-  if (payload.farm?.trim()) {
-    args.push('--farm', payload.farm.trim());
+  args.push('--scene', payload.scene.trim());
+  args.push('--frames', payload.frames.trim());
+  args.push('--output', payload.output.trim());
+
+  if (payload.user?.trim()) {
+    args.push('--user', payload.user.trim());
   }
 
   if (payload.priority !== undefined) {
     args.push('--priority', String(payload.priority));
   }
 
-  if (payload.chunkSize !== undefined) {
-    args.push('--chunk-size', String(payload.chunkSize));
-  }
-
-  if (payload.user?.trim()) {
-    args.push('--user', payload.user.trim());
-  }
-
-  if (payload.refreshCapabilities) {
-    args.push('--refresh-capabilities');
-  }
-
-  if (payload.profileName?.trim()) {
-    args.push('--profile', payload.profileName.trim());
-  }
-
-  if (payload.optimize === false) {
-    args.push('--no-optimize');
-  }
-
-  if (payload.farmQueueDepth !== undefined) {
-    args.push('--farm-queue-depth', String(payload.farmQueueDepth));
-  }
-
-  if (payload.farmAverageFrameMs !== undefined) {
-    args.push('--farm-average-frame-ms', String(payload.farmAverageFrameMs));
+  if (Array.isArray(payload.extraArgs) && payload.extraArgs.length > 0) {
+    args.push(...payload.extraArgs);
   }
 
   return args;
@@ -67,14 +41,15 @@ function buildRenderSubmitArgs(payload: RenderSubmitPayload): string[] {
 
 function buildRenderTaskLabel(payload: RenderSubmitPayload): string {
   const sceneName = path.basename(payload.scene || 'scene');
-  const frames = payload.frames?.trim() || 'default frames';
-  const farm = payload.farm?.trim() || 'farm';
-  return payload.label ?? `Render submit (${sceneName} – ${frames} via ${farm})`;
+  const frames = payload.frames?.trim() || 'frames';
+  const profile = payload.profile?.trim();
+  const profileSuffix = profile ? ` @ ${profile}` : '';
+  return payload.label ?? `Render submit (${sceneName}${profileSuffix} – ${frames})`;
 }
 
 export function registerRenderIpcHandlers(): void {
   ipcMain.handle('onepiece/render-submit', async (_event, payload: RenderSubmitPayload) => {
-    if (!payload || !payload.dcc || !payload.scene || !payload.output) {
+    if (!payload || !payload.scene?.trim() || !payload.output?.trim() || !payload.frames?.trim()) {
       throw new Error('Missing required render submission fields.');
     }
 
