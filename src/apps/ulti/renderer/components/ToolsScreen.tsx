@@ -9,6 +9,7 @@ import DeliveryPanel from './tools/DeliveryPanel';
 import PeronaPanel from './tools/PeronaPanel';
 import PipelineRunnerPanel from './tools/PipelineRunnerPanel';
 import ChopperPlayground from './tools/ChopperPlayground';
+import UnrealImportTool from './tools/UnrealImportTool';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -65,6 +66,12 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
         subtitle="Debug animation scenes, clean them up, and trigger playblasts."
       />
       <AnimationToolsPanel />
+
+      <SectionHeader
+        title="Unreal Import"
+        subtitle="Rehydrate published packages into Unreal, with dry-run previews."
+      />
+      <UnrealImportTool project={project ?? null} />
 
       <SectionHeader
         title="ShotGrid & Delivery"

@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import type { BrowserWindow, IpcMain, WebContents } from 'electron';
 import { createInterface } from 'readline';
+import { createTask } from './taskManager';
 
 /**
  * Represents a running Python service process.
@@ -335,6 +336,57 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
   ipcMain.handle('onepiece/env-summary', async () => runOnepieceEnvSummary());
 
   ipcMain.handle('onepiece/profile-summary', async () => runOnepieceProfileSummary());
+
+  ipcMain.handle(
+    'onepiece/dcc-import-unreal',
+    async (
+      _event,
+      payload: {
+        packagePath: string;
+        project: string;
+        asset: string;
+        dryRun?: boolean;
+        extraArgs?: string[];
+      },
+    ) => {
+      const packagePath = payload?.packagePath?.trim();
+      const project = payload?.project?.trim();
+      const asset = payload?.asset?.trim();
+
+      if (!packagePath || !project || !asset) {
+        throw new Error('packagePath, project, and asset are required for Unreal imports.');
+      }
+
+      const args = [
+        '-m',
+        'onepiece',
+        'dcc',
+        'import-unreal',
+        '--package',
+        packagePath,
+        '--project',
+        project,
+        '--asset',
+        asset,
+      ];
+
+      if (payload?.dryRun) {
+        args.push('--dry-run');
+      }
+
+      if (Array.isArray(payload?.extraArgs) && payload.extraArgs.length > 0) {
+        args.push(...payload.extraArgs);
+      }
+
+      if (payload?.dryRun) {
+        const result = await runCommand(args);
+        return mapCommandResult(result);
+      }
+
+      const label = `Unreal import: ${asset} (${project})`;
+      return { taskId: createTask(label, args) };
+    },
+  );
 
   ipcMain.handle(
     'onepiece/animation-debug',
