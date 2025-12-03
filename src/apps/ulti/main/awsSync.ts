@@ -1,30 +1,57 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { createTask } from './taskManager';
 
-type AwsSyncDirection = 'from' | 'to';
+type AwsSyncDirection = 'upload' | 'download';
 
 type AwsSyncPayload = {
   direction: AwsSyncDirection;
   localPath: string;
-  bucketUrl: string;
+  remote: string;
   extraArgs?: string[];
 };
 
-const buildArgs = ({ direction, localPath, bucketUrl, extraArgs = [] }: AwsSyncPayload): string[] => {
+type ParsedRemote = {
+  bucket: string;
+  showCode: string;
+  folder: string;
+};
+
+const parseRemotePath = (remote: string): ParsedRemote => {
+  const withoutScheme = remote.replace(/^s3:\/\//i, '');
+  const [bucket, ...pathSegments] = withoutScheme.split('/').filter(Boolean);
+
+  if (!bucket || pathSegments.length === 0) {
+    throw new Error("Remote path must include a bucket and prefix, e.g. 's3://bucket/show/path'.");
+  }
+
+  const [showCode, ...remaining] = pathSegments;
+
+  return {
+    bucket,
+    showCode,
+    folder: remaining.join('/'),
+  };
+};
+
+const buildArgs = ({ direction, localPath, remote, extraArgs = [] }: AwsSyncPayload): string[] => {
+  const { bucket, showCode, folder } = parseRemotePath(remote);
+
   return [
     '-m',
     'onepiece',
     'aws',
-    direction === 'from' ? 'sync-from' : 'sync-to',
+    direction === 'download' ? 'sync-from' : 'sync-to',
+    bucket,
+    showCode,
+    folder,
     localPath,
-    bucketUrl,
     ...extraArgs,
   ];
 };
 
-const buildLabel = ({ direction, bucketUrl }: AwsSyncPayload): string => {
-  const target = bucketUrl || 'bucket';
-  return direction === 'from'
+const buildLabel = ({ direction, remote }: AwsSyncPayload): string => {
+  const target = remote || 's3 destination';
+  return direction === 'download'
     ? `AWS sync from ${target}`
     : `AWS sync to ${target}`;
 };

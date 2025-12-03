@@ -24,9 +24,10 @@ export interface DesktopConfig {
   awsSyncPresets?: {
     id: string;
     name: string;
-    direction: 'from' | 'to';
+    direction: 'download' | 'upload' | 'from' | 'to';
     localPath: string;
-    bucketUrl: string;
+    remote?: string;
+    bucketUrl?: string;
   }[];
   shotgrid?: {
     url?: string;

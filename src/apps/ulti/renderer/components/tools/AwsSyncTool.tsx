@@ -2,14 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
 
-type AwsSyncDirection = 'from' | 'to';
+type AwsSyncDirection = 'download' | 'upload';
 
 type AwsSyncPreset = {
   id: string;
   name: string;
   direction: AwsSyncDirection;
   localPath: string;
-  bucketUrl: string;
+  remote: string;
+};
+
+type AwsSyncPresetInput = AwsSyncPreset & {
+  bucketUrl?: string;
+  direction: AwsSyncDirection | 'from' | 'to';
 };
 
 type AwsConfig = {
@@ -18,7 +23,7 @@ type AwsConfig = {
 
 type DesktopConfig = {
   aws?: AwsConfig;
-  awsSyncPresets?: AwsSyncPreset[];
+  awsSyncPresets?: AwsSyncPresetInput[];
 };
 
 type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed';
@@ -29,6 +34,25 @@ type Task = {
   status: TaskStatus;
   createdAt: string;
   finishedAt?: string;
+};
+
+const normalizePresets = (presets: AwsSyncPresetInput[] | undefined): AwsSyncPreset[] => {
+  return (presets ?? []).map((preset) => {
+    const normalizedDirection: AwsSyncDirection =
+      preset.direction === 'from'
+        ? 'download'
+        : preset.direction === 'to'
+          ? 'upload'
+          : preset.direction;
+
+    return {
+      id: preset.id,
+      name: preset.name,
+      direction: normalizedDirection,
+      localPath: preset.localPath,
+      remote: preset.remote ?? (preset as AwsSyncPresetInput).bucketUrl ?? '',
+    } satisfies AwsSyncPreset;
+  });
 };
 
 declare global {
@@ -45,9 +69,9 @@ function AwsSyncTool(): JSX.Element {
   const { showToast } = useToast();
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [direction, setDirection] = useState<AwsSyncDirection>('from');
+  const [direction, setDirection] = useState<AwsSyncDirection>('download');
   const [localPath, setLocalPath] = useState('');
-  const [bucketUrl, setBucketUrl] = useState('');
+  const [remotePath, setRemotePath] = useState('');
   const [extraArgs, setExtraArgs] = useState('');
   const [presets, setPresets] = useState<AwsSyncPreset[]>([]);
   const [presetName, setPresetName] = useState('');
@@ -64,13 +88,13 @@ function AwsSyncTool(): JSX.Element {
         const config = await window.electron.invoke<DesktopConfig>('config/get');
         if (!isMounted) return;
 
-        setPresets(config.awsSyncPresets ?? []);
+        setPresets(normalizePresets(config.awsSyncPresets));
 
-        if (!bucketUrl && config.aws?.defaultBucket) {
+        if (!remotePath && config.aws?.defaultBucket) {
           const normalizedBucket = config.aws.defaultBucket.startsWith('s3://')
             ? config.aws.defaultBucket
             : `s3://${config.aws.defaultBucket}`;
-          setBucketUrl(normalizedBucket);
+          setRemotePath(normalizedBucket);
         }
       } catch (error) {
         console.error('Failed to load config for AWS sync', error);
@@ -82,7 +106,7 @@ function AwsSyncTool(): JSX.Element {
     return () => {
       isMounted = false;
     };
-  }, [bucketUrl]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,7 +159,7 @@ function AwsSyncTool(): JSX.Element {
 
     setDirection(preset.direction);
     setLocalPath(preset.localPath);
-    setBucketUrl(preset.bucketUrl);
+    setRemotePath(preset.remote);
     setPresetName(preset.name);
   }, [presets, selectedPresetId]);
 
@@ -192,8 +216,8 @@ function AwsSyncTool(): JSX.Element {
   };
 
   const handleStartSync = async (): Promise<void> => {
-    if (!localPath.trim() || !bucketUrl.trim()) {
-      setPresetError('Provide both a local path and bucket URL to start a sync.');
+    if (!localPath.trim() || !remotePath.trim()) {
+      setPresetError('Provide both a local path and remote path to start a sync.');
       return;
     }
 
@@ -204,7 +228,7 @@ function AwsSyncTool(): JSX.Element {
       await window.electron.invoke<string>('onepiece/aws-sync', {
         direction,
         localPath: localPath.trim(),
-        bucketUrl: bucketUrl.trim(),
+        remote: remotePath.trim(),
         extraArgs: buildExtraArgs(extraArgs),
       });
 
@@ -226,8 +250,8 @@ function AwsSyncTool(): JSX.Element {
       return;
     }
 
-    if (!localPath.trim() || !bucketUrl.trim()) {
-      setPresetError('Provide both a local path and bucket URL before saving a preset.');
+    if (!localPath.trim() || !remotePath.trim()) {
+      setPresetError('Provide both a local path and remote path before saving a preset.');
       return;
     }
 
@@ -239,7 +263,7 @@ function AwsSyncTool(): JSX.Element {
       name: presetName.trim(),
       direction,
       localPath: localPath.trim(),
-      bucketUrl: bucketUrl.trim(),
+      remote: remotePath.trim(),
     };
 
     const nextPresets = [...presets.filter((preset) => preset.id !== presetId), nextPreset];
@@ -248,7 +272,7 @@ function AwsSyncTool(): JSX.Element {
       const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
         awsSyncPresets: nextPresets,
       });
-      setPresets(updatedConfig.awsSyncPresets ?? []);
+      setPresets(normalizePresets(updatedConfig.awsSyncPresets));
       setSelectedPresetId(presetId);
       showToast({ kind: 'success', message: 'Preset saved.' });
     } catch (error) {
@@ -271,7 +295,7 @@ function AwsSyncTool(): JSX.Element {
       const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
         awsSyncPresets: remaining,
       });
-      setPresets(updatedConfig.awsSyncPresets ?? []);
+      setPresets(normalizePresets(updatedConfig.awsSyncPresets));
       setSelectedPresetId('');
       setPresetName('');
       showToast({ kind: 'success', message: 'Preset deleted.' });
@@ -286,7 +310,7 @@ function AwsSyncTool(): JSX.Element {
       <div style={{ display: 'grid', gap: theme.spacing.md }}>
         <SectionHeader
           title="AWS Sync"
-          subtitle="Wraps onepiece aws sync-from/sync-to so you can send media to or from S3."
+          subtitle="Wraps the onepiece aws sync helpers so you can push or pull project data."
         />
 
         <div style={{ display: 'grid', gap: theme.spacing.sm }}>
@@ -349,8 +373,8 @@ function AwsSyncTool(): JSX.Element {
                 background: theme.colors.surfaceAlt,
               }}
             >
-              <option value="from">From S3 → local</option>
-              <option value="to">From local → S3</option>
+              <option value="download">Download (S3 → local)</option>
+              <option value="upload">Upload (local → S3)</option>
             </select>
           </label>
 
@@ -376,10 +400,10 @@ function AwsSyncTool(): JSX.Element {
           </div>
 
           <TextInput
-            label="Bucket URL"
-            placeholder="s3://bucket/path"
-            value={bucketUrl}
-            onChange={(event) => setBucketUrl(event.target.value)}
+            label="Remote path"
+            placeholder="s3://bucket/show/path"
+            value={remotePath}
+            onChange={(event) => setRemotePath(event.target.value)}
             required
           />
 
