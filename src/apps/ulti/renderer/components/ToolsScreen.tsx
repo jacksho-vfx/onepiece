@@ -43,10 +43,6 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
   return (
     <div style={{ display: 'grid', gap: '1rem' }}>
       <div ref={envProfileRef}>
-        <SectionHeader
-          title="Environment & Profile"
-          subtitle="Validate your CLI setup and profile resolution from the desktop."
-        />
         <EnvProfileTool />
       </div>
 

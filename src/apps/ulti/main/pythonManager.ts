@@ -158,6 +158,34 @@ export function runOnepieceProfile(
   return runCommand(args);
 }
 
+function mapCommandResult(result: { code: number; stdout: string; stderr: string }): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  return {
+    exitCode: result.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+/**
+ * Run the environment summary command exposed by the discovered OnePiece CLI.
+ */
+export async function runOnepieceEnvSummary(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runOnepieceInfo(['--format', 'json']);
+  return mapCommandResult(result);
+}
+
+/**
+ * Run the profile summary command exposed by the discovered OnePiece CLI.
+ */
+export async function runOnepieceProfileSummary(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runOnepieceProfile();
+  return mapCommandResult(result);
+}
+
 /**
  * Start a long-running Python service process.
  *
@@ -303,6 +331,10 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
       return runOnepieceProfile(args);
     },
   );
+
+  ipcMain.handle('onepiece/env-summary', async () => runOnepieceEnvSummary());
+
+  ipcMain.handle('onepiece/profile-summary', async () => runOnepieceProfileSummary());
 
   ipcMain.handle(
     'onepiece/animation-debug',
