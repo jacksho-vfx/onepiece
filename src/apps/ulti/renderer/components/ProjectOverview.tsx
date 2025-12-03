@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 import { getNextStep, ProjectActivitySummary } from '../utils/nextStep';
+import { normalizeCostInsights, type CostInsightsResponse } from '../utils/perona';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -67,6 +68,9 @@ function ProjectOverview({
     deliveries: false,
   });
   const previousStatsRef = useRef<ProjectStats>(DEFAULT_STATS);
+  const [costInsights, setCostInsights] = useState<string[]>([]);
+  const [costInsightsError, setCostInsightsError] = useState<string | null>(null);
+  const [costInsightsLoading, setCostInsightsLoading] = useState(false);
 
   const healthStatus = useMemo(() => {
     return warnings.length > 0 ? 'Warnings' : 'OK';
@@ -93,6 +97,9 @@ function ProjectOverview({
   const fetchProjectInfo = useCallback(async (): Promise<void> => {
     if (!project) {
       resetOverview();
+      setCostInsights([]);
+      setCostInsightsError(null);
+      setCostInsightsLoading(false);
       return;
     }
 
@@ -139,13 +146,45 @@ function ProjectOverview({
     }
   }, [normalizeStats, project, resetOverview]);
 
+  const fetchCostInsights = useCallback(async (): Promise<void> => {
+    if (!project) {
+      setCostInsights([]);
+      setCostInsightsError(null);
+      setCostInsightsLoading(false);
+      return;
+    }
+
+    setCostInsightsLoading(true);
+    setCostInsightsError(null);
+
+    try {
+      const response = await window.electron.invoke<CostInsightsResponse>('perona/cost-insights', {
+        project: project.path,
+      });
+
+      const normalized = normalizeCostInsights(response);
+      setCostInsights(normalized);
+
+      if (normalized.length === 0) {
+        setCostInsightsError('No cost recommendations available yet.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch Perona cost insights', error);
+      setCostInsights([]);
+      setCostInsightsError('Unable to load cost recommendations');
+    } finally {
+      setCostInsightsLoading(false);
+    }
+  }, [project]);
+
   useEffect(() => {
     if (project) {
       setHasFetched(false);
     }
 
     void fetchProjectInfo();
-  }, [fetchProjectInfo, project, refreshKey]);
+    void fetchCostInsights();
+  }, [fetchCostInsights, fetchProjectInfo, project, refreshKey]);
 
   useEffect(() => {
     const previous = previousStatsRef.current;
@@ -327,6 +366,30 @@ function ProjectOverview({
               {nextStep.ctaLabel}
             </Button>
           </div>
+        </Card>
+
+        <Card title="Cost recommendations">
+          {costInsightsLoading ? (
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>Fetching cost insights…</p>
+          ) : null}
+
+          {!costInsightsLoading && costInsightsError ? (
+            <p style={{ margin: 0, color: theme.colors.warning }}>{costInsightsError}</p>
+          ) : null}
+
+          {!costInsightsLoading && costInsights.length === 0 && !costInsightsError ? (
+            <p style={{ margin: 0, color: theme.colors.textMuted }}>
+              Run Perona cost insights to see recommendations for this project.
+            </p>
+          ) : null}
+
+          {costInsights.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'grid', gap: theme.spacing.xs }}>
+              {costInsights.slice(0, 6).map((insight, index) => (
+                <li key={`${insight}-${index}`}>{insight}</li>
+              ))}
+            </ul>
+          ) : null}
         </Card>
       </div>
 
