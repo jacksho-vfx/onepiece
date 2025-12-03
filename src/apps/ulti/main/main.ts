@@ -11,6 +11,7 @@ import { registerTaskIpcHandlers } from './taskManager';
 import { createTray } from './tray';
 import { registerAwsSyncIpcHandlers } from './awsSync';
 import { registerShotgridIpcHandlers } from './shotgrid';
+import { registerPeronaIpcHandlers } from './perona';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   registerFsExplorerIpcHandlers(ipcMain);
   registerAwsSyncIpcHandlers(ipcMain, window);
   registerShotgridIpcHandlers(ipcMain, window);
+  registerPeronaIpcHandlers(ipcMain);
   createTray(window);
   ipcMain.handle('open-url', async (_event, payload: string | { url: string }) => {
     const url = typeof payload === 'string' ? payload : payload.url;

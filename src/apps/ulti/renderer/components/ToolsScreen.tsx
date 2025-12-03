@@ -6,6 +6,7 @@ import { Card, SectionHeader } from './ui';
 import AnimationToolsPanel from './tools/AnimationToolsPanel';
 import AwsSyncTool from './tools/AwsSyncTool';
 import ShotgridOpsPanel from './tools/ShotgridOpsPanel';
+import PeronaPanel from './tools/PeronaPanel';
 
 type ProjectSelection = { name: string; path: string };
 
@@ -40,6 +41,12 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
         />
         <EnvProfileTool />
       </div>
+
+      <SectionHeader
+        title="Perona"
+        subtitle="Start the Perona dashboard and review cost recommendations."
+      />
+      <PeronaPanel project={project ?? null} />
 
       <SectionHeader
         title="Animation tools"
