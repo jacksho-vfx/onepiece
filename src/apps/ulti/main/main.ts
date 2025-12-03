@@ -14,6 +14,7 @@ import { registerShotgridIpcHandlers } from './shotgrid';
 import { registerPeronaIpcHandlers } from './perona';
 import { registerTrafalgarPipelineIpcHandlers } from './trafalgar';
 import { registerChopperIpcHandlers } from './chopper';
+import { registerRenderIpcHandlers } from './render';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   registerVersionIpcHandlers(ipcMain, app);
   registerUpdateIpcHandlers(ipcMain, app);
   registerTaskIpcHandlers(ipcMain, window, app);
+  registerRenderIpcHandlers();
   registerFsExplorerIpcHandlers(ipcMain);
   registerAwsSyncIpcHandlers(ipcMain, window);
   registerShotgridIpcHandlers(ipcMain, window);

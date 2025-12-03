@@ -31,6 +31,8 @@ const statusLabelMap: Record<TaskStatus, string> = {
   failed: 'Failed',
 };
 
+const RENDER_DASHBOARD_URL = 'http://localhost:8080/render';
+
 const formatDate = (value?: string): string => {
   if (!value) {
     return '—';
@@ -64,6 +66,30 @@ const formatDuration = (task: Task): string => {
   return parts.join(' ');
 };
 
+const getBasename = (filePath: string): string => filePath.trim().split(/[\\/]/).pop() || filePath;
+
+const parseRenderTask = (task: Task): { scene?: string; frames?: string; farm?: string } | null => {
+  const args = task.command;
+  const isRenderSubmit = args.includes('render') && args.includes('submit');
+  if (!isRenderSubmit) {
+    return null;
+  }
+
+  const getArgValue = (flag: string): string | undefined => {
+    const index = args.indexOf(flag);
+    if (index !== -1 && index + 1 < args.length) {
+      return args[index + 1];
+    }
+    return undefined;
+  };
+
+  return {
+    scene: getArgValue('--scene'),
+    frames: getArgValue('--frames'),
+    farm: getArgValue('--farm'),
+  };
+};
+
 function TaskList(): JSX.Element {
   const theme = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -73,6 +99,9 @@ function TaskList(): JSX.Element {
     () => tasks.some((task) => task.status === 'succeeded' || task.status === 'failed'),
     [tasks],
   );
+  const openRenderDashboard = (): void => {
+    void window.electron.invoke('open-url', { url: RENDER_DASHBOARD_URL });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -219,32 +248,61 @@ function TaskList(): JSX.Element {
             </div>
 
             {visibleTasks.map((task) => (
-              <div
-                key={task.id}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
-                  gap: theme.spacing.sm,
-                  padding: `${theme.spacing.sm} ${theme.spacing.sm}`,
-                  borderRadius: theme.radii.sm,
-                  border: `1px solid ${theme.colors.border}`,
-                  background: theme.colors.surfaceAlt,
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ display: 'grid', gap: '0.25rem' }}>
-                  <strong>{task.label}</strong>
-                  <code style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
-                    {task.command.join(' ')}
-                  </code>
-                </div>
-                <StatusBadge status={statusLabelMap[task.status]}>
-                  {statusLabelMap[task.status]}
-                </StatusBadge>
-                <span>{formatDate(task.startedAt ?? task.createdAt)}</span>
-                <span>{formatDate(task.finishedAt)}</span>
-                <span>{formatDuration(task)}</span>
-              </div>
+              (() => {
+                const renderInfo = parseRenderTask(task);
+                const displayLabel = renderInfo
+                  ? `Render submit – ${renderInfo.scene ? getBasename(renderInfo.scene) : 'scene'} (${
+                      renderInfo.frames || 'default frames'
+                    })`
+                  : task.label;
+
+                return (
+                  <div
+                    key={task.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                      gap: theme.spacing.sm,
+                      padding: `${theme.spacing.sm} ${theme.spacing.sm}`,
+                      borderRadius: theme.radii.sm,
+                      border: `1px solid ${theme.colors.border}`,
+                      background: theme.colors.surfaceAlt,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gap: '0.25rem' }}>
+                      <strong>{displayLabel}</strong>
+                      {renderInfo ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: theme.spacing.sm,
+                            alignItems: 'center',
+                            color: theme.colors.textMuted,
+                          }}
+                        >
+                          <span>Scene: {renderInfo.scene ? getBasename(renderInfo.scene) : 'Unknown'}</span>
+                          <span>Frames: {renderInfo.frames ?? 'Default range'}</span>
+                          <span>Farm: {renderInfo.farm ?? 'default'}</span>
+                          <Button variant="secondary" onClick={openRenderDashboard}>
+                            Open render dashboard
+                          </Button>
+                        </div>
+                      ) : null}
+                      <code style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
+                        {task.command.join(' ')}
+                      </code>
+                    </div>
+                    <StatusBadge status={statusLabelMap[task.status]}>
+                      {statusLabelMap[task.status]}
+                    </StatusBadge>
+                    <span>{formatDate(task.startedAt ?? task.createdAt)}</span>
+                    <span>{formatDate(task.finishedAt)}</span>
+                    <span>{formatDuration(task)}</span>
+                  </div>
+                );
+              })()
             ))}
           </div>
         )}

@@ -27,7 +27,21 @@ type DesktopConfig = {
     [projectName: string]: {
       vendorIngest?: { sourcePath?: string };
       dccPublish?: { dccType?: string; lastScenePath?: string };
-      renderSubmit?: { profileName?: string; lastFrameRange?: string };
+      renderSubmit?: {
+        profileName?: string;
+        lastFrameRange?: string;
+        lastScenePath?: string;
+        lastOutputPath?: string;
+        farm?: string;
+        dcc?: string;
+        priority?: number;
+        chunkSize?: number;
+        optimize?: boolean;
+        farmQueueDepth?: number;
+        farmAverageFrameMs?: number;
+        refreshCapabilities?: boolean;
+        user?: string;
+      };
       clientDelivery?: { playlistName?: string; targetPath?: string };
     };
   };
