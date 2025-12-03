@@ -7,19 +7,22 @@ import AnimationToolsPanel from './tools/AnimationToolsPanel';
 import AwsSyncTool from './tools/AwsSyncTool';
 import ShotgridOpsPanel from './tools/ShotgridOpsPanel';
 import PeronaPanel from './tools/PeronaPanel';
+import PipelineRunnerPanel from './tools/PipelineRunnerPanel';
 
 type ProjectSelection = { name: string; path: string };
 
 type ToolsScreenProps = {
   project?: ProjectSelection | null;
-  focusSection?: 'envProfile' | 'shotgrid' | null;
+  focusSection?: 'envProfile' | 'shotgrid' | 'pipelines' | null;
   onFocusHandled?: () => void;
   shots?: ShotReference[];
+  onViewTasks?: () => void;
 };
 
-function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScreenProps): JSX.Element {
+function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks }: ToolsScreenProps): JSX.Element {
   const envProfileRef = useRef<HTMLDivElement | null>(null);
   const shotgridRef = useRef<HTMLDivElement | null>(null);
+  const pipelinesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (focusSection === 'envProfile' && envProfileRef.current) {
@@ -28,6 +31,10 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
     }
     if (focusSection === 'shotgrid' && shotgridRef.current) {
       shotgridRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      onFocusHandled?.();
+    }
+    if (focusSection === 'pipelines' && pipelinesRef.current) {
+      pipelinesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       onFocusHandled?.();
     }
   }, [focusSection, onFocusHandled]);
@@ -40,6 +47,14 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots }: ToolsScre
           subtitle="Validate your CLI setup and profile resolution from the desktop."
         />
         <EnvProfileTool />
+      </div>
+
+      <div ref={pipelinesRef}>
+        <SectionHeader
+          title="Pipelines"
+          subtitle="List Trafalgar pipelines and trigger runs with parameters."
+        />
+        <PipelineRunnerPanel onViewTasks={onViewTasks} />
       </div>
 
       <SectionHeader

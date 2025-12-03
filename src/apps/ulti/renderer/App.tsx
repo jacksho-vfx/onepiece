@@ -59,7 +59,7 @@ function App(): JSX.Element {
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
   const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
   const [showEnvironmentReportPrompt, setShowEnvironmentReportPrompt] = useState(false);
-  const [toolsFocus, setToolsFocus] = useState<'envProfile' | 'shotgrid' | null>(null);
+  const [toolsFocus, setToolsFocus] = useState<'envProfile' | 'shotgrid' | 'pipelines' | null>(null);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
     if (!nextConfig?.currentProject) {
@@ -208,6 +208,7 @@ function App(): JSX.Element {
                   project={currentProject ?? undefined}
                   focusSection={toolsFocus}
                   onFocusHandled={() => setToolsFocus(null)}
+                  onViewTasks={handleViewTasks}
                 />
               )}
               {selectedTab === 'settings' && (
