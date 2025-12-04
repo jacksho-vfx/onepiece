@@ -1,4 +1,6 @@
 import type { BrowserWindow, IpcMain } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import { createTask } from './taskManager';
 
 type AwsSyncDirection = 'upload' | 'download';
@@ -87,9 +89,17 @@ export function registerAwsSyncIpcHandlers(ipcMain: IpcMain, _browserWindow: Bro
       throw new Error("A remote path is required, e.g. 's3://bucket/show/path'.");
     }
 
+    const resolvedLocalPath = path.resolve(trimmedLocalPath);
+
+    try {
+      await fs.promises.stat(resolvedLocalPath);
+    } catch {
+      throw new Error(`Local path does not exist: ${resolvedLocalPath}`);
+    }
+
     const normalizedPayload: AwsSyncPayload = {
       ...payload,
-      localPath: trimmedLocalPath,
+      localPath: resolvedLocalPath,
       remote: trimmedRemote,
       extraArgs: payload.extraArgs ?? [],
     };
