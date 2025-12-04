@@ -131,28 +131,49 @@ function parsePipelineListOutput(stdout: string): PipelineSummary[] {
   return pipelines;
 }
 
+async function getPipelineListOutput(): Promise<string> {
+  const baseArgs = ['-m', 'trafalgar', 'pipeline', 'list'];
+  const attempts: string[][] = [[...baseArgs, '--format', 'json'], baseArgs];
+
+  let lastResult: { code: number; stdout: string; stderr: string } | null = null;
+
+  for (const args of attempts) {
+    const result = await runCommand(args);
+    lastResult = result;
+
+    if (result.code === 0) {
+      return result.stdout || result.stderr || '';
+    }
+  }
+
+  throw new Error(lastResult?.stderr || lastResult?.stdout || 'Failed to list pipelines.');
+}
+
 export function registerTrafalgarPipelineIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('trafalgar/pipeline-list', async () => {
-    const result = await runCommand(['-m', 'trafalgar', 'pipeline', 'list']);
+    const output = await getPipelineListOutput();
 
-    if (result.code !== 0) {
-      throw new Error(result.stderr || result.stdout || 'Failed to list pipelines.');
-    }
-
-    return parsePipelineListOutput(result.stdout || result.stderr || '');
+    return parsePipelineListOutput(output);
   });
 
   ipcMain.handle(
     'trafalgar/pipeline-run',
-    async (_event, payload: { pipelineId: string; parameters?: Record<string, string> }) => {
-      const pipelineId = payload?.pipelineId?.trim();
+    async (
+      _event,
+      payload:
+        | { id?: string; params?: Record<string, string> }
+        | { pipelineId?: string; parameters?: Record<string, string> },
+    ) => {
+      const pipelineId = (payload?.id ?? (payload as { pipelineId?: string })?.pipelineId ?? '').trim();
 
       if (!pipelineId) {
         throw new Error('pipelineId is required to run a pipeline.');
       }
 
       const args = ['-m', 'trafalgar', 'pipeline', 'run', pipelineId];
-      const parameters = payload?.parameters ?? {};
+      const parameters = (payload as { params?: Record<string, string> })?.params ??
+        (payload as { parameters?: Record<string, string> })?.parameters ??
+        {};
 
       Object.entries(parameters)
         .filter(([key]) => Boolean(key))

@@ -136,12 +136,12 @@ function PipelineRunnerPanel({ onViewTasks, initialPipelineId }: PipelineRunnerP
 
     try {
       await window.electron.invoke<string>('trafalgar/pipeline-run', {
-        pipelineId: selectedPipeline.id,
-        parameters,
+        id: selectedPipeline.id,
+        params: parameters,
       });
       showToast({
         kind: 'info',
-        message: 'Pipeline run started',
+        message: `Pipeline '${selectedPipeline.name}' started`,
         actionLabel: onViewTasks ? 'View tasks' : undefined,
         onAction: onViewTasks,
       });
