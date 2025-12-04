@@ -10,6 +10,7 @@ from typing import Awaitable, cast
 from libraries.automation.ingest.models import IngestReport, IngestedMedia
 from libraries.automation.ingest.service import (
     Delivery,
+    MAX_DIRECTORY_DEPTH,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,
@@ -466,3 +467,60 @@ def test_ingest_folder_handles_active_event_loop(tmp_path: Path) -> None:
     assert report.processed_count == 1
     assert uploader.uploads
     assert uploader.uploads[0][0] == valid
+
+
+def test_ingest_folder_skips_symlink_directories(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+
+    nested = incoming / "nested"
+    nested.mkdir()
+    valid = nested / "SHOW01_ep001_sc01_0001_comp.mov"
+    valid.write_bytes(b"data")
+
+    (incoming / "loop").symlink_to(incoming, target_is_directory=True)
+
+    service = _make_service(ShotgridClient())
+    report = service.ingest_folder(incoming, recursive=True)
+
+    assert report.processed_count == 1
+    assert report.processed[0].path == valid
+    assert any(
+        "ingest.symlink_directory_skipped" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_ingest_folder_enforces_max_directory_depth(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+
+    shallow_file = incoming / "SHOW01_ep001_sc01_0001_comp.mov"
+    shallow_file.write_bytes(b"data")
+
+    deep_parent = incoming
+    for index in range(MAX_DIRECTORY_DEPTH):
+        deep_parent = deep_parent / f"level_{index}"
+        deep_parent.mkdir()
+
+    deep_file = deep_parent / "SHOW01_ep001_sc01_0001_fx.mov"
+    deep_file.write_bytes(b"data")
+
+    service = _make_service(ShotgridClient())
+    report = service.ingest_folder(incoming, recursive=True)
+
+    assert report.processed_count == 1
+    assert report.processed[0].path == shallow_file
+    assert all(media.path != deep_file for media in report.processed)
+    assert any(
+        "ingest.max_directory_depth_reached" in record.getMessage()
+        for record in caplog.records
+    )
