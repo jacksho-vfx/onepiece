@@ -73,7 +73,7 @@ function App(): JSX.Element {
   const [currentProject, setCurrentProject] = useState<ProjectSelection | null>(null);
   const [autoOpenIngestOnMount, setAutoOpenIngestOnMount] = useState(false);
   const [showEnvironmentReportPrompt, setShowEnvironmentReportPrompt] = useState(false);
-  const [toolsFocus, setToolsFocus] = useState<'envProfile' | 'shotgrid' | 'pipelines' | null>(null);
+  const [toolsFocus, setToolsFocus] = useState<'envProfile' | 'shotgrid' | 'pipelines' | 'perona' | null>(null);
 
   const deriveCurrentProject = useCallback((nextConfig: DesktopConfig | null): ProjectSelection | null => {
     if (!nextConfig?.currentProject) {
@@ -146,6 +146,11 @@ function App(): JSX.Element {
     setToolsFocus('shotgrid');
   }, []);
 
+  const handleOpenPeronaTools = useCallback(() => {
+    setSelectedTab('tools');
+    setToolsFocus('perona');
+  }, []);
+
   const handleProjectChange = useCallback(
     async (project: ProjectSelection | null) => {
       if (!config) {
@@ -185,6 +190,8 @@ function App(): JSX.Element {
     [],
   );
 
+  const peronaConfigured = Boolean(config?.pythonPath || config?.projectRoot);
+
   return (
     <ThemeProvider>
       <HelpContextProvider>
@@ -217,6 +224,8 @@ function App(): JSX.Element {
                   autoOpenIngestOnMount={autoOpenIngestOnMount}
                   onAutoOpenIngestHandled={() => setAutoOpenIngestOnMount(false)}
                   onOpenShotgridOps={handleOpenShotgridOps}
+                  onOpenPeronaTools={handleOpenPeronaTools}
+                  peronaConfigured={peronaConfigured}
                 />
               )}
               {selectedTab === 'tasks' && <TaskList />}

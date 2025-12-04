@@ -55,6 +55,8 @@ type HomeScreenProps = {
   onViewDiagnostics?: () => void;
   onViewEnvironmentReport?: () => void;
   onOpenShotgridOps?: () => void;
+  onOpenPeronaTools?: () => void;
+  peronaConfigured?: boolean;
   currentProject?: { name: string; path: string };
   autoOpenIngestOnMount?: boolean;
   onAutoOpenIngestHandled?: () => void;
@@ -218,6 +220,8 @@ function HomeScreen({
   onViewDiagnostics,
   onViewEnvironmentReport,
   onOpenShotgridOps,
+  onOpenPeronaTools,
+  peronaConfigured: peronaConfiguredProp,
   currentProject,
   autoOpenIngestOnMount,
   onAutoOpenIngestHandled,
@@ -367,6 +371,8 @@ function HomeScreen({
 
     return (['maya', 'blender', 'unreal'] as const).filter((dcc) => config.dccs?.[dcc]?.enabled);
   }, [config]);
+
+  const peronaConfigured = peronaConfiguredProp ?? Boolean(config?.pythonPath || config?.projectRoot);
 
   useEffect(() => {
     if (availableDccs.length === 0) {
@@ -1477,11 +1483,13 @@ function HomeScreen({
               onOpenRenderSubmit={() => setSubmitRenderModalOpen(true)}
               onOpenDelivery={() => handleOpenQuickAction('packageDelivery')}
               onOpenDiagnostics={onViewDiagnostics}
+              onOpenPeronaTools={onOpenPeronaTools}
+              peronaConfigured={peronaConfigured}
               refreshKey={overviewRefreshKey}
             />
           ) : null}
-        {activeTab === 'services' ? renderServicesCard() : null}
-        {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
+          {activeTab === 'services' ? renderServicesCard() : null}
+          {activeTab === 'quickActions' ? renderQuickActionsCard() : null}
       </div>
       {renderQuickActionModal()}
       <SubmitRenderModal

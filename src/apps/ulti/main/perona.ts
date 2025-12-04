@@ -6,29 +6,31 @@ interface WebDashboardPayload {
   port?: number;
   reload?: boolean;
   logLevel?: string;
+  settingsPath?: string;
 }
 
 interface CostInsightsPayload {
   project?: string;
 }
 
-const buildDashboardArgs = ({ host, port, reload, logLevel }: WebDashboardPayload): string[] => {
+const buildDashboardArgs = ({ host, port, reload, logLevel, settingsPath }: WebDashboardPayload): string[] => {
   const args = ['-m', 'perona', 'web', 'dashboard'];
 
-  if (host) {
-    args.push('--host', host);
-  }
+  args.push('--host', host || '127.0.0.1');
+  args.push('--port', String(typeof port === 'number' ? port : 8065));
 
-  if (typeof port === 'number') {
-    args.push('--port', String(port));
-  }
-
-  if (reload) {
+  if (reload === true) {
     args.push('--reload');
+  } else if (reload === false) {
+    args.push('--no-reload');
   }
 
   if (logLevel) {
     args.push('--log-level', logLevel);
+  }
+
+  if (settingsPath) {
+    args.push('--settings-path', settingsPath);
   }
 
   return args;
@@ -44,14 +46,14 @@ const buildCostInsightsArgs = ({ project }: CostInsightsPayload): string[] => {
   return args;
 };
 
-const parseInsightsFromStdout = (stdout?: string): unknown => {
-  const trimmed = stdout?.trim();
+const parseInsightsFromStdout = (stdout?: string): { insights: unknown | null; rawText: string | null } => {
+  const rawText = stdout?.trim() ?? null;
 
-  if (!trimmed) {
-    return null;
+  if (!rawText) {
+    return { insights: null, rawText: null };
   }
 
-  const tryParse = (candidate: string): unknown => {
+  const tryParse = (candidate: string): unknown | null => {
     try {
       return JSON.parse(candidate);
     } catch (error) {
@@ -60,24 +62,24 @@ const parseInsightsFromStdout = (stdout?: string): unknown => {
     }
   };
 
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    const parsed = tryParse(trimmed);
+  if (rawText.startsWith('{') || rawText.startsWith('[')) {
+    const parsed = tryParse(rawText);
     if (parsed) {
-      return parsed;
+      return { insights: parsed, rawText };
     }
   }
 
-  const lines = trimmed.split('\n').map((line) => line.trim()).filter(Boolean);
+  const lines = rawText.split('\n').map((line) => line.trim()).filter(Boolean);
   const reversedCandidate = [...lines].reverse().find((line) => line.startsWith('{') || line.startsWith('['));
 
   if (reversedCandidate) {
     const parsed = tryParse(reversedCandidate);
     if (parsed) {
-      return parsed;
+      return { insights: parsed, rawText };
     }
   }
 
-  return null;
+  return { insights: null, rawText };
 };
 
 export function registerPeronaIpcHandlers(ipcMain: IpcMain): void {
@@ -90,11 +92,12 @@ export function registerPeronaIpcHandlers(ipcMain: IpcMain): void {
     const args = buildCostInsightsArgs(payload);
     const result = await runCommand(args);
 
-    const parsedInsights = parseInsightsFromStdout(result.stdout);
+    const { insights, rawText } = parseInsightsFromStdout(result.stdout);
 
     return {
       ...result,
-      insights: parsedInsights,
+      insights,
+      rawText,
     };
   });
 }

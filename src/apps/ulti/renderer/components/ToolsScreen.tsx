@@ -15,7 +15,7 @@ type ProjectSelection = { name: string; path: string };
 
 type ToolsScreenProps = {
   project?: ProjectSelection | null;
-  focusSection?: 'envProfile' | 'shotgrid' | 'pipelines' | null;
+  focusSection?: 'envProfile' | 'shotgrid' | 'pipelines' | 'perona' | null;
   onFocusHandled?: () => void;
   shots?: ShotReference[];
   onViewTasks?: () => void;
@@ -25,6 +25,7 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
   const envProfileRef = useRef<HTMLDivElement | null>(null);
   const shotgridRef = useRef<HTMLDivElement | null>(null);
   const pipelinesRef = useRef<HTMLDivElement | null>(null);
+  const peronaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (focusSection === 'envProfile' && envProfileRef.current) {
@@ -37,6 +38,10 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
     }
     if (focusSection === 'pipelines' && pipelinesRef.current) {
       pipelinesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      onFocusHandled?.();
+    }
+    if (focusSection === 'perona' && peronaRef.current) {
+      peronaRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       onFocusHandled?.();
     }
   }, [focusSection, onFocusHandled]);
@@ -55,11 +60,13 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
         <PipelineRunnerPanel onViewTasks={onViewTasks} />
       </div>
 
-      <SectionHeader
-        title="Perona"
-        subtitle="Start the Perona dashboard and review cost recommendations."
-      />
-      <PeronaPanel project={project ?? null} />
+      <div ref={peronaRef}>
+        <SectionHeader
+          title="Perona"
+          subtitle="Start the Perona dashboard and review cost recommendations."
+        />
+        <PeronaPanel project={project ?? null} />
+      </div>
 
       <SectionHeader
         title="Animation tools"
