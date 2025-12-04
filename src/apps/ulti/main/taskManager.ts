@@ -27,6 +27,8 @@ export const MAX_TASK_HISTORY = 100;
 
 const completedStatuses: TaskStatus[] = ['succeeded', 'failed'];
 
+const MAX_CAPTURED_OUTPUT_BYTES = 1024 * 1024; // 1MB
+
 const isTaskCompleted = (task: Task): boolean => completedStatuses.includes(task.status);
 
 const getSortedTasks = (): Task[] =>
@@ -42,6 +44,42 @@ function emitTasksUpdated(snapshot?: Task[]): void {
 
 function setRendererWebContents(webContents: WebContents): void {
   rendererWebContents = webContents;
+}
+
+function createStreamCapture(
+  stream: NodeJS.ReadableStream | null | undefined,
+  taskId: string,
+  label: string,
+): {
+  getPreview: () => string;
+  isTruncated: () => boolean;
+} {
+  let captured = '';
+  let truncated = false;
+
+  if (stream) {
+    stream.on('data', (data: Buffer | string) => {
+      const chunk = data.toString();
+      const remaining = Math.max(0, MAX_CAPTURED_OUTPUT_BYTES - captured.length);
+
+      if (remaining > 0) {
+        captured += chunk.slice(0, remaining);
+      }
+
+      if (chunk.length > remaining) {
+        truncated = true;
+      }
+    });
+
+    stream.on('error', (error) => {
+      console.error(`Error reading ${label} for task '${taskId}'`, error);
+    });
+  }
+
+  return {
+    getPreview: () => captured,
+    isTruncated: () => truncated,
+  };
 }
 
 export function enforceTaskRetention(): { mutated: boolean; snapshot: Task[] } {
@@ -184,6 +222,9 @@ export async function createTask(label: string, args: string[]): Promise<string>
     return id;
   }
 
+  const stdoutCapture = createStreamCapture(child.stdout, id, 'stdout');
+  const stderrCapture = createStreamCapture(child.stderr, id, 'stderr');
+
   void updateTask(id, {
     status: 'running',
     startedAt: new Date().toISOString(),
@@ -199,6 +240,21 @@ export async function createTask(label: string, args: string[]): Promise<string>
   });
 
   child.on('close', (code) => {
+    const logPreview = (
+      name: 'stdout' | 'stderr',
+      capture: ReturnType<typeof createStreamCapture>,
+    ): void => {
+      const preview = capture.getPreview();
+
+      if (preview) {
+        const truncatedSuffix = capture.isTruncated() ? ' (truncated)' : '';
+        console.debug(`Task '${label}' ${name}${truncatedSuffix}: ${preview}`);
+      }
+    };
+
+    logPreview('stdout', stdoutCapture);
+    logPreview('stderr', stderrCapture);
+
     void updateTask(id, {
       status: code === 0 ? 'succeeded' : 'failed',
       finishedAt: new Date().toISOString(),
