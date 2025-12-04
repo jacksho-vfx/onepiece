@@ -673,3 +673,16 @@ This respects the same environment variables as the installed entry point and is
 ## Getting help
 
 If you run into issues, open an issue in this repository with the command you ran and the resulting output. Include your OS, Python version, and whether you installed from PyPI or source to help us reproduce the problem quickly.
+
+### Build desktop installer locally
+
+Use the Electron project under `src/apps/ulti` to generate installers for Windows, macOS, and Linux.
+
+```bash
+cd src/apps/ulti
+npm install
+npm run dist
+```
+
+The `dist` script compiles the main and renderer bundles before invoking `electron-builder` to produce platform installers in the
+`release/` directory. Bundle any embedded Python runtime under `src/apps/ulti/python` so it is copied into the packaged app.
