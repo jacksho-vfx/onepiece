@@ -10,6 +10,11 @@ OnePiece is a Typer-powered command line toolkit designed for ingesting, packagi
 >
 > **Onboarding tip:** Run `make tester-present` to launch the fully-seeded Trafalgar, Perona, and Uta demo stack without memorising CLI flags; append `TESTER_ARGS="--no-browser"` (or similar) to forward optional flags to the underlying command.
 
+## Downloads / Releases
+
+- Download desktop installers from the GitHub [Releases](../../releases) page.
+- If you are preparing a new desktop build, follow the step-by-step checklist in [RELEASE.md](./RELEASE.md).
+
 ## Toolkit components
 
 - **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, and validation helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
