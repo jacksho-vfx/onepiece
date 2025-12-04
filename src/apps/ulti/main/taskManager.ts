@@ -23,14 +23,96 @@ const tasks = new Map<string, Task>();
 let rendererWebContents: WebContents | null = null;
 let appInstance: App | null = null;
 
-function emitTasksUpdated(): void {
+export const TASK_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+export const MAX_TASK_HISTORY = 100;
+
+const completedStatuses: TaskStatus[] = ['succeeded', 'failed'];
+
+const isTaskCompleted = (task: Task): boolean => completedStatuses.includes(task.status);
+
+const getSortedTasks = (): Task[] =>
+  Array.from(tasks.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+function emitTasksUpdated(snapshot?: Task[]): void {
   if (rendererWebContents && !rendererWebContents.isDestroyed()) {
-    rendererWebContents.send('tasks/updated', getTasks());
+    rendererWebContents.send('tasks/updated', snapshot ?? getTasks());
   }
 }
 
 function setRendererWebContents(webContents: WebContents): void {
   rendererWebContents = webContents;
+}
+
+export function enforceTaskRetention(): { mutated: boolean; snapshot: Task[] } {
+  const now = Date.now();
+  let mutated = false;
+
+  for (const [id, task] of tasks) {
+    if (!isTaskCompleted(task)) {
+      continue;
+    }
+
+    const finishedAt = task.finishedAt ?? task.createdAt;
+    const finishedTime = new Date(finishedAt).getTime();
+
+    if (Number.isFinite(finishedTime) && now - finishedTime > TASK_TTL_MS) {
+      tasks.delete(id);
+      mutated = true;
+    }
+  }
+
+  const allTasks = getSortedTasks();
+  const overflow = Math.max(0, allTasks.length - MAX_TASK_HISTORY);
+
+  if (overflow > 0) {
+    const completedOldestFirst = allTasks
+      .filter((task) => isTaskCompleted(task))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    let remaining = overflow;
+
+    for (const task of completedOldestFirst) {
+      if (remaining <= 0) {
+        break;
+      }
+
+      if (tasks.delete(task.id)) {
+        remaining -= 1;
+        mutated = true;
+      }
+    }
+  }
+
+  return { mutated, snapshot: getSortedTasks() };
+}
+
+export function clearCompletedTasks(): Task[] {
+  let mutated = false;
+
+  for (const [id, task] of tasks) {
+    if (isTaskCompleted(task)) {
+      tasks.delete(id);
+      mutated = true;
+    }
+  }
+
+  const snapshot = getSortedTasks();
+
+  if (mutated) {
+    emitTasksUpdated(snapshot);
+  }
+
+  return snapshot;
+}
+
+export function replaceTasksForTesting(taskList: Task[]): void {
+  tasks.clear();
+
+  for (const task of taskList) {
+    tasks.set(task.id, task);
+  }
 }
 
 async function maybeShowTaskNotification(task: Task, previousStatus: TaskStatus): Promise<void> {
@@ -63,7 +145,9 @@ async function updateTask(id: string, updates: Partial<Task>): Promise<void> {
   const previousStatus = existing.status;
   const nextTask = { ...existing, ...updates };
   tasks.set(id, nextTask);
-  emitTasksUpdated();
+
+  const { snapshot } = enforceTaskRetention();
+  emitTasksUpdated(snapshot);
 
   await maybeShowTaskNotification(nextTask, previousStatus);
 }
@@ -81,7 +165,9 @@ export function createTask(label: string, args: string[]): string {
   };
 
   tasks.set(id, task);
-  emitTasksUpdated();
+
+  const { snapshot } = enforceTaskRetention();
+  emitTasksUpdated(snapshot);
 
   let child: ChildProcess;
 
@@ -123,9 +209,7 @@ export function createTask(label: string, args: string[]): string {
 }
 
 export function getTasks(): Task[] {
-  return Array.from(tasks.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  return enforceTaskRetention().snapshot;
 }
 
 export function getTask(id: string): Task | undefined {
@@ -143,6 +227,8 @@ export function registerTaskIpcHandlers(
   ipcMain.handle('tasks/create', async (_event, payload: { label: string; args: string[] }) =>
     createTask(payload.label, payload.args),
   );
+
+  ipcMain.handle('tasks/clear-completed', async () => clearCompletedTasks());
 
   ipcMain.handle('tasks/list', async () => getTasks());
 

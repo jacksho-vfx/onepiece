@@ -94,7 +94,6 @@ function TaskList(): JSX.Element {
   const theme = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
-  const [hiddenTaskIds, setHiddenTaskIds] = useState<Set<string>>(new Set());
   const hasCompletedTasks = useMemo(
     () => tasks.some((task) => task.status === 'succeeded' || task.status === 'failed'),
     [tasks],
@@ -143,25 +142,22 @@ function TaskList(): JSX.Element {
   }, []);
 
   const visibleTasks = useMemo(() => {
-    const filtered = tasks
-      .filter((task) => !hiddenTaskIds.has(task.id))
-      .filter((task) => (statusFilter === 'all' ? true : task.status === statusFilter));
+    const filtered = tasks.filter((task) =>
+      statusFilter === 'all' ? true : task.status === statusFilter,
+    );
 
     return filtered.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [hiddenTaskIds, statusFilter, tasks]);
+  }, [statusFilter, tasks]);
 
-  const handleClearCompleted = (): void => {
-    setHiddenTaskIds((prev) => {
-      const next = new Set(prev);
-      tasks.forEach((task) => {
-        if (task.status === 'succeeded' || task.status === 'failed') {
-          next.add(task.id);
-        }
-      });
-      return next;
-    });
+  const handleClearCompleted = async (): Promise<void> => {
+    try {
+      const updated = await window.electron.invoke<Task[]>('tasks/clear-completed');
+      setTasks(updated);
+    } catch (error) {
+      console.error('Failed to clear completed tasks', error);
+    }
   };
 
   return (
