@@ -91,7 +91,7 @@ function createMainWindow(): BrowserWindow {
 // Create the window and wire IPC handlers once Electron is ready.
 app.whenReady().then(() => {
   const window = createMainWindow();
-  registerPythonIpcHandlers(ipcMain, window);
+  registerPythonIpcHandlers(ipcMain, window, app);
   registerConfigIpcHandlers(ipcMain, app);
   registerConfigBundleIpcHandlers(ipcMain, app, window);
   registerEnvIpcHandlers(ipcMain);

@@ -1,8 +1,9 @@
 import { ChildProcess, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import type { BrowserWindow, IpcMain, WebContents } from 'electron';
+import type { App, BrowserWindow, IpcMain, WebContents } from 'electron';
 import { createInterface } from 'readline';
 import { createTask } from './taskManager';
+import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
 
 /**
  * Represents a running Python service process.
@@ -26,14 +27,6 @@ export interface LogEntry {
   line: string;
   timestamp: string;
 }
-
-/**
- * Resolve the interpreter to use for Python invocations.
- *
- * Currently reads from the environment variable `ONEPIECE_PYTHON_PATH`, falling
- * back to the default `python` executable if unset.
- */
-const pythonPath = process.env.ONEPIECE_PYTHON_PATH || 'python';
 
 /**
  * Track running Python services keyed by their generated id.
@@ -107,9 +100,11 @@ export function getRecentLogs(): LogEntry[] {
  * @param args Arguments to pass to the Python interpreter, e.g. `['-m', 'onepiece', 'doctor']`.
  * @returns A promise resolving with the exit code, stdout, and stderr collected from the process.
  */
-export function runCommand(
+export async function runCommand(
   args: string[],
 ): Promise<{ code: number; stdout: string; stderr: string }> {
+  const pythonPath = await resolvePythonPath();
+
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
@@ -195,7 +190,9 @@ export async function runOnepieceProfileSummary(): Promise<{ exitCode: number; s
  * @returns A promise that resolves with the generated service id.
  */
 export function startService(name: string, args: string[]): Promise<{ id: string }> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    const pythonPath = await resolvePythonPath();
+
     let child: ChildProcess;
     try {
       child = spawn(pythonPath, args, { env: process.env });
@@ -285,7 +282,12 @@ export function onServicesChanged(
  * @param ipcMain Electron IpcMain instance used to register handlers.
  * @param browserWindow Primary BrowserWindow used for sending log events.
  */
-export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: BrowserWindow): void {
+export function registerPythonIpcHandlers(
+  ipcMain: IpcMain,
+  browserWindow: BrowserWindow,
+  app: App,
+): void {
+  primePythonPath(app);
   setRendererWebContents(browserWindow.webContents);
 
   ipcMain.handle(
@@ -384,7 +386,7 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
       }
 
       const label = `Unreal import: ${asset} (${project})`;
-      return { taskId: createTask(label, args) };
+      return { taskId: await createTask(label, args) };
     },
   );
 

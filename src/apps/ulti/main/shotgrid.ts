@@ -86,7 +86,7 @@ export function registerShotgridIpcHandlers(ipcMain: IpcMain, _browserWindow: Br
     const args = buildPackagePlaylistArgs(payload);
     const label = `Package playlist: ${payload.playlist}`;
 
-    const taskId = createTask(label, args);
+    const taskId = await createTask(label, args);
 
     return { taskId };
   });
@@ -100,7 +100,7 @@ export function registerShotgridIpcHandlers(ipcMain: IpcMain, _browserWindow: Br
     const args = buildDeliverArgs(payload);
     const label = `ShotGrid delivery: ${payload.project}`;
 
-    const taskId = createTask(label, args);
+    const taskId = await createTask(label, args);
 
     return { taskId };
   });
