@@ -123,9 +123,10 @@ function PeronaPanel({ project }: PeronaPanelProps): JSX.Element {
       setRawInsights(normalized.rawText);
       setLastFetchedAt(new Date().toISOString());
 
-      if (normalized.recommendations.length === 0 && !normalized.rawText) {
-        setInsightsError('No insights available yet.');
-      }
+      setInsightsError(
+        normalized.errorMessage ||
+          (normalized.recommendations.length === 0 && !normalized.rawText ? 'No insights available yet.' : null),
+      );
     } catch (error) {
       console.error('Failed to fetch Perona cost insights', error);
       setInsights([]);

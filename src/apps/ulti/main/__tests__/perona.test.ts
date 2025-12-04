@@ -26,6 +26,16 @@ describe('registerPeronaIpcHandlers', () => {
     return handler;
   };
 
+  const getCostInsightsHandler = () => {
+    const handler = ipcMainMock.handle.mock.calls.find((call) => call[0] === 'perona/cost-insights')?.[1];
+
+    if (!handler) {
+      throw new Error('perona/cost-insights handler was not registered');
+    }
+
+    return handler;
+  };
+
   beforeEach(() => {
     ipcMainMock = { handle: vi.fn() };
     startService.mockReset();
@@ -57,5 +67,27 @@ describe('registerPeronaIpcHandlers', () => {
       'Perona web dashboard',
       expect.arrayContaining(['--log-level', 'debug']),
     );
+  });
+
+  it('propagates stderr and exit code when cost insights parsing fails', async () => {
+    registerPeronaIpcHandlers(ipcMainMock as unknown as IpcMain);
+    const handler = getCostInsightsHandler();
+
+    runCommand.mockResolvedValue({ code: 2, stdout: '', stderr: 'cost insights failed' });
+
+    const response = await handler({}, { project: '/tmp/project' });
+
+    expect(runCommand).toHaveBeenCalledWith(['-m', 'perona', 'cost', 'insights', '--project', '/tmp/project']);
+    expect(response).toMatchObject({
+      code: 2,
+      stderr: 'cost insights failed',
+      rawText: 'cost insights failed',
+      parseError: {
+        code: 2,
+        stderr: 'cost insights failed',
+        message: 'cost insights failed (exit code 2)',
+      },
+      insights: null,
+    });
   });
 });
