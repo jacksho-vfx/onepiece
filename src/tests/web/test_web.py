@@ -14,6 +14,86 @@ from apps.uta.web import RunCommandResponse
 client = TestClient(web.app)
 
 
+class DummyPipelineClient:
+    async def list_pipelines(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "demo",
+                "display_name": "Demo",
+                "description": "example",
+                "parameters": {"foo": "bar"},
+            }
+        ]
+
+    async def trigger_run(
+        self, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:  # pragma: no cover - unused
+        raise AssertionError("trigger_run should not be called")
+
+    async def get_run(
+        self, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:  # pragma: no cover - unused
+        raise AssertionError("get_run should not be called")
+
+    async def get_run_events(
+        self, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:  # pragma: no cover - unused
+        raise AssertionError("get_run_events should not be called")
+
+    async def aclose(self) -> None:
+        return None
+
+
+class RecordingPipelineClient:
+    def __init__(self) -> None:
+        self.triggered: dict[str, Any] | None = None
+
+    async def list_pipelines(
+        self,
+    ) -> list[dict[str, Any]]:  # pragma: no cover - unused
+        raise AssertionError("list_pipelines should not be called")
+
+    async def trigger_run(
+        self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        self.triggered = {
+            "pipeline": pipeline,
+            "parameters": dict(parameters or {}),
+        }
+        return {
+            "id": "run-1",
+            "pipeline": pipeline,
+            "status": "queued",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+            "parameters": dict(parameters or {}),
+        }
+
+    async def get_run(self, run_id: str) -> dict[str, Any]:
+        return {
+            "id": run_id,
+            "pipeline": "demo",
+            "status": "succeeded",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:05Z",
+            "parameters": {"foo": "bar"},
+        }
+
+    async def get_run_events(self, run_id: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": run_id,
+                "pipeline": "demo",
+                "status": "queued",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "parameters": {"foo": "bar"},
+            }
+        ]
+
+    async def aclose(self) -> None:
+        return None
+
+
 def test_run_command_failure_reports_success_flag(monkeypatch: MonkeyPatch) -> None:
     command_path = next(iter(web.COMMAND_LOOKUP))
 
@@ -185,38 +265,9 @@ def test_pipeline_endpoints_require_credentials() -> None:
 
 
 def test_pipeline_list_uses_client(monkeypatch: MonkeyPatch) -> None:
-    class DummyClient:
-        async def list_pipelines(self) -> list[dict[str, Any]]:
-            return [
-                {
-                    "name": "demo",
-                    "display_name": "Demo",
-                    "description": "example",
-                    "parameters": {"foo": "bar"},
-                }
-            ]
+    dummy = DummyPipelineClient()
 
-        async def trigger_run(
-            self, *args: Any, **kwargs: Any
-        ) -> dict[str, Any]:  # pragma: no cover - unused
-            raise AssertionError("trigger_run should not be called")
-
-        async def get_run(
-            self, *args: Any, **kwargs: Any
-        ) -> dict[str, Any]:  # pragma: no cover - unused
-            raise AssertionError("get_run should not be called")
-
-        async def get_run_events(
-            self, *args: Any, **kwargs: Any
-        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
-            raise AssertionError("get_run_events should not be called")
-
-        async def aclose(self) -> None:
-            return None
-
-    dummy = DummyClient()
-
-    async def fake_dependency(request: Request) -> AsyncIterator[DummyClient]:
+    async def fake_dependency(request: Request) -> AsyncIterator[DummyPipelineClient]:
         assert isinstance(request, Request)
         yield dummy
 
@@ -235,58 +286,11 @@ def test_pipeline_list_uses_client(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_pipeline_run_proxy(monkeypatch: MonkeyPatch) -> None:
-    class RecordingClient:
-        def __init__(self) -> None:
-            self.triggered: dict[str, Any] | None = None
+    client_stub = RecordingPipelineClient()
 
-        async def list_pipelines(
-            self,
-        ) -> list[dict[str, Any]]:  # pragma: no cover - unused
-            raise AssertionError("list_pipelines should not be called")
-
-        async def trigger_run(
-            self, pipeline: str, *, parameters: Mapping[str, Any] | None = None
-        ) -> dict[str, Any]:
-            self.triggered = {
-                "pipeline": pipeline,
-                "parameters": dict(parameters or {}),
-            }
-            return {
-                "id": "run-1",
-                "pipeline": pipeline,
-                "status": "queued",
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z",
-                "parameters": dict(parameters or {}),
-            }
-
-        async def get_run(self, run_id: str) -> dict[str, Any]:
-            return {
-                "id": run_id,
-                "pipeline": "demo",
-                "status": "succeeded",
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:05Z",
-                "parameters": {"foo": "bar"},
-            }
-
-        async def get_run_events(self, run_id: str) -> list[dict[str, Any]]:
-            return [
-                {
-                    "id": run_id,
-                    "pipeline": "demo",
-                    "status": "queued",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "parameters": {"foo": "bar"},
-                }
-            ]
-
-        async def aclose(self) -> None:
-            return None
-
-    client_stub = RecordingClient()
-
-    async def fake_dependency(request: Request) -> AsyncIterator[RecordingClient]:
+    async def fake_dependency(
+        request: Request,
+    ) -> AsyncIterator[RecordingPipelineClient]:
         assert isinstance(request, Request)
         yield client_stub
 
