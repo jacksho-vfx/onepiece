@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { constants as fsConstants } from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import { createTask } from './taskManager';
 import { ensureSafeExternalUrl } from './url';
@@ -13,6 +15,34 @@ type RenderSubmitPayload = {
   extraArgs?: string[];
   label?: string;
 };
+
+async function validateScenePath(scenePath: string): Promise<void> {
+  const stats = await fs.stat(scenePath).catch(() => null);
+
+  if (!stats) {
+    throw new Error(`Scene file does not exist or is inaccessible: ${scenePath}`);
+  }
+
+  if (!stats.isFile()) {
+    throw new Error(`Scene path must point to a file: ${scenePath}`);
+  }
+}
+
+async function ensureWritableOutputDirectory(outputPath: string): Promise<void> {
+  try {
+    await fs.mkdir(outputPath, { recursive: true });
+    const stats = await fs.stat(outputPath);
+    if (!stats.isDirectory()) {
+      throw new Error(`Output path is not a directory: ${outputPath}`);
+    }
+    await fs.access(outputPath, fsConstants.W_OK);
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
+    throw new Error(
+      `Output directory is not writable or cannot be created: ${outputPath}${detail}`,
+    );
+  }
+}
 
 function buildRenderSubmitArgs(payload: RenderSubmitPayload): string[] {
   const args = ['-m', 'onepiece', 'render', 'submit'];
@@ -81,8 +111,15 @@ export function registerRenderIpcHandlers(): void {
       throw new Error('Missing required render submission fields.');
     }
 
-    const args = buildRenderSubmitArgs(payload);
-    const label = buildRenderTaskLabel(payload);
+    const scenePath = payload.scene.trim();
+    const outputPath = payload.output.trim();
+    const normalizedPayload = { ...payload, scene: scenePath, output: outputPath };
+
+    await validateScenePath(scenePath);
+    await ensureWritableOutputDirectory(outputPath);
+
+    const args = buildRenderSubmitArgs(normalizedPayload);
+    const label = buildRenderTaskLabel(normalizedPayload);
 
     // This spawns the existing `onepiece render submit` CLI (apps.onepiece.render.submit.submit)
     // via the shared TaskManager so renders run as background tasks.
