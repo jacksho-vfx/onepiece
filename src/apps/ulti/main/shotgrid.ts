@@ -23,6 +23,44 @@ type DeliverPayload = {
   manifest?: string;
 };
 
+function trimRequired(value: string | undefined, field: string): string {
+  const trimmed = value?.trim() ?? '';
+
+  if (!trimmed) {
+    throw new Error(`${field} is required`);
+  }
+
+  return trimmed;
+}
+
+function trimOptional(value: string | undefined, field: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new Error(`${field} cannot be empty`);
+  }
+
+  return trimmed;
+}
+
+function normalizeEpisodes(episodes?: string[]): string[] | undefined {
+  if (!episodes) {
+    return undefined;
+  }
+
+  const normalized = episodes.map((episode) => episode.trim()).filter((episode) => episode.length > 0);
+
+  if (!normalized.length) {
+    throw new Error('episodes cannot be empty');
+  }
+
+  return normalized;
+}
+
 function buildPackagePlaylistArgs(payload: PackagePlaylistPayload): string[] {
   const args = [
     '-m',
@@ -83,8 +121,15 @@ function buildDeliverArgs(payload: DeliverPayload): string[] {
 
 export function registerShotgridIpcHandlers(ipcMain: IpcMain, _browserWindow: BrowserWindow): void {
   ipcMain.handle('onepiece/shotgrid-package-playlist', async (_event, payload: PackagePlaylistPayload) => {
-    const args = buildPackagePlaylistArgs(payload);
-    const label = `Package playlist: ${payload.playlist}`;
+    const sanitizedPayload: PackagePlaylistPayload = {
+      project: trimRequired(payload.project, 'project'),
+      playlist: trimRequired(payload.playlist, 'playlist'),
+      destination: trimOptional(payload.destination, 'destination'),
+      recipient: trimOptional(payload.recipient, 'recipient'),
+    };
+
+    const args = buildPackagePlaylistArgs(sanitizedPayload);
+    const label = `Package playlist: ${sanitizedPayload.playlist}`;
 
     const taskId = await createTask(label, args);
 
@@ -92,13 +137,27 @@ export function registerShotgridIpcHandlers(ipcMain: IpcMain, _browserWindow: Br
   });
 
   ipcMain.handle('onepiece/shotgrid-show-setup', async (_event, payload: ShowSetupPayload) => {
-    const args = buildShowSetupArgs(payload);
+    const sanitizedPayload: ShowSetupPayload = {
+      csvPath: trimRequired(payload.csvPath, 'csvPath'),
+      project: trimRequired(payload.project, 'project'),
+      template: trimOptional(payload.template, 'template'),
+    };
+
+    const args = buildShowSetupArgs(sanitizedPayload);
     return runCommand(args);
   });
 
   ipcMain.handle('onepiece/shotgrid-deliver', async (_event, payload: DeliverPayload) => {
-    const args = buildDeliverArgs(payload);
-    const label = `ShotGrid delivery: ${payload.project}`;
+    const sanitizedPayload: DeliverPayload = {
+      project: trimRequired(payload.project, 'project'),
+      context: trimRequired(payload.context, 'context'),
+      output: trimRequired(payload.output, 'output'),
+      episodes: normalizeEpisodes(payload.episodes),
+      manifest: trimOptional(payload.manifest, 'manifest'),
+    };
+
+    const args = buildDeliverArgs(sanitizedPayload);
+    const label = `ShotGrid delivery: ${sanitizedPayload.project}`;
 
     const taskId = await createTask(label, args);
 
