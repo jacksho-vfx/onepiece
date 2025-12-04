@@ -16,11 +16,13 @@ import { registerTrafalgarPipelineIpcHandlers } from './trafalgar';
 import { registerChopperIpcHandlers } from './chopper';
 import { registerRenderIpcHandlers } from './render';
 import { ensureSafeExternalUrl } from './url';
+import { buildMenuTemplate } from './menuTemplate';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
 // renderer assets alongside the compiled main process files.
 const isDevelopment = process.env.NODE_ENV === 'development';
+const allowDeveloperTools = isDevelopment || process.env.ENABLE_DEVTOOLS_MENU === 'true';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -52,33 +54,10 @@ function createMainWindow(): BrowserWindow {
   }
 
   // Wire up the application menu once the window exists so the handlers can reference it.
-  const menuTemplate: MenuItemConstructorOptions[] = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          role: 'quit',
-          label: 'Quit',
-        },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload', label: 'Reload' },
-        { role: 'toggleDevTools', label: 'Toggle Developer Tools' },
-      ],
-    },
-    {
-      label: 'Developer',
-      submenu: [
-        {
-          label: 'Toggle Dev Tools',
-          click: () => mainWindow?.webContents.toggleDevTools(),
-        },
-      ],
-    },
-  ];
+  const menuTemplate: MenuItemConstructorOptions[] = buildMenuTemplate({
+    allowDevTools: allowDeveloperTools,
+    mainWindow,
+  }) as MenuItemConstructorOptions[];
 
   const menu = Menu.buildFromTemplate(menuTemplate);
   Menu.setApplicationMenu(menu);
