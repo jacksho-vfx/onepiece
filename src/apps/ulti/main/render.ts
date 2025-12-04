@@ -30,6 +30,10 @@ function buildRenderSubmitArgs(payload: RenderSubmitPayload): string[] {
   }
 
   if (payload.priority !== undefined) {
+    if (typeof payload.priority !== 'number' || !Number.isFinite(payload.priority)) {
+      throw new Error('Priority must be a finite number.');
+    }
+
     args.push('--priority', String(payload.priority));
   }
 
