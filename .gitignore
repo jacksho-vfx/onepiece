@@ -11,6 +11,7 @@ build/
 # Track Electron build resources for the Ulti desktop app
 !src/apps/ulti/build/
 !src/apps/ulti/build/**
+node_modules/
 
 # Virtual environments
 .venv/
