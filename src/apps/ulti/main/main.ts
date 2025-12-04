@@ -41,6 +41,8 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      enableRemoteModule: false,
+      webviewTag: false,
     },
   });
 

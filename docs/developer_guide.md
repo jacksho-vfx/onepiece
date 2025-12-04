@@ -129,6 +129,14 @@ Exiting the context closes the underlying database handle and delivers the termi
 - Enable structured logging by exporting `ONEPIECE_LOG_LEVEL=DEBUG` and `ONEPIECE_LOG_FORMAT=json` when you need machine-parseable telemetry for complex ingest or render investigations.
 - The sample manifests under `docs/examples/` cover ingest, ShotGrid hierarchy seeding, render metrics, and Trafalgar event streams. Copy them into a throwaway directory so you can tweak values freely while testing edge cases.
 
+## Desktop security defaults
+
+- The Ulti Electron shell pins strict `BrowserWindow` defaults to reduce renderer attack surface: `contextIsolation: true`,
+  `sandbox: true`, `nodeIntegration: false`, `enableRemoteModule: false`, and `webviewTag: false`. Keep these options enabled
+  when adding new windows or preload scripts so renderer content cannot reach privileged Node APIs or legacy remote bridges. If
+  a feature requires relaxing one of these settings, document the rationale and isolate the change to a dedicated window
+  configuration.
+
 ## Launching demo surfaces for manual QA
 
 The `tester` CLI bootstraps the Trafalgar, Perona, and Uta demo applications
