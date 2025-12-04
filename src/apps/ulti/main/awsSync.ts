@@ -17,19 +17,37 @@ type ParsedRemote = {
 };
 
 const parseRemotePath = (remote: string): ParsedRemote => {
-  const withoutScheme = remote.replace(/^s3:\/\//i, '');
-  const [bucket, ...pathSegments] = withoutScheme.split('/').filter(Boolean);
+  const trimmedRemote = remote.trim();
 
-  if (!bucket || pathSegments.length === 0) {
-    throw new Error("Remote path must include a bucket and prefix, e.g. 's3://bucket/show/path'.");
+  if (!trimmedRemote) {
+    throw new Error("Remote path is required, e.g. 's3://bucket/show/path'.");
   }
 
-  const [showCode, ...remaining] = pathSegments;
+  const withoutScheme = trimmedRemote.replace(/^s3:\/\//i, '');
+  const [bucket, showCode, ...remainingSegments] = withoutScheme.split('/').filter(Boolean);
+
+  if (!bucket) {
+    throw new Error("Remote path must include an S3 bucket, e.g. 's3://bucket/show/path'.");
+  }
+
+  if (!showCode) {
+    throw new Error(
+      "Remote path must include a show code after the bucket, e.g. 's3://bucket/show/path'.",
+    );
+  }
+
+  const folder = remainingSegments.join('/');
+
+  if (!folder) {
+    throw new Error(
+      "Remote path must include a folder/prefix after the show code, e.g. 's3://bucket/show/path'.",
+    );
+  }
 
   return {
     bucket,
     showCode,
-    folder: remaining.join('/'),
+    folder,
   };
 };
 
@@ -58,8 +76,26 @@ const buildLabel = ({ direction, remote }: AwsSyncPayload): string => {
 
 export function registerAwsSyncIpcHandlers(ipcMain: IpcMain, _browserWindow: BrowserWindow): void {
   ipcMain.handle('onepiece/aws-sync', async (_event, payload: AwsSyncPayload) => {
-    const args = buildArgs(payload);
-    const label = buildLabel(payload);
+    const trimmedLocalPath = payload.localPath?.trim();
+    const trimmedRemote = payload.remote?.trim();
+
+    if (!trimmedLocalPath) {
+      throw new Error('A local path is required to run AWS sync.');
+    }
+
+    if (!trimmedRemote) {
+      throw new Error("A remote path is required, e.g. 's3://bucket/show/path'.");
+    }
+
+    const normalizedPayload: AwsSyncPayload = {
+      ...payload,
+      localPath: trimmedLocalPath,
+      remote: trimmedRemote,
+      extraArgs: payload.extraArgs ?? [],
+    };
+
+    const args = buildArgs(normalizedPayload);
+    const label = buildLabel(normalizedPayload);
 
     return createTask(label, args);
   });
