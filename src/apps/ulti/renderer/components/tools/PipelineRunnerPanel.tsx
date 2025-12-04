@@ -19,14 +19,6 @@ interface PipelineRunnerPanelProps {
   initialPipelineId?: string | null;
 }
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 function PipelineRunnerPanel({ onViewTasks, initialPipelineId }: PipelineRunnerPanelProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();

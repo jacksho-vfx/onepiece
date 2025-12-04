@@ -16,14 +16,6 @@ type ProjectExplorerProps = {
   project?: Project | null;
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 const INDENT_PER_LEVEL = 18;
 
 function ProjectExplorer({ project }: ProjectExplorerProps): JSX.Element {

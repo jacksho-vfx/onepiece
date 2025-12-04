@@ -100,14 +100,6 @@ const defaultFormState: WizardFormState = {
   },
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 type DetectedEnv = {
   pythonPathGuess?: string;
   dccs: Partial<Record<DccAppKey, string>>;

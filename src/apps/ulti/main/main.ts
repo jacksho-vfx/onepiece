@@ -35,8 +35,10 @@ function createMainWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 700,
     webPreferences: {
-      // Preload can be wired here once implemented to expose a safe API to the renderer.
-      // preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
     },
   });
 

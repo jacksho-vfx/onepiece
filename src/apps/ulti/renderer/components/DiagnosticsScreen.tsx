@@ -46,14 +46,6 @@ type DoctorResult = {
   error?: string;
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 function DiagnosticsScreen(): JSX.Element {
   const theme = useTheme();
   const [config, setConfig] = useState<DesktopConfig | null>(null);

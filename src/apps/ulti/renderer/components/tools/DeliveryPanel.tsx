@@ -16,15 +16,6 @@ type Task = {
   finishedAt?: string;
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-      on?: (channel: string, listener: (event: unknown, payload: Task[] | Task) => void) => () => void;
-    };
-  }
-}
-
 type ShotgridResult = {
   running: boolean;
   result: CommandResult | null;

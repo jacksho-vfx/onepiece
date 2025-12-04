@@ -8,14 +8,6 @@ interface CommandResult {
   stderr: string;
 }
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 function deriveErrorHint(output: string): string | null {
   const normalized = output.toLowerCase();
 

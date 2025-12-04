@@ -10,15 +10,6 @@ interface LogEntry {
   timestamp: string;
 }
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-      on?: (channel: string, listener: (event: unknown, payload: LogEntry) => void) => () => void;
-    };
-  }
-}
-
 function LogsPanel(): JSX.Element {
   const theme = useTheme();
   const [logs, setLogs] = useState<LogEntry[]>([]);

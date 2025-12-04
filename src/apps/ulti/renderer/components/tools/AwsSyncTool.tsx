@@ -56,15 +56,6 @@ const normalizePresets = (presets: AwsSyncPresetInput[] | undefined): AwsSyncPre
   });
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-      on?: (channel: string, listener: (event: unknown, payload: Task[] | Task) => void) => () => void;
-    };
-  }
-}
-
 function AwsSyncTool(): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();

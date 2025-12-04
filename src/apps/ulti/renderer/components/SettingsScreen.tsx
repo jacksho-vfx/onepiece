@@ -66,14 +66,6 @@ type UpdateCheckResult = {
   currentVersion?: string;
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 const defaultForm: FormState = {
   profile: '',
   projectRoot: '',

@@ -18,14 +18,6 @@ type DccShotLauncherProps = {
 
 type CommandResult = { code: number; stdout: string; stderr: string };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 function DccShotLauncher({ project, shots = [] }: DccShotLauncherProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
