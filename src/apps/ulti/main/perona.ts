@@ -9,6 +9,8 @@ interface WebDashboardPayload {
   settingsPath?: string;
 }
 
+const ALLOWED_LOG_LEVELS = new Set(['debug', 'info', 'warning', 'error']);
+
 interface CostInsightsPayload {
   project?: string;
 }
@@ -26,7 +28,15 @@ const buildDashboardArgs = ({ host, port, reload, logLevel, settingsPath }: WebD
   }
 
   if (logLevel) {
-    args.push('--log-level', logLevel);
+    const normalizedLogLevel = logLevel.trim().toLowerCase();
+
+    if (!ALLOWED_LOG_LEVELS.has(normalizedLogLevel)) {
+      throw new Error(
+        `Invalid log level '${logLevel}'. Allowed values: ${Array.from(ALLOWED_LOG_LEVELS).join(', ')}.`,
+      );
+    }
+
+    args.push('--log-level', normalizedLogLevel);
   }
 
   if (settingsPath) {
