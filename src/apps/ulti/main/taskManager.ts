@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import { Notification, type App, type BrowserWindow, type IpcMain, type WebContents } from 'electron';
 import { ensureDefaultConfig } from './configManager';
+import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
 
 export type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 
@@ -15,8 +16,6 @@ export interface Task {
   status: TaskStatus;
   exitCode?: number;
 }
-
-const pythonPath = process.env.ONEPIECE_PYTHON_PATH || 'python';
 
 const tasks = new Map<string, Task>();
 
@@ -152,7 +151,7 @@ async function updateTask(id: string, updates: Partial<Task>): Promise<void> {
   await maybeShowTaskNotification(nextTask, previousStatus);
 }
 
-export function createTask(label: string, args: string[]): string {
+export async function createTask(label: string, args: string[]): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
@@ -170,6 +169,8 @@ export function createTask(label: string, args: string[]): string {
   emitTasksUpdated(snapshot);
 
   let child: ChildProcess;
+
+  const pythonPath = await resolvePythonPath();
 
   try {
     child = spawn(pythonPath, args, { env: process.env });
@@ -223,6 +224,7 @@ export function registerTaskIpcHandlers(
 ): void {
   setRendererWebContents(browserWindow.webContents);
   appInstance = app;
+  primePythonPath(app);
 
   ipcMain.handle('tasks/create', async (_event, payload: { label: string; args: string[] }) =>
     createTask(payload.label, payload.args),

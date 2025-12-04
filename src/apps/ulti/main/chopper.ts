@@ -44,7 +44,7 @@ export function registerChopperIpcHandlers(ipcMain: IpcMain): void {
     }
 
     const label = `Chopper render: ${path.basename(scenePath) || scenePath}`;
-    const taskId = createTask(label, args);
+    const taskId = await createTask(label, args);
 
     return { taskId, outputDir: path.dirname(scenePath) };
   });
