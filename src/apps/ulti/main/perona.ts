@@ -92,6 +92,33 @@ const parseInsightsFromStdout = (stdout?: string): { insights: unknown | null; r
   return { insights: null, rawText };
 };
 
+const buildParseError = ({
+  stderr,
+  code,
+}: {
+  stderr?: string;
+  code?: number | null;
+}): { message: string | null; stderr: string | null; code: number | null } | null => {
+  const normalizedStderr = stderr?.trim() ?? null;
+  const exitCode = typeof code === 'number' ? code : null;
+
+  if (!normalizedStderr && exitCode === null) {
+    return null;
+  }
+
+  const messageParts = [] as string[];
+  if (normalizedStderr) {
+    messageParts.push(normalizedStderr);
+  }
+  if (exitCode !== null) {
+    messageParts.push(`(exit code ${exitCode})`);
+  }
+
+  const message = messageParts.length > 0 ? messageParts.join(' ') : null;
+
+  return { message, stderr: normalizedStderr, code: exitCode };
+};
+
 export function registerPeronaIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('perona/web-dashboard', async (_event, payload: WebDashboardPayload = {}) => {
     const args = buildDashboardArgs(payload);
@@ -103,11 +130,13 @@ export function registerPeronaIpcHandlers(ipcMain: IpcMain): void {
     const result = await runCommand(args);
 
     const { insights, rawText } = parseInsightsFromStdout(result.stdout);
+    const parseError = insights === null ? buildParseError(result) : null;
 
     return {
       ...result,
       insights,
-      rawText,
+      rawText: rawText ?? parseError?.stderr ?? null,
+      parseError,
     };
   });
 }

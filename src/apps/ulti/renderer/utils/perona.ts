@@ -4,6 +4,11 @@ export type CostInsightsResponse = {
   stderr?: string | null;
   code?: number;
   rawText?: string | null;
+  parseError?: {
+    message?: string | null;
+    stderr?: string | null;
+    code?: number | null;
+  } | null;
 };
 
 export type NormalizedCostInsight = { title: string; summary?: string | null };
@@ -11,6 +16,8 @@ export type NormalizedCostInsight = { title: string; summary?: string | null };
 export type NormalizedCostInsights = {
   recommendations: NormalizedCostInsight[];
   rawText: string | null;
+  errorMessage: string | null;
+  exitCode: number | null;
 };
 
 const cleanText = (value?: string | number | null): string | null => {
@@ -74,13 +81,30 @@ const normalizeRecommendation = (value: unknown, index: number): NormalizedCostI
 };
 
 export const normalizeCostInsights = (response: CostInsightsResponse): NormalizedCostInsights => {
-  const rawText = cleanText(response?.rawText ?? response?.stdout);
+  const rawText = cleanText(response?.rawText ?? response?.stdout ?? response?.parseError?.stderr);
+
+  const exitCode =
+    typeof response?.parseError?.code === 'number'
+      ? response.parseError.code
+      : typeof response?.code === 'number'
+        ? response.code
+        : null;
+
+  const errorMessage =
+    cleanText(response?.parseError?.message) ??
+    cleanText(response?.parseError?.stderr) ??
+    cleanText(response?.stderr) ??
+    (exitCode !== null && exitCode !== 0
+      ? `Perona cost insights exited with code ${exitCode}`
+      : null);
 
   const insightsArray = pickInsightArray(response?.insights);
   if (insightsArray) {
     return {
       recommendations: insightsArray.map(normalizeRecommendation),
       rawText,
+      errorMessage,
+      exitCode,
     };
   }
 
@@ -91,6 +115,8 @@ export const normalizeCostInsights = (response: CostInsightsResponse): Normalize
       return {
         recommendations: parsedArray.map(normalizeRecommendation),
         rawText,
+        errorMessage,
+        exitCode,
       };
     }
   }
@@ -102,8 +128,8 @@ export const normalizeCostInsights = (response: CostInsightsResponse): Normalize
       .filter(Boolean)
       .map((line, index) => ({ title: line, summary: line || `Insight ${index + 1}` }));
 
-    return { recommendations, rawText };
+    return { recommendations, rawText, errorMessage, exitCode };
   }
 
-  return { recommendations: [], rawText: null };
+  return { recommendations: [], rawText, errorMessage, exitCode };
 };
