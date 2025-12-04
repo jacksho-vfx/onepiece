@@ -1,0 +1,60 @@
+{
+  "name": "@onepiece/desktop",
+  "version": "0.1.0",
+  "description": "OnePiece Studio Desktop Electron application",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "clean": "rimraf dist release",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.13.3",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.2.0"
+  },
+  "build": {
+    "appId": "com.onepiece.studio.desktop",
+    "productName": "OnePiece Studio Desktop",
+    "files": [
+      "dist/main/**/*",
+      "dist/renderer/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!**/*.map"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    },
+    "extraResources": [
+      {
+        "from": "python",
+        "to": "python",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}
