@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
+import { validateAwsSyncPaths } from './awsSyncValidation';
 
 type AwsSyncDirection = 'download' | 'upload';
 
@@ -216,8 +217,14 @@ function AwsSyncTool(): JSX.Element {
   };
 
   const handleStartSync = async (): Promise<void> => {
-    if (!localPath.trim() || !remotePath.trim()) {
-      setPresetError('Provide both a local path and remote path to start a sync.');
+    let validatedPaths: { localPath: string; remotePath: string };
+
+    try {
+      validatedPaths = validateAwsSyncPaths({ localPath, remotePath });
+    } catch (error) {
+      if (error instanceof Error) {
+        setPresetError(error.message);
+      }
       return;
     }
 
@@ -227,8 +234,8 @@ function AwsSyncTool(): JSX.Element {
     try {
       await window.electron.invoke<string>('onepiece/aws-sync', {
         direction,
-        localPath: localPath.trim(),
-        remote: remotePath.trim(),
+        localPath: validatedPaths.localPath,
+        remote: validatedPaths.remotePath,
         extraArgs: buildExtraArgs(extraArgs),
       });
 
@@ -250,8 +257,14 @@ function AwsSyncTool(): JSX.Element {
       return;
     }
 
-    if (!localPath.trim() || !remotePath.trim()) {
-      setPresetError('Provide both a local path and remote path before saving a preset.');
+    let validatedPaths: { localPath: string; remotePath: string };
+
+    try {
+      validatedPaths = validateAwsSyncPaths({ localPath, remotePath });
+    } catch (error) {
+      if (error instanceof Error) {
+        setPresetError(error.message);
+      }
       return;
     }
 
@@ -262,8 +275,8 @@ function AwsSyncTool(): JSX.Element {
       id: presetId,
       name: presetName.trim(),
       direction,
-      localPath: localPath.trim(),
-      remote: remotePath.trim(),
+      localPath: validatedPaths.localPath,
+      remote: validatedPaths.remotePath,
     };
 
     const nextPresets = [...presets.filter((preset) => preset.id !== presetId), nextPreset];
