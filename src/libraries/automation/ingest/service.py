@@ -52,6 +52,9 @@ AUTO_WORKER_BYTES_TARGET = 512 * 1024 * 1024
 AUTO_WORKER_FILES_TARGET = 8
 """Target number of files per worker when auto-tuning based on file counts."""
 
+MAX_DIRECTORY_DEPTH = 32
+"""Maximum recursion depth allowed when scanning ingest folders."""
+
 
 def _normalise_identifier(value: str) -> str:
     """Return a case-insensitive representation of production identifiers."""
@@ -233,11 +236,73 @@ class MediaIngestService:
         matched_manifest_entries: set[Delivery] = set()
 
         report = IngestReport()
-        candidates: Iterable[Path]
-        if recursive:
-            candidates = folder.rglob("*")
-        else:
-            candidates = folder.iterdir()
+
+        def _iter_candidates() -> Iterable[Path]:
+            if not recursive:
+                return sorted(folder.iterdir())
+
+            try:
+                root_stat = folder.stat(follow_symlinks=False)
+            except OSError as exc:
+                log.error(
+                    "ingest.folder_stat_failed", folder=str(folder), reason=str(exc)
+                )
+                return ()
+
+            visited_dirs: set[tuple[int, int]] = {(root_stat.st_dev, root_stat.st_ino)}
+
+            def _walk(current: Path, depth: int) -> Iterable[Path]:
+                try:
+                    with os.scandir(current) as entries:
+                        sorted_entries = sorted(entries, key=lambda entry: entry.name)
+                except OSError as exc:
+                    log.warning(
+                        "ingest.directory_unreadable",
+                        directory=str(current),
+                        reason=str(exc),
+                    )
+                    return
+
+                for entry in sorted_entries:
+                    path = Path(entry.path)
+                    try:
+                        stat_result = entry.stat(follow_symlinks=False)
+                    except OSError as exc:
+                        log.warning(
+                            "ingest.path_stat_failed", path=str(path), reason=str(exc)
+                        )
+                        continue
+
+                    if entry.is_symlink() and path.is_dir():
+                        log.warning(
+                            "ingest.symlink_directory_skipped", directory=str(path)
+                        )
+                        continue
+
+                    if entry.is_dir(follow_symlinks=False):
+                        inode = (stat_result.st_dev, stat_result.st_ino)
+                        if inode in visited_dirs:
+                            log.warning(
+                                "ingest.directory_cycle_skipped", directory=str(path)
+                            )
+                            continue
+                        if depth + 1 >= MAX_DIRECTORY_DEPTH:
+                            log.warning(
+                                "ingest.max_directory_depth_reached",
+                                directory=str(path),
+                                depth=depth + 1,
+                            )
+                            continue
+
+                        visited_dirs.add(inode)
+                        yield from _walk(path, depth + 1)
+                        continue
+
+                    yield path
+
+            return _walk(folder, 0)
+
+        candidates = _iter_candidates()
 
         def _notify(path: Path, status: str) -> None:
             if progress_callback is not None:
