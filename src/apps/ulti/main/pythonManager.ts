@@ -98,10 +98,26 @@ export function getRecentLogs(): LogEntry[] {
  * Run a one-shot Python command and collect its output.
  *
  * @param args Arguments to pass to the Python interpreter, e.g. `['-m', 'onepiece', 'doctor']`.
+ * @param options Optional overrides (e.g. timeoutMs) used to control process handling.
  * @returns A promise resolving with the exit code, stdout, and stderr collected from the process.
  */
+export interface RunCommandOptions {
+  timeoutMs?: number;
+}
+
+/**
+ * Default timeout (in milliseconds) applied to IPC runCommand calls. Provide `timeoutMs`
+ * in the IPC payload to override this for long-running operations.
+ */
+export const DEFAULT_RUN_COMMAND_TIMEOUT_MS = 30000;
+
+function withDefaultTimeout(options?: RunCommandOptions): RunCommandOptions {
+  return { timeoutMs: options?.timeoutMs ?? DEFAULT_RUN_COMMAND_TIMEOUT_MS };
+}
+
 export async function runCommand(
   args: string[],
+  options: RunCommandOptions = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const pythonPath = await resolvePythonPath();
 
@@ -110,30 +126,62 @@ export async function runCommand(
     let stderr = '';
 
     let child: ChildProcess;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let finished = false;
+
+    const clearTimeoutIfNeeded = (): void => {
+      if (!timeoutId) return;
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+
+    const settle = <T>(handler: (value: T) => void, payload: T): void => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      clearTimeoutIfNeeded();
+      handler(payload);
+    };
 
     try {
       child = spawn(pythonPath, args, { env: process.env });
     } catch (error) {
       console.error('Failed to spawn Python command:', error);
-      reject(error);
+      settle(reject, error as Error);
       return;
     }
 
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      timeoutId = setTimeout(() => {
+        const killed = child.kill();
+        if (!killed) {
+          child.kill('SIGKILL');
+        }
+
+        const timeoutMessage = `Python command timed out after ${options.timeoutMs}ms: ${args.join(' ')}`;
+        settle(reject, new Error(timeoutMessage));
+      }, options.timeoutMs);
+    }
+
     child.stdout?.on('data', (data: Buffer | string) => {
+      if (finished) return;
       stdout += data.toString();
     });
 
     child.stderr?.on('data', (data: Buffer | string) => {
+      if (finished) return;
       stderr += data.toString();
     });
 
     child.on('error', (error) => {
       console.error('Python command process error:', error);
-      reject(error);
+      settle(reject, error);
     });
 
     child.on('close', (code) => {
-      resolve({
+      settle(resolve, {
         code: code ?? -1,
         stdout,
         stderr,
@@ -142,16 +190,20 @@ export async function runCommand(
   });
 }
 
-export function runOnepieceInfo(additionalArgs: string[] = []): Promise<{ code: number; stdout: string; stderr: string }> {
+export function runOnepieceInfo(
+  additionalArgs: string[] = [],
+  options?: RunCommandOptions,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const args = ['-m', 'onepiece', 'info', ...additionalArgs];
-  return runCommand(args);
+  return runCommand(args, options);
 }
 
 export function runOnepieceProfile(
   additionalArgs: string[] = [],
+  options?: RunCommandOptions,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const args = ['-m', 'onepiece', 'profile', ...additionalArgs];
-  return runCommand(args);
+  return runCommand(args, options);
 }
 
 function mapCommandResult(result: { code: number; stdout: string; stderr: string }): {
@@ -169,16 +221,20 @@ function mapCommandResult(result: { code: number; stdout: string; stderr: string
 /**
  * Run the environment summary command exposed by the discovered OnePiece CLI.
  */
-export async function runOnepieceEnvSummary(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  const result = await runOnepieceInfo(['--format', 'json']);
+export async function runOnepieceEnvSummary(
+  options?: RunCommandOptions,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runOnepieceInfo(['--format', 'json'], options);
   return mapCommandResult(result);
 }
 
 /**
  * Run the profile summary command exposed by the discovered OnePiece CLI.
  */
-export async function runOnepieceProfileSummary(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  const result = await runOnepieceProfile();
+export async function runOnepieceProfileSummary(
+  options?: RunCommandOptions,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runOnepieceProfile([], options);
   return mapCommandResult(result);
 }
 
@@ -292,8 +348,15 @@ export function registerPythonIpcHandlers(
 
   ipcMain.handle(
     'python/run-command',
-    async (_event, payload: string[] | { args: string[] }) =>
-      runCommand(Array.isArray(payload) ? payload : payload.args),
+    async (
+      _event,
+      payload: string[] | { args: string[]; timeoutMs?: number },
+    ) => {
+      const args = Array.isArray(payload) ? payload : payload.args;
+      const timeoutMs = Array.isArray(payload) ? undefined : payload.timeoutMs;
+
+      return runCommand(args, withDefaultTimeout({ timeoutMs }));
+    },
   );
 
   ipcMain.handle(
@@ -321,23 +384,32 @@ export function registerPythonIpcHandlers(
 
   ipcMain.handle(
     'onepiece/info',
-    async (_event, payload: { checkIntegrations?: boolean } = {}) => {
+    async (
+      _event,
+      payload: { checkIntegrations?: boolean; timeoutMs?: number } = {},
+    ) => {
       const args = payload.checkIntegrations ? ['--check-integrations'] : [];
-      return runOnepieceInfo(args);
+      return runOnepieceInfo(args, withDefaultTimeout(payload));
     },
   );
 
   ipcMain.handle(
     'onepiece/profile',
-    async (_event, payload: { showSources?: boolean } = {}) => {
+    async (
+      _event,
+      payload: { showSources?: boolean; timeoutMs?: number } = {},
+    ) => {
       const args = payload.showSources ? ['--show-sources'] : [];
-      return runOnepieceProfile(args);
+      return runOnepieceProfile(args, withDefaultTimeout(payload));
     },
   );
 
-  ipcMain.handle('onepiece/env-summary', async () => runOnepieceEnvSummary());
+  ipcMain.handle('onepiece/env-summary', async () => runOnepieceEnvSummary(withDefaultTimeout()));
 
-  ipcMain.handle('onepiece/profile-summary', async () => runOnepieceProfileSummary());
+  ipcMain.handle(
+    'onepiece/profile-summary',
+    async () => runOnepieceProfileSummary(withDefaultTimeout()),
+  );
 
   ipcMain.handle(
     'onepiece/dcc-import-unreal',
@@ -349,6 +421,7 @@ export function registerPythonIpcHandlers(
         asset: string;
         dryRun?: boolean;
         extraArgs?: string[];
+        timeoutMs?: number;
       },
     ) => {
       const packagePath = payload?.packagePath?.trim();
@@ -381,7 +454,7 @@ export function registerPythonIpcHandlers(
       }
 
       if (payload?.dryRun) {
-        const result = await runCommand(args);
+        const result = await runCommand(args, withDefaultTimeout(payload));
         return mapCommandResult(result);
       }
 
@@ -392,7 +465,7 @@ export function registerPythonIpcHandlers(
 
   ipcMain.handle(
     'onepiece/animation-debug',
-    async (_event, payload: { sceneName: string }) => {
+    async (_event, payload: { sceneName: string; timeoutMs?: number }) => {
       const sceneName = payload?.sceneName?.trim();
 
       if (!sceneName) {
@@ -401,7 +474,7 @@ export function registerPythonIpcHandlers(
 
       const args = ['-m', 'onepiece', 'dcc', 'animation', 'debug-animation', '--scene-name', sceneName];
 
-      return runCommand(args);
+      return runCommand(args, withDefaultTimeout(payload));
     },
   );
 
@@ -409,7 +482,12 @@ export function registerPythonIpcHandlers(
     'onepiece/animation-cleanup',
     async (
       _event,
-      payload: { sceneName: string; keepUnusedReferences?: boolean; keepNamespaces?: boolean },
+      payload: {
+        sceneName: string;
+        keepUnusedReferences?: boolean;
+        keepNamespaces?: boolean;
+        timeoutMs?: number;
+      },
     ) => {
       const sceneName = payload?.sceneName?.trim();
 
@@ -429,7 +507,7 @@ export function registerPythonIpcHandlers(
         args.push('--keep-namespaces');
       }
 
-      return runCommand(args);
+      return runCommand(args, withDefaultTimeout(payload));
     },
   );
 
@@ -453,6 +531,7 @@ export function registerPythonIpcHandlers(
         frameEnd?: number | null;
         description?: string | null;
         includeAudio?: boolean;
+        timeoutMs?: number;
       },
     ) => {
       const {
@@ -535,13 +614,13 @@ export function registerPythonIpcHandlers(
         args.push('--include-audio');
       }
 
-      return runCommand(args);
+      return runCommand(args, withDefaultTimeout(payload));
     },
   );
 
   ipcMain.handle(
     'onepiece/dcc-open-shot',
-    async (_event, payload: { scenePath: string; dcc?: string }) => {
+    async (_event, payload: { scenePath: string; dcc?: string; timeoutMs?: number }) => {
       if (!payload?.scenePath) {
         throw new Error('Scene path is required to open a shot.');
       }
@@ -552,7 +631,7 @@ export function registerPythonIpcHandlers(
         args.push('--dcc', payload.dcc);
       }
 
-      return runCommand(args);
+      return runCommand(args, withDefaultTimeout(payload));
     },
   );
 }
