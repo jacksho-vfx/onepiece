@@ -31,8 +31,6 @@ const statusLabelMap: Record<TaskStatus, string> = {
   failed: 'Failed',
 };
 
-const RENDER_DASHBOARD_URL = 'http://localhost:8080/render';
-
 const formatDate = (value?: string): string => {
   if (!value) {
     return '—';
@@ -94,16 +92,46 @@ function TaskList(): JSX.Element {
   const theme = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
+  const [renderDashboardUrl, setRenderDashboardUrl] = useState<string | null>(null);
+  const [renderDashboardError, setRenderDashboardError] = useState<string | null>(null);
   const hasCompletedTasks = useMemo(
     () => tasks.some((task) => task.status === 'succeeded' || task.status === 'failed'),
     [tasks],
   );
   const openRenderDashboard = (): void => {
-    void window.electron.invoke('open-url', { url: RENDER_DASHBOARD_URL });
+    if (!renderDashboardUrl) {
+      setRenderDashboardError('Render dashboard URL is not configured.');
+      return;
+    }
+
+    void window.electron.invoke('open-url', { url: renderDashboardUrl });
   };
 
   useEffect(() => {
     let isMounted = true;
+
+    const resolveRenderDashboard = async (): Promise<void> => {
+      try {
+        const resolvedUrl = await window.electron.invoke<string | null>('render/dashboard-url');
+        if (!isMounted) {
+          return;
+        }
+
+        if (resolvedUrl) {
+          setRenderDashboardUrl(resolvedUrl);
+          setRenderDashboardError(null);
+        } else {
+          setRenderDashboardUrl(null);
+          setRenderDashboardError('Render dashboard URL is not available.');
+        }
+      } catch (error) {
+        console.error('Failed to resolve render dashboard URL', error);
+        if (isMounted) {
+          setRenderDashboardUrl(null);
+          setRenderDashboardError('Render dashboard URL is not available.');
+        }
+      }
+    };
 
     const loadTasks = async (): Promise<void> => {
       try {
@@ -116,6 +144,7 @@ function TaskList(): JSX.Element {
       }
     };
 
+    void resolveRenderDashboard();
     void loadTasks();
 
     const unsubscribe = window.electron.on?.('tasks/updated', (_event, payload: Task[] | Task) => {
@@ -281,9 +310,16 @@ function TaskList(): JSX.Element {
                           <span>Scene: {renderInfo.scene ? getBasename(renderInfo.scene) : 'Unknown'}</span>
                           <span>Frames: {renderInfo.frames ?? 'Default range'}</span>
                           <span>Farm: {renderInfo.farm ?? 'default'}</span>
-                          <Button variant="secondary" onClick={openRenderDashboard}>
+                          <Button
+                            variant="secondary"
+                            onClick={openRenderDashboard}
+                            disabled={!renderDashboardUrl}
+                          >
                             Open render dashboard
                           </Button>
+                          {renderDashboardError ? (
+                            <span style={{ color: theme.colors.danger }}>{renderDashboardError}</span>
+                          ) : null}
                         </div>
                       ) : null}
                       <code style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>

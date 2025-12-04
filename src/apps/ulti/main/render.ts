@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import path from 'path';
 import { createTask } from './taskManager';
+import { ensureSafeExternalUrl } from './url';
 
 type RenderSubmitPayload = {
   profile?: string;
@@ -47,6 +48,29 @@ function buildRenderTaskLabel(payload: RenderSubmitPayload): string {
   return payload.label ?? `Render submit (${sceneName}${profileSuffix} – ${frames})`;
 }
 
+const DEFAULT_RENDER_DASHBOARD_BASE_URL = 'http://127.0.0.1:8080';
+
+export function resolveRenderDashboardUrl(): string | null {
+  const configuredBaseUrl =
+    process.env.ONEPIECE_RENDER_DASHBOARD_BASE_URL?.trim() ||
+    process.env.RENDER_DASHBOARD_BASE_URL?.trim() ||
+    process.env.ONEPIECE_RENDER_DASHBOARD_URL?.trim() ||
+    process.env.RENDER_DASHBOARD_URL?.trim() ||
+    DEFAULT_RENDER_DASHBOARD_BASE_URL;
+
+  if (!configuredBaseUrl) {
+    return null;
+  }
+
+  try {
+    const safeBase = ensureSafeExternalUrl(configuredBaseUrl);
+    return new URL('/render', safeBase).toString();
+  } catch (error) {
+    console.warn('render.dashboard.url.invalid', error);
+    return null;
+  }
+}
+
 export function registerRenderIpcHandlers(): void {
   ipcMain.handle('onepiece/render-submit', async (_event, payload: RenderSubmitPayload) => {
     if (!payload || !payload.scene?.trim() || !payload.output?.trim() || !payload.frames?.trim()) {
@@ -60,6 +84,8 @@ export function registerRenderIpcHandlers(): void {
     // via the shared TaskManager so renders run as background tasks.
     return createTask(label, args);
   });
+
+  ipcMain.handle('render/dashboard-url', async () => resolveRenderDashboardUrl());
 }
 
 export { RenderSubmitPayload };
