@@ -5,6 +5,12 @@ import type { App, IpcMain } from 'electron';
 // release artifacts live elsewhere, or set ONEPIECE_DESKTOP_REPO in the environment.
 const DEFAULT_REPOSITORY = 'onepiece/studio-main';
 
+// Abort the GitHub request after a reasonable amount of time so the UI can surface
+// a clear error to the user instead of hanging indefinitely.
+export const UPDATE_CHECK_TIMEOUT_MS = 5000;
+export const UPDATE_CHECK_TIMEOUT_MESSAGE =
+  'Update check timed out. Please try again in a few moments.';
+
 // Drop any leading "v" prefix and trim whitespace so we can compare versions reliably.
 function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, '');
@@ -42,6 +48,14 @@ async function fetchLatestTag(repository: string): Promise<{ latestVersion?: str
   };
 
   return await new Promise((resolve) => {
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    const clearRequestTimeout = (): void => {
+      if (!timeoutId) return;
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    };
+
     const request = https.get(requestOptions, (response) => {
       if (!response) {
         resolve({ error: 'No response received from GitHub.' });
@@ -55,6 +69,7 @@ async function fetchLatestTag(repository: string): Promise<{ latestVersion?: str
       });
 
       response.on('end', () => {
+        clearRequestTimeout();
         const body = Buffer.concat(chunks).toString('utf-8');
 
         if (response.statusCode && response.statusCode >= 400) {
@@ -79,10 +94,29 @@ async function fetchLatestTag(repository: string): Promise<{ latestVersion?: str
           resolve({ error: error instanceof Error ? error.message : 'Failed to parse GitHub response.' });
         }
       });
+
+      response.on('aborted', () => {
+        clearRequestTimeout();
+        resolve({ error: 'GitHub response was aborted.' });
+      });
+
+      response.on('error', (error) => {
+        clearRequestTimeout();
+        resolve({ error: error.message || 'GitHub response failed.' });
+      });
     });
 
+    timeoutId = setTimeout(() => {
+      request.destroy(new Error(UPDATE_CHECK_TIMEOUT_MESSAGE));
+    }, UPDATE_CHECK_TIMEOUT_MS);
+
     request.on('error', (error) => {
+      clearRequestTimeout();
       resolve({ error: error.message || 'Unable to connect to GitHub.' });
+    });
+
+    request.on('close', () => {
+      clearRequestTimeout();
     });
 
     request.end();
