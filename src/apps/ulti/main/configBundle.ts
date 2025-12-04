@@ -1,7 +1,9 @@
 import { spawn } from 'child_process';
-import { promises as fs } from 'fs';
+import { promises as fs, createWriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
+import { pipeline } from 'stream/promises';
+import yauzl from 'yauzl';
 import type { App, BrowserWindow, IpcMain } from 'electron';
 import { dialog } from 'electron';
 import {
@@ -71,23 +73,79 @@ function resolveProjectRoot(config: DesktopConfig): string | undefined {
   return recent?.path?.trim();
 }
 
-async function unzipArchive(zipPath: string, destination: string): Promise<void> {
+function isSymlinkEntry(entry: yauzl.Entry): boolean {
+  const fileType = (entry.externalFileAttributes ?? 0) >>> 16;
+  return (fileType & 0o170000) === 0o120000;
+}
+
+function resolveExtractPath(baseDir: string, entryPath: string): string {
+  const normalized = path.normalize(entryPath);
+
+  if (path.isAbsolute(normalized) || normalized.startsWith('..')) {
+    throw new Error(`Blocked unsafe path in archive entry: ${entryPath}`);
+  }
+
+  const targetPath = path.join(baseDir, normalized);
+  const relative = path.relative(baseDir, targetPath);
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Blocked path traversal attempt for entry: ${entryPath}`);
+  }
+
+  return targetPath;
+}
+
+export async function extractConfigBundleArchive(zipPath: string, destination: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('unzip', ['-o', zipPath, '-d', destination]);
-
-    let errorOutput = '';
-    child.stderr?.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    child.on('error', reject);
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(errorOutput || `Unzip command failed with exit code ${code}`));
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+      if (err || !zipfile) {
+        reject(err ?? new Error('Unable to open zip archive'));
+        return;
       }
+
+      zipfile.readEntry();
+
+      zipfile.on('entry', (entry) => {
+        void (async () => {
+          try {
+            if (isSymlinkEntry(entry)) {
+              throw new Error(`Blocked symlink entry: ${entry.fileName}`);
+            }
+
+            const targetPath = resolveExtractPath(destination, entry.fileName);
+
+            if (entry.fileName.endsWith('/')) {
+              await fs.mkdir(targetPath, { recursive: true });
+              zipfile.readEntry();
+              return;
+            }
+
+            await fs.mkdir(path.dirname(targetPath), { recursive: true });
+
+            zipfile.openReadStream(entry, async (streamError, readStream) => {
+              if (streamError || !readStream) {
+                zipfile.close();
+                reject(streamError ?? new Error(`Failed to read entry: ${entry.fileName}`));
+                return;
+              }
+
+              try {
+                await pipeline(readStream, createWriteStream(targetPath));
+                zipfile.readEntry();
+              } catch (pipelineError) {
+                zipfile.close();
+                reject(pipelineError);
+              }
+            });
+          } catch (processingError) {
+            zipfile.close();
+            reject(processingError);
+          }
+        })();
+      });
+
+      zipfile.on('end', resolve);
+      zipfile.on('error', reject);
     });
   });
 }
@@ -196,7 +254,7 @@ export async function importConfigBundle(app: App, bundlePath: string): Promise<
   const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onepiece-config-import-'));
 
   try {
-    await unzipArchive(bundlePath, stagingDir);
+    await extractConfigBundleArchive(bundlePath, stagingDir);
 
     const desktopConfigPath = path.join(stagingDir, 'main-config.json');
     if (!(await pathExists(desktopConfigPath))) {
