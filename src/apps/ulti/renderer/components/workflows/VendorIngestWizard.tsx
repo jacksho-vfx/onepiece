@@ -46,15 +46,6 @@ type IngestState = {
   startedAt?: string;
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-      on?: (channel: string, listener: (_event: unknown, payload: Task[] | Task) => void) => () => void;
-    };
-  }
-}
-
 const stepLabels = ['Source', 'Preflight', 'Review', 'Ingest'];
 
 const defaultPreflightState: PreflightState = {

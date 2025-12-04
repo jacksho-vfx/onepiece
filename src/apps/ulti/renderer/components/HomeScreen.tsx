@@ -132,14 +132,6 @@ interface HealthCheckError {
   suggestedAction?: string;
 }
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   {
     key: 'trafalgar',

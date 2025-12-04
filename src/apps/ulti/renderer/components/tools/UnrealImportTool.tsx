@@ -35,15 +35,6 @@ const parseExtraArgs = (raw: string): string[] => {
   return tokens.map((token) => token.replace(/^"|"$/g, ''));
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-      on?: (channel: string, listener: (event: unknown, payload: Task[] | Task) => void) => () => void;
-    };
-  }
-}
-
 function UnrealImportTool({ project }: UnrealImportToolProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();

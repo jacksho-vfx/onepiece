@@ -54,14 +54,6 @@ type DesktopConfig = {
   }[];
 };
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 type ProjectSelection = { name: string; path: string };
 
 function App(): JSX.Element {

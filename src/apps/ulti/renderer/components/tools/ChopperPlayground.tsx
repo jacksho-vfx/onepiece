@@ -14,12 +14,6 @@ type RenderResponse = { taskId: string; outputDir: string };
 
 type RenderFormat = 'ppm' | 'png' | 'gif' | 'mp4';
 
-declare global {
-  interface Window {
-    electron: { invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T> };
-  }
-}
-
 function parseInspectSummary(output: string): InspectSummary | null {
   const trimmed = output.trim();
 

@@ -17,14 +17,6 @@ interface ProjectSwitcherProps {
   onProjectChange: (project: { name: string; path: string } | null) => void;
 }
 
-declare global {
-  interface Window {
-    electron: {
-      invoke: <T = unknown>(channel: string, payload?: unknown) => Promise<T>;
-    };
-  }
-}
-
 const BROWSE_VALUE = '__browse__';
 
 function ProjectSwitcher({ config, onProjectChange }: ProjectSwitcherProps): JSX.Element {
