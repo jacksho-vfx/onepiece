@@ -1,4 +1,4 @@
-import { statSync } from 'fs';
+import { accessSync, constants, statSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import type { IpcMain } from 'electron';
@@ -6,14 +6,22 @@ import type { IpcMain } from 'electron';
 /**
  * Check whether a given file path exists and is likely executable.
  */
-function pathExists(candidate: string | undefined): candidate is string {
+export function pathExists(candidate: string | undefined): candidate is string {
   if (!candidate) {
     return false;
   }
 
   try {
     const stats = statSync(candidate);
-    return stats.isFile();
+    if (!stats.isFile()) {
+      return false;
+    }
+
+    if (process.platform !== 'win32') {
+      accessSync(candidate, constants.X_OK);
+    }
+
+    return true;
   } catch (error) {
     // Swallow errors and treat the candidate as missing to keep detection best-effort.
     return false;
