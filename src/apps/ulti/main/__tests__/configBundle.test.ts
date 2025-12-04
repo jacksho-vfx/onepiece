@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import yazl from 'yazl';
 import type { App } from 'electron';
 
-import { createConfigBundle, extractConfigBundleArchive } from '../configBundle';
+import { createConfigBundle, extractConfigBundleArchive, importConfigBundle } from '../configBundle';
+import { ensureDefaultConfig, getConfigPath, saveConfig } from '../configManager';
 
 const spawnMock = vi.fn<typeof import('child_process').spawn>();
 
@@ -27,20 +28,28 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn() },
 }));
 
-vi.mock('../configManager', () => ({
-  ensureDefaultConfig: vi.fn().mockResolvedValue({
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    enableNotifications: true,
-  }),
-  getConfigPath: vi.fn().mockReturnValue(path.join(os.tmpdir(), 'config-bundle-test', 'config.json')),
-  saveConfig: vi.fn(),
-}));
+vi.mock('../configManager', async () => {
+  const actual = await vi.importActual<typeof import('../configManager')>('../configManager');
+
+  return {
+    ...actual,
+    ensureDefaultConfig: vi.fn().mockResolvedValue({
+      hasCompletedWizard: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      enableNotifications: true,
+    }),
+    getConfigPath: vi.fn().mockReturnValue(path.join(os.tmpdir(), 'config-bundle-test', 'config.json')),
+    saveConfig: vi.fn(),
+  };
+});
 
 beforeEach(async () => {
   const actual = await vi.importActual<typeof import('child_process')>('child_process');
   spawnMock.mockImplementation(actual.spawn);
   spawnMock.mockClear();
+  vi.mocked(ensureDefaultConfig).mockClear();
+  vi.mocked(saveConfig).mockClear();
 });
 
 async function createZipArchive(
@@ -144,5 +153,31 @@ describe('createConfigBundle', () => {
 
     const actual = await vi.importActual<typeof import('child_process')>('child_process');
     spawnMock.mockImplementation(actual.spawn);
+  });
+});
+
+describe('importConfigBundle', () => {
+  it('rejects invalid config shapes without persisting changes', async () => {
+    const app = { getPath: vi.fn().mockReturnValue(os.tmpdir()) } as unknown as App;
+    const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'config-bundle-test-'));
+    const bundlePath = path.join(stagingDir, 'invalid.zip');
+
+    try {
+      await createZipArchive(bundlePath, [
+        {
+          name: 'main-config.json',
+          data: JSON.stringify({ hasCompletedWizard: 'nope', createdAt: 'now', updatedAt: 'later', extra: true }),
+        },
+      ]);
+
+      await expect(importConfigBundle(app, bundlePath)).rejects.toThrow(/Invalid desktop config/i);
+      expect(saveConfig).not.toHaveBeenCalled();
+      expect(ensureDefaultConfig).not.toHaveBeenCalled();
+      const configPath = getConfigPath(app);
+      expect(await pathExists(configPath)).toBe(false);
+    } finally {
+      await fs.rm(stagingDir, { recursive: true, force: true });
+      await fs.rm(path.dirname(getConfigPath(app)), { recursive: true, force: true });
+    }
   });
 });

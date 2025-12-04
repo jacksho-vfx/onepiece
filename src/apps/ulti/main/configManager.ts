@@ -1,50 +1,114 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { z } from 'zod';
 import type { App, IpcMain } from 'electron';
 import { generateOnepieceToml, installStarterKit, type WizardConfigInput } from './onepieceConfig';
 
-export interface DesktopConfig {
-  hasCompletedWizard: boolean;
-  createdAt: string;
-  updatedAt: string;
-  enableNotifications?: boolean;
-  profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
-  pythonPath?: string;
-  projectRoot?: string;
-  currentProject?: string;
-  recentProjects?: { name: string; path: string; lastOpenedAt: string }[];
-  quickActionPresets?: {
-    [projectName: string]: {
-      vendorIngest?: { sourcePath?: string };
-      dccPublish?: { dccType?: string; lastScenePath?: string };
-      renderSubmit?: { profileName?: string; lastFrameRange?: string };
-      clientDelivery?: { playlistName?: string; targetPath?: string };
-    };
-  };
-  awsSyncPresets?: {
-    id: string;
-    name: string;
-    direction: 'download' | 'upload' | 'from' | 'to';
-    localPath: string;
-    remote?: string;
-    bucketUrl?: string;
-  }[];
-  shotgrid?: {
-    url?: string;
-    scriptName?: string;
-    apiKey?: string;
-  };
-  aws?: {
-    accessKeyId?: string;
-    secretAccessKey?: string;
-    region?: string;
-    defaultBucket?: string;
-  };
-  dccs?: {
-    maya?: { enabled: boolean; executablePath?: string };
-    blender?: { enabled: boolean; executablePath?: string };
-    unreal?: { enabled: boolean; executablePath?: string };
-  };
+const quickActionPresetsSchema = z
+  .record(
+    z
+      .object({
+        vendorIngest: z.object({ sourcePath: z.string().optional() }).strict().optional(),
+        dccPublish: z
+          .object({ dccType: z.string().optional(), lastScenePath: z.string().optional() })
+          .strict()
+          .optional(),
+        renderSubmit: z
+          .object({ profileName: z.string().optional(), lastFrameRange: z.string().optional() })
+          .strict()
+          .optional(),
+        clientDelivery: z
+          .object({ playlistName: z.string().optional(), targetPath: z.string().optional() })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+  )
+  .optional();
+
+const awsSyncPresetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    direction: z.enum(['download', 'upload', 'from', 'to']),
+    localPath: z.string(),
+    remote: z.string().optional(),
+    bucketUrl: z.string().optional(),
+  })
+  .strict();
+
+const dccSchema = z
+  .object({
+    enabled: z.boolean(),
+    executablePath: z.string().optional(),
+  })
+  .strict();
+
+export const DesktopConfigSchema = z
+  .object({
+    hasCompletedWizard: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    enableNotifications: z.boolean().optional(),
+    profile: z.enum(['vfx', 'archviz', 'freelancer', 'demo']).optional(),
+    pythonPath: z.string().optional(),
+    projectRoot: z.string().optional(),
+    currentProject: z.string().optional(),
+    recentProjects: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            path: z.string(),
+            lastOpenedAt: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+    quickActionPresets: quickActionPresetsSchema,
+    awsSyncPresets: z.array(awsSyncPresetSchema).optional(),
+    shotgrid: z
+      .object({
+        url: z.string().optional(),
+        scriptName: z.string().optional(),
+        apiKey: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    aws: z
+      .object({
+        accessKeyId: z.string().optional(),
+        secretAccessKey: z.string().optional(),
+        region: z.string().optional(),
+        defaultBucket: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    dccs: z
+      .object({
+        maya: dccSchema.optional(),
+        blender: dccSchema.optional(),
+        unreal: dccSchema.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export type DesktopConfig = z.infer<typeof DesktopConfigSchema>;
+
+export function validateDesktopConfig(input: unknown): DesktopConfig {
+  const parsed = DesktopConfigSchema.safeParse(input);
+
+  if (!parsed.success) {
+    const formatted = parsed.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
+
+    throw new Error(`Invalid desktop config: ${formatted}`);
+  }
+
+  return parsed.data;
 }
 
 export function getConfigPath(app: App): string {

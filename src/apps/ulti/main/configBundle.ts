@@ -10,6 +10,7 @@ import {
   ensureDefaultConfig,
   getConfigPath,
   saveConfig,
+  validateDesktopConfig,
   type DesktopConfig,
 } from './configManager';
 
@@ -270,7 +271,13 @@ export async function importConfigBundle(app: App, bundlePath: string): Promise<
       throw new Error('The bundle is missing main-config.json');
     }
 
-    const importedConfig = JSON.parse(await fs.readFile(desktopConfigPath, 'utf-8')) as DesktopConfig;
+    let importedConfig: DesktopConfig;
+    try {
+      importedConfig = validateDesktopConfig(JSON.parse(await fs.readFile(desktopConfigPath, 'utf-8')));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown validation error';
+      throw new Error(`Failed to import config bundle: ${message}`);
+    }
     const existingConfig = await ensureDefaultConfig(app);
 
     const mergedConfig: DesktopConfig = {
