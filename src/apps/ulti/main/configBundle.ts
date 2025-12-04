@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import * as childProcess from 'child_process';
 import { promises as fs, createWriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -201,14 +201,23 @@ async function zipDirectory(sourceDir: string): Promise<string> {
 
   // TODO: Replace with a Node zip library (e.g. archiver) for better portability and streaming.
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('zip', ['-r', zipPath, '.'], { cwd: sourceDir });
+    const child = childProcess.spawn('zip', ['-r', zipPath, '.'], { cwd: sourceDir });
 
     let errorOutput = '';
     child.stderr?.on('data', (data) => {
       errorOutput += data.toString();
     });
 
-    child.on('error', (error) => {
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') {
+        reject(
+          new Error(
+            'Unable to create config bundle because the `zip` command is missing. Install zip/unzip (e.g. `apt-get install zip unzip` on Debian/Ubuntu or `brew install zip` on macOS) and try again.',
+          ),
+        );
+        return;
+      }
+
       reject(error);
     });
 
