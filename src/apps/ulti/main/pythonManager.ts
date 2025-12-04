@@ -415,7 +415,7 @@ export function registerPythonIpcHandlers(ipcMain: IpcMain, browserWindow: Brows
         throw new Error('Scene name is required to clean up a scene.');
       }
 
-      const args = ['-m', 'onepiece', 'dcc', 'animation', 'cleanup-scene'];
+      const args = ['-m', 'onepiece', 'dcc', 'animation', 'cleanup-scene', '--scene-name', sceneName];
 
       if (payload.keepUnusedReferences) {
         args.push('--keep-unused-references');
