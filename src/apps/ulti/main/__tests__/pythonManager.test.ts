@@ -1,0 +1,68 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { BrowserWindow, IpcMain } from 'electron';
+import { registerPythonIpcHandlers } from '../pythonManager';
+import { spawn } from 'child_process';
+
+vi.mock('child_process', () => {
+  const { EventEmitter: ChildEventEmitter } = require('events');
+
+  const spawnMock = vi.fn(() => {
+    const stdout = new ChildEventEmitter();
+    const stderr = new ChildEventEmitter();
+    const process = new ChildEventEmitter() as ChildEventEmitter & {
+      stdout: ChildEventEmitter;
+      stderr: ChildEventEmitter;
+      kill?: () => boolean;
+    };
+
+    process.stdout = stdout;
+    process.stderr = stderr;
+    process.kill = vi.fn().mockReturnValue(true);
+
+    setImmediate(() => {
+      process.emit('close', 0);
+    });
+
+    return process;
+  });
+
+  return { spawn: spawnMock };
+});
+
+vi.mock('electron', () => ({
+  Notification: vi.fn().mockImplementation(() => ({ show: vi.fn() })),
+}));
+
+describe('pythonManager animation cleanup handler', () => {
+  it('forwards the validated scene name to the cleanup command', async () => {
+    const handlers = new Map<string, (event: unknown, payload: unknown, ...args: unknown[]) => unknown>();
+    const fakeIpcMain = {
+      handle: (channel: string, listener: (event: unknown, payload: unknown, ...args: unknown[]) => unknown) => {
+        handlers.set(channel, listener);
+      },
+    } as unknown as IpcMain;
+
+    const fakeWindow = {
+      webContents: {
+        send: vi.fn(),
+        isDestroyed: vi.fn().mockReturnValue(false),
+      },
+    } as unknown as BrowserWindow;
+
+    registerPythonIpcHandlers(fakeIpcMain, fakeWindow);
+
+    const handler = handlers.get('onepiece/animation-cleanup');
+    expect(handler).toBeDefined();
+
+    await handler?.({}, { sceneName: '  DemoScene  ' });
+
+    const spawnCalls = vi.mocked(spawn).mock.calls;
+    expect(spawnCalls.length).toBeGreaterThan(0);
+
+    const [, args] = spawnCalls[0];
+    const sceneFlagIndex = args.indexOf('--scene-name');
+
+    expect(sceneFlagIndex).toBeGreaterThan(-1);
+    expect(args[sceneFlagIndex + 1]).toBe('DemoScene');
+  });
+});
