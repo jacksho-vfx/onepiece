@@ -1,11 +1,24 @@
+import { EventEmitter } from 'events';
 import { spawnSync } from 'child_process';
 import { createWriteStream, promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import yazl from 'yazl';
+import type { App } from 'electron';
 
-import { extractConfigBundleArchive } from '../configBundle';
+import { createConfigBundle, extractConfigBundleArchive } from '../configBundle';
+
+const spawnMock = vi.fn<typeof import('child_process').spawn>();
+
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+
+  return {
+    ...actual,
+    spawn: (...args) => spawnMock(...args),
+  };
+});
 
 vi.mock('electron', () => ({
   dialog: {},
@@ -13,6 +26,22 @@ vi.mock('electron', () => ({
   ipcMain: {},
   app: { getPath: vi.fn() },
 }));
+
+vi.mock('../configManager', () => ({
+  ensureDefaultConfig: vi.fn().mockResolvedValue({
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    enableNotifications: true,
+  }),
+  getConfigPath: vi.fn().mockReturnValue(path.join(os.tmpdir(), 'config-bundle-test', 'config.json')),
+  saveConfig: vi.fn(),
+}));
+
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  spawnMock.mockImplementation(actual.spawn);
+  spawnMock.mockClear();
+});
 
 async function createZipArchive(
   zipPath: string,
@@ -89,5 +118,31 @@ describe('extractConfigBundleArchive', () => {
     } finally {
       await fs.rm(stagingDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('createConfigBundle', () => {
+  it('throws a clear error when the zip binary is missing', async () => {
+    const app = { getPath: vi.fn().mockReturnValue(os.tmpdir()) } as unknown as App;
+
+    spawnMock.mockImplementation(() => {
+      const fakeChild = new EventEmitter();
+      // @ts-expect-error - stderr is optional for the mock child process
+      fakeChild.stderr = new EventEmitter();
+
+      queueMicrotask(() => {
+        const error = new Error('spawn ENOENT');
+        (error as NodeJS.ErrnoException).code = 'ENOENT';
+        fakeChild.emit('error', error);
+      });
+
+      // @ts-expect-error - the mock child process only needs to support events
+      return fakeChild;
+    });
+
+    await expect(createConfigBundle(app)).rejects.toThrow(/`zip` command is missing/i);
+
+    const actual = await vi.importActual<typeof import('child_process')>('child_process');
+    spawnMock.mockImplementation(actual.spawn);
   });
 });
