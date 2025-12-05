@@ -11,7 +11,8 @@ type TextInputProps = {
 function TextInput({ label, helpText, errorText, id, disabled, style, ...props }: TextInputProps): JSX.Element {
   const theme = useTheme();
   const [isFocused, setIsFocused] = useState(false);
-  const inputId = useMemo(() => id ?? useId(), [id]);
+  const generatedId = useId();
+  const inputId = useMemo(() => id ?? generatedId, [generatedId, id]);
   const describedByIds = [helpText ? `${inputId}-help` : undefined, errorText ? `${inputId}-error` : undefined]
     .filter(Boolean)
     .join(' ');

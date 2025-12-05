@@ -61,6 +61,22 @@ function SubmitRenderModal({ isOpen, onClose, project, defaultProfile, onViewTas
     };
   }, [isOpen, user]);
 
+  const buildPickerError = (reason: unknown, target: 'file' | 'folder') => {
+    const fallback = target === 'file' ? 'Unable to open file picker.' : 'Unable to open folder picker.';
+    const rawMessage = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : null;
+    const normalized = rawMessage?.toLowerCase();
+
+    if (normalized?.includes('cancel')) {
+      const cancelled = `${target === 'file' ? 'File' : 'Folder'} picker was cancelled.`;
+      return { log: cancelled, user: cancelled };
+    }
+
+    const detailed = rawMessage ? `${fallback} (${rawMessage})` : fallback;
+    const log = rawMessage ? `${fallback} ${rawMessage}` : fallback;
+
+    return { log, user: detailed };
+  };
+
   const handleBrowseScene = async (): Promise<void> => {
     try {
       const selected = await window.electron.invoke<string | null>('dialog/open-file', {
@@ -70,8 +86,9 @@ function SubmitRenderModal({ isOpen, onClose, project, defaultProfile, onViewTas
         setScenePath(selected);
       }
     } catch (err) {
-      console.error('Failed to browse for scene file', err);
-      setError('Unable to open file picker.');
+      const { log, user } = buildPickerError(err, 'file');
+      console.error(log, err);
+      setError(user);
     }
   };
 
@@ -85,8 +102,9 @@ function SubmitRenderModal({ isOpen, onClose, project, defaultProfile, onViewTas
         setOutputPath(selected);
       }
     } catch (err) {
-      console.error('Failed to browse for output directory', err);
-      setError('Unable to open folder picker.');
+      const { log, user } = buildPickerError(err, 'folder');
+      console.error(log, err);
+      setError(user);
     }
   };
 
