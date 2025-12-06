@@ -13,6 +13,8 @@ All notable changes to the OnePiece pipeline toolkit.
 - Added walkthroughs for Perona's telemetry-driven cost insights, covering the
   `perona cost insights` command, the `/api/cost/insights` endpoint, and how to supply
   custom metric stores for automated recommendations.
+- Hardened the desktop release pipeline so TypeScript compilation runs as part of
+  packaging, preventing broken installers when renderer or main-process types drift.
 
 ---
 
