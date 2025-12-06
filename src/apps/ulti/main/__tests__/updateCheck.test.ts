@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import https from 'https';
+import http from 'http';
 import type { App, IpcMain } from 'electron';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
@@ -41,7 +42,7 @@ describe('update check timeout handling', () => {
 
   it('returns promptly when GitHub is unreachable', async () => {
     vi.spyOn(https, 'get').mockImplementation(() => {
-      return new HangingRequest() as unknown as https.ClientRequest;
+      return new HangingRequest() as unknown as http.ClientRequest;
     });
 
     const updatePromise = checkForDesktopUpdate('1.0.0');
@@ -58,7 +59,7 @@ describe('update check timeout handling', () => {
     const app = { getVersion: vi.fn(() => '1.2.3') } as unknown as App;
 
     vi.spyOn(https, 'get').mockImplementation(() => {
-      return new HangingRequest() as unknown as https.ClientRequest;
+      return new HangingRequest() as unknown as http.ClientRequest;
     });
 
     registerUpdateIpcHandlers(ipcMain, app);

@@ -5,14 +5,14 @@ import { spawn } from 'child_process';
 import { resolvePythonPath } from '../pythonPathResolver';
 
 vi.mock('child_process', () => {
-  const { EventEmitter: ChildEventEmitter } = require('events');
+  const { EventEmitter } = require('events');
 
   const spawnMock = vi.fn(() => {
-    const stdout = new ChildEventEmitter();
-    const stderr = new ChildEventEmitter();
-    const process = new ChildEventEmitter() as ChildEventEmitter & {
-      stdout: ChildEventEmitter;
-      stderr: ChildEventEmitter;
+    const stdout = new EventEmitter();
+    const stderr = new EventEmitter();
+    const process = new EventEmitter() as InstanceType<typeof EventEmitter> & {
+      stdout: InstanceType<typeof EventEmitter>;
+      stderr: InstanceType<typeof EventEmitter>;
       kill?: () => boolean;
     };
 
