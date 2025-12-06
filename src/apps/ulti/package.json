@@ -1,6 +1,6 @@
 {
   "name": "@onepiece/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OnePiece Studio Desktop Electron application",
   "main": "dist/main/main.js",
   "scripts": {
