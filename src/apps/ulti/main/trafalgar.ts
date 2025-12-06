@@ -22,32 +22,33 @@ function parsePipelineHeader(line: string): { id: string; name: string } {
 
 function parsePipelineListFromJson(candidate: unknown): PipelineSummary[] | null {
   if (Array.isArray(candidate)) {
-    return candidate
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') {
-          return null;
-        }
+    const parsed: PipelineSummary[] = [];
 
-        const id = String((entry as { id?: unknown; name?: unknown }).id ?? '').trim();
-        const name = String((entry as { name?: unknown }).name ?? id).trim();
-        const description = (entry as { description?: unknown }).description;
-        const parameters = (entry as { parameters?: unknown }).parameters;
+    for (const entry of candidate) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
 
-        if (!id) {
-          return null;
-        }
+      const id = String((entry as { id?: unknown; name?: unknown }).id ?? '').trim();
+      const name = String((entry as { name?: unknown }).name ?? id).trim();
+      const description = (entry as { description?: unknown }).description;
+      const parameters = (entry as { parameters?: unknown }).parameters;
 
-        return {
-          id,
-          name: name || id,
-          description:
-            typeof description === 'string' && description.trim() ? description.trim() : undefined,
-          parameters: Array.isArray(parameters)
-            ? parameters.map((param) => String(param).trim()).filter(Boolean)
-            : undefined,
-        } satisfies PipelineSummary;
-      })
-      .filter((entry): entry is PipelineSummary => Boolean(entry));
+      if (!id) {
+        continue;
+      }
+
+      parsed.push({
+        id,
+        name: name || id,
+        description: typeof description === 'string' && description.trim() ? description.trim() : undefined,
+        parameters: Array.isArray(parameters)
+          ? parameters.map((param) => String(param).trim()).filter(Boolean)
+          : undefined,
+      });
+    }
+
+    return parsed;
   }
 
   if (
@@ -164,7 +165,16 @@ export function registerTrafalgarPipelineIpcHandlers(ipcMain: IpcMain): void {
         | { id?: string; params?: Record<string, string> }
         | { pipelineId?: string; parameters?: Record<string, string> },
     ) => {
-      const pipelineId = (payload?.id ?? (payload as { pipelineId?: string })?.pipelineId ?? '').trim();
+      const rawPipelineId =
+        payload && typeof payload === 'object'
+          ? 'id' in payload && typeof payload.id === 'string'
+            ? payload.id
+            : 'pipelineId' in payload && typeof payload.pipelineId === 'string'
+              ? payload.pipelineId
+              : ''
+          : '';
+
+      const pipelineId = rawPipelineId.trim();
 
       if (!pipelineId) {
         throw new Error('pipelineId is required to run a pipeline.');

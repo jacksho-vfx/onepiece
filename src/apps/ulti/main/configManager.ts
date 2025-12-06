@@ -6,6 +6,7 @@ import { generateOnepieceToml, installStarterKit, type WizardConfigInput } from 
 
 const quickActionPresetsSchema = z
   .record(
+    z.string(),
     z
       .object({
         vendorIngest: z.object({ sourcePath: z.string().optional() }).strict().optional(),
@@ -223,9 +224,10 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
         const merged = { ...(existing.quickActionPresets ?? {}) };
         for (const [projectName, preset] of Object.entries(updates.quickActionPresets)) {
           const existingPreset = merged[projectName] ?? {};
+          const nextPreset = preset ?? {};
           merged[projectName] = {
             ...existingPreset,
-            ...preset,
+            ...nextPreset,
           };
         }
         return merged;

@@ -328,11 +328,17 @@ export function registerConfigBundleIpcHandlers(
     const bundlePath = await createConfigBundle(app);
 
     try {
-      const { canceled, filePath } = await dialog.showSaveDialog(window, {
-        title: 'Export studio config bundle',
-        defaultPath: path.join(app.getPath('documents'), 'onepiece-config-bundle.zip'),
-        filters: [{ name: 'Zip archive', extensions: ['zip'] }],
-      });
+      const { canceled, filePath } = await (window
+        ? dialog.showSaveDialog(window, {
+            title: 'Export studio config bundle',
+            defaultPath: path.join(app.getPath('documents'), 'onepiece-config-bundle.zip'),
+            filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+          })
+        : dialog.showSaveDialog({
+            title: 'Export studio config bundle',
+            defaultPath: path.join(app.getPath('documents'), 'onepiece-config-bundle.zip'),
+            filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+          }));
 
       if (canceled || !filePath) {
         throw new Error('Export cancelled');
@@ -346,11 +352,17 @@ export function registerConfigBundleIpcHandlers(
   });
 
   ipcMain.handle('config/import-bundle', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
-      title: 'Import studio config bundle',
-      properties: ['openFile'],
-      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
-    });
+    const { canceled, filePaths } = await (window
+      ? dialog.showOpenDialog(window, {
+          title: 'Import studio config bundle',
+          properties: ['openFile'],
+          filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+        })
+      : dialog.showOpenDialog({
+          title: 'Import studio config bundle',
+          properties: ['openFile'],
+          filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+        }));
 
     if (canceled || !filePaths?.length) {
       throw new Error('Import cancelled');

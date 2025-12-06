@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { spawnSync } from 'child_process';
+import { spawnSync, type ChildProcess } from 'child_process';
 import { createWriteStream, promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -17,7 +17,7 @@ vi.mock('child_process', async () => {
 
   return {
     ...actual,
-    spawn: (...args) => spawnMock(...args),
+    spawn: (...args: Parameters<typeof actual.spawn>) => spawnMock(...args),
   };
 });
 
@@ -135,9 +135,9 @@ describe('createConfigBundle', () => {
     const app = { getPath: vi.fn().mockReturnValue(os.tmpdir()) } as unknown as App;
 
     spawnMock.mockImplementation(() => {
-      const fakeChild = new EventEmitter();
-      // @ts-expect-error - stderr is optional for the mock child process
-      fakeChild.stderr = new EventEmitter();
+      const fakeChild = Object.assign(new EventEmitter(), {
+        stderr: new EventEmitter(),
+      }) as ChildProcess;
 
       queueMicrotask(() => {
         const error = new Error('spawn ENOENT');
@@ -145,7 +145,6 @@ describe('createConfigBundle', () => {
         fakeChild.emit('error', error);
       });
 
-      // @ts-expect-error - the mock child process only needs to support events
       return fakeChild;
     });
 
