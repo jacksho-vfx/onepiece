@@ -1,58 +1,55 @@
 # Releasing OnePiece Studio Desktop
 
-This guide walks through every step to publish a new desktop release of OnePiece Studio. It assumes the repository is on GitHub and uses git tags like `v0.2.0`.
+Follow this checklist to ship a new OnePiece Studio Desktop build from the `src/apps/ulti` package. Each step keeps the version, tag, and uploaded installers in sync so GitHub Releases stays trustworthy.
 
-## 1) Update the version number
-- Open the desktop app package file: `src/apps/ulti/package.json`.
-- Bump the `"version"` field (for example: `0.2.0`, `0.3.0`, etc.). Stick to semantic-style versions: `MAJOR.MINOR.PATCH`.
+## Prerequisites
+- Node.js 18+ with npm available.
+- Clean working tree (`git status` shows no pending changes).
+- Ability to push commits and tags to the repository remote.
 
-## 2) Commit and push the version bump
-Run the following commands from the repository root to capture the version change:
+## 1) Bump the version
+1. Edit `src/apps/ulti/package.json` and update the `"version"` field (for example: `0.2.0`).
+2. Save the file; no other edits are required for a straight version bump.
+
+## 2) Commit and tag the bump
+Run the commands below from the repository root, replacing the version string if needed:
 
 ```bash
-git status
-git add .
+git add src/apps/ulti/package.json
 git commit -m "Bump desktop version to v0.2.0"
-git push origin main
-```
+git push origin HEAD
 
-## 3) Create and push the tag
-- Create a tag that matches the `package.json` version:
-
-```bash
 git tag v0.2.0
-```
-
-- Push the tag to GitHub so the release can reference it:
-
-```bash
 git push origin v0.2.0
 ```
 
-## 4) Build installers locally (REL-001)
-Build the installers on your machine so you can upload them to GitHub Releases.
+## 3) Build installers locally (REL-001)
+1. Install dependencies once per machine or whenever `package-lock.json` changes:
 
-```bash
-cd src/apps/ulti
-npm install               # only needed the first time or after dependency changes
-npm run release:prep      # builds the app and packages installers
-```
+   ```bash
+   cd src/apps/ulti
+   npm ci
+   ```
 
-The build outputs go to `src/apps/ulti/release/`, including platform-specific installers such as:
-- `OnePiece Studio Desktop Setup 0.2.0.exe` (Windows)
-- `OnePiece Studio Desktop-0.2.0.dmg` (macOS)
-- `OnePiece Studio Desktop-0.2.0.AppImage` (Linux)
+2. Generate the release artifacts. This command cleans old builds, compiles the TypeScript main and renderer bundles, and packages platform installers under `release/`:
 
-## 5) Create a GitHub release
-1. Open the repository on GitHub.
-2. Click **Releases** → **Draft a new release**.
-3. Select the tag `v0.2.0` (create it if it is not listed yet).
-4. Title the release (for example: `OnePiece Studio Desktop v0.2.0`).
-5. Drag the generated `.exe`, `.dmg`, and `.AppImage` files from `src/apps/ulti/release/` into the **Attach binaries…** area.
-6. Optionally mark the release as **Pre-release** for early builds.
-7. Click **Publish release**.
+   ```bash
+   npm run release:prep
+   ```
 
-## 6) Share the download link
-Share the GitHub Releases page with teammates and users so they can download the installers: `https://github.com/<org>/<repo>/releases`.
+Expected outputs (versioned automatically):
+- `release/OnePiece Studio Desktop Setup 0.2.0.exe`
+- `release/OnePiece Studio Desktop-0.2.0.dmg`
+- `release/OnePiece Studio Desktop-0.2.0.AppImage`
 
-That's it—repeat this checklist for each new desktop release.
+## 4) Publish the GitHub release
+1. Open **Releases → Draft a new release** on GitHub.
+2. Pick the tag you just pushed (for example `v0.2.0`).
+3. Title the release `OnePiece Studio Desktop v0.2.0`.
+4. Upload the `.exe`, `.dmg`, and `.AppImage` files from `src/apps/ulti/release/`.
+5. Publish the release (mark as **Pre-release** if you are distributing an early build).
+
+## 5) Share the download link
+Send the GitHub Releases page URL to users: `https://github.com/<org>/<repo>/releases`.
+
+Repeat the checklist for every desktop release to keep downloads predictable and verifiable.

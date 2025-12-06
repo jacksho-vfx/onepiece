@@ -99,6 +99,14 @@ onepiece/
 
 7. **Open a pull request** summarising your changes, screenshots, and any caveats. Link to relevant tickets and call out breaking changes explicitly.
 
+### Desktop release quick reference
+
+The desktop app lives under `src/apps/ulti`. When preparing a release:
+
+1. Bump the `version` field in `src/apps/ulti/package.json` and commit/tag it (for example `v0.2.0`).
+2. Run `npm ci && npm run release:prep` from `src/apps/ulti` to clean old builds, compile the TypeScript bundles, and emit the platform installers under `release/`.
+3. Upload the generated `.exe`, `.dmg`, and `.AppImage` files to the GitHub release matching your tag. See [RELEASE.md](../RELEASE.md) for the full checklist.
+
 ### Resource cleanup patterns
 
 Storage helpers such as `PipelineRunStore` implement context manager hooks so SQLite connections and event subscribers are always torn down, even when exceptions bubble up. Prefer the pattern below when wiring orchestration logic or tests:
