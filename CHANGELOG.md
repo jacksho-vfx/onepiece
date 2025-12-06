@@ -18,6 +18,9 @@ All notable changes to the OnePiece pipeline toolkit.
 
 ## [Desktop v0.2.0]
 
+Release version for the second Desktop milestone, matching the `@onepiece/desktop`
+package bump to 0.2.0.
+
 ### Added / Improved
 
 - Added `--open-browser` and `--browser-path` switches to `trafalgar web dashboard`
