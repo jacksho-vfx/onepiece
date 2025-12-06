@@ -10,15 +10,22 @@ All notable changes to the OnePiece pipeline toolkit.
   yields to streaming clients, avoiding mismatched annotations during type checks.
 - Documented Trafalgar render job history retention controls and the `/render/health`
   metrics so operators can tune pruning windows and alert on persistence issues.
+- Added walkthroughs for Perona's telemetry-driven cost insights, covering the
+  `perona cost insights` command, the `/api/cost/insights` endpoint, and how to supply
+  custom metric stores for automated recommendations.
+
+---
+
+## [Desktop v0.2.0]
+
+### Added / Improved
+
 - Added `--open-browser` and `--browser-path` switches to `trafalgar web dashboard`
   so teams can immediately open the UI in a preferred browser when the service
   starts.
 - Improved the Chopper CLI's scene loading diagnostics so directory paths, permission
   errors, and other I/O failures surface actionable guidance instead of generic
   tracebacks.
-- Added walkthroughs for Perona's telemetry-driven cost insights, covering the
-  `perona cost insights` command, the `/api/cost/insights` endpoint, and how to supply
-  custom metric stores for automated recommendations.
 - Refreshed the Perona dashboard landing page with a responsive HTML UI that
   streams live telemetry, surfaces risk/cost summaries, and exposes a reusable
   `/dashboard/summary` JSON snapshot for automation.
