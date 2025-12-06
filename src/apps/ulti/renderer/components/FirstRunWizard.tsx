@@ -6,6 +6,8 @@ import TextInput from './ui/TextInput';
 import WizardStep from './ui/WizardStep';
 import { designTokens, roleColors } from '../styles/designTokens';
 import { useTheme } from '../styles/ThemeContext';
+import { useToast } from './ui/Toaster';
+import { hexToRgba } from './ui/styles';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 
@@ -61,6 +63,7 @@ type WizardContextValue = {
     value: string,
   ): void;
   updateDcc(app: DccAppKey, updates: Partial<DccConfig>): void;
+  detectionWarning: string | null;
 };
 
 const WizardFormContext = createContext<WizardContextValue | undefined>(undefined);
@@ -105,17 +108,48 @@ type DetectedEnv = {
   dccs: Partial<Record<DccAppKey, string>>;
 };
 
+const detectionFailureMessage =
+  'Automatic environment detection failed. Please enter your paths manually.';
+
 function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element {
   const [formData, setFormData] = useState<WizardFormState>(defaultFormState);
+  const [detectionWarning, setDetectionWarning] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     let isMounted = true;
 
+    const handleDetectionFailure = (): void => {
+      if (!isMounted) {
+        return;
+      }
+
+      setDetectionWarning(detectionFailureMessage);
+      showToast({
+        kind: 'error',
+        message: detectionFailureMessage,
+      });
+    };
+
     const detectEnv = async (): Promise<void> => {
       try {
-        const env = await window.electron.invoke<DetectedEnv>('system/detect-env');
+        const env = await window.electron.invoke<DetectedEnv | null>('system/detect-env');
 
-        if (!isMounted || !env) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!env) {
+          handleDetectionFailure();
+          return;
+        }
+
+        const hasPythonGuess = Boolean(env.pythonPathGuess);
+        const detectedDccs = env.dccs ?? {};
+        const hasDccs = Object.values(detectedDccs).some(Boolean);
+
+        if (!hasPythonGuess && !hasDccs) {
+          handleDetectionFailure();
           return;
         }
 
@@ -142,6 +176,7 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
         });
       } catch (error) {
         console.error('Failed to detect environment', error);
+        handleDetectionFailure();
       }
     };
 
@@ -150,7 +185,7 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [showToast]);
 
   const updateForm = <K extends keyof WizardFormState>(key: K, value: WizardFormState[K]): void => {
     setFormData((prev) => ({
@@ -186,7 +221,10 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
     }));
   };
 
-  const value = useMemo(() => ({ formData, updateForm, updateNested, updateDcc }), [formData]);
+  const value = useMemo(
+    () => ({ formData, updateForm, updateNested, updateDcc, detectionWarning }),
+    [detectionWarning, formData],
+  );
 
   return <WizardFormContext.Provider value={value}>{children}</WizardFormContext.Provider>;
 }
@@ -654,7 +692,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { formData } = useWizardForm();
+  const { formData, detectionWarning } = useWizardForm();
   const theme = useTheme();
 
   const canFinish = useMemo(
@@ -810,6 +848,24 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
           title="First-time setup"
           subtitle="Follow the guided steps to configure your environment, storage, and integrations."
         />
+        {detectionWarning ? (
+          <div
+            role="alert"
+            style={{
+              background: hexToRgba(theme.colors.warning, 0.12),
+              border: `1px solid ${hexToRgba(theme.colors.warning, 0.6)}`,
+              borderRadius: theme.radii.md,
+              padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+              color: theme.colors.text,
+              display: 'flex',
+              gap: theme.spacing.sm,
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontWeight: theme.typography.fontWeightBold }}>Environment detection</span>
+            <span style={{ color: theme.colors.text }}>{detectionWarning}</span>
+          </div>
+        ) : null}
         <StepIndicator currentStep={currentStep} />
         <WizardStep stepKey={currentStep}>
           <div style={{ display: 'grid', gap: theme.spacing.lg }}>
