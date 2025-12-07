@@ -9,7 +9,8 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "dist": "npm run build && electron-builder",
-    "release:prep": "npm run clean && npm run dist"
+    "bundle:runtime": "bash ./scripts/package-runtime.sh",
+    "release:prep": "npm run clean && npm run bundle:runtime && npm run dist"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -41,20 +42,61 @@
       "output": "release"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "extraResources": [
+        {
+          "from": "python/runtime/mac",
+          "to": "python/runtime"
+        },
+        {
+          "from": "python/wheels",
+          "to": "python/wheels"
+        },
+        {
+          "from": "python/dcc",
+          "to": "python/dcc"
+        }
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": "python/runtime/win",
+          "to": "python/runtime"
+        },
+        {
+          "from": "python/wheels",
+          "to": "python/wheels"
+        },
+        {
+          "from": "python/dcc",
+          "to": "python/dcc"
+        }
+      ]
     },
     "linux": {
       "target": "AppImage",
-      "category": "Utility"
+      "category": "Utility",
+      "extraResources": [
+        {
+          "from": "python/runtime/linux",
+          "to": "python/runtime"
+        },
+        {
+          "from": "python/wheels",
+          "to": "python/wheels"
+        },
+        {
+          "from": "python/dcc",
+          "to": "python/dcc"
+        }
+      ]
     },
     "extraResources": [
       {
-        "from": "python",
-        "to": "python",
-        "filter": ["**/*"]
+        "from": "python/manifest.json",
+        "to": "python/manifest.json"
       }
     ]
   }
