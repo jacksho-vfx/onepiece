@@ -58,6 +58,7 @@ export const DesktopConfigSchema = z
     enableNotifications: z.boolean().optional(),
     profile: z.enum(['vfx', 'archviz', 'freelancer', 'demo']).optional(),
     pythonPath: z.string().optional(),
+    includePipelineTemplates: z.boolean().optional(),
     projectRoot: z.string().optional(),
     currentProject: z.string().optional(),
     recentProjects: z
@@ -299,6 +300,7 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
           profile: updatedConfig.profile,
           projectRoot: updatedConfig.projectRoot,
           pythonPath: updatedConfig.pythonPath,
+          includePipelineTemplates: updatedConfig.includePipelineTemplates,
           shotgrid: updatedConfig.shotgrid,
           aws: updatedConfig.aws,
           dccs: updatedConfig.dccs,

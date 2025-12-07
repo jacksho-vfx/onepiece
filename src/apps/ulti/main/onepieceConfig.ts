@@ -9,6 +9,7 @@ export type WizardConfigInput = {
   profile: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   projectRoot: string;
   pythonPath?: string;
+  includePipelineTemplates?: boolean;
   shotgrid?: { url?: string; scriptName?: string; apiKey?: string };
   aws?: { accessKeyId?: string; secretAccessKey?: string; region?: string; defaultBucket?: string };
   dccs?: {
@@ -72,6 +73,31 @@ export function generateOnepieceToml(input: WizardConfigInput): string {
 
   // TODO: Add pipeline step definitions, logging configuration, and other
   // advanced OnePiece settings derived from future wizard steps.
+
+  const includeVfxPipelines =
+    input.profile === 'vfx' && (input.includePipelineTemplates ?? true);
+
+  if (includeVfxPipelines) {
+    lines.push('', '# Sample VFX pipeline templates');
+
+    lines.push('[pipelines.ingest]');
+    lines.push('display_name = "Vendor Ingest"');
+    lines.push('description = "Transcode and stage vendor plates for editorial."');
+    lines.push('command = "python pipeline/ingest.py --source {source} --shot {shot}"');
+    lines.push('log_file = "logs/pipeline/ingest.log"');
+
+    lines.push('', '[pipelines.render]');
+    lines.push('display_name = "Render Shots"');
+    lines.push('description = "Submit renders to the farm with show defaults."');
+    lines.push('command = "python pipeline/render.py --scene {scene} --frames {frames}"');
+    lines.push('log_file = "logs/pipeline/render.log"');
+
+    lines.push('', '[pipelines.delivery]');
+    lines.push('display_name = "Client Delivery"');
+    lines.push('description = "Package review outputs for client delivery."');
+    lines.push('command = "python pipeline/delivery.py --playlist {playlist} --target {target}"');
+    lines.push('log_file = "logs/pipeline/delivery.log"');
+  }
 
   return lines.join('\n') + '\n';
 }
