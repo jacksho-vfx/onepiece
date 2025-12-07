@@ -43,3 +43,5 @@ extraResources:
     to: python
     filter:
       - "**/*"
+  - from: build/starter-kits
+    to: starter-kits

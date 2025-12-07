@@ -10,8 +10,15 @@ import AppShell from './components/layout/AppShell';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ToolsScreen from './components/ToolsScreen';
 import { ThemeProvider } from './styles/ThemeContext';
-import { ToasterProvider } from './components/ui';
+import { ToasterProvider, useToast } from './components/ui';
 import { HelpContextProvider } from './components/HelpContext';
+
+type StarterKitInstallResult = {
+  status: 'installed' | 'skipped' | 'failed';
+  profile: 'vfx' | 'archviz' | 'freelancer' | 'demo';
+  target: string;
+  message: string;
+};
 
 type DesktopConfig = {
   hasCompletedWizard: boolean;
@@ -55,6 +62,41 @@ type DesktopConfig = {
 };
 
 type ProjectSelection = { name: string; path: string };
+
+function StarterKitInstallListener(): JSX.Element {
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    const unsubscribe = window.electron.on(
+      'starter-kit/install-result',
+      (_event, payload: StarterKitInstallResult) => {
+        if (!payload) {
+          return;
+        }
+
+        if (payload.status === 'installed') {
+          showToast({
+            kind: 'success',
+            message: 'Starter kit ready',
+            description: `${payload.profile.toUpperCase()} files added to ${payload.target}`,
+          });
+          return;
+        }
+
+        const kind = payload.status === 'failed' ? 'error' : 'info';
+        showToast({
+          kind,
+          message: 'Starter kit notice',
+          description: payload.message,
+        });
+      },
+    );
+
+    return unsubscribe;
+  }, [showToast]);
+
+  return null;
+}
 
 function App(): JSX.Element {
   const [config, setConfig] = useState<DesktopConfig | null>(null);
@@ -188,6 +230,7 @@ function App(): JSX.Element {
     <ThemeProvider>
       <HelpContextProvider>
         <ToasterProvider>
+          <StarterKitInstallListener />
           {loading || !config ? (
             <div className="op-loading">Loading...</div>
           ) : !config.hasCompletedWizard ? (

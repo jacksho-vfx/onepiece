@@ -76,6 +76,13 @@ export function generateOnepieceToml(input: WizardConfigInput): string {
   return lines.join('\n') + '\n';
 }
 
+export type StarterKitInstallResult = {
+  status: 'installed' | 'skipped' | 'failed';
+  profile: WizardConfigInput['profile'];
+  target: string;
+  message: string;
+};
+
 async function safeCopyFile(src: string, dest: string): Promise<void> {
   try {
     await fs.access(dest);
@@ -111,22 +118,52 @@ async function copyDirectoryRecursive(srcDir: string, destDir: string): Promise<
  * Copy the starter-kit files for the selected profile into the target project directory.
  * Files are only written when they do not already exist, so running the wizard again is safe.
  */
-export async function installStarterKit(profile: WizardConfigInput['profile'], projectRoot: string): Promise<void> {
-  const resourcesDir = app.isPackaged ? process.resourcesPath : app.getAppPath();
-  const kitPath = path.join(resourcesDir, 'starter-kits', profile);
+export async function installStarterKit(
+  profile: WizardConfigInput['profile'],
+  projectRoot: string,
+): Promise<StarterKitInstallResult> {
+  const candidates = [
+    process.resourcesPath,
+    app.getAppPath(),
+    path.join(app.getAppPath(), 'build'),
+  ];
 
-  let stats: Awaited<ReturnType<typeof fs.stat>>;
-  try {
-    stats = await fs.stat(kitPath);
-  } catch (error) {
-    console.warn(`Starter kit for profile "${profile}" was not found at ${kitPath}.`);
-    return;
+  for (const base of candidates) {
+    const kitPath = path.join(base, 'starter-kits', profile);
+
+    let stats: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stats = await fs.stat(kitPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        continue;
+      }
+      console.error(`Error checking starter kit at ${kitPath}:`, error);
+      continue;
+    }
+
+    if (!stats.isDirectory()) {
+      console.warn(`Starter kit path ${kitPath} is not a directory.`);
+      continue;
+    }
+
+    try {
+      await copyDirectoryRecursive(kitPath, projectRoot);
+      return {
+        status: 'installed',
+        profile,
+        target: projectRoot,
+        message: `Starter kit for ${profile} copied to ${projectRoot}.`,
+      };
+    } catch (error) {
+      const message = `Failed to install starter kit for ${profile}: ${(error as Error).message}`;
+      console.error(message);
+      return { status: 'failed', profile, target: projectRoot, message };
+    }
   }
 
-  if (!stats.isDirectory()) {
-    console.warn(`Starter kit path ${kitPath} is not a directory.`);
-    return;
-  }
-
-  await copyDirectoryRecursive(kitPath, projectRoot);
+  const message = `Starter kit for profile "${profile}" was not found in any known location.`;
+  console.warn(message);
+  return { status: 'skipped', profile, target: projectRoot, message };
 }

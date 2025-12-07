@@ -1,8 +1,13 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { z } from 'zod';
-import type { App, IpcMain } from 'electron';
-import { generateOnepieceToml, installStarterKit, type WizardConfigInput } from './onepieceConfig';
+import type { App, IpcMain, IpcMainInvokeEvent } from 'electron';
+import {
+  generateOnepieceToml,
+  installStarterKit,
+  type StarterKitInstallResult,
+  type WizardConfigInput,
+} from './onepieceConfig';
 
 const quickActionPresetsSchema = z
   .record(
@@ -195,12 +200,51 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
   return defaultConfig;
 }
 
+function sendStarterKitResult(event: IpcMainInvokeEvent, result: StarterKitInstallResult): void {
+  try {
+    event.sender.send('starter-kit/install-result', result);
+  } catch (error) {
+    console.error('Failed to notify renderer about starter kit installation:', error);
+  }
+}
+
+function getStarterKitTarget(
+  existing: DesktopConfig,
+  updates: Partial<DesktopConfig>,
+  hasNewlyCompletedWizard: boolean,
+): string | null {
+  const profile = updates.profile ?? existing.profile;
+  if (!profile) {
+    return null;
+  }
+
+  const projectRootCandidate = updates.projectRoot ?? existing.projectRoot;
+
+  if (hasNewlyCompletedWizard && projectRootCandidate) {
+    return projectRootCandidate;
+  }
+
+  if (updates.projectRoot && updates.projectRoot !== existing.projectRoot) {
+    return updates.projectRoot;
+  }
+
+  if (
+    updates.currentProject &&
+    updates.currentProject !== existing.currentProject &&
+    !existing.recentProjects?.some((project) => project.path === updates.currentProject)
+  ) {
+    return updates.currentProject;
+  }
+
+  return null;
+}
+
 export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
   ipcMain.handle('config/get', async () => ensureDefaultConfig(app));
 
   ipcMain.handle(
     'config/save',
-    async (_event, updates: Partial<DesktopConfig>): Promise<DesktopConfig> => {
+    async (event, updates: Partial<DesktopConfig>): Promise<DesktopConfig> => {
       const existing = await ensureDefaultConfig(app);
       const now = new Date().toISOString();
       const hasNewlyCompletedWizard = !existing.hasCompletedWizard && updates.hasCompletedWizard === true;
@@ -274,11 +318,22 @@ export function registerConfigIpcHandlers(ipcMain: IpcMain, app: App): void {
             console.error('Error writing onepiece.toml after wizard completion:', error);
           }
         }
+      }
 
+      const starterKitTarget = getStarterKitTarget(existing, updates, hasNewlyCompletedWizard);
+
+      if (starterKitTarget && updatedConfig.profile) {
         try {
-          await installStarterKit(updatedConfig.profile, updatedConfig.projectRoot);
+          const result = await installStarterKit(updatedConfig.profile, starterKitTarget);
+          sendStarterKitResult(event, result);
         } catch (error) {
           console.error('Error installing starter kit:', error);
+          sendStarterKitResult(event, {
+            status: 'failed',
+            profile: updatedConfig.profile,
+            target: starterKitTarget,
+            message: 'Unexpected error installing starter kit.',
+          });
         }
       }
 
