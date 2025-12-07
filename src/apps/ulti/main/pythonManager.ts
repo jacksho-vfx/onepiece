@@ -239,6 +239,16 @@ export async function runOnepieceProfileSummary(
 }
 
 /**
+ * Run the OnePiece doctor command via the info helper.
+ */
+export async function runOnepieceDoctor(
+  options?: RunCommandOptions,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runOnepieceInfo(['--doctor'], options);
+  return mapCommandResult(result);
+}
+
+/**
  * Start a long-running Python service process.
  *
  * @param name A descriptive name of the service being started.
@@ -357,6 +367,12 @@ export function registerPythonIpcHandlers(
 
       return runCommand(args, withDefaultTimeout({ timeoutMs }));
     },
+  );
+
+  ipcMain.handle(
+    'python/run-doctor',
+    async (_event, payload: { timeoutMs?: number } = {}) =>
+      runOnepieceDoctor(withDefaultTimeout(payload)),
   );
 
   ipcMain.handle(
