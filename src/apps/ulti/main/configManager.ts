@@ -8,6 +8,9 @@ import {
   type StarterKitInstallResult,
   type WizardConfigInput,
 } from './onepieceConfig';
+import { detectDccExecutables } from './envDetection';
+
+const DCC_KEYS = ['maya', 'blender', 'unreal'] as const;
 
 const quickActionPresetsSchema = z
   .record(
@@ -123,6 +126,36 @@ export function getConfigPath(app: App): string {
   return path.join(userDataPath, 'main-config.json');
 }
 
+function mergeDccConfig(
+  existing: DesktopConfig['dccs'],
+  detected: ReturnType<typeof detectDccExecutables>,
+): { dccs?: DesktopConfig['dccs']; changed: boolean } {
+  const dccs: NonNullable<DesktopConfig['dccs']> = existing ? { ...existing } : {};
+  let changed = false;
+
+  for (const key of DCC_KEYS) {
+    const current = dccs[key];
+    const detectedPath = detected[key];
+    const hasCurrentPath = Boolean(current?.executablePath?.trim());
+
+    if (detectedPath && !hasCurrentPath) {
+      dccs[key] = {
+        enabled: true,
+        executablePath: detectedPath,
+      };
+      changed = true;
+      continue;
+    }
+
+    if (!current) {
+      dccs[key] = { enabled: false, executablePath: undefined };
+      changed = true;
+    }
+  }
+
+  return { dccs, changed };
+}
+
 export async function loadConfig(app: App): Promise<DesktopConfig | null> {
   const configPath = getConfigPath(app);
   try {
@@ -160,6 +193,7 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
   const existing = await loadConfig(app);
   if (existing) {
     let needsSave = false;
+    const detectedDccs = detectDccExecutables();
     if (!existing.createdAt) {
       existing.createdAt = new Date().toISOString();
       needsSave = true;
@@ -174,6 +208,12 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
       needsSave = true;
     }
 
+    const { dccs: normalizedDccs, changed: dccsChanged } = mergeDccConfig(existing.dccs, detectedDccs);
+    if (dccsChanged) {
+      existing.dccs = normalizedDccs;
+      needsSave = true;
+    }
+
     if (needsSave) {
       try {
         await saveConfig(app, existing);
@@ -185,11 +225,13 @@ export async function ensureDefaultConfig(app: App): Promise<DesktopConfig> {
   }
 
   const now = new Date().toISOString();
+  const detectedDccs = detectDccExecutables();
   const defaultConfig: DesktopConfig = {
     hasCompletedWizard: false,
     createdAt: now,
     updatedAt: now,
     enableNotifications: true,
+    dccs: mergeDccConfig(undefined, detectedDccs).dccs,
   };
 
   try {

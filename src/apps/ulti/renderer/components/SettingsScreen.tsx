@@ -4,6 +4,9 @@ import { useTheme } from '../styles/ThemeContext';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 type DccKey = 'maya' | 'blender' | 'unreal';
+type DetectedEnv = {
+  dccs?: Partial<Record<DccKey, string>>;
+};
 
 type ShotgridConfig = {
   url?: string;
@@ -58,6 +61,12 @@ type SettingsScreenProps = {
   onConfigImported?: () => Promise<void> | void;
 };
 
+const DCC_LABELS: Record<DccKey, string> = {
+  maya: 'Maya',
+  blender: 'Blender',
+  unreal: 'Unreal Engine',
+};
+
 type UpdateCheckResult = {
   hasUpdate: boolean;
   latestVersion?: string;
@@ -89,6 +98,41 @@ const defaultForm: FormState = {
   enableNotifications: true,
 };
 
+function applyDetectedDccs(
+  baseForm: FormState,
+  detected?: Partial<Record<DccKey, string>>,
+): { form: FormState; applied: DccKey[] } {
+  if (!detected) {
+    return { form: baseForm, applied: [] };
+  }
+
+  const applied: DccKey[] = [];
+  const nextForm: FormState = {
+    ...baseForm,
+    dccs: { ...baseForm.dccs },
+  };
+
+  (Object.keys(detected) as DccKey[]).forEach((key) => {
+    const detectedPath = detected[key];
+    if (!detectedPath) {
+      return;
+    }
+
+    const currentPath = nextForm.dccs[key].executablePath?.trim();
+    const hasUserValue = Boolean(currentPath);
+
+    if (!hasUserValue) {
+      applied.push(key);
+      nextForm.dccs[key] = {
+        enabled: true,
+        executablePath: detectedPath,
+      };
+    }
+  });
+
+  return { form: nextForm, applied };
+}
+
 function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
@@ -102,6 +146,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [exportingConfig, setExportingConfig] = useState<boolean>(false);
   const [importingConfig, setImportingConfig] = useState<boolean>(false);
+  const [dccDetectionMessage, setDccDetectionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -122,8 +167,7 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
         const loaded = await window.electron.invoke<DesktopConfig>('config/get');
         if (!mounted) return;
 
-        setConfig(loaded);
-        setForm({
+        let nextForm: FormState = {
           profile: loaded.profile ?? '',
           projectRoot: loaded.projectRoot ?? '',
           pythonPath: loaded.pythonPath ?? '',
@@ -153,7 +197,32 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
               executablePath: loaded.dccs?.unreal?.executablePath ?? '',
             },
           },
-        });
+        };
+
+        setDccDetectionMessage(null);
+
+        try {
+          const env = await window.electron.invoke<DetectedEnv | null>('system/detect-env');
+
+          const { form: formWithDetected, applied } = applyDetectedDccs(nextForm, env?.dccs);
+          nextForm = formWithDetected;
+
+          if (applied.length > 0) {
+            const readableList = applied.map((key) => DCC_LABELS[key]).join(', ');
+            setDccDetectionMessage(
+              `We detected ${readableList}. Confirm or update these paths before saving.`,
+            );
+          } else {
+            setDccDetectionMessage(null);
+          }
+        } catch (detectionError) {
+          console.error('Failed to detect DCC executables', detectionError);
+        }
+
+        if (!mounted) return;
+
+        setConfig(loaded);
+        setForm(nextForm);
       } catch (err) {
         if (!mounted) return;
         console.error('Failed to load config', err);
@@ -579,6 +648,13 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
           <p style={{ margin: 0, color: theme.colors.textMuted }}>
             Enable and point to your preferred digital content creation tools.
           </p>
+          {dccDetectionMessage ? (
+            <div className="op-banner" role="alert">
+              <p className="op-banner-message" style={{ margin: 0 }}>
+                {dccDetectionMessage}
+              </p>
+            </div>
+          ) : null}
           <div style={{ display: 'grid', gap: theme.spacing.md }}>
             {renderDccRow('maya', 'Maya')}
             {renderDccRow('blender', 'Blender')}
