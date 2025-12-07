@@ -141,14 +141,13 @@ function DiagnosticsScreen(): JSX.Element {
     setCopyMessage('');
 
     try {
-      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
-        'python/run-command',
-        { args: ['-m', 'onepiece', 'doctor'] },
+      const result = await window.electron.invoke<{ exitCode: number; stdout: string; stderr: string }>(
+        'python/run-doctor',
       );
 
       setDoctorResult({
         running: false,
-        exitCode: result.code,
+        exitCode: result.exitCode,
         stdout: result.stdout ?? '',
         stderr: result.stderr ?? '',
       });

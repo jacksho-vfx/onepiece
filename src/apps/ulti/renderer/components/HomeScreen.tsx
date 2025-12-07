@@ -889,17 +889,16 @@ function HomeScreen({
     setError(null);
 
     try {
-      const result = await window.electron.invoke<{ code: number; stdout: string; stderr: string }>(
-        'python/run-command',
-        { args: ['-m', 'onepiece', 'doctor'] },
+      const result = await window.electron.invoke<{ exitCode: number; stdout: string; stderr: string }>(
+        'python/run-doctor',
       );
 
-      const formatted = formatDoctorOutput(result.stdout, result.stderr, result.code);
-      const hasError = !formatted.isOk || result.code !== 0;
+      const formatted = formatDoctorOutput(result.stdout, result.stderr, result.exitCode);
+      const hasError = !formatted.isOk || result.exitCode !== 0;
 
       setHealthCheck({
         running: false,
-        exitCode: result.code,
+        exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
       });

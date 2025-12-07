@@ -782,7 +782,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
       // screen experience but keeps the UX inline with the wizard. Non-blocking: we still continue
       // onboarding even if the doctor fails so users can recover later.
       try {
-        await window.electron.invoke('python/run-command', { args: ['-m', 'onepiece', 'doctor'] });
+        await window.electron.invoke('python/run-doctor');
       } catch (doctorError) {
         console.warn('onepiece doctor did not complete during setup', doctorError);
       }

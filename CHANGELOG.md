@@ -15,6 +15,8 @@ All notable changes to the OnePiece pipeline toolkit.
   custom metric stores for automated recommendations.
 - Hardened the desktop release pipeline so TypeScript compilation runs as part of
   packaging, preventing broken installers when renderer or main-process types drift.
+- Added a `python/run-doctor` IPC entrypoint that surfaces OnePiece doctor results
+  in the desktop UI for both development and packaged builds.
 
 ---
 
