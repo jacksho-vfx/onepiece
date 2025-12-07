@@ -206,27 +206,29 @@ function unrealCandidates(): string[] {
   return candidates.filter(Boolean) as string[];
 }
 
+export type DccDetectionResult = {
+  maya?: string;
+  blender?: string;
+  unreal?: string;
+};
+
+export function detectDccExecutables(): DccDetectionResult {
+  return {
+    maya: firstExisting(mayaCandidates()),
+    blender: firstExisting(blenderCandidates()),
+    unreal: firstExisting(unrealCandidates()),
+  };
+}
+
 export async function detectEnvironment(): Promise<{
   pythonPathGuess?: string;
-  dccs: {
-    maya?: string;
-    blender?: string;
-    unreal?: string;
-  };
+  dccs: DccDetectionResult;
 }> {
   const pythonPathGuess = detectPython();
 
-  const maya = firstExisting(mayaCandidates());
-  const blender = firstExisting(blenderCandidates());
-  const unreal = firstExisting(unrealCandidates());
-
   return {
     pythonPathGuess,
-    dccs: {
-      maya,
-      blender,
-      unreal,
-    },
+    dccs: detectDccExecutables(),
   };
 }
 
