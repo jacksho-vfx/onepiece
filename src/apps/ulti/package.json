@@ -97,6 +97,10 @@
       {
         "from": "python/manifest.json",
         "to": "python/manifest.json"
+      },
+      {
+        "from": "build/starter-kits",
+        "to": "starter-kits"
       }
     ]
   }

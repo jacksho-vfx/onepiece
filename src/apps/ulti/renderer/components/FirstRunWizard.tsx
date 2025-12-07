@@ -81,7 +81,7 @@ type FirstRunWizardProps = {
 };
 
 const defaultFormState: WizardFormState = {
-  profile: '',
+  profile: 'vfx',
   projectRoot: '',
   cacheLocation: '',
   pythonPath: '',
@@ -350,11 +350,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
 function UsageProfileStep({ error }: { error?: string }): JSX.Element {
   const { formData, updateForm } = useWizardForm();
   const theme = useTheme();
-  const options: { label: string; value: ProfileOption }[] = [
-    { label: 'Small VFX studio', value: 'vfx' },
-    { label: 'Arch-viz studio', value: 'archviz' },
-    { label: 'Solo artist / freelancer', value: 'freelancer' },
-    { label: 'Just trying the demo stack', value: 'demo' },
+  const options: { label: string; value: ProfileOption; description: string }[] = [
+    { label: 'VFX (recommended)', value: 'vfx', description: 'Best starting point for most studio pipelines.' },
+    { label: 'Arch-viz', value: 'archviz', description: 'Defaults tuned for visualization workflows.' },
+    { label: 'Freelancer', value: 'freelancer', description: 'Lightweight setup for solo artists.' },
+    { label: 'Demo stack', value: 'demo', description: 'Use sample assets without touching DCCs.' },
   ];
 
   return (
@@ -362,7 +362,7 @@ function UsageProfileStep({ error }: { error?: string }): JSX.Element {
       <div style={{ display: 'grid', gap: theme.spacing.xs }}>
         <h3 style={{ margin: 0 }}>Tell us about your usage</h3>
         <p style={{ margin: 0, color: theme.colors.textMuted }}>
-          Choose the description that best fits your typical workload.
+          We preselected the VFX profile to get you moving quickly. Pick another if it fits your day-to-day work better.
         </p>
       </div>
       <div
@@ -373,6 +373,7 @@ function UsageProfileStep({ error }: { error?: string }): JSX.Element {
       >
         {options.map((option) => {
           const isSelected = formData.profile === option.value;
+          const isRecommended = option.value === 'vfx';
           return (
             <label
               key={option.value}
@@ -395,7 +396,15 @@ function UsageProfileStep({ error }: { error?: string }): JSX.Element {
                 onChange={() => updateForm('profile', option.value)}
                 style={{ accentColor: theme.colors.primary }}
               />
-              <span style={{ fontWeight: isSelected ? theme.typography.fontWeightBold : undefined }}>{option.label}</span>
+              <div style={{ display: 'grid', gap: '0.15rem' }}>
+                <span style={{ fontWeight: isSelected ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium }}>
+                  {option.label}
+                  {isRecommended ? ' • Default' : ''}
+                </span>
+                <span style={{ color: theme.colors.textMuted, fontSize: theme.typography.fontSizeSm }}>
+                  {option.description}
+                </span>
+              </div>
             </label>
           );
         })}
