@@ -130,6 +130,23 @@ shows/demo/prerenders/seq010/sh010/concept/v002/*.jpg,concept/seq010/sh010/v002,
 
    The same `--report-format csv` flag streams a tabular version to stdout (or to `--report-path`) when you prefer spreadsheet tooling.
 
+### Quickly verify checksums without uploading
+
+When you only need to confirm a drop-off matches a manifest, generate a checksum
+report without touching S3:
+
+```bash
+onepiece ingest report docs/examples/assets \
+  --manifest docs/examples/delivery_manifest_assets.json \
+  --format json \
+  --output /tmp/ingest_checksum_report.json
+```
+
+The command walks every file in the provided folders, computes `md5` or
+`sha256` digests, and flags mismatches or missing manifest entries. Point the
+report at a vendor delivery to share validation results before triggering a
+full ingest run.
+
 ## 4. Package a DCC publish for QA
 
 This scenario simulates a Maya lighting publish that bundles render outputs, previews, and metadata before pushing them to S3.
