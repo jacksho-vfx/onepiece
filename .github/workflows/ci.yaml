@@ -38,5 +38,8 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Smoke check
+        run: make smoke-onepiece
+
       - name: Pre-commit hooks
         run: .venv/bin/pre-commit run --all-files --show-diff-on-failure

@@ -1,4 +1,4 @@
-.PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines tester-present install-dev check-format
+.PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines tester-present install-dev check-format smoke-onepiece
 
 VENV := .venv/bin
 PYTHON ?= $(VENV)/python
@@ -54,3 +54,6 @@ tester-present:
 	else \
 		$(PYTHON) -m apps.tester present $(TESTER_ARGS); \
 	fi
+
+smoke-onepiece:
+	$(PYTHON) -m apps.tester.app --smoke

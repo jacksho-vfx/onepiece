@@ -1,0 +1,2 @@
+show,episode,scene,shot,asset,version,source_path,delivery_path,checksum
+XYZ,ep001,sc01,0001,ep001_sc01_0001_plate,1,XYZ_ep001_sc01_0001_plate.exr,shows/xyz/ep001/sc01/0001/plate_v001/frame_####.exr,
