@@ -632,6 +632,20 @@ def _serve_review(*, host: str, port: int, reload: bool, log_level: str) -> None
     )
 
 
+def _serve_pipeline(*, host: str, port: int, reload: bool, log_level: str) -> None:
+    """Launch the pipeline API using uvicorn."""
+
+    typer.echo(f"Starting OnePiece pipeline API on http://{host}:{port}")
+    uvicorn = _load_uvicorn()
+    uvicorn.run(
+        "apps.trafalgar.web.pipeline:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level=log_level,
+    )
+
+
 @web_app.command("ingest")
 def web_ingest(
     host: str = typer.Option(
@@ -738,6 +752,42 @@ def web_review(
     """Launch the review API via the web command group."""
 
     _serve_review(host=host, port=port, reload=reload, log_level=log_level)
+
+
+@web_app.command("pipeline")
+def web_pipeline(
+    host: str = typer.Option(
+        DEFAULT_HOST,
+        "--host",
+        "-h",
+        help="Host interface to bind the pipeline API server to.",
+        show_default=True,
+    ),
+    port: int = typer.Option(
+        DEFAULT_PORT,
+        "--port",
+        "-p",
+        min=1,
+        max=65535,
+        help="Port to expose the pipeline API on.",
+        show_default=True,
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload/--no-reload",
+        help="Automatically reload when source files change.",
+        show_default=True,
+    ),
+    log_level: str = typer.Option(
+        "info",
+        "--log-level",
+        help="Log level passed to uvicorn.",
+        show_default=True,
+    ),
+) -> None:
+    """Launch the pipeline API via the web command group."""
+
+    _serve_pipeline(host=host, port=port, reload=reload, log_level=log_level)
 
 
 @ingest_app.callback()

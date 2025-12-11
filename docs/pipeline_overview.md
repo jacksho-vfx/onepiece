@@ -51,6 +51,13 @@ stack or add lightweight alerts when active workers consistently hit the limit;
 it is a strong signal that you should raise `pipeline.storage.max_workers` or
 scale out additional Trafalgar instances.
 
+Trafalgar also exposes `/health` and `/metrics` endpoints on the pipeline API.
+Both endpoints require the standard dashboard bearer token (set
+`TRAFALGAR_DASHBOARD_TOKEN` and pass `Authorization: Bearer <token>`). `/health`
+returns a short JSON payload with worker utilisation; `/metrics` emits the same
+data using the Prometheus text exposition format so scrapers can ingest it
+directly.
+
 ## Entry points mapped to pipeline stages
 
 Traditional pipelines emphasise linear stages (ingest → conform → review → publish), while modern approaches favour event-driven automation and control planes. The matrix below maps the primary OnePiece entry points to both views so teams can place them inside existing governance.
