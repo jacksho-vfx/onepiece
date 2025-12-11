@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, dialog, ipcMain, shell } from 'electron';
 import path from 'path';
 import { registerConfigIpcHandlers } from './configManager';
 import { registerConfigBundleIpcHandlers } from './configBundle';
@@ -17,6 +17,7 @@ import { registerChopperIpcHandlers } from './chopper';
 import { registerRenderIpcHandlers } from './render';
 import { ensureSafeExternalUrl } from './url';
 import { buildMenuTemplate } from './menuTemplate';
+import { getPythonBundleSearchPaths, validatePythonBundle } from './pythonBundleValidator';
 
 // Detect whether we are running in development mode (served by Vite) or production
 // (loading the bundled renderer output). This assumes the build pipeline outputs
@@ -25,6 +26,58 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const allowDeveloperTools = isDevelopment || process.env.ENABLE_DEVTOOLS_MENU === 'true';
 
 let mainWindow: BrowserWindow | null = null;
+
+async function ensurePythonPayloadReady(): Promise<boolean> {
+  const searchPaths = getPythonBundleSearchPaths(app);
+
+  while (true) {
+    const validation = await validatePythonBundle(searchPaths);
+
+    if (validation.status === 'valid') {
+      console.info('Python payload validated', {
+        bundlePath: validation.attempt.bundlePath,
+        manifest: validation.attempt.manifest,
+      });
+      return true;
+    }
+
+    console.error('Python payload validation failed', validation.attempts);
+
+    const detail = validation.attempts
+      .map((attempt) => {
+        const missing = attempt.missing.length > 0 ? `Missing: ${attempt.missing.join(', ')}` : null;
+        const error = attempt.error ? `Error: ${attempt.error}` : null;
+        const parts = [missing, error].filter(Boolean);
+        const manifestSource = attempt.manifest?.runtimeSource || attempt.manifest?.wheelsSource;
+        const sourceLine = manifestSource ? `Source: ${manifestSource}` : null;
+
+        if (sourceLine) {
+          parts.unshift(sourceLine);
+        }
+
+        return [attempt.bundlePath, ...parts].filter(Boolean).join('\n');
+      })
+      .join('\n\n');
+
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Python payload required',
+      message: 'OnePiece Studio Desktop is missing its bundled Python runtime.',
+      detail:
+        'Please supply the runtime, wheels, and DCC directories referenced in python/manifest.json, then click Retry.' +
+        (detail ? `\n\n${detail}` : ''),
+      buttons: ['Retry', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+
+    if (response !== 0) {
+      app.quit();
+      return false;
+    }
+  }
+}
 
 /**
  * Create the primary application window.
@@ -71,7 +124,12 @@ function createMainWindow(): BrowserWindow {
 }
 
 // Create the window and wire IPC handlers once Electron is ready.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const payloadReady = await ensurePythonPayloadReady();
+  if (!payloadReady) {
+    return;
+  }
+
   const window = createMainWindow();
   registerPythonIpcHandlers(ipcMain, window, app);
   registerConfigIpcHandlers(ipcMain, app);
