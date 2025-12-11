@@ -194,7 +194,7 @@ Under the hood the CLI seeds the demo state, ensures uvicorn is installed, termi
 
 ### Orchestrate pipelines and surface Wrangler insights
 
-- `trafalgar pipeline list|run` &mdash; Inspect the pipelines registered with the orchestrator and trigger runs directly from the CLI. Pair runs with key/value parameters to drive templated steps. 【F:src/apps/trafalgar/app.py†L1-L120】
+- `trafalgar pipeline list|run|history` &mdash; Inspect the pipelines registered with the orchestrator, trigger runs directly from the CLI, and review recent history with `--limit`, `--pipeline`, and `--format json` options. Pair runs with key/value parameters to drive templated steps. 【F:src/apps/trafalgar/app.py†L1-L120】
 - `/pipeline/pipelines`, `/pipeline/runs/{id}`, and `/pipeline/runs/{id}/events` &mdash; FastAPI endpoints that back the CLI and dashboards. They expose pipeline definitions, run metadata, and server-sent event streams suitable for live monitoring. 【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
 - Perona Wrangler scripts — Launch targeted analyses such as cost-driver attribution, cache stability rebuilds, deadline escalations, telemetry freshness checks, and render volatility spotlights. Each script ships with structured payloads for dashboards and automation. 【F:src/apps/perona/web/wrangler/scripts/cost.py†L17-L216】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】
 

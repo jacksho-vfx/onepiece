@@ -24,6 +24,7 @@ from apps.trafalgar.pipeline import (
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
+    PipelineRun,
     WorkerPoolMetrics,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
@@ -129,6 +130,35 @@ def _format_pipeline_statistics(
             if backlog_int > 0:
                 line += f" [backlog: {backlog_int}]"
             lines.append(line)
+    return lines
+
+
+def _format_run_history(runs: list[PipelineRun]) -> list[str]:
+    grouped: dict[str, list[PipelineRun]] = {}
+    for run in runs:
+        grouped.setdefault(run.pipeline, []).append(run)
+
+    lines: list[str] = []
+    for pipeline in sorted(grouped):
+        lines.append(f"Pipeline: {pipeline}")
+        entries = grouped[pipeline]
+        if not entries:
+            lines.append("  No runs recorded.")
+            continue
+        for entry in entries:
+            created = entry.created_at.astimezone(timezone.utc).isoformat()
+            updated = entry.updated_at.astimezone(timezone.utc).isoformat()
+            details = [f"{entry.run_id} [{entry.status}]"]
+            details.append(f"created {created}")
+            if entry.finished_at is not None:
+                finished = entry.finished_at.astimezone(timezone.utc).isoformat()
+                details.append(f"finished {finished}")
+            else:
+                details.append(f"updated {updated}")
+            if entry.duration_ms is not None:
+                duration_seconds = float(entry.duration_ms) / 1000
+                details.append(f"duration {duration_seconds:.2f}s")
+            lines.append("  " + " | ".join(details))
     return lines
 
 
@@ -363,6 +393,50 @@ def pipeline_stats(
         raise typer.Exit(code=0)
 
     for line in _format_pipeline_statistics(stats):
+        typer.echo(line)
+
+
+@pipeline_app.command("history")
+def pipeline_history(
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        min=1,
+        help="Maximum number of runs to return.",
+    ),
+    pipeline: str | None = typer.Option(
+        None,
+        "--pipeline",
+        help="Restrict history to the specified pipeline.",
+    ),
+    format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: 'text' (default) or 'json'.",
+    ),
+) -> None:
+    """Display recent pipeline run metadata from the orchestrator."""
+
+    output_format = _resolve_output_format(format)
+
+    pipeline_filter: str | None = None
+    if pipeline is not None:
+        pipeline_filter = pipeline.strip()
+        if not pipeline_filter:
+            raise typer.BadParameter("Pipeline name must not be blank.")
+
+    orchestrator = get_pipeline_orchestrator()
+    page = orchestrator.list_runs(pipeline=pipeline_filter, limit=limit)
+
+    if output_format == "json":
+        typer.echo(json.dumps(page.serialise(), indent=2))
+        return
+
+    if not page.runs:
+        typer.echo("No pipeline run history available.")
+        raise typer.Exit(code=0)
+
+    for line in _format_run_history(page.runs):
         typer.echo(line)
 
 
