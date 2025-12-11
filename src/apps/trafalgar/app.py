@@ -342,6 +342,49 @@ def pipeline_run(
     typer.echo(f"Current status: {payload['status']}")
 
 
+@pipeline_app.command("cancel")
+def pipeline_cancel(
+    run_ids: list[str] = typer.Argument(
+        ...,
+        help="Pipeline run identifier(s) to cancel.",
+        metavar="RUN_ID ...",
+    ),
+    *,
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Attempt to forcefully cancel running tasks if graceful cancellation "
+            "is not possible."
+        ),
+    ),
+) -> None:
+    """Request cancellation of one or more pipeline runs."""
+
+    orchestrator = get_pipeline_orchestrator()
+    try:
+        results = orchestrator.cancel_runs(run_ids, force=force)
+    except KeyError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1)
+
+    failed: list[str] = []
+    for run_id, cancelled in results.items():
+        if cancelled:
+            typer.echo(f"Cancelled run '{run_id}'.")
+        else:
+            failed.append(run_id)
+            message = (
+                f"Cancellation requested for run '{run_id}'."
+                if not force
+                else f"Unable to cancel run '{run_id}' despite --force."
+            )
+            typer.echo(message)
+
+    if failed:
+        raise typer.Exit(code=1)
+
+
 @pipeline_app.command("stats")
 def pipeline_stats(
     include_durations: bool = typer.Option(
