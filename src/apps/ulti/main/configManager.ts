@@ -43,6 +43,8 @@ const awsSyncPresetSchema = z
     localPath: z.string(),
     remote: z.string().optional(),
     bucketUrl: z.string().optional(),
+    showCode: z.string().optional(),
+    remotePath: z.string().optional(),
   })
   .strict();
 

@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Card, SectionHeader, TextInput, useToast } from './ui';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Card, SectionHeader, StatusBadge, TextInput, useToast } from './ui';
 import { useTheme } from '../styles/ThemeContext';
+import {
+  buildRemoteFromParts,
+  normalizeAwsSyncPresets,
+  normalizeBucketUrl,
+  parseRemoteParts,
+  type AwsSyncPresetInput,
+} from './tools/awsSyncPresets';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
 type DccKey = 'maya' | 'blender' | 'unreal';
@@ -40,9 +47,12 @@ type DesktopConfig = {
   awsSyncPresets?: {
     id: string;
     name: string;
-    direction: 'from' | 'to';
+    direction: 'from' | 'to' | 'download' | 'upload';
     localPath: string;
     bucketUrl: string;
+    showCode?: string;
+    remotePath?: string;
+    remote?: string;
   }[];
 };
 
@@ -98,6 +108,26 @@ const defaultForm: FormState = {
   enableNotifications: true,
 };
 
+type AwsSyncPresetForm = {
+  id: string;
+  name: string;
+  direction: 'from' | 'to';
+  localPath: string;
+  bucketUrl: string;
+  showCode: string;
+  remotePath: string;
+};
+
+const defaultPresetForm: AwsSyncPresetForm = {
+  id: '',
+  name: '',
+  direction: 'from',
+  localPath: '',
+  bucketUrl: '',
+  showCode: '',
+  remotePath: '',
+};
+
 function applyDetectedDccs(
   baseForm: FormState,
   detected?: Partial<Record<DccKey, string>>,
@@ -147,6 +177,41 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
   const [exportingConfig, setExportingConfig] = useState<boolean>(false);
   const [importingConfig, setImportingConfig] = useState<boolean>(false);
   const [dccDetectionMessage, setDccDetectionMessage] = useState<string | null>(null);
+  const [awsSyncPresets, setAwsSyncPresets] = useState<AwsSyncPresetInput[]>([]);
+  const [presetForm, setPresetForm] = useState<AwsSyncPresetForm>(defaultPresetForm);
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [savingPreset, setSavingPreset] = useState<boolean>(false);
+
+  const buildPresetForm = (
+    preset?: AwsSyncPresetInput,
+    bucketFallback?: string,
+  ): AwsSyncPresetForm => {
+    const parsed = preset ? parseRemoteParts(preset.remote ?? preset.bucketUrl) : {};
+    const bucketUrl = normalizeBucketUrl(
+      preset?.bucketUrl ?? parsed.bucketUrl ?? bucketFallback ?? form.aws.defaultBucket,
+    );
+
+    const direction: 'from' | 'to' = preset?.direction === 'upload'
+      ? 'to'
+      : preset?.direction === 'download'
+        ? 'from'
+        : (preset?.direction as 'from' | 'to' | undefined) ?? 'from';
+
+    return {
+      id: preset?.id ?? '',
+      name: preset?.name ?? '',
+      direction,
+      localPath: preset?.localPath ?? '',
+      bucketUrl: bucketUrl || '',
+      showCode: preset?.showCode ?? parsed.showCode ?? '',
+      remotePath: preset?.remotePath ?? parsed.remotePath ?? '',
+    };
+  };
+
+  const resetPresetForm = (bucketFallback?: string): void => {
+    setPresetForm(buildPresetForm(undefined, bucketFallback));
+    setPresetError(null);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -223,6 +288,8 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
 
         setConfig(loaded);
         setForm(nextForm);
+        setAwsSyncPresets(loaded.awsSyncPresets ?? []);
+        resetPresetForm(loaded.aws?.defaultBucket);
       } catch (err) {
         if (!mounted) return;
         console.error('Failed to load config', err);
@@ -239,6 +306,14 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (presetForm.bucketUrl || !form.aws.defaultBucket) {
+      return;
+    }
+
+    setPresetForm((prev) => ({ ...prev, bucketUrl: normalizeBucketUrl(form.aws.defaultBucket) }));
+  }, [form.aws.defaultBucket, presetForm.bucketUrl]);
 
   const normalizeString = (value: string): string | undefined => {
     const trimmed = value.trim();
@@ -342,6 +417,113 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
       setError(err instanceof Error ? err.message : 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const normalizedPresets = useMemo(
+    () => normalizeAwsSyncPresets(awsSyncPresets, form.aws.defaultBucket),
+    [awsSyncPresets, form.aws.defaultBucket],
+  );
+
+  const handlePresetSelect = (presetId: string): void => {
+    const selected = awsSyncPresets.find((preset) => preset.id === presetId);
+    setPresetForm(buildPresetForm(selected));
+    setPresetError(null);
+  };
+
+  const handlePresetSave = async (): Promise<void> => {
+    setPresetError(null);
+
+    const name = presetForm.name.trim();
+    const localPath = presetForm.localPath.trim();
+    const showCode = presetForm.showCode.trim();
+    const remotePath = presetForm.remotePath.trim();
+    const resolvedBucket = normalizeBucketUrl(presetForm.bucketUrl || form.aws.defaultBucket);
+
+    if (!name) {
+      setPresetError('Give the preset a name.');
+      return;
+    }
+
+    if (!localPath) {
+      setPresetError('Enter the local path to sync.');
+      return;
+    }
+
+    if (!resolvedBucket) {
+      setPresetError('Enter a bucket or set a default bucket in AWS settings.');
+      return;
+    }
+
+    if (!showCode) {
+      setPresetError('Enter the show code to sync.');
+      return;
+    }
+
+    if (!remotePath) {
+      setPresetError('Enter the folder/path within the show.');
+      return;
+    }
+
+    const presetId = presetForm.id || `aws-sync-${Date.now().toString(16)}`;
+    const direction: AwsSyncPresetInput['direction'] = presetForm.direction === 'to' ? 'to' : 'from';
+    const remote = buildRemoteFromParts({ bucketUrl: resolvedBucket, showCode, remotePath });
+
+    const nextPreset: AwsSyncPresetInput = {
+      id: presetId,
+      name,
+      direction,
+      localPath,
+      bucketUrl: resolvedBucket,
+      showCode,
+      remotePath,
+      remote,
+    };
+
+    const nextPresets = [...awsSyncPresets.filter((preset) => preset.id !== presetId), nextPreset];
+
+    setSavingPreset(true);
+
+    try {
+      const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+        awsSyncPresets: nextPresets,
+      });
+
+      setConfig(updatedConfig);
+      setAwsSyncPresets(updatedConfig.awsSyncPresets ?? []);
+      setPresetForm(buildPresetForm(nextPreset, updatedConfig.aws?.defaultBucket));
+      showToast({ kind: 'success', message: 'AWS sync preset saved.' });
+    } catch (err) {
+      console.error('Failed to save AWS sync preset', err);
+      setPresetError(err instanceof Error ? err.message : 'Could not save preset.');
+    } finally {
+      setSavingPreset(false);
+    }
+  };
+
+  const handlePresetDelete = async (presetId: string): Promise<void> => {
+    if (!presetId) {
+      setPresetError('Select a preset to delete.');
+      return;
+    }
+
+    const remaining = awsSyncPresets.filter((preset) => preset.id !== presetId);
+    setSavingPreset(true);
+
+    try {
+      const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+        awsSyncPresets: remaining,
+      });
+
+      setConfig(updatedConfig);
+      setAwsSyncPresets(updatedConfig.awsSyncPresets ?? []);
+      resetPresetForm(updatedConfig.aws?.defaultBucket);
+      showToast({ kind: 'success', message: 'Preset deleted.' });
+    } catch (err) {
+      console.error('Failed to delete AWS sync preset', err);
+      setPresetError(err instanceof Error ? err.message : 'Could not delete preset.');
+    } finally {
+      setSavingPreset(false);
     }
   };
 
@@ -588,6 +770,156 @@ function SettingsScreen({ onRequestRerunWizard }: SettingsScreenProps): JSX.Elem
                   }
                   placeholder="Script API key"
                 />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gap: theme.spacing.sm,
+                padding: theme.spacing.sm,
+                borderRadius: theme.radii.md,
+                border: `1px solid ${theme.colors.border}`,
+                background: theme.colors.surfaceAlt,
+              }}
+            >
+              <h3 style={{ margin: 0 }}>AWS Sync presets</h3>
+              <p style={{ margin: 0, color: theme.colors.textMuted }}>
+                Define reusable AWS sync presets without editing JSON. These presets appear in the AWS
+                Sync tool so artists can trigger them quickly.
+              </p>
+
+              <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+                {normalizedPresets.length === 0 ? (
+                  <p style={{ margin: 0, color: theme.colors.textMuted }}>No presets saved yet.</p>
+                ) : (
+                  normalizedPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handlePresetSelect(preset.id)}
+                      style={{
+                        textAlign: 'left',
+                        padding: theme.spacing.sm,
+                        borderRadius: theme.radii.md,
+                        border: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.surface,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
+                        <strong>{preset.name}</strong>
+                        <StatusBadge status={preset.direction === 'upload' ? 'Warning' : 'Default'}>
+                          {preset.direction === 'upload' ? 'Upload' : 'Download'}
+                        </StatusBadge>
+                      </div>
+                      <div className="op-muted" style={{ display: 'grid', gap: 2 }}>
+                        <span>Remote: {preset.remote || 'Not configured'}</span>
+                        <span>Local: {preset.localPath}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+                <TextInput
+                  label="Preset name"
+                  value={presetForm.name}
+                  onChange={(event) => setPresetForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Daily upload"
+                />
+
+                <label style={{ display: 'grid', gap: '0.35rem' }}>
+                  <span style={{ fontWeight: theme.typography.fontWeightMedium }}>Direction</span>
+                  <select
+                    value={presetForm.direction}
+                    onChange={(event) =>
+                      setPresetForm((prev) => ({ ...prev, direction: event.target.value as AwsSyncPresetForm['direction'] }))
+                    }
+                    style={{
+                      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                      borderRadius: theme.radii.md,
+                      border: `1px solid ${theme.colors.border}`,
+                      background: theme.colors.surface,
+                    }}
+                  >
+                    <option value="from">Download (S3 → local)</option>
+                    <option value="to">Upload (local → S3)</option>
+                  </select>
+                </label>
+
+                <TextInput
+                  label="Local path"
+                  value={presetForm.localPath}
+                  onChange={(event) =>
+                    setPresetForm((prev) => ({ ...prev, localPath: event.target.value }))
+                  }
+                  placeholder="/projects/show/cache"
+                  required
+                />
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: theme.spacing.sm,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  }}
+                >
+                  <TextInput
+                    label="Bucket"
+                    value={presetForm.bucketUrl}
+                    onChange={(event) =>
+                      setPresetForm((prev) => ({ ...prev, bucketUrl: event.target.value }))
+                    }
+                    placeholder={form.aws.defaultBucket || 's3://my-bucket'}
+                  />
+                  <TextInput
+                    label="Show code"
+                    value={presetForm.showCode}
+                    onChange={(event) =>
+                      setPresetForm((prev) => ({ ...prev, showCode: event.target.value }))
+                    }
+                    placeholder="show"
+                  />
+                  <TextInput
+                    label="Path / prefix"
+                    value={presetForm.remotePath}
+                    onChange={(event) =>
+                      setPresetForm((prev) => ({ ...prev, remotePath: event.target.value }))
+                    }
+                    placeholder="renders/shot01"
+                  />
+                </div>
+
+                <p style={{ margin: 0, color: theme.colors.textMuted }}>
+                  Remote preview:{' '}
+                  {buildRemoteFromParts({
+                    bucketUrl: presetForm.bucketUrl || form.aws.defaultBucket,
+                    showCode: presetForm.showCode,
+                    remotePath: presetForm.remotePath,
+                  }) || 'Add a bucket, show, and path to preview'}
+                </p>
+
+                {presetError ? (
+                  <p style={{ margin: 0, color: theme.colors.danger }}>{presetError}</p>
+                ) : null}
+
+                <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+                  <Button onClick={() => void handlePresetSave()} isLoading={savingPreset} disabled={savingPreset}>
+                    Save preset
+                  </Button>
+                  <Button variant="secondary" onClick={() => resetPresetForm()} disabled={savingPreset}>
+                    Reset form
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handlePresetDelete(presetForm.id)}
+                    disabled={!presetForm.id || savingPreset}
+                  >
+                    Delete preset
+                  </Button>
+                </div>
               </div>
             </div>
 
