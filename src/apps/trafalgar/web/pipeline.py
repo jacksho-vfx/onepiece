@@ -9,17 +9,19 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Annotated, AsyncIterator, Mapping, Sequence
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
+    WorkerPoolMetrics,
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.version import TRAFALGAR_VERSION
+from apps.trafalgar.web.dashboard.auth import require_dashboard_auth
 from .security import (
     AuthenticatedPrincipal,
     ROLE_PIPELINE_READ,
@@ -123,11 +125,59 @@ def _service_status_payload() -> dict[str, str]:
     return {"message": "OnePiece Pipeline API is running"}
 
 
+def _format_prometheus_metrics(metrics: WorkerPoolMetrics) -> str:
+    """Render worker pool metrics using the Prometheus text format."""
+
+    max_workers = metrics.max_workers if metrics.max_workers is not None else -1
+
+    lines = [
+        "# HELP trafalgar_worker_active_count Active pipeline orchestrator workers.",
+        "# TYPE trafalgar_worker_active_count gauge",
+        f"trafalgar_worker_active_count {int(metrics.active_workers)}",
+        (
+            "# HELP trafalgar_worker_max_count Maximum configured pipeline orchestrator "
+            "workers (-1 indicates unbounded)."
+        ),
+        "# TYPE trafalgar_worker_max_count gauge",
+        f"trafalgar_worker_max_count {int(max_workers)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, str]:
     """Return a public landing message confirming the API is reachable."""
 
     return _service_status_payload()
+
+
+@app.get("/health", dependencies=[Depends(require_dashboard_auth)])
+def health() -> JSONResponse:
+    """Return a basic health payload with worker pool metrics."""
+
+    orchestrator = get_pipeline_orchestrator()
+    metrics = orchestrator.worker_pool_metrics()
+    payload = {
+        "status": "ok",
+        "workers": {
+            "max_workers": metrics.max_workers,
+            "active_workers": metrics.active_workers,
+        },
+    }
+    return JSONResponse(content=payload)
+
+
+@app.get(
+    "/metrics",
+    response_class=PlainTextResponse,
+    dependencies=[Depends(require_dashboard_auth)],
+)
+def prometheus_metrics() -> str:
+    """Expose worker pool utilisation in Prometheus scrape format."""
+
+    orchestrator = get_pipeline_orchestrator()
+    metrics = orchestrator.worker_pool_metrics()
+    return _format_prometheus_metrics(metrics)
 
 
 @app.on_event("startup")
