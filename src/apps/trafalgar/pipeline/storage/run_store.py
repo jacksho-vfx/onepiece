@@ -410,7 +410,7 @@ class PipelineRunStore:
 
             if current_started is None:
                 current_started = timestamp
-        if run_status in {"succeeded", "failed"}:
+        if run_status in {"succeeded", "failed", "cancelled"}:
             current_finished = timestamp
             anchor = current_started or created_at
             if anchor is not None:

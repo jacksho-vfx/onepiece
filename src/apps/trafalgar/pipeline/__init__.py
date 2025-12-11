@@ -247,6 +247,7 @@ class PipelineOrchestrator:
         self._max_workers = derived_max_workers
         self._shutdown = False
         self._pending: set[Future[None]] = set()
+        self._run_futures: dict[str, Future[None]] = {}
         self._active_workers = 0
         self._retention = retention
         self._retention_lock = Lock()
@@ -355,7 +356,7 @@ class PipelineOrchestrator:
         future = self._submit_run(
             definition=definition, run_id=run_id, parameters=parameters
         )
-        self._register_future(future)
+        self._register_future(future, run_id=run_id)
 
         return self._store.get_run(run_id)
 
@@ -420,9 +421,36 @@ class PipelineOrchestrator:
         future = self._submit_run(
             definition=definition, run_id=new_run_id, parameters=parameters
         )
-        self._register_future(future)
+        self._register_future(future, run_id=new_run_id)
 
         return self._store.get_run(new_run_id)
+
+    def cancel_runs(
+        self, run_ids: Iterable[str], *, force: bool = False
+    ) -> dict[str, bool]:
+        """Request cancellation of the provided pipeline run identifiers."""
+
+        results: dict[str, bool] = {}
+        for run_id in run_ids:
+            # Ensure the run exists before attempting cancellation.
+            self.get_run(run_id)
+
+            with self._lock:
+                future = self._run_futures.get(run_id)
+
+            cancelled = False
+            if future is not None:
+                cancelled = future.cancel()
+
+            event_status = "cancelled" if cancelled else "cancellation_requested"
+            self._append_event(
+                run_id,
+                event_status,
+                parameters={"force": force},
+            )
+            results[run_id] = cancelled
+
+        return results
 
     def set_enabled(self, name: str, enabled: bool) -> PipelineDefinition:
         updated_definition: PipelineDefinition
@@ -492,13 +520,19 @@ class PipelineOrchestrator:
 
         return future
 
-    def _register_future(self, future: Future[None]) -> None:
+    def _register_future(
+        self, future: Future[None], *, run_id: str | None = None
+    ) -> None:
         def _cleanup(completed: Future[None]) -> None:
             with self._lock:
                 self._pending.discard(completed)
+                if run_id is not None:
+                    self._run_futures.pop(run_id, None)
 
         with self._lock:
             self._pending.add(future)
+            if run_id is not None:
+                self._run_futures[run_id] = future
         future.add_done_callback(_cleanup)
 
     def worker_pool_metrics(self) -> WorkerPoolMetrics:
@@ -548,6 +582,7 @@ class PipelineOrchestrator:
             self._worker_pool.shutdown(wait=wait)
             with self._lock:
                 self._pending.clear()
+                self._run_futures.clear()
                 self._active_workers = 0
         self._store.close()
 
@@ -642,10 +677,12 @@ class PipelineOrchestrator:
         timestamp = datetime.now(timezone.utc)
         parameters = dict(parameters or {})
         run_status: str | None
-        if status in {"queued", "running", "succeeded", "failed"}:
+        if status in {"queued", "running", "succeeded", "failed", "cancelled"}:
             run_status = status
         elif status == "step_failed":
             run_status = "failed"
+        elif status == "cancellation_requested":
+            run_status = None
         else:
             run_status = None
         self._store.append_event(
