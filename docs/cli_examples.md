@@ -19,6 +19,7 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 
 ### Core
 - `python -m apps.onepiece info` — print environment and configuration details for the pipeline client. Append `--format json` to emit a machine-readable report for automation or dashboards.
+- `python -m apps.onepiece healthcheck run [--format text|json] [--aws-profile <profile>] [--profile <config_profile>]` — verify ShotGrid settings, AWS credentials, and OnePiece configuration layers. The command exits non-zero when any probe fails so CI and deployment hooks can gate on environment readiness. 【F:src/apps/onepiece/healthcheck.py†L1-L165】
 
 ### AWS utilities
 - `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run --report-format <json|csv> --report-path <file>]` — validate deliveries, upload to S3, and register ShotGrid Versions. The analytics flags capture dry-run results as JSON or CSV so you can review invalid files and planned uploads before executing a real ingest.
