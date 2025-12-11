@@ -55,9 +55,12 @@ type DesktopConfig = {
   awsSyncPresets?: {
     id: string;
     name: string;
-    direction: 'from' | 'to';
+    direction: 'from' | 'to' | 'download' | 'upload';
     localPath: string;
     bucketUrl: string;
+    showCode?: string;
+    remotePath?: string;
+    remote?: string;
   }[];
 };
 

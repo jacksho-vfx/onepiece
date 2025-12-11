@@ -138,7 +138,7 @@ function ToolsScreen({ project, focusSection, onFocusHandled, shots, onViewTasks
 
             <ProjectExplorer project={project ?? null} />
 
-            <AwsSyncTool />
+            <AwsSyncTool onViewTasks={onViewTasks} />
 
             <ChopperPlayground />
           </div>

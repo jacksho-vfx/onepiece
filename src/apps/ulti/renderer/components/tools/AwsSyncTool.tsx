@@ -1,22 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge, TextInput, useToast } from '../ui';
 import { useTheme } from '../../styles/ThemeContext';
-import { validateAwsSyncPaths } from './awsSyncValidation';
-
-type AwsSyncDirection = 'download' | 'upload';
-
-type AwsSyncPreset = {
-  id: string;
-  name: string;
-  direction: AwsSyncDirection;
-  localPath: string;
-  remote: string;
-};
-
-type AwsSyncPresetInput = AwsSyncPreset & {
-  bucketUrl?: string;
-  direction: AwsSyncDirection | 'from' | 'to';
-};
+import {
+  normalizeAwsSyncPresets,
+  normalizeBucketUrl,
+  parseRemoteParts,
+  validatePresetPayload,
+  type AwsSyncDirection,
+  type NormalizedAwsSyncPreset,
+  type AwsSyncPresetInput,
+} from './awsSyncPresets';
 
 type AwsConfig = {
   defaultBucket?: string;
@@ -37,26 +30,11 @@ type Task = {
   finishedAt?: string;
 };
 
-const normalizePresets = (presets: AwsSyncPresetInput[] | undefined): AwsSyncPreset[] => {
-  return (presets ?? []).map((preset) => {
-    const normalizedDirection: AwsSyncDirection =
-      preset.direction === 'from'
-        ? 'download'
-        : preset.direction === 'to'
-          ? 'upload'
-          : preset.direction;
-
-    return {
-      id: preset.id,
-      name: preset.name,
-      direction: normalizedDirection,
-      localPath: preset.localPath,
-      remote: preset.remote ?? (preset as AwsSyncPresetInput).bucketUrl ?? '',
-    } satisfies AwsSyncPreset;
-  });
+type AwsSyncToolProps = {
+  onViewTasks?: () => void;
 };
 
-function AwsSyncTool(): JSX.Element {
+function AwsSyncTool({ onViewTasks }: AwsSyncToolProps): JSX.Element {
   const theme = useTheme();
   const { showToast } = useToast();
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
@@ -65,7 +43,8 @@ function AwsSyncTool(): JSX.Element {
   const [localPath, setLocalPath] = useState('');
   const [remotePath, setRemotePath] = useState('');
   const [extraArgs, setExtraArgs] = useState('');
-  const [presets, setPresets] = useState<AwsSyncPreset[]>([]);
+  const [presets, setPresets] = useState<NormalizedAwsSyncPreset[]>([]);
+  const [defaultBucket, setDefaultBucket] = useState('');
   const [presetName, setPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -80,7 +59,12 @@ function AwsSyncTool(): JSX.Element {
         const config = await window.electron.invoke<DesktopConfig>('config/get');
         if (!isMounted) return;
 
-        setPresets(normalizePresets(config.awsSyncPresets));
+        const normalizedPresets = normalizeAwsSyncPresets(
+          config.awsSyncPresets,
+          config.aws?.defaultBucket,
+        );
+
+        setPresets(normalizedPresets);
 
         if (!remotePath && config.aws?.defaultBucket) {
           const normalizedBucket = config.aws.defaultBucket.startsWith('s3://')
@@ -88,6 +72,8 @@ function AwsSyncTool(): JSX.Element {
             : `s3://${config.aws.defaultBucket}`;
           setRemotePath(normalizedBucket);
         }
+
+        setDefaultBucket(config.aws?.defaultBucket ?? '');
       } catch (error) {
         console.error('Failed to load config for AWS sync', error);
       }
@@ -207,11 +193,21 @@ function AwsSyncTool(): JSX.Element {
       .filter(Boolean);
   };
 
-  const handleStartSync = async (): Promise<void> => {
+  const startSync = async (payload: {
+    direction: AwsSyncDirection;
+    localPath: string;
+    remotePath: string;
+  }): Promise<void> => {
     let validatedPaths: { localPath: string; remotePath: string };
 
     try {
-      validatedPaths = validateAwsSyncPaths({ localPath, remotePath });
+      validatedPaths = validatePresetPayload({
+        id: 'manual',
+        name: 'Manual',
+        direction: payload.direction,
+        localPath: payload.localPath,
+        remote: payload.remotePath,
+      });
     } catch (error) {
       if (error instanceof Error) {
         setPresetError(error.message);
@@ -224,13 +220,14 @@ function AwsSyncTool(): JSX.Element {
 
     try {
       await window.electron.invoke<string>('onepiece/aws-sync', {
-        direction,
+        direction: payload.direction,
         localPath: validatedPaths.localPath,
         remote: validatedPaths.remotePath,
         extraArgs: buildExtraArgs(extraArgs),
       });
 
       showToast({ kind: 'info', message: 'Sync started – see Tasks for progress.' });
+      onViewTasks?.();
     } catch (error) {
       console.error('Failed to start AWS sync', error);
       showToast({
@@ -241,6 +238,9 @@ function AwsSyncTool(): JSX.Element {
       setIsStarting(false);
     }
   };
+
+  const handleStartSync = async (): Promise<void> =>
+    startSync({ direction, localPath, remotePath });
 
   const handleSavePreset = async (): Promise<void> => {
     if (!presetName.trim()) {
@@ -262,12 +262,16 @@ function AwsSyncTool(): JSX.Element {
     setPresetError(null);
 
     const presetId = selectedPresetId || `aws-sync-${Date.now().toString(16)}`;
-    const nextPreset: AwsSyncPreset = {
+    const parsedRemote = parseRemoteParts(validatedPaths.remotePath);
+
+    const nextPreset: NormalizedAwsSyncPreset = {
       id: presetId,
       name: presetName.trim(),
       direction,
       localPath: validatedPaths.localPath,
       remote: validatedPaths.remotePath,
+      ...parsedRemote,
+      bucketUrl: normalizeBucketUrl(parsedRemote.bucketUrl),
     };
 
     const nextPresets = [...presets.filter((preset) => preset.id !== presetId), nextPreset];
@@ -276,7 +280,7 @@ function AwsSyncTool(): JSX.Element {
       const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
         awsSyncPresets: nextPresets,
       });
-      setPresets(normalizePresets(updatedConfig.awsSyncPresets));
+      setPresets(normalizeAwsSyncPresets(updatedConfig.awsSyncPresets, defaultBucket));
       setSelectedPresetId(presetId);
       showToast({ kind: 'success', message: 'Preset saved.' });
     } catch (error) {
@@ -299,7 +303,7 @@ function AwsSyncTool(): JSX.Element {
       const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
         awsSyncPresets: remaining,
       });
-      setPresets(normalizePresets(updatedConfig.awsSyncPresets));
+      setPresets(normalizeAwsSyncPresets(updatedConfig.awsSyncPresets, defaultBucket));
       setSelectedPresetId('');
       setPresetName('');
       showToast({ kind: 'success', message: 'Preset deleted.' });
@@ -316,6 +320,60 @@ function AwsSyncTool(): JSX.Element {
           title="AWS Sync"
           subtitle="Wraps the onepiece aws sync helpers so you can push or pull project data."
         />
+
+        {presets.length ? (
+          <Card title="Saved presets">
+            <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+              {presets.map((preset) => (
+                <div
+                  key={preset.id}
+                  style={{
+                    display: 'grid',
+                    gap: theme.spacing.xs,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: theme.radii.md,
+                    padding: theme.spacing.sm,
+                    background: theme.colors.surfaceAlt,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+                    <strong>{preset.name}</strong>
+                    <StatusBadge status={preset.direction === 'upload' ? 'Warning' : 'Default'}>
+                      {preset.direction === 'upload' ? 'Upload' : 'Download'}
+                    </StatusBadge>
+                  </div>
+                  <div className="op-muted" style={{ display: 'grid', gap: 4 }}>
+                    <span>
+                      Remote: {preset.remote || 'Not configured'}
+                      {preset.showCode ? ` · Show ${preset.showCode}` : ''}
+                    </span>
+                    <span>Local: {preset.localPath}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setSelectedPresetId(preset.id)}
+                      disabled={isStarting}
+                    >
+                      Load in form
+                    </Button>
+                    <Button
+                      onClick={() => void startSync({
+                        direction: preset.direction,
+                        localPath: preset.localPath,
+                        remotePath: preset.remote,
+                      })}
+                      isLoading={isStarting && selectedPresetId === preset.id}
+                      disabled={isStarting}
+                    >
+                      Sync preset
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
 
         <div style={{ display: 'grid', gap: theme.spacing.sm }}>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
@@ -424,7 +482,7 @@ function AwsSyncTool(): JSX.Element {
         ) : null}
 
         <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-          <Button isLoading={isStarting} onClick={() => void handleStartSync()}>
+          <Button isLoading={isStarting} onClick={() => void handleStartSync()} disabled={isStarting}>
             Start sync
           </Button>
           <span className="op-muted">Runs as a background task so you can keep working.</span>
