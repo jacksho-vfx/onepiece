@@ -71,6 +71,23 @@ Traditional pipelines emphasise linear stages (ingest → conform → review →
 | **Review & approval** | Generate dailies, manage playlists, sync to delivery portals. | Realtime dashboards, webhook-driven status updates. | `onepiece shotgrid package-playlist`, Trafalgar dashboard UI, Uta embedded review widgets. |
 | **Delivery & archive** | Package finals, push to S3 or clients, record archives. | Immutable event trails, automated reconciliation. | CLI delivery helpers (`aws sync-to`, ShotGrid delivery commands), Trafalgar reconciliation providers, Uta delivery overview.
 
+### Render farm and automation node usage
+
+Render farm workers or cron-style automation nodes can trigger pipelines without the desktop shell by invoking the Node-based
+CLI wrapper that reuses the task manager for consistent tracking and log streaming. Install dependencies (`npm install`) and run
+the helper via the project-level script:
+
+```
+npm run pipeline:cli -- <subcommand> [flags]
+```
+
+- **Ingest:** `npm run pipeline:cli -- ingest --source /mnt/input/plates --shot ep01_sc010`
+- **Render:** `npm run pipeline:cli -- render --scene /mnt/scenes/shot.usd --frames 1001-1050`
+- **Delivery:** `npm run pipeline:cli -- delivery --playlist finals --target /mnt/review/out`
+
+Each invocation forwards stdout/stderr directly to the calling process while also recording the run inside the task manager for
+diagnostics and retention.
+
 ## Integration protocols
 
 ### Embedding into an existing studio stack (brownfield)

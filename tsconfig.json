@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/apps/ulti/**/*.ts", "src/apps/ulti/**/*.tsx"]
+  "include": ["src/apps/ulti/**/*.ts", "src/apps/ulti/**/*.tsx", "scripts/**/*.ts"]
 }

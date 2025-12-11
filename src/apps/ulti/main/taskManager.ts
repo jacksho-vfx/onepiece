@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
-import { Notification, type App, type BrowserWindow, type IpcMain, type WebContents } from 'electron';
+import type { App, BrowserWindow, IpcMain, Notification as ElectronNotification, WebContents } from 'electron';
 import { ensureDefaultConfig } from './configManager';
 import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
 
@@ -17,7 +17,20 @@ export interface Task {
   exitCode?: number;
 }
 
+export interface TaskOptions {
+  onStdout?: (chunk: string) => void;
+  onStderr?: (chunk: string) => void;
+}
+
 const tasks = new Map<string, Task>();
+const completionListeners = new Map<string, Array<(task: Task) => void>>();
+
+let electronModule: typeof import('electron') | null = null;
+
+if (process.versions.electron) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  electronModule = require('electron') as typeof import('electron');
+}
 
 let rendererWebContents: WebContents | null = null;
 let appInstance: App | null = null;
@@ -31,6 +44,8 @@ const MAX_CAPTURED_OUTPUT_BYTES = 1024 * 1024; // 1MB
 
 const isTaskCompleted = (task: Task): boolean => completedStatuses.includes(task.status);
 
+const getNotificationCtor = (): typeof ElectronNotification | undefined => electronModule?.Notification;
+
 const getSortedTasks = (): Task[] =>
   Array.from(tasks.values()).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -40,6 +55,20 @@ function emitTasksUpdated(snapshot?: Task[]): void {
   if (rendererWebContents && !rendererWebContents.isDestroyed()) {
     rendererWebContents.send('tasks/updated', snapshot ?? getTasks());
   }
+}
+
+function resolveCompletionListeners(task: Task): void {
+  const listeners = completionListeners.get(task.id);
+
+  if (!listeners || listeners.length === 0) {
+    return;
+  }
+
+  for (const listener of listeners) {
+    listener(task);
+  }
+
+  completionListeners.delete(task.id);
 }
 
 function setRendererWebContents(webContents: WebContents): void {
@@ -152,12 +181,32 @@ export function replaceTasksForTesting(taskList: Task[]): void {
   }
 }
 
+export function waitForTaskCompletion(taskId: string): Promise<Task> {
+  const existing = tasks.get(taskId);
+
+  if (existing && isTaskCompleted(existing)) {
+    return Promise.resolve(existing);
+  }
+
+  return new Promise((resolve) => {
+    const listeners = completionListeners.get(taskId) ?? [];
+    listeners.push(resolve);
+    completionListeners.set(taskId, listeners);
+  });
+}
+
 async function maybeShowTaskNotification(task: Task, previousStatus: TaskStatus): Promise<void> {
   if (!appInstance) {
     return;
   }
 
   if ((task.status !== 'succeeded' && task.status !== 'failed') || task.status === previousStatus) {
+    return;
+  }
+
+  const NotificationCtor = getNotificationCtor();
+
+  if (!NotificationCtor) {
     return;
   }
 
@@ -169,7 +218,7 @@ async function maybeShowTaskNotification(task: Task, previousStatus: TaskStatus)
   const title = task.status === 'succeeded' ? 'OnePiece task completed' : 'OnePiece task failed';
   const body = `Task "${task.label}" ${task.status}.`;
 
-  const notification = new Notification({ title, body });
+  const notification = new NotificationCtor({ title, body });
   notification.show();
 }
 
@@ -187,9 +236,17 @@ async function updateTask(id: string, updates: Partial<Task>): Promise<void> {
   emitTasksUpdated(snapshot);
 
   await maybeShowTaskNotification(nextTask, previousStatus);
+
+  if (!isTaskCompleted(existing) && isTaskCompleted(nextTask)) {
+    resolveCompletionListeners(nextTask);
+  }
 }
 
-export async function createTask(label: string, args: string[]): Promise<string> {
+export async function createTask(
+  label: string,
+  args: string[],
+  options?: TaskOptions,
+): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
@@ -224,6 +281,18 @@ export async function createTask(label: string, args: string[]): Promise<string>
 
   const stdoutCapture = createStreamCapture(child.stdout, id, 'stdout');
   const stderrCapture = createStreamCapture(child.stderr, id, 'stderr');
+
+  if (options?.onStdout && child.stdout) {
+    child.stdout.on('data', (data: Buffer | string) => {
+      options.onStdout?.(data.toString());
+    });
+  }
+
+  if (options?.onStderr && child.stderr) {
+    child.stderr.on('data', (data: Buffer | string) => {
+      options.onStderr?.(data.toString());
+    });
+  }
 
   void updateTask(id, {
     status: 'running',
