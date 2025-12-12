@@ -285,7 +285,7 @@ class AnimaUsdExporter:
         return [(1 - alpha) * float(a) + alpha * float(b) for a, b in zip(start, end)]
 
 
-def load_export(path: str | Path) -> dict[str, Any]:
+def load_export(path: str | Path) -> Any:
     """Load an exported USD skel stub from disk."""
 
     data = json.loads(Path(path).read_text())
