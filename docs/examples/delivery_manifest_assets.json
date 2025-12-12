@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "show": "SHOW01",
+      "episode": "ep001",
+      "scene": "sc01",
+      "shot": "0001",
+      "asset": "comp",
+      "version": 1,
+      "source_path": "assets/ingest_clip.txt",
+      "delivery_path": "assets/ingest_clip.txt",
+      "checksum": "md5:5f5312473b5df069b01546e3aeb2f9bf"
+    }
+  ]
+}

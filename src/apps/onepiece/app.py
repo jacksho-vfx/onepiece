@@ -5,6 +5,7 @@ from apps.onepiece.dcc import app as dcc
 from apps.onepiece.misc.info import app as info
 from apps.onepiece.notify import app as notify
 from apps.onepiece.healthcheck import app as healthcheck
+from apps.onepiece.ingest import app as ingest
 from apps.onepiece.pipeline import app as pipeline
 from apps.onepiece.render import app as render
 from apps.onepiece.shotgrid import app as shotgrid
@@ -24,6 +25,7 @@ app.add_typer(chopper)
 app.add_typer(render)
 app.add_typer(notify)
 app.add_typer(healthcheck)
+app.add_typer(ingest)
 
 app.add_typer(shotgrid)
 app.add_typer(validate)
