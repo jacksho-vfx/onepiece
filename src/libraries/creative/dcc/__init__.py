@@ -12,6 +12,12 @@ from libraries.creative.dcc.client import (
 )
 from libraries.creative.dcc.dcc_client import SupportedDCC, open_scene
 from libraries.creative.dcc.enums import DCC
+from libraries.creative.dcc.lighting_presets import (
+    LightingPreset,
+    find_preset_root,
+    list_lighting_presets,
+    load_lighting_preset,
+)
 
 __all__ = [
     "SupportedDCC",
@@ -25,4 +31,8 @@ __all__ = [
     "MaxClient",
     "VrayClient",
     "Cinema4DClient",
+    "LightingPreset",
+    "find_preset_root",
+    "list_lighting_presets",
+    "load_lighting_preset",
 ]

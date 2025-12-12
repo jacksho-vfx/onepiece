@@ -1,0 +1,12 @@
+#usda 1.0
+
+over Scope "Lighting" {
+    over Light "Key" {
+        color3f color = (0.96, 0.84, 0.72)
+    }
+
+    over Light "Bounce" {
+        float intensity = 400
+        float exposure = 0.35
+    }
+}

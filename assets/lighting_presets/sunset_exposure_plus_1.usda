@@ -1,0 +1,18 @@
+#usda 1.0
+(
+    subLayers = [
+        @sunset_base.usda@
+    ]
+)
+
+over Scope "Lighting" {
+    over Light "Key" {
+        float intensity = 1120
+        float exposure = 0.9
+    }
+
+    over Light "Bounce" {
+        float intensity = 360
+        float exposure = 0.25
+    }
+}

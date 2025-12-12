@@ -1,0 +1,23 @@
+#usda 1.0
+(
+    subLayers = [
+        @studio_base.usda@
+    ]
+)
+
+over Scope "Lighting" {
+    over Light "Key" {
+        float intensity = 900
+        float exposure = -1.0
+    }
+
+    over Light "Fill" {
+        float intensity = 500
+        float exposure = -0.75
+    }
+
+    over Light "Rim" {
+        float intensity = 220
+        float exposure = -0.1
+    }
+}

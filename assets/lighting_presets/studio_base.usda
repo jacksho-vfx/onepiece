@@ -1,0 +1,21 @@
+#usda 1.0
+
+def Scope "Lighting" {
+    def Light "Key" {
+        float intensity = 1200
+        color3f color = (1.0, 0.95, 0.9)
+        float exposure = 0.0
+    }
+
+    def Light "Fill" {
+        float intensity = 650
+        color3f color = (0.85, 0.9, 1.0)
+        float exposure = -0.35
+    }
+
+    def Light "Rim" {
+        float intensity = 400
+        color3f color = (1.0, 1.0, 1.0)
+        float exposure = 0.5
+    }
+}
