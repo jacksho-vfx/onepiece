@@ -199,6 +199,26 @@ def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
     return parameters
 
 
+def _extract_pipeline_definitions(
+    payload: Mapping[str, Any], *, source: str | None = None
+) -> list[PipelineDefinition]:
+    pipelines_section = payload.get("pipelines")
+    if not isinstance(pipelines_section, Mapping):
+        definition = _extract_pipeline_definition(payload, source=source)
+        return [definition]
+
+    if not pipelines_section:
+        raise typer.BadParameter("Manifest does not contain any pipeline entries.")
+
+    definitions: list[PipelineDefinition] = []
+    for pipeline_name, config_payload in sorted(pipelines_section.items()):
+        definition = _build_pipeline_definition_from_manifest(
+            config_payload, pipeline_name, source=source
+        )
+        definitions.append(definition)
+    return definitions
+
+
 def _load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
     if not path.exists():
         msg = f"Pipeline manifest '{path}' does not exist."
@@ -223,8 +243,32 @@ def _load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
     return dict(data)
 
 
+def _build_pipeline_definition_from_manifest(
+    config_payload: Mapping[str, Any],
+    pipeline_name: str,
+    *,
+    source: str | None = None,
+) -> PipelineDefinition:
+    pipeline_name = str(pipeline_name)
+    context = source or "manifest"
+
+    if not isinstance(config_payload, Mapping):
+        msg = f"{context} pipeline '{pipeline_name}' entry must be a mapping."
+        raise typer.BadParameter(msg)
+
+    try:
+        translated = translate_pipeline_manifest(dict(config_payload))
+        return pipeline_definition_from_profile_entry(
+            str(pipeline_name),
+            translated,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        msg = f"{context} pipeline '{pipeline_name}': {exc}"
+        raise typer.BadParameter(msg) from exc
+
+
 def _extract_pipeline_definition(
-    payload: Mapping[str, Any], *, name: str | None = None
+    payload: Mapping[str, Any], *, name: str | None = None, source: str | None = None
 ) -> PipelineDefinition:
     config_payload: Mapping[str, Any]
     pipeline_name: str
@@ -243,9 +287,6 @@ def _extract_pipeline_definition(
                 msg = f"Manifest does not include a pipeline named '{name}'."
                 raise typer.BadParameter(msg) from exc
             pipeline_name = name
-        if not isinstance(config_payload, Mapping):
-            msg = "Pipeline entries must be mappings."
-            raise typer.BadParameter(msg)
     else:
         pipeline_name = name or payload.get("name")  # type: ignore[assignment]
         if not pipeline_name:
@@ -259,14 +300,9 @@ def _extract_pipeline_definition(
             raise typer.BadParameter(msg)
         config_payload = payload
 
-    try:
-        translated = translate_pipeline_manifest(dict(config_payload))
-        return pipeline_definition_from_profile_entry(
-            str(pipeline_name),
-            translated,
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise typer.BadParameter(str(exc)) from exc
+    return _build_pipeline_definition_from_manifest(
+        config_payload, str(pipeline_name), source=source
+    )
 
 
 @pipeline_app.command("list")
@@ -539,13 +575,56 @@ def pipeline_push(
     """Register or update a pipeline definition from a manifest file."""
 
     manifest_payload = _load_pipeline_manifest(manifest)
-    definition = _extract_pipeline_definition(manifest_payload, name=name)
+    definition = _extract_pipeline_definition(
+        manifest_payload, name=name, source=str(manifest.resolve())
+    )
 
     orchestrator = get_pipeline_orchestrator()
     created = orchestrator.upsert(definition)
     action = "created" if created else "updated"
     typer.echo(
         f"Pipeline '{definition.name}' {action} from {manifest.resolve()}.",
+    )
+
+
+@pipeline_app.command("validate")
+def pipeline_validate(
+    manifest: Path = typer.Argument(..., help="TOML or YAML pipeline manifest."),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help=(
+            "Pipeline name when validating a specific entry in a manifest "
+            "containing multiple definitions."
+        ),
+    ),
+) -> None:
+    """Validate pipeline manifest schema without registering definitions."""
+
+    manifest_payload = _load_pipeline_manifest(manifest)
+    source = str(manifest.resolve())
+
+    if name is None:
+        definitions = _extract_pipeline_definitions(manifest_payload, source=source)
+    else:
+        definitions = [
+            _extract_pipeline_definition(manifest_payload, name=name, source=source)
+        ]
+
+    if len(definitions) == 1:
+        definition = definitions[0]
+        typer.echo(
+            (
+                f"Pipeline '{definition.name}' manifest from {source} "
+                "is valid and ready for registration."
+            )
+        )
+        return
+
+    names = ", ".join(definition.name for definition in definitions)
+    typer.echo(
+        (f"Validated {len(definitions)} pipeline manifests from {source}: " f"{names}.")
     )
 
 

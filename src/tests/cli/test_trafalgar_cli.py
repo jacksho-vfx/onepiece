@@ -239,6 +239,72 @@ def test_pipeline_push_upserts_definition(
     assert "Pipeline 'custom' created" in result.stdout
 
 
+def test_pipeline_validate_reports_schema_errors(
+    tmp_path: Path, mocker: pytest_mock.MockerFixture
+) -> None:
+    manifest = tmp_path / "invalid.toml"
+    manifest.write_text(
+        textwrap.dedent(
+            """
+            name = "broken"
+
+            [steps]
+            name = "prepare"
+            uses = "tests.pipeline:prepare"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "validate", str(manifest)])
+
+    assert result.exit_code != 0
+    assert str(manifest) in result.stderr
+    assert "pipeline 'broken'" in result.stderr
+    assert "Invalid value:" in result.stderr
+
+
+def test_pipeline_validate_handles_multiple_entries(
+    tmp_path: Path, mocker: pytest_mock.MockerFixture
+) -> None:
+    manifest = tmp_path / "pipelines.toml"
+    manifest.write_text(
+        textwrap.dedent(
+            """
+            [pipelines.alpha]
+            summary = "Alpha pipeline"
+
+            [[pipelines.alpha.steps]]
+            id = "first"
+            uses = "tests.pipeline:prepare"
+
+            [pipelines.beta]
+            summary = "Beta pipeline"
+
+            [[pipelines.beta.steps]]
+            id = "prepare"
+            uses = "tests.pipeline:publish"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    mocker.patch("apps.trafalgar.app.load_profile")
+    mocker.patch("apps.trafalgar.app.configure_orchestrator_from_profile")
+
+    result = runner.invoke(trafalgar_app, ["pipeline", "validate", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    assert "Validated 2 pipeline manifests" in result.stdout
+    assert "alpha" in result.stdout
+    assert "beta" in result.stdout
+
+
 def test_pipeline_delete_invokes_deregister(
     mocker: pytest_mock.MockerFixture,
 ) -> None:

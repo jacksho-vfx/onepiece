@@ -96,6 +96,27 @@ after = "prepare"
 Multiple pipelines can be bundled in a single file via a top-level `pipelines`
 section. When doing so, pass `--name` to select the entry to push or update.
 
+## Validating manifests before pushing
+
+Use `trafalgar pipeline validate <path>` to confirm a manifest meets the schema
+before registering it. The command reports contextual errors that identify the
+pipeline entry and the source file so you can fix typos quickly.
+
+Validate a single TOML manifest:
+
+```bash
+trafalgar pipeline validate manifests/render.toml
+```
+
+When the manifest bundles multiple definitions under `pipelines`, the command
+validates all entries and lists their names in the success output. Supply
+`--name` to target a specific pipeline without evaluating the others:
+
+```bash
+trafalgar pipeline validate manifests/all-pipelines.toml
+trafalgar pipeline validate manifests/all-pipelines.toml --name orchestrator
+```
+
 ## Pulling existing definitions
 
 Use `onepiece pipeline pull` to serialise a definition from the orchestrator back
