@@ -7,10 +7,12 @@ import os
 import platform
 import signal
 import subprocess
+import sys
 import time
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from importlib import import_module
 from importlib.util import find_spec
 from multiprocessing import Process
@@ -74,6 +76,125 @@ app = typer.Typer(
         "apps for manual testing sessions."
     ),
 )
+
+
+def _run_cli_command(command: Sequence[str], *, env: Mapping[str, str]) -> None:
+    """Execute a CLI command, echoing output and surfacing failures."""
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        env=dict(env),
+        cwd=_REPO_ROOT,
+        check=False,
+    )
+
+    if result.stdout:
+        typer.echo(result.stdout.rstrip())
+    if result.stderr:
+        typer.echo(result.stderr.rstrip(), err=True)
+
+    if result.returncode != 0:
+        raise typer.Exit(code=result.returncode)
+
+
+def _smoke_environment() -> dict[str, str]:
+    """Return an environment suitable for invoking CLI smoke checks."""
+
+    env = dict(os.environ)
+    env.setdefault("PYTHONPATH", str(_REPO_ROOT / "src"))
+    return env
+
+
+def _smoke_ingest_folder() -> Path:
+    """Return the ingest fixture directory, ensuring required assets exist."""
+
+    if not _SMOKE_FIXTURE_DIR.exists():
+        typer.echo(
+            f"Smoke ingest fixtures not found at {_SMOKE_FIXTURE_DIR}. ",
+            err=True,
+        )
+        typer.echo("Recreate the examples directory before retrying.", err=True)
+        raise typer.Exit(code=1)
+
+    payloads = [
+        path
+        for path in _SMOKE_FIXTURE_DIR.iterdir()
+        if path.is_file() and path.name != _SMOKE_MANIFEST.name
+    ]
+
+    if not payloads:
+        typer.echo(
+            f"Smoke ingest fixtures are empty at {_SMOKE_FIXTURE_DIR}.",
+            err=True,
+        )
+        typer.echo("Add at least one media file for validation.", err=True)
+        raise typer.Exit(code=1)
+
+    return _SMOKE_FIXTURE_DIR
+
+
+def _run_smoke_checks() -> None:
+    """Exercise the critical OnePiece CLI surfaces for smoke validation."""
+
+    env = _smoke_environment()
+    ingest_folder = _smoke_ingest_folder()
+
+    typer.echo("Running onepiece info…")
+    _run_cli_command([sys.executable, "-m", "apps.onepiece", "info"], env=env)
+
+    typer.echo("\nRunning onepiece profile --show-sources…")
+    _run_cli_command(
+        [sys.executable, "-m", "apps.onepiece", "profile", "--show-sources"],
+        env=env,
+    )
+
+    ingest_command = [
+        sys.executable,
+        "-m",
+        "apps.onepiece",
+        "aws",
+        "ingest",
+        str(ingest_folder),
+        "--project",
+        "Smoke Demo",
+        "--show-code",
+        "XYZ",
+        "--dry-run",
+    ]
+
+    if _SMOKE_MANIFEST.exists():
+        ingest_command.extend(["--manifest", str(_SMOKE_MANIFEST)])
+
+    typer.echo("\nRunning onepiece aws ingest --dry-run with fixtures…")
+    _run_cli_command(ingest_command, env=env)
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    smoke: bool = typer.Option(
+        False,
+        "--smoke",
+        help="Run smoke checks covering key OnePiece CLI entry points.",
+        show_default=True,
+    ),
+) -> None:
+    """Run smoke checks or defer to subcommands when requested."""
+
+    if smoke:
+        _run_smoke_checks()
+        raise typer.Exit(code=0)
+
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(code=0)
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_SMOKE_FIXTURE_DIR = _REPO_ROOT / "docs" / "examples" / "ingest_smoke"
+_SMOKE_MANIFEST = _SMOKE_FIXTURE_DIR / "manifest.csv"
 
 
 @dataclass(frozen=True)

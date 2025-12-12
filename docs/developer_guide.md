@@ -95,6 +95,11 @@ onepiece/
 
 5. **Run the quality suite** before opening a pull request. Continuous integration mirrors the commands listed earlier; matching the same sequence locally prevents surprises.
 
+## Continuous integration
+
+- GitHub Actions runs formatting, linting, typing, tests, and a short CLI smoke check. The smoke job exercises `onepiece info`, `onepiece profile --show-sources`, and a dry-run ingest of the bundled fixtures to catch configuration regressions.
+- Trigger the same verification locally with `make smoke-onepiece`, which wraps `python -m apps.tester.app --smoke` to ensure the developer CLI stays in sync with the automated CI gates.
+
 6. **Document user-facing changes**. Update the README, `CHANGELOG.md`, or create new docs inside `docs/` whenever you add new commands, flags, or workflows.
 
 7. **Open a pull request** summarising your changes, screenshots, and any caveats. Link to relevant tickets and call out breaking changes explicitly.

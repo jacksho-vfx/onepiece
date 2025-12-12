@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 from typer.testing import CliRunner
@@ -25,6 +25,49 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes.
 
 
 runner = CliRunner()
+
+
+def test_smoke_flag_runs_expected_commands(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The smoke flag should trigger the OnePiece CLI checks."""
+
+    manifest_path = tmp_path / "manifest.csv"
+    manifest_path.write_text("show,episode\n", encoding="utf-8")
+
+    commands: list[list[str]] = []
+    environments: list[dict[str, str]] = []
+
+    def fake_run(command: list[str], env: Mapping[str, str]) -> None:
+        commands.append(list(command))
+        environments.append(dict(env))
+
+    monkeypatch.setattr(tester_app, "_run_cli_command", fake_run)
+    monkeypatch.setattr(tester_app, "_smoke_ingest_folder", lambda: tmp_path)
+    monkeypatch.setattr(tester_app, "_SMOKE_MANIFEST", manifest_path)
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+
+    result = runner.invoke(tester_app.app, ["--smoke"])
+
+    assert result.exit_code == 0, result.output
+    assert len(commands) == 3
+
+    assert commands[0][2:] == ["apps.onepiece", "info"]
+    assert commands[1][2:] == ["apps.onepiece", "profile", "--show-sources"]
+
+    ingest_command = commands[2][2:]
+    assert ingest_command[:5] == [
+        "apps.onepiece",
+        "aws",
+        "ingest",
+        str(tmp_path),
+        "--project",
+    ]
+    assert "--manifest" in ingest_command
+    assert str(manifest_path) in ingest_command
+
+    expected_pythonpath = str(tester_app._REPO_ROOT / "src")
+    assert all(env.get("PYTHONPATH") == expected_pythonpath for env in environments)
 
 
 class DummyProcess:
