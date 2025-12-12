@@ -56,4 +56,8 @@ tester-present:
 	fi
 
 smoke-onepiece:
-	$(PYTHON) -m apps.tester.app --smoke
+	if command -v tester >/dev/null 2>&1; then \
+		tester --smoke $(TESTER_ARGS); \
+	else \
+		$(PYTHON) -m apps.tester --smoke $(TESTER_ARGS); \
+	fi
