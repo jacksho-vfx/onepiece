@@ -6,7 +6,7 @@ import shutil
 import socket
 from dataclasses import asdict
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
@@ -31,7 +31,12 @@ from apps.perona.cli.web import (
     _resolve_dashboard_url,
     _resolve_settings_reload_timeout,
 )
+from apps.perona.notifications import (
+    NotificationDispatchError,
+    dispatch_render_volatility_alert,
+)
 from apps.perona.web.dashboard import dependencies as dashboard_dependencies
+from apps.perona.web.wrangler.scripts.production import _build_render_volatility_report
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import SUPPORTED_CURRENCIES
 from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
@@ -579,6 +584,86 @@ def risk_heatmap(
             total_count=total_count,
         )
     )
+
+
+@risk_app.command("volatility")
+def render_volatility(
+    output_format: OutputFormat = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format for the volatility hotspots (table or json).",
+        case_sensitive=False,
+    ),
+    settings_path: Path | None = typer.Option(
+        None,
+        "--settings-path",
+        help="Optional path to a Perona settings file to seed defaults.",
+    ),
+    notify: bool = typer.Option(
+        False,
+        "--notify/--no-notify",
+        help="Send the volatility headline to configured webhook URLs.",
+        show_default=True,
+    ),
+) -> None:
+    """Surface volatility hotspots derived from render frame time telemetry."""
+
+    validated_settings_path = _validate_settings_path(settings_path)
+    settings_result = PeronaEngine.from_settings(path=validated_settings_path)
+    engine = settings_result.engine
+
+    headline, hotspots = _build_render_volatility_report(engine)
+    payload: dict[str, object] = {"headline": headline, "volatility": hotspots}
+
+    fmt = str(output_format).lower()
+    if fmt not in {"table", "json"}:
+        raise typer.BadParameter("format must be either 'table' or 'json'.")
+
+    if notify:
+        try:
+            dispatched = dispatch_render_volatility_alert(headline, hotspots)
+        except NotificationDispatchError as exc:
+            typer.echo(f"Notification failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        payload["notification_dispatched"] = dispatched
+
+    if fmt == "json":
+        if settings_result.settings_path is not None:
+            payload["settings_path"] = str(settings_result.settings_path)
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    typer.echo(headline)
+    if hotspots:
+        typer.echo("")
+        for entry in hotspots:
+            variance = entry.get("variance") or {}
+            coeff = None
+            if isinstance(variance, Mapping):
+                coeff = variance.get("coefficient_of_variation")
+            avg_ms = None
+            if isinstance(variance, Mapping):
+                avg_ms = variance.get("average_frame_time_ms")
+            avg_display = (
+                f"{float(avg_ms):.3f}" if isinstance(avg_ms, (int, float)) else "?"
+            )
+            coeff_display = (
+                f"{float(coeff):.4f}" if isinstance(coeff, (int, float)) else "?"
+            )
+            sequence = entry.get("sequence", "?")
+            shot = entry.get("shot", "?")
+            risk = float(entry.get("risk_score", 0.0) or 0.0)
+
+            typer.echo(
+                f"- {sequence} {shot}: risk {risk:.1f}, frame time {avg_display}ms, coeff {coeff_display}"
+            )
+
+    if notify:
+        if payload.get("notification_dispatched"):
+            typer.echo("Notification dispatched via configured webhooks.")
+        else:
+            typer.echo("No webhook URLs configured; skipped notification.")
 
 
 @web_app.command("dashboard")

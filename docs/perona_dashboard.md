@@ -135,6 +135,21 @@ Key options:
    `Settings file: …`, confirming the engine analysed telemetry with those defaults. A missing banner indicates the CLI fell
    back to packaged defaults, so double-check permissions and the path.
 
+### Flag render volatility hotspots
+
+Use `perona risk volatility` to mirror the Wrangler volatility audit directly from the CLI:
+
+```bash
+# Print the headline and hotspot rollup in table form
+perona risk volatility
+
+# Emit JSON and notify configured webhooks (Slack or generic)
+perona risk volatility --format json --notify
+```
+
+When `--notify` is supplied the CLI sends the headline and ranked hotspots to any webhook URLs defined in the environment. The
+JSON output always includes the webhook dispatch status so automation pipelines can assert delivery. 【F:src/apps/perona/app.py†L65-L123】【F:src/apps/perona/notifications.py†L1-L105】
+
 ### Launch the web dashboard
 
 Use `perona web dashboard` to boot the uvicorn-powered FastAPI service:
@@ -186,7 +201,8 @@ Wrangler responses expose `headline` strings for dashboards, sorted result
 arrays, and `recommended_follow_up` text for each entry so operators can copy
 the next steps into tickets or chatops tooling. When no issues are found the
 payloads default to a success headline (for example “Frame times steady”) to
-confirm monitoring remains healthy. 【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】【F:src/apps/perona/web/wrangler/scripts/production.py†L193-L420】
+confirm monitoring remains healthy. Pass `?notify=true` to `POST /wrangler/scripts/flag_render_volatility` to forward the
+headline and hotspot rollup to configured webhooks. 【F:src/apps/perona/web/wrangler/routes/wrangler.py†L1-L75】
 
 ### Launch the dummy demo dashboard
 
@@ -331,6 +347,12 @@ Tips for supplying bespoke metric stores:
   to `1` switches to a truncate-on-rollover policy instead of keeping backups.
 - Rotate large stores by copying the NDJSON file to archival storage and truncating the original path. Because Perona streams the
   file lazily, rotations take effect on the next ingestion without a restart.
+
+### Notification webhooks
+
+- `PERONA_VOLATILITY_SLACK_WEBHOOK_URL` — optional Slack-compatible webhook used when `--notify` is passed to `perona risk volatility` or the Wrangler volatility endpoint.
+- `PERONA_VOLATILITY_WEBHOOK_URL` — optional generic webhook that receives the same payload as the Slack hook.
+- `PERONA_WEBHOOK_TIMEOUT` — optional request timeout in seconds for webhook dispatches (defaults to 5 seconds).
 
 ### Cost estimation
 

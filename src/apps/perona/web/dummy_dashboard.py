@@ -27,6 +27,10 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from apps.perona.web import dashboard as live_dashboard
 from apps.perona.web import wrangler as wrangler_module
+from apps.perona.notifications import (
+    NotificationDispatchError,
+    dispatch_render_volatility_alert,
+)
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import (
     CostEstimate,
@@ -162,16 +166,41 @@ def list_wrangler_scripts() -> list[wrangler_module.WranglerScriptMetadata]:
 )
 async def execute_wrangler_script(
     script_id: str,
+    notify: bool = Query(
+        False,
+        description=(
+            "Dispatch notifications for scripts that support it (currently render volatility)."
+        ),
+    ),
 ) -> wrangler_module.WranglerScriptResult:
     """Execute a Wrangler script against the deterministic demo engine."""
 
     try:
-        return await wrangler_module.execute_script(script_id)
+        result = await wrangler_module.execute_script(script_id)
     except KeyError as exc:  # pragma: no cover - defensive guard for API usage
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown Wrangler script '{script_id}'",
         ) from exc
+
+    payload = result.payload if isinstance(result.payload, dict) else {}
+    if notify and script_id == "flag_render_volatility":
+        try:
+            dispatched = dispatch_render_volatility_alert(
+                result.message or "Render volatility report",
+                payload.get("volatility", []) if isinstance(payload, dict) else [],
+            )
+        except NotificationDispatchError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Unable to dispatch notification: {exc}",
+            ) from exc
+        if isinstance(payload, dict):
+            payload["notification_dispatched"] = dispatched
+
+        return result.model_copy(update={"payload": payload})
+
+    return result
 
 
 @app.get("/render-feed", response_model=list[RenderMetric])
