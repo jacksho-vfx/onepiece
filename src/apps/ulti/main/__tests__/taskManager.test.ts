@@ -9,6 +9,7 @@ import {
   getTask,
   getTasks,
   replaceTasksForTesting,
+  waitForTaskCompletion,
 } from '../taskManager';
 import * as pythonPathResolver from '../pythonPathResolver';
 
@@ -24,6 +25,14 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
+
+const waitForTaskWithTimeout = async (taskId: string, timeoutMs = 5000): Promise<Task> =>
+  Promise.race([
+    waitForTaskCompletion(taskId),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error('Timed out waiting for task completion')), timeoutMs),
+    ),
+  ]);
 
 describe('taskManager retention', () => {
   it('removes completed tasks beyond the TTL', () => {
@@ -121,25 +130,6 @@ describe('taskManager retention', () => {
 });
 
 describe('createTask output handling', () => {
-  const waitForTaskCompletion = async (taskId: string, timeoutMs = 5000): Promise<Task> => {
-    const deadline = Date.now() + timeoutMs;
-
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const task = getTask(taskId);
-
-      if (task && (task.status === 'succeeded' || task.status === 'failed')) {
-        return task;
-      }
-
-      if (Date.now() > deadline) {
-        throw new Error('Timed out waiting for task completion');
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  };
-
   it('completes tasks that produce verbose output', async () => {
     const noisyScript = `
 const chunk = 'spam'.repeat(1000);
@@ -152,9 +142,28 @@ for (let i = 0; i < 500; i += 1) {
     vi.spyOn(pythonPathResolver, 'resolvePythonPath').mockResolvedValue(process.execPath);
 
     const taskId = await createTask('chatty task', ['-e', noisyScript]);
-    const task = await waitForTaskCompletion(taskId, 10000);
+    const task = await waitForTaskWithTimeout(taskId, 10000);
 
     expect(task.status).toBe('succeeded');
     expect(task.exitCode).toBe(0);
   }, 15000);
+
+  it('streams task output to provided handlers while awaiting completion', async () => {
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const script = "console.log('hello from stdout'); console.error('oops from stderr');";
+
+    vi.spyOn(pythonPathResolver, 'resolvePythonPath').mockResolvedValue(process.execPath);
+
+    const taskId = await createTask('streamed task', ['-e', script], {
+      onStdout: (chunk) => stdoutChunks.push(chunk),
+      onStderr: (chunk) => stderrChunks.push(chunk),
+    });
+
+    const task = await waitForTaskWithTimeout(taskId);
+
+    expect(task.status).toBe('succeeded');
+    expect(stdoutChunks.join('')).toContain('hello from stdout');
+    expect(stderrChunks.join('')).toContain('oops from stderr');
+  });
 });
