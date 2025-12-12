@@ -102,8 +102,9 @@ def _run_list_failing_jobs_script() -> WranglerScriptResult:
     )
 
 
-def _run_flag_render_volatility_script() -> WranglerScriptResult:
-    engine = dashboard_module.get_engine()
+def _build_render_volatility_report(
+    engine: Any,
+) -> tuple[str, list[dict[str, Any]]]:
     indicators = list(engine.risk_heatmap())
     frame_time_index = getattr(engine, "_frame_times_by_shot", {})
 
@@ -157,6 +158,13 @@ def _run_flag_render_volatility_script() -> WranglerScriptResult:
         )
     else:
         headline = "Frame times steady — no volatility hotspots detected."
+
+    return headline, hotspots
+
+
+def _run_flag_render_volatility_script() -> WranglerScriptResult:
+    engine = dashboard_module.get_engine()
+    headline, hotspots = _build_render_volatility_report(engine)
 
     payload = {"headline": headline, "volatility": hotspots}
 
@@ -734,6 +742,7 @@ def _run_highlight_stage_bottlenecks_script() -> WranglerScriptResult:
 
 
 __all__ = [
+    "_build_render_volatility_report",
     "_run_escalate_deadline_shots_script",
     "_run_flag_frame_time_regressions_script",
     "_run_flag_render_error_streaks_script",
