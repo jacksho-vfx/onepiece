@@ -15,11 +15,14 @@ export interface Task {
   finishedAt?: string;
   status: TaskStatus;
   exitCode?: number;
+  pid?: number;
 }
 
 export interface TaskOptions {
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
+  onSpawn?: (child: ChildProcess) => void;
+  taskId?: string;
 }
 
 const tasks = new Map<string, Task>();
@@ -247,7 +250,7 @@ export async function createTask(
   args: string[],
   options?: TaskOptions,
 ): Promise<string> {
-  const id = randomUUID();
+  const id = options?.taskId ?? randomUUID();
   const createdAt = new Date().toISOString();
 
   const task: Task = {
@@ -279,6 +282,8 @@ export async function createTask(
     return id;
   }
 
+  options?.onSpawn?.(child);
+
   const stdoutCapture = createStreamCapture(child.stdout, id, 'stdout');
   const stderrCapture = createStreamCapture(child.stderr, id, 'stderr');
 
@@ -297,6 +302,7 @@ export async function createTask(
   void updateTask(id, {
     status: 'running',
     startedAt: new Date().toISOString(),
+    pid: child.pid ?? undefined,
   });
 
   child.on('error', (error) => {

@@ -1,8 +1,8 @@
 import { ChildProcess, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import type { App, BrowserWindow, IpcMain, WebContents } from 'electron';
-import { createInterface } from 'readline';
 import { createTask } from './taskManager';
+import { ensureDefaultConfig, type DesktopConfig } from './configManager';
 import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
 
 /**
@@ -12,20 +12,42 @@ interface PythonService {
   id: string;
   name: string;
   process: ChildProcess;
+  key?: string;
+  persistent?: boolean;
+  taskId?: string;
 }
 
 export interface ServiceSummary {
   id: string;
+  key?: string;
   name: string;
   pid: number;
+  persistent?: boolean;
 }
 
 export interface LogEntry {
   serviceId: string;
+  serviceKey?: string;
   serviceName: string;
   stream: 'stdout' | 'stderr';
   line: string;
   timestamp: string;
+  persistent?: boolean;
+}
+
+export interface ServiceProfile {
+  key: string;
+  name: string;
+  description?: string;
+  args: string[];
+  persistent?: boolean;
+}
+
+interface ServiceLaunchPayload {
+  key?: string;
+  name: string;
+  args: string[];
+  persistent?: boolean;
 }
 
 /**
@@ -35,6 +57,8 @@ const services = new Map<string, PythonService>();
 const logBuffers = new Map<string, LogEntry[]>();
 const LOG_BUFFER_LIMIT = 200;
 const serviceListeners = new Set<(services: ServiceSummary[]) => void>();
+let serviceProfiles: ServiceProfile[] = [];
+let serviceEnabledState: Record<string, boolean> = {};
 
 let rendererWebContents: WebContents | null = null;
 
@@ -45,10 +69,12 @@ function setRendererWebContents(webContents: WebContents): void {
 function appendLog(service: PythonService, stream: 'stdout' | 'stderr', line: string): void {
   const entry: LogEntry = {
     serviceId: service.id,
+    serviceKey: service.key,
     serviceName: service.name,
     stream,
     line,
     timestamp: new Date().toISOString(),
+    persistent: Boolean(service.persistent),
   };
 
   const buffer = logBuffers.get(service.id) ?? [];
@@ -63,18 +89,11 @@ function appendLog(service: PythonService, stream: 'stdout' | 'stderr', line: st
   }
 }
 
-function attachServiceLogging(service: PythonService): void {
-  if (service.process.stdout) {
-    const stdoutReader = createInterface({ input: service.process.stdout });
-    stdoutReader.on('line', (line) => appendLog(service, 'stdout', line));
-    service.process.stdout.on('close', () => stdoutReader.close());
-  }
-
-  if (service.process.stderr) {
-    const stderrReader = createInterface({ input: service.process.stderr });
-    stderrReader.on('line', (line) => appendLog(service, 'stderr', line));
-    service.process.stderr.on('close', () => stderrReader.close());
-  }
+function appendLogChunk(service: PythonService, stream: 'stdout' | 'stderr', chunk: string): void {
+  chunk
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0)
+    .forEach((line) => appendLog(service, stream, line));
 }
 
 function notifyServicesChanged(): void {
@@ -86,6 +105,51 @@ function notifyServicesChanged(): void {
       console.error('Failed to notify service listener', error);
     }
   });
+}
+
+function setServiceConfig(services: DesktopConfig['services'] | undefined): void {
+  serviceProfiles = services?.profiles ?? [];
+  serviceEnabledState = services?.enabled ?? {};
+}
+
+function getServiceByKey(key: string): PythonService | undefined {
+  for (const service of services.values()) {
+    if (service.key === key) {
+      return service;
+    }
+  }
+  return undefined;
+}
+
+async function startEnabledPersistentServices(): Promise<void> {
+  for (const profile of serviceProfiles) {
+    const isEnabled = serviceEnabledState[profile.key] ?? Boolean(profile.persistent);
+    if (!profile.persistent || !isEnabled) {
+      continue;
+    }
+
+    const alreadyRunning = getServiceByKey(profile.key);
+    if (alreadyRunning) {
+      continue;
+    }
+
+    try {
+      await startService({ ...profile, key: profile.key });
+    } catch (error) {
+      console.error(`Failed to auto-start service '${profile.name}'`, error);
+    }
+  }
+}
+
+export async function primeServicesFromConfig(app: App): Promise<void> {
+  if (typeof app?.getPath !== 'function') {
+    console.warn('Skipping service priming: app.getPath is not available');
+    return;
+  }
+
+  const config = await ensureDefaultConfig(app);
+  setServiceConfig(config.services);
+  await startEnabledPersistentServices();
 }
 
 export function getRecentLogs(): LogEntry[] {
@@ -255,42 +319,60 @@ export async function runOnepieceDoctor(
  * @param args Arguments to pass to the Python interpreter for the service process.
  * @returns A promise that resolves with the generated service id.
  */
-export function startService(name: string, args: string[]): Promise<{ id: string }> {
-  return new Promise(async (resolve, reject) => {
-    const pythonPath = await resolvePythonPath();
+export async function startService(payload: ServiceLaunchPayload): Promise<{ id: string }> {
+  const existing = payload.key ? getServiceByKey(payload.key) : undefined;
+  if (existing) {
+    return { id: existing.id };
+  }
 
-    let child: ChildProcess;
-    try {
-      child = spawn(pythonPath, args, { env: process.env });
-    } catch (error) {
-      console.error(`Failed to start Python service '${name}':`, error);
-      reject(error);
-      return;
-    }
+  const id = payload.key ?? randomUUID();
+  let serviceRef: PythonService | null = null;
 
-    const id = randomUUID();
-    const service: PythonService = { id, name, process: child };
-    services.set(id, service);
+  const taskId = await createTask(`Service: ${payload.name}`, payload.args, {
+    taskId: id,
+    onSpawn: (child) => {
+      serviceRef = {
+        id,
+        key: payload.key,
+        name: payload.name,
+        persistent: payload.persistent,
+        process: child,
+        taskId,
+      };
 
-    attachServiceLogging(service);
-
-    notifyServicesChanged();
-
-    child.on('error', (error) => {
-      console.error(`Python service '${name}' encountered an error:`, error);
-      services.delete(id);
-      logBuffers.delete(id);
+      services.set(id, serviceRef);
       notifyServicesChanged();
-    });
 
-    child.on('exit', () => {
-      services.delete(id);
-      logBuffers.delete(id);
-      notifyServicesChanged();
-    });
+      child.on('error', (error) => {
+        console.error(`Python service '${payload.name}' encountered an error:`, error);
+        services.delete(id);
+        logBuffers.delete(id);
+        notifyServicesChanged();
+      });
 
-    resolve({ id });
+      child.on('exit', () => {
+        services.delete(id);
+        logBuffers.delete(id);
+        notifyServicesChanged();
+      });
+    },
+    onStdout: (chunk) => {
+      if (serviceRef) {
+        appendLogChunk(serviceRef, 'stdout', chunk);
+      }
+    },
+    onStderr: (chunk) => {
+      if (serviceRef) {
+        appendLogChunk(serviceRef, 'stderr', chunk);
+      }
+    },
   });
+
+  if (!serviceRef) {
+    throw new Error(`Failed to start service '${payload.name}'`);
+  }
+
+  return { id: taskId };
 }
 
 /**
@@ -328,8 +410,10 @@ export function stopService(id: string): Promise<void> {
 export function listServices(): ServiceSummary[] {
   return Array.from(services.values()).map((service) => ({
     id: service.id,
+    key: service.key,
     name: service.name,
     pid: service.process.pid ?? -1,
+    persistent: Boolean(service.persistent),
   }));
 }
 
@@ -340,6 +424,11 @@ export function onServicesChanged(
   return () => {
     serviceListeners.delete(listener);
   };
+}
+
+export async function applyServiceConfig(services: DesktopConfig['services']): Promise<void> {
+  setServiceConfig(services);
+  await startEnabledPersistentServices();
 }
 
 /**
@@ -354,6 +443,7 @@ export function registerPythonIpcHandlers(
   app: App,
 ): void {
   primePythonPath(app);
+  void primeServicesFromConfig(app);
   setRendererWebContents(browserWindow.webContents);
 
   ipcMain.handle(
@@ -379,13 +469,13 @@ export function registerPythonIpcHandlers(
     'python/start-service',
     async (
       _event,
-      payload: { name: string; args: string[] } | string,
+      payload: ServiceLaunchPayload | string,
       args?: string[],
     ) => {
       if (typeof payload === 'string') {
-        return startService(payload, args ?? []);
+        return startService({ name: payload, args: args ?? [] });
       }
-      return startService(payload.name, payload.args);
+      return startService(payload);
     },
   );
 
@@ -395,6 +485,11 @@ export function registerPythonIpcHandlers(
   );
 
   ipcMain.handle('python/list-services', async () => listServices());
+
+  ipcMain.handle('python/apply-service-config', async (_event, services: DesktopConfig['services']) => {
+    await applyServiceConfig(services);
+    return listServices();
+  });
 
   ipcMain.handle('logs/recent', async () => getRecentLogs());
 

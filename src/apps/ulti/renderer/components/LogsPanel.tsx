@@ -4,10 +4,12 @@ import { useTheme } from '../styles/ThemeContext';
 
 interface LogEntry {
   serviceId: string;
+  serviceKey?: string;
   serviceName: string;
   stream: 'stdout' | 'stderr';
   line: string;
   timestamp: string;
+  persistent?: boolean;
 }
 
 function LogsPanel(): JSX.Element {
@@ -142,7 +144,8 @@ function LogsPanel(): JSX.Element {
               }}
             >
               <span style={{ color: theme.colors.textMuted }}>
-                [{log.serviceName}] {new Date(log.timestamp).toLocaleTimeString()}
+                [{log.persistent ? `${log.serviceName} (persistent)` : log.serviceName}]{' '}
+                {new Date(log.timestamp).toLocaleTimeString()}
               </span>
               <span style={{ whiteSpace: 'pre-wrap' }}>{log.line}</span>
             </div>

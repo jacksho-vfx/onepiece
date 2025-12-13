@@ -44,6 +44,16 @@ type DesktopConfig = {
   shotgrid?: ShotgridConfig;
   aws?: AwsConfig;
   dccs?: Record<DccKey, DccConfig>;
+  services?: {
+    profiles: {
+      key: string;
+      name: string;
+      description: string;
+      args: string[];
+      persistent?: boolean;
+    }[];
+    enabled?: Record<string, boolean>;
+  };
   awsSyncPresets?: {
     id: string;
     name: string;

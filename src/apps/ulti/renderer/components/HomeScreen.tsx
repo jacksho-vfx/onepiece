@@ -46,6 +46,10 @@ interface DesktopConfig {
     blender?: { enabled: boolean; executablePath?: string };
     unreal?: { enabled: boolean; executablePath?: string };
   };
+  services?: {
+    profiles: ServiceDefinition[];
+    enabled?: Record<string, boolean>;
+  };
 }
 
 type HomeScreenProps = {
@@ -64,19 +68,20 @@ type HomeScreenProps = {
   onDismissEnvironmentReportPrompt?: () => void;
 };
 
-interface ServiceSummary {
-  id: string;
-  name: string;
-  pid: number;
-}
-
-type ServiceKey = 'trafalgar' | 'perona' | 'uta' | 'tester';
-
 interface ServiceDefinition {
-  key: ServiceKey;
+  key: string;
   name: string;
   description: string;
   args: string[];
+  persistent?: boolean;
+}
+
+interface ServiceSummary {
+  id: string;
+  key?: string;
+  name: string;
+  pid: number;
+  persistent?: boolean;
 }
 
 interface HealthCheckState {
@@ -132,24 +137,27 @@ interface HealthCheckError {
   suggestedAction?: string;
 }
 
-const SERVICE_DEFINITIONS: ServiceDefinition[] = [
+const DEFAULT_SERVICE_DEFINITIONS: ServiceDefinition[] = [
   {
     key: 'trafalgar',
     name: 'Trafalgar',
     description: 'Asset management and pipeline orchestration.',
     args: ['-m', 'apps.trafalgar'],
+    persistent: true,
   },
   {
     key: 'perona',
     name: 'Perona',
     description: 'Perona dashboard web service.',
     args: ['-m', 'apps.perona'],
+    persistent: true,
   },
   {
     key: 'uta',
     name: 'Uta Control Center',
     description: 'Monitoring and operations control center.',
     args: ['-m', 'apps.uta'],
+    persistent: true,
   },
   {
     key: 'tester',
@@ -232,15 +240,7 @@ function HomeScreen({
     stderr: '',
   });
   const [error, setError] = useState<HealthCheckError | null>(null);
-  const [serviceActions, setServiceActions] = useState<Record<ServiceKey, 'starting' | 'stopping' | null>>(() =>
-    SERVICE_DEFINITIONS.reduce(
-      (acc, definition) => ({
-        ...acc,
-        [definition.key]: null,
-      }),
-      {} as Record<ServiceKey, 'starting' | 'stopping' | null>,
-    ),
-  );
+  const [serviceActions, setServiceActions] = useState<Record<string, 'starting' | 'stopping' | null>>({});
   const [quickActionForms, setQuickActionForms] = useState<QuickActionForms>({
     vendorIngest: { source: '', project: '' },
     dccPublish: { dccType: '', scenePath: '' },
@@ -356,6 +356,32 @@ function HomeScreen({
     return map;
   }, [services]);
 
+  const serviceProfiles = useMemo<ServiceDefinition[]>(
+    () => config?.services?.profiles ?? DEFAULT_SERVICE_DEFINITIONS,
+    [config?.services?.profiles],
+  );
+
+  const serviceEnabled = useMemo(() => config?.services?.enabled ?? {}, [config?.services?.enabled]);
+
+  useEffect(() => {
+    setServiceActions((prev) => {
+      const next: Record<string, 'starting' | 'stopping' | null> = {};
+      serviceProfiles.forEach((definition) => {
+        next[definition.key] = prev[definition.key] ?? null;
+      });
+      return next;
+    });
+  }, [serviceProfiles]);
+
+  const runningServicesByKey = useMemo(() => {
+    const map = new Map<string, ServiceSummary>();
+    services.forEach((service) => {
+      const key = service.key || service.name;
+      map.set(key, service);
+    });
+    return map;
+  }, [services]);
+
   const availableDccs = useMemo(() => {
     if (!config?.dccs) {
       return [] as QuickActionForms['dccPublish']['dccType'][];
@@ -386,6 +412,8 @@ function HomeScreen({
       await window.electron.invoke('python/start-service', {
         name: definition.name,
         args: definition.args,
+        key: definition.key,
+        persistent: definition.persistent,
       });
       await fetchServices();
     } catch (error) {
@@ -397,7 +425,7 @@ function HomeScreen({
   };
 
   const handleStop = async (definition: ServiceDefinition): Promise<void> => {
-    const running = runningServicesByName.get(definition.name);
+    const running = runningServicesByKey.get(definition.key) ?? runningServicesByName.get(definition.name);
     if (!running) {
       setServiceError(`${definition.name} is not currently running.`);
       return;
@@ -412,6 +440,55 @@ function HomeScreen({
       setServiceError(`Failed to stop ${definition.name}.`);
     } finally {
       setServiceActions((prev) => ({ ...prev, [definition.key]: null }));
+    }
+  };
+
+  const handleRestart = async (definition: ServiceDefinition): Promise<void> => {
+    const running = runningServicesByKey.get(definition.key) ?? runningServicesByName.get(definition.name);
+    setServiceActions((prev) => ({ ...prev, [definition.key]: 'starting' }));
+
+    try {
+      if (running) {
+        await window.electron.invoke('python/stop-service', { id: running.id });
+      }
+
+      await window.electron.invoke('python/start-service', {
+        name: definition.name,
+        args: definition.args,
+        key: definition.key,
+        persistent: definition.persistent,
+      });
+
+      await fetchServices();
+    } catch (error) {
+      console.error(`Failed to restart ${definition.name}`, error);
+      setServiceError(`Failed to restart ${definition.name}.`);
+    } finally {
+      setServiceActions((prev) => ({ ...prev, [definition.key]: null }));
+    }
+  };
+
+  const handleToggleService = async (definition: ServiceDefinition, enabled: boolean): Promise<void> => {
+    try {
+      const updatedConfig = await window.electron.invoke<DesktopConfig>('config/save', {
+        services: { enabled: { [definition.key]: enabled } },
+      });
+
+      setConfig(updatedConfig);
+      await window.electron.invoke('python/apply-service-config', updatedConfig.services);
+
+      const running = runningServicesByKey.get(definition.key);
+
+      if (enabled && !running && definition.persistent) {
+        await handleStart(definition);
+      }
+
+      if (!enabled && running && definition.persistent) {
+        await handleStop(definition);
+      }
+    } catch (error) {
+      console.error(`Failed to update ${definition.name} enablement`, error);
+      setServiceError(`Unable to update ${definition.name} enablement.`);
     }
   };
 
@@ -944,9 +1021,11 @@ function HomeScreen({
   };
 
   const renderServiceStatus = (definition: ServiceDefinition): JSX.Element => {
-    const running = runningServicesByName.get(definition.name);
+    const running =
+      runningServicesByKey.get(definition.key) ?? runningServicesByName.get(definition.name);
     const isRunning = Boolean(running);
-    const actionState = serviceActions[definition.key];
+    const actionState = serviceActions[definition.key] ?? null;
+    const isEnabled = serviceEnabled[definition.key] ?? Boolean(definition.persistent);
 
     return (
       <Card key={definition.key}>
@@ -954,13 +1033,18 @@ function HomeScreen({
           <div style={{ display: 'grid', gap: theme.spacing.xs }}>
             <h3 style={{ margin: 0 }}>{definition.name}</h3>
             <p style={{ margin: 0, color: theme.colors.textMuted }}>{definition.description}</p>
+            {definition.persistent ? (
+              <StatusBadge status={isEnabled ? 'running' : 'stopped'}>
+                Persistent service
+              </StatusBadge>
+            ) : null}
           </div>
           <StatusBadge status={isRunning ? 'running' : 'stopped'}>
             {isRunning ? 'Running' : 'Stopped'}
           </StatusBadge>
         </div>
 
-        <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+        <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
           <Button
             onClick={() => void handleStart(definition)}
             disabled={isRunning || actionState === 'starting'}
@@ -976,6 +1060,24 @@ function HomeScreen({
           >
             Stop
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => void handleRestart(definition)}
+            disabled={actionState !== null}
+            isLoading={actionState === 'starting'}
+          >
+            Restart
+          </Button>
+          {definition.persistent ? (
+            <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
+              <input
+                type="checkbox"
+                checked={isEnabled}
+                onChange={(event) => void handleToggleService(definition, event.target.checked)}
+              />
+              <span style={{ color: theme.colors.text }}>Auto-start</span>
+            </label>
+          ) : null}
         </div>
         {isRunning && running?.pid ? (
           <p style={{ margin: 0, color: theme.colors.textMuted }}>PID: {running.pid}</p>
@@ -1281,7 +1383,7 @@ function HomeScreen({
           gap: theme.spacing.md,
         }}
       >
-        {SERVICE_DEFINITIONS.map((definition) => renderServiceStatus(definition))}
+        {serviceProfiles.map((definition) => renderServiceStatus(definition))}
       </div>
     </Card>
   );

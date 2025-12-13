@@ -62,6 +62,16 @@ type DesktopConfig = {
     remotePath?: string;
     remote?: string;
   }[];
+  services?: {
+    profiles: {
+      key: string;
+      name: string;
+      description: string;
+      args: string[];
+      persistent?: boolean;
+    }[];
+    enabled?: Record<string, boolean>;
+  };
 };
 
 type ProjectSelection = { name: string; path: string };
