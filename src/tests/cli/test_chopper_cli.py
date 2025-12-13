@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from botocore.exceptions import ClientError
 import pytest
 from typer.testing import CliRunner
 import typer
@@ -288,6 +289,26 @@ def _write_scene_with_animation(path: Path) -> None:
         ],
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+class _FakeS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.upload_calls: list[tuple[str, str]] = []
+
+    def upload_file(
+        self, Filename: str, Bucket: str, Key: str, Config: object | None = None
+    ) -> None:
+        payload = Path(Filename).read_bytes()
+        self.objects[(Bucket, Key)] = payload
+        self.upload_calls.append((Bucket, Key))
+
+    def head_object(self, Bucket: str, Key: str) -> dict[str, Any]:
+        if (Bucket, Key) not in self.objects:
+            raise ClientError(
+                {"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject"
+            )
+        return {"Key": Key, "ContentLength": len(self.objects[(Bucket, Key)])}
 
 
 def test_render_png_frames(tmp_path: Path) -> None:
@@ -1234,6 +1255,146 @@ def test_compare_divergent_scenes(tmp_path: Path) -> None:
     max_delta = float(match.group(2))
     assert mean_delta > 0
     assert max_delta > 0
+
+
+def test_export_render_output_uploads_directory(tmp_path: Path) -> None:
+    export_root = tmp_path / "frames"
+    export_root.mkdir()
+    (export_root / "frame_0000.png").write_text("first", encoding="utf-8")
+    nested = export_root / "nested"
+    nested.mkdir()
+    (nested / "frame_0001.png").write_text("second", encoding="utf-8")
+
+    client = _FakeS3Client()
+
+    uploaded = chopper_app_module._export_render_output_to_s3(
+        export_root,
+        bucket="demo-bucket",
+        prefix="renders/shot10",
+        resume=False,
+        client=client,
+    )
+
+    assert sorted(uploaded) == [
+        "renders/shot10/frame_0000.png",
+        "renders/shot10/nested/frame_0001.png",
+    ]
+    assert ("demo-bucket", "renders/shot10/frame_0000.png") in client.objects
+
+
+def test_export_render_output_respects_resume(tmp_path: Path) -> None:
+    export_root = tmp_path / "frames"
+    export_root.mkdir()
+    frame_path = export_root / "frame_0000.png"
+    frame_path.write_text("content", encoding="utf-8")
+
+    client = _FakeS3Client()
+    client.objects[("demo-bucket", "renders/frame_0000.png")] = b"existing"
+
+    uploaded = chopper_app_module._export_render_output_to_s3(
+        export_root,
+        bucket="demo-bucket",
+        prefix="renders",
+        resume=True,
+        client=client,
+    )
+
+    assert uploaded == []
+    assert client.upload_calls == []
+
+
+def test_render_cli_uploads_to_s3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    fake_client = _FakeS3Client()
+    monkeypatch.setattr(chopper_app_module, "_create_s3_client", lambda: fake_client)
+
+    def fake_render_scene(**kwargs: object) -> str:
+        destination, _ = chopper_app_module._resolve_export_destination(
+            kwargs["output_path"],
+            kwargs["export_format"],
+            kwargs["export_was_explicit"],
+        )
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "frame_0000.png").write_text("frame", encoding="utf-8")
+        return "Rendered 1 frame"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--format",
+            "png",
+            "--output",
+            str(tmp_path / "frames"),
+            "--s3-bucket",
+            "demo-bucket",
+            "--prefix",
+            "renders/shot10",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (
+        "demo-bucket",
+        "renders/shot10/frame_0000.png",
+    ) in fake_client.objects
+    assert "Uploaded 1 file(s) to s3://demo-bucket/renders/shot10" in result.stdout
+
+
+def test_render_cli_skips_uploaded_files_when_resuming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scene_path = tmp_path / "scene.json"
+    _write_scene(scene_path)
+
+    fake_client = _FakeS3Client()
+    fake_client.objects[("demo-bucket", "renders/frame_0000.png")] = b"existing"
+    monkeypatch.setattr(chopper_app_module, "_create_s3_client", lambda: fake_client)
+
+    def fake_render_scene(**kwargs: object) -> str:
+        destination, _ = chopper_app_module._resolve_export_destination(
+            kwargs["output_path"],
+            kwargs["export_format"],
+            kwargs["export_was_explicit"],
+        )
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "frame_0000.png").write_text("frame", encoding="utf-8")
+        return "Rendered 1 frame"
+
+    monkeypatch.setattr(chopper_app_module, "render_scene", fake_render_scene)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            str(scene_path),
+            "--format",
+            "png",
+            "--output",
+            str(tmp_path / "frames"),
+            "--s3-bucket",
+            "demo-bucket",
+            "--prefix",
+            "renders",
+            "--resume",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.upload_calls == []
+    assert (
+        "S3 export skipped; existing objects preserved at s3://demo-bucket/renders"
+        in result.stdout
+    )
 
 
 def _write_blank_scene(path: Path) -> None:
