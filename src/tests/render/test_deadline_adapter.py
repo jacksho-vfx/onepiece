@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any, cast
+
 import pytest
-from typing import Any
 
 from libraries.automation.render import config as render_config
 from libraries.automation.render import deadline
@@ -80,6 +82,46 @@ def test_submit_job_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     assert client.payloads[0]["JobInfo"]["Pool"] == "farm-a"  # type: ignore[index]
     assert client.payloads[0]["JobInfo"]["ChunkSize"] == 5  # type: ignore[index]
+
+
+def test_submit_job_attaches_bundle_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    client = FakeDeadlineClient()
+    _patch_client(monkeypatch, client)
+
+    bundle_dir = tmp_path / "bundle"
+    layers = bundle_dir / "layers"
+    layers.mkdir(parents=True)
+    scene = layers / "shot.usda"
+    scene.write_text("#usda 1.0", encoding="utf-8")
+
+    manifest = bundle_dir / "bundle_manifest.json"
+    manifest.write_text(
+        """
+{
+  "root_layer": "layers/shot.usda",
+  "version_hash": "abcd1234",
+  "artifacts": []
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = deadline.submit_job(
+        scene=str(scene),
+        frames="1-10",
+        output="/tmp/output",
+        dcc="maya",
+        priority=70,
+        user="nami",
+        chunk_size=None,
+    )
+
+    job_info = cast(dict[str, object], client.payloads[0]["JobInfo"])
+    assert job_info.get("ExtraInfoKeyValue0") == "bundle_version=abcd1234"
+    assert job_info.get("ExtraInfoKeyValue1") == f"bundle_manifest={manifest}"
+    assert result["job_id"] == "abcd1234"
 
 
 def test_submit_job_raises_for_authentication(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Mapping, cast
 
 import requests
@@ -25,6 +26,7 @@ from .base import (
     SubmissionResult,
 )
 from .config import get_adapter_setting
+from tools.usd_bundler import BundleManifest
 
 log = structlog.get_logger(__name__)
 
@@ -271,6 +273,41 @@ def _get_client() -> DeadlineClient:
     )
 
 
+def _load_bundle_metadata(scene: str) -> Mapping[str, str]:
+    """Return Deadline JobInfo extras referencing a nearby USD bundle manifest."""
+
+    scene_path = Path(scene)
+    if not scene_path.exists():
+        return {}
+
+    candidates = [
+        scene_path.parent / "bundle_manifest.json",
+        scene_path.parent.parent / "bundle_manifest.json",
+        scene_path.with_suffix(scene_path.suffix + ".bundle.json"),
+    ]
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            manifest = BundleManifest.from_path(candidate)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            log.warning(
+                "render.deadline.bundle_manifest_unreadable",
+                scene=str(scene_path),
+                manifest=str(candidate),
+                error=str(exc),
+            )
+            continue
+
+        return {
+            "ExtraInfoKeyValue0": f"bundle_version={manifest.version_hash}",
+            "ExtraInfoKeyValue1": f"bundle_manifest={candidate}",
+        }
+
+    return {}
+
+
 def _translate_capabilities(data: Mapping[str, Any]) -> AdapterCapabilities:
     defaults = _default_capabilities()
 
@@ -312,6 +349,8 @@ def submit_job(
     client = _get_client()
     pool_override = get_adapter_setting("deadline", "pool")
 
+    bundle_metadata = _load_bundle_metadata(scene)
+
     job_info: dict[str, Any] = {
         "Name": f"{dcc} render",
         "UserName": user,
@@ -320,6 +359,7 @@ def submit_job(
         "Priority": priority,
         "OutputFilename0": output,
     }
+    job_info.update(bundle_metadata)
     if pool_override:
         job_info["Pool"] = pool_override
     if chunk_size is not None:
