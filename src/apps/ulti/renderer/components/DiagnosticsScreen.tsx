@@ -31,6 +31,16 @@ type DesktopConfig = {
     defaultBucket?: string;
   };
   dccs?: Partial<Record<DccAppKey, DccConfig>>;
+  services?: {
+    profiles: {
+      key: string;
+      name: string;
+      description: string;
+      args: string[];
+      persistent?: boolean;
+    }[];
+    enabled?: Record<string, boolean>;
+  };
 };
 
 type DetectedEnv = {
