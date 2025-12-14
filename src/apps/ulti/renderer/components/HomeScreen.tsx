@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ProjectOverview from './ProjectOverview';
 import { Button, Card, Modal, SectionHeader, StatusBadge, Tabs, TextInput, useToast } from './ui';
 import VendorIngestWizard from './workflows/VendorIngestWizard';
@@ -62,6 +62,7 @@ type HomeScreenProps = {
   onOpenPeronaTools?: () => void;
   peronaConfigured?: boolean;
   currentProject?: { name: string; path: string };
+  onSelectProject?: (project: { name: string; path: string }) => void;
   autoOpenIngestOnMount?: boolean;
   onAutoOpenIngestHandled?: () => void;
   showEnvironmentReportPrompt?: boolean;
@@ -223,6 +224,7 @@ function HomeScreen({
   onOpenPeronaTools,
   peronaConfigured: peronaConfiguredProp,
   currentProject,
+  onSelectProject,
   autoOpenIngestOnMount,
   onAutoOpenIngestHandled,
   showEnvironmentReportPrompt,
@@ -272,6 +274,13 @@ function HomeScreen({
   const [showIngestReminder, setShowIngestReminder] = useState(false);
   const [shouldAutoOpenIngest, setShouldAutoOpenIngest] = useState<boolean>(Boolean(autoOpenIngestOnMount));
   const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
+  const recentProjects = useMemo(
+    () =>
+      [...(config?.recentProjects ?? [])].sort(
+        (a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime(),
+      ),
+    [config?.recentProjects],
+  );
   useHelpContext(activeTab === 'overview' ? 'home.overview' : null);
   const projectActivitySummary = useMemo<ProjectActivitySummary>(
     () => ({ ingests: 0, publishes: 0, renders: 0, deliveries: 0 }),
@@ -347,6 +356,13 @@ function HomeScreen({
       },
     }));
   }, [currentProject]);
+
+  const handleRecentProjectOpen = useCallback(
+    (project: { name: string; path: string }) => {
+      onSelectProject?.(project);
+    },
+    [onSelectProject],
+  );
 
   const runningServicesByName = useMemo(() => {
     const map = new Map<string, ServiceSummary>();
@@ -1490,6 +1506,38 @@ function HomeScreen({
           </div>
         </div>
       </Card>
+
+      {recentProjects.length ? (
+        <Card title="Recent projects">
+          <div style={{ display: 'grid', gap: theme.spacing.sm }}>
+            {recentProjects.map((project) => (
+              <div
+                key={project.path}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: theme.spacing.sm,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'grid', gap: '0.15rem' }}>
+                  <p className="op-eyebrow" style={{ margin: 0 }}>
+                    {project.name}
+                  </p>
+                  <p style={{ margin: 0, color: theme.colors.textMuted }}>{project.path}</p>
+                </div>
+                <Button
+                  onClick={() => handleRecentProjectOpen({ name: project.name, path: project.path })}
+                  disabled={!onSelectProject}
+                >
+                  Open
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <SectionHeader title="Health & Status" subtitle="See your configuration and run workstation checks." />
       <div
