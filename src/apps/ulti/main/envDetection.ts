@@ -1,7 +1,12 @@
 import { accessSync, constants, statSync } from 'fs';
 import path from 'path';
 import os from 'os';
-import type { IpcMain } from 'electron';
+import type { App, IpcMain } from 'electron';
+import {
+  getPythonBundleSearchPaths,
+  type PythonBundleManifest,
+  validatePythonBundle,
+} from './pythonBundleValidator';
 
 /**
  * Check whether a given file path exists and is likely executable.
@@ -212,6 +217,29 @@ export type DccDetectionResult = {
   unreal?: string;
 };
 
+export type PackagedRuntimeStatus = {
+  present: boolean;
+  bundlePath?: string;
+  manifestPath?: string;
+  manifest?: PythonBundleManifest;
+  manifestSource?: string;
+  searchedPaths: string[];
+  missing?: string[];
+  error?: string;
+};
+
+export type EnvironmentDiagnostics = {
+  pythonPathGuess?: string;
+  dccs: DccDetectionResult;
+  system: {
+    platform: NodeJS.Platform;
+    release: string;
+    arch: string;
+  };
+  nodeEnv?: string;
+  packagedRuntime: PackagedRuntimeStatus;
+};
+
 export function detectDccExecutables(): DccDetectionResult {
   return {
     maya: firstExisting(mayaCandidates()),
@@ -220,16 +248,88 @@ export function detectDccExecutables(): DccDetectionResult {
   };
 }
 
-export async function detectEnvironment(): Promise<{
-  pythonPathGuess?: string;
-  dccs: DccDetectionResult;
-}> {
+async function detectPackagedRuntime(app?: App): Promise<PackagedRuntimeStatus> {
+  const resourceBase = process.resourcesPath ?? process.cwd();
+  const searchPaths = app
+    ? getPythonBundleSearchPaths(app)
+    : [path.join(resourceBase, 'python'), path.join(process.cwd(), 'python')];
+
+  try {
+    const validation = await validatePythonBundle(searchPaths);
+
+    if (validation.status === 'valid') {
+      const manifestSource =
+        validation.attempt.manifest?.runtimeSource ?? validation.attempt.manifest?.wheelsSource;
+
+      return {
+        present: true,
+        bundlePath: validation.attempt.bundlePath,
+        manifestPath: validation.attempt.manifestPath,
+        manifest: validation.attempt.manifest,
+        manifestSource,
+        searchedPaths: searchPaths,
+      };
+    }
+
+    const missing = Array.from(
+      new Set(validation.attempts.flatMap((attempt) => attempt.missing)),
+    );
+    const error = validation.attempts.map((attempt) => attempt.error).filter(Boolean)[0];
+
+    return {
+      present: false,
+      searchedPaths: searchPaths,
+      missing: missing.length > 0 ? missing : undefined,
+      error,
+      manifestSource: validation.attempts
+        .map((attempt) => attempt.manifest?.runtimeSource || attempt.manifest?.wheelsSource)
+        .filter(Boolean)[0],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown runtime detection error';
+    return { present: false, searchedPaths: searchPaths, error: message };
+  }
+}
+
+export async function detectEnvironment(app?: App): Promise<EnvironmentDiagnostics> {
   const pythonPathGuess = detectPython();
 
   return {
     pythonPathGuess,
     dccs: detectDccExecutables(),
+    system: {
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+    },
+    nodeEnv: process.env.NODE_ENV,
+    packagedRuntime: await detectPackagedRuntime(app),
   };
+}
+
+export function formatEnvironmentDiagnostics(diagnostics: EnvironmentDiagnostics): string {
+  const lines = [
+    `Platform: ${diagnostics.system.platform} ${diagnostics.system.release} (${diagnostics.system.arch})`,
+    `NODE_ENV: ${diagnostics.nodeEnv ?? 'undefined'}`,
+    diagnostics.packagedRuntime.present
+      ? `Packaged runtime: present at ${diagnostics.packagedRuntime.bundlePath ?? 'unknown path'}`
+      : `Packaged runtime: missing (searched ${diagnostics.packagedRuntime.searchedPaths.join(', ')})`,
+    `Python path guess: ${diagnostics.pythonPathGuess ?? 'Not detected'}`,
+    `Maya: ${diagnostics.dccs.maya ?? 'Not detected'}`,
+    `Blender: ${diagnostics.dccs.blender ?? 'Not detected'}`,
+    `Unreal: ${diagnostics.dccs.unreal ?? 'Not detected'}`,
+  ];
+
+  if (!diagnostics.packagedRuntime.present) {
+    if (diagnostics.packagedRuntime.missing?.length) {
+      lines.push(`Runtime missing paths: ${diagnostics.packagedRuntime.missing.join(', ')}`);
+    }
+    if (diagnostics.packagedRuntime.error) {
+      lines.push(`Runtime detection error: ${diagnostics.packagedRuntime.error}`);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function getCurrentUsername(): string | null {
@@ -245,7 +345,7 @@ function getCurrentUsername(): string | null {
   return process.env.USER || process.env.USERNAME || null;
 }
 
-export function registerEnvIpcHandlers(ipcMain: IpcMain): void {
-  ipcMain.handle('system/detect-env', async () => detectEnvironment());
+export function registerEnvIpcHandlers(ipcMain: IpcMain, app?: App): void {
+  ipcMain.handle('system/detect-env', async () => detectEnvironment(app));
   ipcMain.handle('system/get-username', async () => getCurrentUsername());
 }

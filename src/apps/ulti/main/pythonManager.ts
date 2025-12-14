@@ -4,6 +4,7 @@ import type { App, BrowserWindow, IpcMain, WebContents } from 'electron';
 import { createTask } from './taskManager';
 import { ensureDefaultConfig, type DesktopConfig } from './configManager';
 import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
+import { detectEnvironment, formatEnvironmentDiagnostics } from './envDetection';
 
 /**
  * Represents a running Python service process.
@@ -461,8 +462,20 @@ export function registerPythonIpcHandlers(
 
   ipcMain.handle(
     'python/run-doctor',
-    async (_event, payload: { timeoutMs?: number } = {}) =>
-      runOnepieceDoctor(withDefaultTimeout(payload)),
+    async (_event, payload: { timeoutMs?: number } = {}) => {
+      const [doctorResult, envDiagnostics] = await Promise.all([
+        runOnepieceDoctor(withDefaultTimeout(payload)),
+        detectEnvironment(app),
+      ]);
+
+      const environmentBlock = `\n\n# Pipeline Doctor environment\n${formatEnvironmentDiagnostics(envDiagnostics)}`;
+
+      return {
+        ...doctorResult,
+        stdout: `${doctorResult.stdout}${environmentBlock}`,
+        envDiagnostics,
+      };
+    },
   );
 
   ipcMain.handle(

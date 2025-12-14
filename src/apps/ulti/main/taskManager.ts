@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { App, BrowserWindow, IpcMain, Notification as ElectronNotification, WebContents } from 'electron';
 import { ensureDefaultConfig } from './configManager';
 import { primePythonPath, resolvePythonPath } from './pythonPathResolver';
+import { detectEnvironment, formatEnvironmentDiagnostics } from './envDetection';
 
 export type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 
@@ -16,6 +17,7 @@ export interface Task {
   status: TaskStatus;
   exitCode?: number;
   pid?: number;
+  environmentSummary?: string;
 }
 
 export interface TaskOptions {
@@ -253,15 +255,29 @@ export async function createTask(
   const id = options?.taskId ?? randomUUID();
   const createdAt = new Date().toISOString();
 
+  let environmentSummary: string | undefined;
+
+  try {
+    const env = await detectEnvironment(appInstance ?? undefined);
+    environmentSummary = formatEnvironmentDiagnostics(env);
+  } catch (error) {
+    console.warn('Failed to collect environment diagnostics for task', error);
+  }
+
   const task: Task = {
     id,
     label,
     command: args,
     createdAt,
     status: 'pending',
+    environmentSummary,
   };
 
   tasks.set(id, task);
+
+  if (environmentSummary) {
+    console.info(`Task '${label}' environment snapshot:\n${environmentSummary}`);
+  }
 
   const { snapshot } = enforceTaskRetention();
   emitTasksUpdated(snapshot);

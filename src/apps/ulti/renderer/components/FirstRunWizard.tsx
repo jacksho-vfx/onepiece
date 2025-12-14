@@ -8,10 +8,9 @@ import { designTokens, roleColors } from '../styles/designTokens';
 import { useTheme } from '../styles/ThemeContext';
 import { useToast } from './ui/Toaster';
 import { hexToRgba } from './ui/styles';
+import { type DetectedEnv, type DccAppKey } from '../types/env';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
-
-type DccAppKey = 'maya' | 'blender' | 'unreal';
 
 interface ShotgridConfig {
   url?: string;
@@ -103,11 +102,6 @@ const defaultFormState: WizardFormState = {
     blender: { enabled: false, executablePath: '' },
     unreal: { enabled: false, executablePath: '' },
   },
-};
-
-type DetectedEnv = {
-  pythonPathGuess?: string;
-  dccs: Partial<Record<DccAppKey, string>>;
 };
 
 const detectionFailureMessage =
