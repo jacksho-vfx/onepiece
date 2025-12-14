@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 import numpy as np
 
@@ -18,6 +18,9 @@ import click
 from click.core import ParameterSource
 from PIL import Image
 import typer
+
+import boto3
+from botocore.exceptions import ClientError
 
 from apps.chopper.renderer import (
     Color,
@@ -32,6 +35,8 @@ from libraries.automation.render.chopper import (
     load_scene,
     render_scene,
 )
+from libraries.automation.ingest.uploaders import S3ClientProtocol
+from libraries.automation.render import chopper as chopper_render
 
 
 app = typer.Typer(help="Render self-contained scene descriptions using Chopper.")
@@ -52,6 +57,76 @@ def _was_option_explicit(option_name: str) -> bool:
         return False
 
     return source not in (None, ParameterSource.DEFAULT)
+
+
+def _create_s3_client() -> S3ClientProtocol:
+    client = boto3.client("s3")
+    return cast(S3ClientProtocol, client)
+
+
+def _resolve_export_destination(
+    output: Path, export_format: str, export_was_explicit: bool
+) -> tuple[Path, str]:
+    normalized_export = chopper_render._normalize_export_format(  # type: ignore[attr-defined]
+        output_path=output,
+        export_format=export_format,
+        export_was_explicit=export_was_explicit,
+    )
+
+    destination = output
+    if normalized_export in {"gif", "mp4"}:
+        suffix = f".{normalized_export}"
+        if destination.suffix.lower() != suffix:
+            destination = destination.with_suffix(suffix)
+
+    return destination, normalized_export
+
+
+def _iter_export_files(export_root: Path) -> Iterable[Path]:
+    if export_root.is_file():
+        yield export_root
+        return
+    if not export_root.is_dir():
+        raise FileNotFoundError(f"Export path {export_root} was not created")
+
+    for child in export_root.rglob("*"):
+        if child.is_file():
+            yield child
+
+
+def _export_render_output_to_s3(
+    export_root: Path,
+    *,
+    bucket: str,
+    prefix: str | None,
+    resume: bool,
+    client: S3ClientProtocol | None = None,
+) -> list[str]:
+    s3_client = client or _create_s3_client()
+    normalized_prefix = prefix.strip("/") if prefix else ""
+
+    uploaded: list[str] = []
+    for file_path in _iter_export_files(export_root):
+        relative_key = (
+            file_path.name
+            if export_root.is_file()
+            else file_path.relative_to(export_root).as_posix()
+        )
+        key = "/".join(part for part in (normalized_prefix, relative_key) if part)
+
+        if resume:
+            try:
+                s3_client.head_object(Bucket=bucket, Key=key)
+                continue
+            except ClientError as exc:
+                error_code = exc.response.get("Error", {}).get("Code")
+                if error_code not in {"404", "NotFound", "NoSuchKey"}:
+                    raise
+
+        s3_client.upload_file(str(file_path), bucket, key)
+        uploaded.append(key)
+
+    return uploaded
 
 
 def _build_guides_overlay(
@@ -593,6 +668,21 @@ def render(
         "--safe-window",
         help="Safe aperture width and height as 'width,height' or 'widthxheight'.",
     ),
+    s3_bucket: str | None = typer.Option(
+        None,
+        "--s3-bucket",
+        help="Optional S3 bucket to upload renders after completion.",
+    ),
+    s3_prefix: str | None = typer.Option(
+        None,
+        "--prefix",
+        help="Prefix within the S3 bucket for uploaded renders.",
+    ),
+    s3_resume: bool = typer.Option(
+        False,
+        "--resume/--no-resume",
+        help=("Skip uploading files that already exist at the same S3 key."),
+    ),
 ) -> None:
     """Render a scene description and write the frames to disk."""
 
@@ -683,6 +773,31 @@ def render(
         raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(message)
+
+    if s3_bucket:
+        try:
+            destination, _ = _resolve_export_destination(
+                output, export, export_was_explicit
+            )
+            uploaded = _export_render_output_to_s3(
+                destination,
+                bucket=s3_bucket,
+                prefix=s3_prefix,
+                resume=s3_resume,
+            )
+        except Exception as exc:  # pragma: no cover - runtime safety
+            raise typer.BadParameter(f"Failed to upload renders to S3: {exc}") from exc
+
+        normalized_prefix = s3_prefix.strip("/") if s3_prefix else ""
+        location = (
+            f"s3://{s3_bucket}/{normalized_prefix}"
+            if normalized_prefix
+            else f"s3://{s3_bucket}"
+        )
+        if uploaded:
+            typer.echo(f"Uploaded {len(uploaded)} file(s) to {location}")
+        else:
+            typer.echo(f"S3 export skipped; existing objects preserved at {location}")
 
 
 @app.command(name="qc-render")
@@ -812,6 +927,21 @@ def qc_render(
         None,
         "--safe-window",
         help="Safe aperture width and height as 'width,height' or 'widthxheight'.",
+    ),
+    s3_bucket: str | None = typer.Option(
+        None,
+        "--s3-bucket",
+        help="Optional S3 bucket to upload renders after completion.",
+    ),
+    s3_prefix: str | None = typer.Option(
+        None,
+        "--prefix",
+        help="Prefix within the S3 bucket for uploaded renders.",
+    ),
+    s3_resume: bool = typer.Option(
+        False,
+        "--resume/--no-resume",
+        help="Skip uploading files that already exist at the same S3 key.",
     ),
     preset: str = typer.Option(
         "hd-1080",
@@ -964,6 +1094,31 @@ def qc_render(
     )
 
     typer.echo(f"{message} (scene sha256: {scene_hash})")
+
+    if s3_bucket:
+        try:
+            destination, _ = _resolve_export_destination(
+                output, export, export_was_explicit
+            )
+            uploaded = _export_render_output_to_s3(
+                destination,
+                bucket=s3_bucket,
+                prefix=s3_prefix,
+                resume=s3_resume,
+            )
+        except Exception as exc:  # pragma: no cover - runtime safety
+            raise typer.BadParameter(f"Failed to upload renders to S3: {exc}") from exc
+
+        normalized_prefix = s3_prefix.strip("/") if s3_prefix else ""
+        location = (
+            f"s3://{s3_bucket}/{normalized_prefix}"
+            if normalized_prefix
+            else f"s3://{s3_bucket}"
+        )
+        if uploaded:
+            typer.echo(f"Uploaded {len(uploaded)} file(s) to {location}")
+        else:
+            typer.echo(f"S3 export skipped; existing objects preserved at {location}")
 
 
 @dataclass

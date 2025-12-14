@@ -340,6 +340,17 @@ chopper render scene.json --format png --safe-frame --thirds-grid --center-mark 
 }
 ```
 
+Upload renders straight to S3 once the frames land on disk by combining
+`--s3-bucket` with an optional `--prefix`. The exporter targets the animation
+file when bundling (GIF/MP4) or every frame under the output directory for
+image sequences. Add `--resume` to skip keys that already exist and avoid
+retransmitting previous renders:
+
+```sh
+chopper render scene.json --format png --s3-bucket studio-renders \
+  --prefix previews/shot010 --resume
+```
+
 
 Override the background colour on the fly with `--background "#112233"` when you
 need blank-space contrast without editing the source JSON.
