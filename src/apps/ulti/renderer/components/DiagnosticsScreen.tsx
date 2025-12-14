@@ -2,10 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, SectionHeader, StatusBadge } from './ui';
 import { useTheme } from '../styles/ThemeContext';
 import EnvProfileTool from './tools/EnvProfileTool';
+import { type DetectedEnv, type DccAppKey } from '../types/env';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo';
-
-type DccAppKey = 'maya' | 'blender' | 'unreal';
 
 type DccConfig = {
   enabled: boolean;
@@ -43,11 +42,6 @@ type DesktopConfig = {
   };
 };
 
-type DetectedEnv = {
-  pythonPathGuess?: string;
-  dccs: Partial<Record<DccAppKey, string>>;
-};
-
 type DoctorResult = {
   running: boolean;
   exitCode: number | null;
@@ -68,6 +62,7 @@ function DiagnosticsScreen(): JSX.Element {
     stderr: '',
   });
   const [copyMessage, setCopyMessage] = useState<string>('');
+  const [envCopyMessage, setEnvCopyMessage] = useState<string>('');
   const [showStdout, setShowStdout] = useState<boolean>(true);
   const [showStderr, setShowStderr] = useState<boolean>(false);
 
@@ -136,6 +131,24 @@ function DiagnosticsScreen(): JSX.Element {
     return 'Issues detected';
   }, [doctorStatus]);
 
+  const platformLabel = useMemo(
+    () =>
+      detectedEnv
+        ? `${detectedEnv.system.platform} ${detectedEnv.system.release} (${detectedEnv.system.arch})`
+        : 'Unknown',
+    [detectedEnv],
+  );
+
+  const runtimeStatusLabel = useMemo(() => {
+    if (!detectedEnv) {
+      return 'Unknown';
+    }
+
+    return detectedEnv.packagedRuntime.present
+      ? `Present${detectedEnv.packagedRuntime.bundlePath ? ` (${detectedEnv.packagedRuntime.bundlePath})` : ''}`
+      : 'Missing';
+  }, [detectedEnv]);
+
   const confettiPieces = useMemo(
     () =>
       Array.from({ length: 12 }).map((_, index) => ({
@@ -149,6 +162,7 @@ function DiagnosticsScreen(): JSX.Element {
   const handleRunDoctor = async (): Promise<void> => {
     setDoctorResult((prev) => ({ ...prev, running: true, error: undefined }));
     setCopyMessage('');
+    setEnvCopyMessage('');
 
     try {
       const result = await window.electron.invoke<{ exitCode: number; stdout: string; stderr: string }>(
@@ -168,6 +182,10 @@ function DiagnosticsScreen(): JSX.Element {
   };
 
   const copySummary = async (): Promise<void> => {
+    const runtimeLabel = detectedEnv?.packagedRuntime.present
+      ? `Present (${detectedEnv.packagedRuntime.bundlePath ?? 'path unknown'})`
+      : 'Missing';
+
     const summary = [
       '# Diagnostics summary',
       '',
@@ -179,6 +197,13 @@ function DiagnosticsScreen(): JSX.Element {
       `- AWS configured: ${awsConfigured ? 'Yes' : 'No'}`,
       '',
       '## Environment detection',
+      `- Platform: ${
+        detectedEnv
+          ? `${detectedEnv.system.platform} ${detectedEnv.system.release} (${detectedEnv.system.arch})`
+          : 'Unknown'
+      }`,
+      `- NODE_ENV: ${detectedEnv?.nodeEnv ?? 'undefined'}`,
+      `- Packaged runtime: ${runtimeLabel}`,
       `- Python path guess: ${detectedEnv?.pythonPathGuess ?? 'Not detected'}`,
       `- Maya: ${detectedEnv?.dccs?.maya ?? 'Not detected'}`,
       `- Blender: ${detectedEnv?.dccs?.blender ?? 'Not detected'}`,
@@ -193,9 +218,50 @@ function DiagnosticsScreen(): JSX.Element {
     try {
       await navigator.clipboard.writeText(summary);
       setCopyMessage('Diagnostics summary copied to clipboard.');
+      setEnvCopyMessage('');
     } catch (error) {
       console.error('Failed to copy diagnostics summary', error);
       setCopyMessage('Unable to copy diagnostics summary.');
+    }
+  };
+
+  const buildEnvironmentLines = (): string[] => {
+    if (!detectedEnv) {
+      return ['Environment detection unavailable.'];
+    }
+
+    const runtime = detectedEnv.packagedRuntime;
+    const runtimeLabel = runtime.present
+      ? `Present at ${runtime.bundlePath ?? 'unknown path'}`
+      : `Missing (searched ${runtime.searchedPaths.join(', ')})`;
+
+    const lines = [
+      `Platform: ${detectedEnv.system.platform} ${detectedEnv.system.release} (${detectedEnv.system.arch})`,
+      `NODE_ENV: ${detectedEnv.nodeEnv ?? 'undefined'}`,
+      `Packaged runtime: ${runtimeLabel}`,
+      `Python path guess: ${detectedEnv.pythonPathGuess ?? 'Not detected'}`,
+    ];
+
+    if (!runtime.present && runtime.missing?.length) {
+      lines.push(`Missing paths: ${runtime.missing.join(', ')}`);
+    }
+    if (!runtime.present && runtime.error) {
+      lines.push(`Runtime error: ${runtime.error}`);
+    }
+
+    return lines;
+  };
+
+  const copyEnvironmentStatus = async (): Promise<void> => {
+    const summary = ['# Environment status', ...buildEnvironmentLines()].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(summary);
+      setEnvCopyMessage('Environment status copied to clipboard.');
+      setCopyMessage('');
+    } catch (error) {
+      console.error('Failed to copy environment status', error);
+      setEnvCopyMessage('Unable to copy environment status.');
     }
   };
 
@@ -239,8 +305,25 @@ function DiagnosticsScreen(): JSX.Element {
       </Card>
 
       <Card>
-        <SectionHeader title="Environment detection" />
+        <SectionHeader
+          title="Environment status"
+          subtitle="Quick view of your OS, runtime, and detected tooling."
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void copyEnvironmentStatus()}>
+              Copy for bug report
+            </Button>
+          }
+        />
         <div style={summaryGridStyle}>
+          <div>Platform</div>
+          <div>{platformLabel}</div>
+
+          <div>NODE_ENV</div>
+          <div>{detectedEnv?.nodeEnv ?? 'undefined'}</div>
+
+          <div>Packaged runtime</div>
+          <div>{runtimeStatusLabel}</div>
+
           <div>Python path guess</div>
           <div>{detectedEnv?.pythonPathGuess ?? 'Not detected'}</div>
 
@@ -253,6 +336,10 @@ function DiagnosticsScreen(): JSX.Element {
           <div>Unreal</div>
           <div>{detectedEnv?.dccs?.unreal ?? 'Not detected'}</div>
         </div>
+
+        {envCopyMessage && (
+          <p style={{ color: theme.colors.textMuted, marginTop: theme.spacing.sm }}>{envCopyMessage}</p>
+        )}
       </Card>
 
       <EnvProfileTool />

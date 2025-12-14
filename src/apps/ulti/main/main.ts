@@ -134,7 +134,7 @@ app.whenReady().then(async () => {
   registerPythonIpcHandlers(ipcMain, window, app);
   registerConfigIpcHandlers(ipcMain, app);
   registerConfigBundleIpcHandlers(ipcMain, app, window);
-  registerEnvIpcHandlers(ipcMain);
+  registerEnvIpcHandlers(ipcMain, app);
   registerVersionIpcHandlers(ipcMain, app);
   registerUpdateIpcHandlers(ipcMain, app);
   registerTaskIpcHandlers(ipcMain, window, app);

@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { pathExists } from '../envDetection';
+import { formatEnvironmentDiagnostics, pathExists } from '../envDetection';
 
 describe('pathExists', () => {
   let tempDir: string;
@@ -40,4 +40,25 @@ describe('pathExists', () => {
       expect(pathExists(candidate)).toBe(expected);
     });
   }
+
+  it('formats environment diagnostics with runtime context', () => {
+    const formatted = formatEnvironmentDiagnostics({
+      pythonPathGuess: 'python3',
+      dccs: { maya: '/usr/bin/maya' },
+      system: { platform: 'darwin', release: '23.1', arch: 'arm64' },
+      nodeEnv: 'test',
+      packagedRuntime: {
+        present: false,
+        searchedPaths: ['/resources/python'],
+        missing: ['/resources/python/runtime'],
+        error: 'missing runtime',
+      },
+    });
+
+    expect(formatted).toContain('darwin 23.1 (arm64)');
+    expect(formatted).toContain('NODE_ENV: test');
+    expect(formatted).toContain('Packaged runtime: missing');
+    expect(formatted).toContain('Runtime missing paths: /resources/python/runtime');
+    expect(formatted).toContain('Runtime detection error: missing runtime');
+  });
 });

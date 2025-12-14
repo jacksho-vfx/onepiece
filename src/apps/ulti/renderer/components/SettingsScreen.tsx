@@ -8,13 +8,10 @@ import {
   parseRemoteParts,
   type AwsSyncPresetInput,
 } from './tools/awsSyncPresets';
+import { type DetectedEnv, type DccAppKey } from '../types/env';
 
 type ProfileOption = 'vfx' | 'archviz' | 'freelancer' | 'demo' | '';
-type DccKey = 'maya' | 'blender' | 'unreal';
-type DetectedEnv = {
-  dccs?: Partial<Record<DccKey, string>>;
-};
-
+type DccKey = DccAppKey;
 type ShotgridConfig = {
   url?: string;
   scriptName?: string;
