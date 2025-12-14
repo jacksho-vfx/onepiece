@@ -263,6 +263,7 @@ function App(): JSX.Element {
                 <HomeScreen
                   config={config}
                   currentProject={currentProject ?? undefined}
+                  onSelectProject={handleProjectChange}
                   onViewTasks={handleViewTasks}
                   onViewLogs={handleViewLogs}
                   onViewDiagnostics={handleViewDiagnostics}

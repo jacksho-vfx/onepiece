@@ -38,7 +38,7 @@ interface WizardFormState {
   pythonPath: string;
   shotgrid: ShotgridConfig;
   aws: AwsConfig;
-  dcc: Record<DccAppKey, DccConfig>;
+  dccs: Record<DccAppKey, DccConfig>;
 }
 
 interface DesktopConfig {
@@ -48,10 +48,12 @@ interface DesktopConfig {
   profile?: 'vfx' | 'archviz' | 'freelancer' | 'demo';
   pythonPath?: string;
   projectRoot?: string;
+  currentProject?: string;
+  recentProjects?: { name: string; path: string; lastOpenedAt: string }[];
   shotgrid?: ShotgridConfig;
   aws?: AwsConfig;
   cacheLocation?: string;
-  dcc?: Record<DccAppKey, DccConfig>;
+  dccs?: Record<DccAppKey, DccConfig>;
 }
 
 type WizardContextValue = {
@@ -96,7 +98,7 @@ const defaultFormState: WizardFormState = {
     region: '',
     defaultBucket: '',
   },
-  dcc: {
+  dccs: {
     maya: { enabled: false, executablePath: '' },
     blender: { enabled: false, executablePath: '' },
     unreal: { enabled: false, executablePath: '' },
@@ -154,11 +156,11 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
         }
 
         setFormData((prev) => {
-          const nextDcc = { ...prev.dcc };
+          const nextDcc = { ...prev.dccs };
 
           (['maya', 'blender', 'unreal'] as DccAppKey[]).forEach((key) => {
             const detectedPath = env.dccs?.[key];
-            const hasUserValue = prev.dcc[key].enabled || Boolean(prev.dcc[key].executablePath);
+            const hasUserValue = prev.dccs[key].enabled || Boolean(prev.dccs[key].executablePath);
 
             if (detectedPath && !hasUserValue) {
               nextDcc[key] = {
@@ -171,7 +173,7 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
           return {
             ...prev,
             pythonPath: prev.pythonPath || env.pythonPathGuess || '',
-            dcc: nextDcc,
+            dccs: nextDcc,
           };
         });
       } catch (error) {
@@ -211,10 +213,10 @@ function WizardFormProvider({ children }: { children: ReactNode }): JSX.Element 
   const updateDcc = (app: DccAppKey, updates: Partial<DccConfig>): void => {
     setFormData((prev) => ({
       ...prev,
-      dcc: {
-        ...prev.dcc,
+      dccs: {
+        ...prev.dccs,
         [app]: {
-          ...prev.dcc[app],
+          ...prev.dccs[app],
           ...updates,
         },
       },
@@ -567,7 +569,7 @@ function DccSelectionStep(): JSX.Element {
             <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
               <input
                 type="checkbox"
-                checked={formData.dcc[option.key].enabled}
+                checked={formData.dccs[option.key].enabled}
                 onChange={(event) => updateDcc(option.key, { enabled: event.target.checked })}
                 style={{ accentColor: theme.colors.primary }}
               />
@@ -576,9 +578,9 @@ function DccSelectionStep(): JSX.Element {
             <TextInput
               label="Executable path"
               placeholder={option.placeholder}
-              value={formData.dcc[option.key].executablePath || ''}
+              value={formData.dccs[option.key].executablePath || ''}
               onChange={(event) => updateDcc(option.key, { executablePath: event.target.value })}
-              disabled={!formData.dcc[option.key].enabled}
+              disabled={!formData.dccs[option.key].enabled}
               helpText="Provide only if a custom install path is needed."
             />
           </div>
@@ -654,8 +656,8 @@ function SummaryStep({
           <h4 style={{ margin: '0 0 0.25rem' }}>DCCs</h4>
           {(['maya', 'blender', 'unreal'] as DccAppKey[]).map((key) => (
             <p key={key} style={{ margin: 0 }}>
-              {key}: {formData.dcc[key].enabled ? 'Enabled' : 'Skipped'}
-              {formData.dcc[key].executablePath ? ` (${formData.dcc[key].executablePath})` : ''}
+              {key}: {formData.dccs[key].enabled ? 'Enabled' : 'Skipped'}
+              {formData.dccs[key].executablePath ? ` (${formData.dccs[key].executablePath})` : ''}
             </p>
           ))}
         </div>
@@ -758,11 +760,28 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
     setIsSubmitting(true);
     setErrors({});
 
+    const now = new Date().toISOString();
+    const projectName = formData.projectRoot
+      ? formData.projectRoot.split(/[\\/]/).pop() ?? formData.projectRoot
+      : '';
+
+    const recentProjects = formData.projectRoot
+      ? [
+          {
+            name: projectName || formData.projectRoot,
+            path: formData.projectRoot,
+            lastOpenedAt: now,
+          },
+        ]
+      : undefined;
+
     const payload: Partial<DesktopConfig> = {
       profile: formData.profile || undefined,
       projectRoot: formData.projectRoot || undefined,
       cacheLocation: formData.cacheLocation || undefined,
       pythonPath: formData.pythonPath || undefined,
+      currentProject: formData.projectRoot || undefined,
+      recentProjects,
       shotgrid:
         formData.shotgrid.url || formData.shotgrid.scriptName || formData.shotgrid.apiKey
           ? {
@@ -780,7 +799,7 @@ function FirstRunWizardContent({ onComplete }: FirstRunWizardProps): JSX.Element
               defaultBucket: formData.aws.defaultBucket || undefined,
             }
           : undefined,
-      dcc: formData.dcc,
+      dccs: formData.dccs,
     };
 
     try {
