@@ -42,7 +42,7 @@ class BundleArtifact:
     @classmethod
     def from_dict(cls, data: Mapping[str, str]) -> "BundleArtifact":
         return cls(
-            kind=data.get("kind", "layer"),
+            kind=data.get("kind", "layer"),  # type: ignore[arg-type]
             source=Path(data.get("source", "")),
             bundled_path=Path(data.get("bundled_path", "")),
             sha256=data.get("sha256", ""),
@@ -66,7 +66,7 @@ class BundleManifest:
     def from_dict(cls, data: Mapping[str, object]) -> "BundleManifest":
         artifacts = tuple(
             BundleArtifact.from_dict(entry)
-            for entry in data.get("artifacts", [])  # type: ignore[arg-type]
+            for entry in data.get("artifacts", [])  # type: ignore[arg-type, attr-defined]
         )
         root_layer = Path(str(data.get("root_layer", "")))
         version_hash = str(data.get("version_hash", ""))
