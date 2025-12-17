@@ -11,7 +11,7 @@ Matrix4x4 = tuple[tuple[float, float, float, float], ...]
 def _validate_matrix(matrix: Sequence[Sequence[float]]) -> Matrix4x4:
     if len(matrix) != 4 or any(len(row) != 4 for row in matrix):
         raise ValueError("Camera transforms must be 4x4 matrices")
-    return tuple(tuple(float(value) for value in row) for row in matrix)
+    return tuple(tuple(float(value) for value in row) for row in matrix)  # type: ignore[misc]
 
 
 @dataclass(frozen=True)
@@ -90,7 +90,7 @@ class Timewarp:
                 float(entry["timeline_time"]),
                 float(entry["source_time"]),
             )
-            for entry in payload.get("keyframes", [])
+            for entry in payload.get("keyframes", [])  # type: ignore[attr-defined]
         ]
         return cls(keyframes)
 
@@ -133,13 +133,13 @@ def import_usd_camera(payload: Mapping[str, object]) -> CameraPrim:
     if payload.get("type") != "Camera":
         raise ValueError("USD payload does not describe a Camera prim")
 
-    projection = ProjectionParameters.from_dict(payload["attributes"])
+    projection = ProjectionParameters.from_dict(payload["attributes"])  # type: ignore[arg-type]
     metadata = payload.get("metadata", {})
-    lens_distortion = metadata.get("lens_distortion", {})
-    timewarp_payload = metadata.get("timewarp", {"keyframes": []})
+    lens_distortion = metadata.get("lens_distortion", {})  # type: ignore[attr-defined]
+    timewarp_payload = metadata.get("timewarp", {"keyframes": []})  # type: ignore[attr-defined]
     return CameraPrim(
         name=str(payload.get("name", "Camera")),
-        transform=_validate_matrix(payload["transform"]),
+        transform=_validate_matrix(payload["transform"]),  # type: ignore[arg-type]
         projection=projection,
         lens_distortion={
             str(key): float(value) for key, value in lens_distortion.items()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tools.camera_io import (
+from libraries.creative.camera_io import (
     CameraPrim,
     ProjectionParameters,
     Timewarp,

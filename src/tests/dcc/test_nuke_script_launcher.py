@@ -31,7 +31,7 @@ def test_script_definition_from_path(
 
 
 def test_discover_script_definitions_ignores_init(tmp_path: Path) -> None:
-    (tmp_path / "__init__.py").write_text("# package", encoding="utf-8")
+    (tmp_path / "material_harmonizer.py").write_text("# package", encoding="utf-8")
     alpha = tmp_path / "alpha.py"
     beta = tmp_path / "beta.py"
     alpha.touch()

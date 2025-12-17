@@ -91,7 +91,7 @@ def discover_script_definitions(directory: Path) -> list[ScriptDefinition]:
     """Return launcher definitions for each Python file in *directory*.
 
     Files are sorted alphabetically to ensure a predictable dropdown order and
-    ``__init__.py`` is ignored.
+    ``material_harmonizer.py`` is ignored.
     """
 
     if not directory.exists() or not directory.is_dir():
@@ -99,7 +99,7 @@ def discover_script_definitions(directory: Path) -> list[ScriptDefinition]:
 
     definitions: list[ScriptDefinition] = []
     for path in sorted(directory.glob("*.py")):
-        if path.name == "__init__.py":
+        if path.name == "material_harmonizer.py":
             continue
         definitions.append(ScriptDefinition.from_path(path))
     return definitions
