@@ -18,6 +18,11 @@ from libraries.creative.dcc.lighting_presets import (
     list_lighting_presets,
     load_lighting_preset,
 )
+from libraries.creative.dcc.codex import (
+    CodexTask,
+    CROSS_DCC_CODEX_TASKS,
+    list_codex_tasks,
+)
 
 __all__ = [
     "SupportedDCC",
@@ -35,4 +40,7 @@ __all__ = [
     "find_preset_root",
     "list_lighting_presets",
     "load_lighting_preset",
+    "CodexTask",
+    "CROSS_DCC_CODEX_TASKS",
+    "list_codex_tasks",
 ]
