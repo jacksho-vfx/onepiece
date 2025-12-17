@@ -2,7 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from pipelines.material_harmonizer import MaterialHarmonizer, UsdShadeParseError
+from libraries.creative.dcc.material_harmonizer import (
+    MaterialHarmonizer,
+    UsdShadeParseError,
+)
 
 
 SAMPLE_USD = """#usda 1.0
