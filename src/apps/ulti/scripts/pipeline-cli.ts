@@ -8,7 +8,7 @@
  * workers: ingest, render, and delivery.
  */
 
-import { createTask, waitForTaskCompletion } from '../src/apps/ulti/main/taskManager';
+import { createTask, waitForTaskCompletion } from '../main/taskManager';
 
 const PIPELINE_COMMAND = ['-m', 'trafalgar', 'pipeline', 'run'] as const;
 

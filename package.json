@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "test": "vitest run",
-    "pipeline:cli": "tsx scripts/pipeline-cli.ts"
+    "pipeline:cli": "tsx src/apps/ulti/scripts/pipeline-cli.ts"
   },
   "devDependencies": {
     "@types/electron": "^1.6.10",
