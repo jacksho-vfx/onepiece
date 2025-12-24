@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
@@ -101,8 +102,23 @@ def discover_script_definitions(directory: Path) -> list[ScriptDefinition]:
     for path in sorted(directory.glob("*.py")):
         if path.name == "material_harmonizer.py":
             continue
-        definitions.append(ScriptDefinition.from_path(path))
+        description = _extract_description(path)
+        definitions.append(ScriptDefinition.from_path(path, description=description))
     return definitions
+
+
+def _extract_description(path: Path) -> str | None:
+    """Return the leading docstring from *path* if present."""
+
+    try:
+        module = ast.parse(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, SyntaxError, OSError):
+        return None
+
+    description = ast.get_docstring(module)
+    if not description:
+        return None
+    return description.strip().splitlines()[0]
 
 
 class ScriptLauncherWidget(_WidgetBase):  # type: ignore[misc, valid-type]

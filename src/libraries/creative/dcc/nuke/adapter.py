@@ -8,8 +8,21 @@ from typing import Any, Callable
 import structlog
 
 from libraries.creative.dcc.ui_core import BaseMenu, BasePanel, MenuAction
+from .deploy import get_script_library_path
+from .script_launcher import (
+    configure_script_launcher_defaults,
+    discover_script_definitions,
+)
 
 log = structlog.get_logger(__name__)
+
+
+SCRIPT_LIBRARY = get_script_library_path()
+"""Packaged script directory used for menus and panels."""
+
+configure_script_launcher_defaults(
+    discover_script_definitions(SCRIPT_LIBRARY), SCRIPT_LIBRARY
+)
 
 
 def _safe_action(label: str, func: Callable[[], None]) -> Callable[[], None]:
@@ -58,6 +71,25 @@ _ACTIONS = (
 )
 
 
+def _script_actions(script_directory: Path | None = None) -> list[MenuAction]:
+    """Return actions for every bundled script in ``nuke/scripts``."""
+
+    directory = script_directory or SCRIPT_LIBRARY
+    definitions = discover_script_definitions(directory)
+    actions: list[MenuAction] = []
+    for definition in definitions:
+        label = f"Run {definition.label}"
+        description = definition.description or (
+            f"Execute {definition.label} from {directory.name}."
+        )
+        actions.append(
+            MenuAction(
+                label, _safe_action(definition.label, definition.run), description
+            )
+        )
+    return actions
+
+
 def build_panel(parent: object | None = None) -> BasePanel:
     """Return a modern, accent-colored panel for Nuke utilities."""
 
@@ -66,7 +98,11 @@ def build_panel(parent: object | None = None) -> BasePanel:
         "Curated utilities for lookdev, publishing and review inside Nuke.",
         parent=parent,
     )
-    panel.add_actions(_ACTIONS)
+    panel.add_section("OnePiece Actions", _ACTIONS)
+
+    script_actions = _script_actions()
+    if script_actions:
+        panel.add_section("Nuke Scripts", script_actions)
     return panel
 
 
@@ -75,4 +111,5 @@ def build_menu(parent: object | None = None) -> Any:
 
     menu_builder = BaseMenu("OnePiece", accent="#8CE0FF")
     menu_builder.extend(_ACTIONS)
+    menu_builder.extend(_script_actions())
     return menu_builder.build_menu(parent)
