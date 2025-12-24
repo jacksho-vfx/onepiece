@@ -518,6 +518,21 @@ demonstrations of the new capabilities. The delivery command
 (``onepiece shotgrid deliver``) complements these helpers by packaging approved
 Versions, writing manifests, and synchronising the results to S3.
 
+### Mudstack
+
+Set the variables required by the Mudstack production tracking client:
+
+```bash
+export ONEPIECE_MUDSTACK_URL="https://app.mudstack.com"
+export ONEPIECE_MUDSTACK_API_KEY="<personal-access-token>"
+export ONEPIECE_MUDSTACK_WORKSPACE="<workspace>"  # optional
+```
+
+The new helper mirrors the ShotGrid integration style: typed payload models
+for projects, assets, tasks, and reviews plus convenience methods for media
+uploads. Import ``libraries.integrations.mudstack.MudstackClient`` to drive
+automation flows or script lightweight CRUD helpers against your workspace.
+
 ### AWS
 
 The AWS commands leverage the standard AWS CLI configuration. Configure credentials via `aws configure`, or specify a profile when running commands. The optional `--profile` flag maps directly to the `AWS_PROFILE` environment variable so the spawned `s5cmd` process uses the matching credential profile:
