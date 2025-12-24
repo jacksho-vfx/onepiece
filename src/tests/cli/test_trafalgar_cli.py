@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock, call
 
 import pytest_mock
@@ -12,6 +13,11 @@ from typer.testing import CliRunner
 import textwrap
 
 from apps.trafalgar import app as trafalgar_app
+from apps.trafalgar.providers.providers import (
+    ProviderMetadata,
+    ProviderRegistry,
+    ReconcileDataProvider,
+)
 
 
 runner = CliRunner()
@@ -193,6 +199,52 @@ def test_web_review_command_invokes_uvicorn(mocker: pytest_mock.MockerFixture) -
         reload=False,
         log_level="critical",
     )
+
+
+class _SampleReconcileProvider(ReconcileDataProvider):  # type: ignore[misc]
+    metadata = ProviderMetadata(name="sample", version="1.0")
+
+    def load(self) -> dict[str, Any]:
+        return {
+            "items": [
+                {"id": 1, "value": "alpha"},
+                {"id": 2, "value": "beta"},
+                {"id": 3, "value": "gamma"},
+            ]
+        }
+
+
+def test_ingest_dry_run_renders_table_output(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    registry = ProviderRegistry()
+    registry.register(_SampleReconcileProvider, default=True)
+
+    mocker.patch("apps.trafalgar.app.initialize_providers", return_value=registry)
+
+    result = runner.invoke(trafalgar_app, ["ingest", "dry-run", "--limit", "2"])
+
+    assert result.exit_code == 0
+    assert "items:" in result.stdout
+    assert "alpha" in result.stdout
+    assert "beta" in result.stdout
+    assert "gamma" not in result.stdout
+
+
+def test_ingest_dry_run_reports_missing_source(
+    mocker: pytest_mock.MockerFixture,
+) -> None:
+    mocker.patch(
+        "apps.trafalgar.app.initialize_providers", return_value=ProviderRegistry()
+    )
+
+    result = runner.invoke(
+        trafalgar_app,
+        ["ingest", "dry-run", "--source", "missing"],
+    )
+
+    assert result.exit_code == 1
+    assert "provider 'missing' not found" in result.stdout
 
 
 def test_pipeline_push_upserts_definition(

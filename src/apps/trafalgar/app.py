@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import json
 import os
@@ -28,6 +28,11 @@ from apps.trafalgar.pipeline import (
     WorkerPoolMetrics,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
+from apps.trafalgar.providers.providers import (
+    ProviderNotFoundError,
+    ReconcileDataProvider,
+    initialize_providers,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -197,6 +202,51 @@ def _parse_pipeline_parameters(raw: list[str] | None) -> dict[str, str]:
             raise ValueError("Parameter keys cannot be empty.")
         parameters[key] = value.strip()
     return parameters
+
+
+def _limit_dataset(value: Any, limit: int) -> Any:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)[:limit]
+    return value
+
+
+def _coerce_table_rows(value: Any) -> list[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        return [value]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        rows: list[Mapping[str, Any]] = []
+        for item in value:
+            if isinstance(item, Mapping):
+                rows.append(item)
+            else:
+                rows.append({"value": item})
+        return rows
+    return [{"value": value}]
+
+
+def _format_table_rows(rows: list[Mapping[str, Any]]) -> list[str]:
+    if not rows:
+        return ["(no records)"]
+
+    columns = sorted({key for row in rows for key in row.keys()})
+    widths = {
+        column: max(len(column), max(len(str(row.get(column, ""))) for row in rows))
+        for column in columns
+    }
+
+    header = " | ".join(column.ljust(widths[column]) for column in columns)
+    separator = "-+-".join("-" * widths[column] for column in columns)
+    lines = [header, separator]
+
+    for row in rows:
+        lines.append(
+            " | ".join(
+                str(row.get(column, "")).ljust(widths[column]) for column in columns
+            )
+        )
+    return lines
 
 
 def _extract_pipeline_definitions(
@@ -1020,6 +1070,64 @@ def ingest(
     """Launch the ingest runs API using uvicorn."""
 
     _serve_ingest(host=host, port=port, reload=reload, log_level=log_level)
+
+
+@ingest_app.command("dry-run")
+def ingest_dry_run(
+    source: str | None = typer.Option(
+        None,
+        "--source",
+        "-s",
+        help="Name of the ingestion source to preview. Defaults to the registered default.",
+    ),
+    limit: int = typer.Option(
+        5,
+        "--limit",
+        "-n",
+        min=1,
+        help="Maximum number of records to display per dataset.",
+        show_default=True,
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: 'text' (table) or 'json'.",
+        callback=lambda value: _resolve_output_format(value),
+        show_default=True,
+    ),
+) -> None:
+    """Preview ingest source output without persisting it."""
+
+    registry = initialize_providers()
+    try:
+        provider = (
+            registry.create("reconcile", source)
+            if source is not None
+            else registry.create_default("reconcile")
+        )
+    except ProviderNotFoundError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1)
+
+    if not isinstance(provider, ReconcileDataProvider):
+        typer.echo("Selected provider is not a reconcile data provider.")
+        raise typer.Exit(code=1)
+
+    payload = provider.load()
+    limited_payload = {
+        key: _limit_dataset(value, limit) for key, value in payload.items()
+    }
+
+    if output_format == "json":
+        typer.echo(json.dumps(limited_payload, indent=2, default=str))
+        return
+
+    for dataset, data in limited_payload.items():
+        typer.echo(f"{dataset}:")
+        for line in _format_table_rows(_coerce_table_rows(data)):
+            typer.echo(f"  {line}")
+        typer.echo()
 
 
 @auth_app.command("generate-token")

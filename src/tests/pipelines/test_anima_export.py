@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pipelines.anima_export import (
+from libraries.creative.dcc.anima_export import (
     AnimaActor,
     AnimaUsdExporter,
     AnimationClip,
