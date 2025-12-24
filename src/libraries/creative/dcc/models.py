@@ -24,6 +24,7 @@ class SupportedDCC(Enum):
     MAX = "3dsmax"
     VRAY = "vray"
     CINEMA4D = "cinema4d"
+    UNREAL = "unreal"
 
     @property
     def command(self) -> str:
@@ -77,6 +78,7 @@ DCC_PLUGIN_REQUIREMENTS: dict[SupportedDCC, frozenset[str]] = {
     SupportedDCC.MAX: frozenset({"vray"}),
     SupportedDCC.VRAY: frozenset({"vray"}),
     SupportedDCC.CINEMA4D: frozenset({"redshift"}),
+    SupportedDCC.UNREAL: frozenset({"datasmith"}),
 }
 
 
@@ -88,6 +90,7 @@ DCC_GPU_REQUIREMENTS: dict[SupportedDCC, str] = {
     SupportedDCC.MAX: "DirectX 12",
     SupportedDCC.VRAY: "CUDA 11",
     SupportedDCC.CINEMA4D: "OpenGL 4.5",
+    SupportedDCC.UNREAL: "DirectX 12",
 }
 
 
@@ -101,6 +104,10 @@ DCC_ASSET_REQUIREMENTS: dict[SupportedDCC, tuple[str, ...]] = {
     SupportedDCC.CINEMA4D: (
         "plugins/redshift",
         "prefs/cinema4d/shared_prefs.json",
+    ),
+    SupportedDCC.UNREAL: (
+        "Plugins/DatasmithImporter",
+        "Config/DefaultEngine.ini",
     ),
 }
 
