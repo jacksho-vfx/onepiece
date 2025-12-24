@@ -15,6 +15,11 @@ from libraries.creative.dcc.cinema4d.metadata import (
     SUMMARY_ENV_VAR,
     load_cinema4d_summary,
 )
+from libraries.creative.dcc.cinema4d.script_library import (
+    default_script_directory,
+    deploy_scripts_to_directory,
+    discover_cinema4d_scripts,
+)
 from libraries.creative.dcc.cinema4d.validation import (
     normalise_asset_paths,
     validate_package,
@@ -314,6 +319,56 @@ def normalise_paths(
         "cinema4d.normalise_paths.noop",
         package=str(package_dir),
         updated=False,
+    )
+
+
+@app.command("deploy-to-cinema4d")
+def deploy_scripts_to_cinema4d(
+    destination: Path = typer.Argument(
+        ...,
+        help="Directory where Cinema 4D scripts should be copied for Cinema 4D.",
+        exists=False,
+        dir_okay=True,
+        file_okay=False,
+        writable=True,
+        resolve_path=True,
+    ),
+    scripts_dir: Path | None = typer.Option(
+        None,
+        "--scripts",
+        "-s",
+        help=(
+            "Optional path to the Cinema 4D scripts directory. Defaults to the "
+            "bundled scripts shipped with the OnePiece toolkit."
+        ),
+        exists=False,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+    ),
+) -> None:
+    """Copy Cinema 4D helper scripts into a Cinema 4D scripts directory."""
+
+    source_dir = scripts_dir or default_script_directory()
+    scripts = discover_cinema4d_scripts(source_dir)
+
+    if not scripts:
+        typer.secho(f"No Cinema 4D scripts found in {source_dir}.", fg=typer.colors.RED)
+        log.warning(
+            "cinema4d.deploy_to_cinema4d.missing_scripts", source=str(source_dir)
+        )
+        raise typer.Exit(code=1)
+
+    copied = deploy_scripts_to_directory(destination, scripts)
+    typer.secho(
+        f"Copied {len(copied)} Cinema 4D scripts to {destination}.",
+        fg=typer.colors.GREEN,
+    )
+    log.info(
+        "cinema4d.deploy_to_cinema4d.success",
+        destination=str(destination),
+        scripts=[str(path) for path in copied],
     )
 
 

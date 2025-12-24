@@ -12,6 +12,11 @@ from libraries.creative.dcc.ui_core import (
     MenuAction,
     require_qt_modules,
 )
+from .script_library import (
+    build_menu_actions_from_scripts,
+    default_script_directory,
+    discover_cinema4d_scripts,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -59,6 +64,11 @@ def _launch_command_panel() -> None:
     panel.show()
 
 
+def _script_actions() -> tuple[MenuAction, ...]:
+    scripts = discover_cinema4d_scripts(default_script_directory())
+    return tuple(build_menu_actions_from_scripts(scripts, wrap_callback=_safe_action))
+
+
 _ACTIONS = (
     MenuAction(
         "Cleanup Scene",
@@ -85,11 +95,19 @@ def build_panel(parent: object | None = None) -> BasePanel:
         accent="#F6C343",
         parent=parent,
     )
-    panel.add_actions(_ACTIONS)
+    panel.add_section("Core Actions", _ACTIONS)
+
+    scripts = _script_actions()
+    if scripts:
+        panel.add_section("Cinema 4D Scripts", scripts)
     return panel
 
 
 def build_menu(parent: object | None = None) -> Any:
     menu_builder = BaseMenu("OnePiece", accent="#F6C343")
     menu_builder.extend(_ACTIONS)
+
+    script_actions = _script_actions()
+    if script_actions:
+        menu_builder.extend(script_actions)
     return menu_builder.build_menu(parent)

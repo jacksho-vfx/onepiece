@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Iterable, Protocol, Sequence, cast
 
 import structlog
@@ -13,6 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - replaced by tests stubs
     c4d = None  # type: ignore
 
 from .cleanup import cleanup_scene
+from .script_library import default_script_directory, discover_cinema4d_scripts
 from .publish_pipeline import PipelineResult, build_pipeline
 
 
@@ -333,9 +335,51 @@ def register_scene_validator_publisher_command(
     )
 
 
+def register_script_commands(
+    panel: CommandPanel,
+    *,
+    script_directory: Path | None = None,
+    module: object | None = None,
+) -> list[CommandDefinition]:
+    """Register buttons for each bundled Cinema 4D script."""
+
+    resolved_module = module or panel._module
+    scripts = discover_cinema4d_scripts(script_directory or default_script_directory())
+    registered: list[CommandDefinition] = []
+
+    for script in scripts:
+        script_runner = script.run
+
+        def _run_script(
+            path: Path = script.path,
+            label: str = script.label,
+            runner: Callable[[], None] = script_runner,
+        ) -> None:
+            try:
+                runner()
+            except Exception as exc:  # pragma: no cover - surfaced to users
+                log.exception("cinema4d_script_run_failed", script=str(path))
+                _show_message(
+                    resolved_module,
+                    f"Script '{label}' failed to run: {exc}",
+                )
+
+        registered.append(
+            panel.register_command(
+                script.label,
+                _run_script,
+                description=script.description
+                or "Execute a Cinema 4D helper script from the bundled toolkit.",
+            )
+        )
+
+    return registered
+
+
 __all__ = [
     "CommandDefinition",
     "CommandPanel",
     "register_cleanup_command",
+    "register_script_commands",
     "register_scene_validator_publisher_command",
 ]

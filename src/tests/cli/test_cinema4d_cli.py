@@ -198,6 +198,51 @@ def test_cinema4d_gather_assets_reports_missing(
     assert "Cinema 4D reference issues detected" in result.output
 
 
+def test_cinema4d_deploy_scripts_to_cinema4d(tmp_path: Path) -> None:
+    """Scripts are copied to the requested Cinema 4D directory."""
+
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    script_path = scripts_dir / "tool.py"
+    script_path.write_text("print('hello from cinema4d')\n")
+
+    destination = tmp_path / "cinema4d"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cinema4d_module.app,
+        [
+            "deploy-to-cinema4d",
+            str(destination),
+            "--scripts",
+            str(scripts_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (destination / script_path.name).exists()
+
+
+def test_cinema4d_deploy_scripts_to_cinema4d_requires_scripts(tmp_path: Path) -> None:
+    """The deploy command fails fast when no scripts are present."""
+
+    destination = tmp_path / "cinema4d"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cinema4d_module.app,
+        [
+            "deploy-to-cinema4d",
+            str(destination),
+            "--scripts",
+            str(tmp_path / "missing"),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "No Cinema 4D scripts found" in result.output
+
+
 def test_cinema4d_normalise_paths_success(tmp_path: Path) -> None:
     """Paths are rebased relative to the package and written to disk."""
 
