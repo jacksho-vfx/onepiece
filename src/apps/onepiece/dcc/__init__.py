@@ -12,6 +12,7 @@ from apps.onepiece.dcc.nuke import app as nuke
 from apps.onepiece.dcc.open_shot import app as open_shot
 from apps.onepiece.dcc.publish import app as publish
 from apps.onepiece.dcc.unreal_import import app as unreal_import
+from apps.onepiece.dcc.unreal_panel import app as unreal_panel
 
 
 log = structlog.get_logger(__name__)
@@ -25,6 +26,7 @@ app.add_typer(nuke)
 app.add_typer(open_shot)
 app.add_typer(publish)
 app.add_typer(unreal_import)
+app.add_typer(unreal_panel)
 
 
 def conform(*, profile: str | None = None, **kwargs: Any) -> dict[str, Any]:
@@ -43,5 +45,6 @@ __all__ = [
     "open_shot",
     "publish",
     "unreal_import",
+    "unreal_panel",
     "conform",
 ]
