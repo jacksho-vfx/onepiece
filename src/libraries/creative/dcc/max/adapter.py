@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 import importlib
+import importlib.util
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
