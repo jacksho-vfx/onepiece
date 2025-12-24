@@ -7,6 +7,7 @@ import typer
 
 from apps.onepiece.dcc.animation import app as animation
 from apps.onepiece.dcc.cinema4d import app as cinema4d
+from apps.onepiece.dcc.maya_panel import app as maya
 from apps.onepiece.dcc.max import app as max_app
 from apps.onepiece.dcc.nuke import app as nuke
 from apps.onepiece.dcc.open_shot import app as open_shot
@@ -21,6 +22,7 @@ app = typer.Typer(name="dcc", help="DCC integration commands")
 
 app.add_typer(animation)
 app.add_typer(cinema4d)
+app.add_typer(maya)
 app.add_typer(max_app)
 app.add_typer(nuke)
 app.add_typer(open_shot)
@@ -40,6 +42,7 @@ __all__ = [
     "app",
     "animation",
     "cinema4d",
+    "maya",
     "max_app",
     "nuke",
     "open_shot",
