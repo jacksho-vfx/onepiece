@@ -161,7 +161,7 @@ def import_otio_timewarp(payload: Mapping[str, object]) -> Timewarp:
 
 
 def bake_lens_metadata(
-    distortion_coefficients: Mapping[str, float]
+    distortion_coefficients: Mapping[str, float],
 ) -> dict[str, float]:
     """Normalize lens distortion metadata for publication."""
 

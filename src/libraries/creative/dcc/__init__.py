@@ -18,6 +18,12 @@ from libraries.creative.dcc.lighting_presets import (
     list_lighting_presets,
     load_lighting_preset,
 )
+from libraries.creative.dcc.usd_pipeline import (
+    LayerRole,
+    USDLayerContribution,
+    USDShotPlan,
+    build_usd_plan,
+)
 
 __all__ = [
     "SupportedDCC",
@@ -31,6 +37,10 @@ __all__ = [
     "MaxClient",
     "VrayClient",
     "Cinema4DClient",
+    "USDLayerContribution",
+    "USDShotPlan",
+    "LayerRole",
+    "build_usd_plan",
     "LightingPreset",
     "find_preset_root",
     "list_lighting_presets",
