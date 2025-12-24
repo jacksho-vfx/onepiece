@@ -16,8 +16,11 @@ from typing import Any, Mapping, MutableMapping, Sequence
 
 import structlog
 
+from libraries.metrics.usd import USDMetricClient
+
 
 log = structlog.get_logger(__name__)
+_metrics = USDMetricClient()
 
 
 class UnrealImportError(RuntimeError):
@@ -247,59 +250,68 @@ class UnrealPackageImporter:
 
         metadata = _load_metadata(package_dir)
         _assert_maya_package(metadata)
-        summaries = _collect_import_summaries(
-            package_dir, metadata, project=project, asset_name=asset_name
-        )
+        with _metrics.time_block(
+            dcc="unreal",
+            stage="import_package",
+            sequence=project,
+            asset=asset_name,
+            metadata={"dry_run": dry_run, "package": str(package_dir)},
+        ):
+            summaries = _collect_import_summaries(
+                package_dir, metadata, project=project, asset_name=asset_name
+            )
 
-        if dry_run:
+            if dry_run:
+                log.info(
+                    "unreal_import_dry_run",
+                    project=project,
+                    asset=asset_name,
+                    package=str(package_dir),
+                    tasks=len(summaries),
+                )
+                return summaries
+
+            unreal = self._resolve_unreal_module()
+
+            try:
+                asset_tools_helpers = unreal.AssetToolsHelpers
+                asset_tools = asset_tools_helpers.get_asset_tools()
+            except AttributeError as exc:  # pragma: no cover - defensive guard
+                raise UnrealImportError(
+                    "Unreal module missing AssetToolsHelpers"
+                ) from exc
+
+            tasks = [self._build_task(unreal, summary) for summary in summaries]
+
             log.info(
-                "unreal_import_dry_run",
+                "unreal_import_start",
                 project=project,
                 asset=asset_name,
                 package=str(package_dir),
-                tasks=len(summaries),
+                tasks=len(tasks),
             )
+
+            try:
+                asset_tools.import_asset_tasks(tasks)
+            except Exception as exc:  # pragma: no cover - depends on Unreal runtime
+                log.error(
+                    "unreal_import_failed",
+                    project=project,
+                    asset=asset_name,
+                    package=str(package_dir),
+                    error=str(exc),
+                )
+                raise UnrealImportError(f"Unreal import failed: {exc}") from exc
+
+            log.info(
+                "unreal_import_completed",
+                project=project,
+                asset=asset_name,
+                package=str(package_dir),
+                imported=len(tasks),
+            )
+
             return summaries
-
-        unreal = self._resolve_unreal_module()
-
-        try:
-            asset_tools_helpers = unreal.AssetToolsHelpers
-            asset_tools = asset_tools_helpers.get_asset_tools()
-        except AttributeError as exc:  # pragma: no cover - defensive guard
-            raise UnrealImportError("Unreal module missing AssetToolsHelpers") from exc
-
-        tasks = [self._build_task(unreal, summary) for summary in summaries]
-
-        log.info(
-            "unreal_import_start",
-            project=project,
-            asset=asset_name,
-            package=str(package_dir),
-            tasks=len(tasks),
-        )
-
-        try:
-            asset_tools.import_asset_tasks(tasks)
-        except Exception as exc:  # pragma: no cover - depends on Unreal runtime
-            log.error(
-                "unreal_import_failed",
-                project=project,
-                asset=asset_name,
-                package=str(package_dir),
-                error=str(exc),
-            )
-            raise UnrealImportError(f"Unreal import failed: {exc}") from exc
-
-        log.info(
-            "unreal_import_completed",
-            project=project,
-            asset=asset_name,
-            package=str(package_dir),
-            imported=len(tasks),
-        )
-
-        return summaries
 
     def _resolve_unreal_module(self) -> Any:
         if self._unreal is not None:
