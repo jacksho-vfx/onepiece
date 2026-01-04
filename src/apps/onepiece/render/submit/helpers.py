@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+import sys
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Final, Mapping, cast
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Final, Mapping, TypeVar, cast
 
 from apps.onepiece.config import load_profile
 from apps.onepiece.utils.errors import (
@@ -14,6 +17,7 @@ from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
+import structlog
 from libraries.automation.render import deadline, houdini, mock, opencue, tractor
 from libraries.automation.render.base import (
     AdapterCapabilities,
@@ -65,6 +69,51 @@ _CAPABILITIES_CACHE_TTL_SECONDS: Final[float] = 60.0
 _CAPABILITIES_CACHE_MAXSIZE: Final[int] = 32
 _CAPABILITIES_CACHE_LOCK = threading.RLock()
 _CAPABILITIES_CACHE: OrderedDict[str, tuple[float, AdapterCapabilities]] = OrderedDict()
+
+_DEFAULT_LOGGER = structlog.get_logger(__name__)
+_ModuleAttr = TypeVar("_ModuleAttr")
+
+
+@dataclass(frozen=True)
+class RenderCliModuleResolver:
+    """Resolve shared render CLI dependencies from a host module when present."""
+
+    module_name: str = "apps.onepiece.render.submit"
+
+    @property
+    def module(self) -> Any | None:
+        return sys.modules.get(self.module_name)
+
+    def resolve_logger(self, fallback: Any = _DEFAULT_LOGGER) -> Any:
+        module = self.module
+        if module is not None and hasattr(module, "log"):
+            return getattr(module, "log")
+        return fallback
+
+    def resolve_attribute(self, name: str, default: _ModuleAttr) -> _ModuleAttr:
+        module = self.module
+        if module is not None and hasattr(module, name):
+            return cast(_ModuleAttr, getattr(module, name))
+        return default
+
+
+def validate_scene_and_output(scene: Path, output: Path) -> None:
+    """Ensure render inputs point to real files and directories."""
+
+    if not scene.exists():
+        raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
+    if not scene.is_file():
+        raise OnePieceValidationError(f"Scene path '{scene}' is not a file (--scene).")
+
+    if not output.exists():
+        raise OnePieceValidationError(
+            f"Output directory '{output}' does not exist (--output)."
+        )
+    if not output.is_dir():
+        raise OnePieceValidationError(
+            f"Output path '{output}' is not a directory (--output)."
+        )
+
 
 _FRAME_SEGMENT_PATTERN = re.compile(
     r"^\s*(?P<start>-?\d+)(?:\s*-\s*(?P<end>-?\d+))?(?:x(?P<step>\d+))?\s*$"
@@ -443,7 +492,9 @@ __all__ = [
     "get_adapter",
     "get_adapter_capabilities",
     "parse_frame_count",
+    "RenderCliModuleResolver",
     "refresh_capabilities_cache",
     "resolve_metrics",
     "resolve_priority_and_chunk_size",
+    "validate_scene_and_output",
 ]

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
-from typing import TYPE_CHECKING, cast
 
 import typer
 
@@ -14,30 +12,10 @@ from apps.onepiece.utils.errors import (
     OnePieceValidationError,
 )
 
-from .helpers import extract_history
-
-if TYPE_CHECKING:
-    from ..jobs import RenderJobClient, RenderJobClientError
+from .helpers import RenderCliModuleResolver, extract_history
 
 
-def _render_job_client_class() -> type["RenderJobClient"]:
-    from ..jobs import RenderJobClient as DefaultClient
-
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "RenderJobClient"):
-        return cast(type["RenderJobClient"], getattr(module, "RenderJobClient"))
-    return DefaultClient
-
-
-def _render_job_error_class() -> type["RenderJobClientError"]:
-    from ..jobs import RenderJobClientError as DefaultError
-
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "RenderJobClientError"):
-        return cast(
-            type["RenderJobClientError"], getattr(module, "RenderJobClientError")
-        )
-    return DefaultError
+_resolver = RenderCliModuleResolver()
 
 
 def render_status(
@@ -60,8 +38,13 @@ def render_status(
 ) -> None:
     """Fetch render job metadata from the Trafalgar render API."""
 
-    client_class = _render_job_client_class()
-    error_class = _render_job_error_class()
+    from ..jobs import (
+        RenderJobClient as DefaultClient,
+        RenderJobClientError as DefaultError,
+    )
+
+    client_class = _resolver.resolve_attribute("RenderJobClient", DefaultClient)
+    error_class = _resolver.resolve_attribute("RenderJobClientError", DefaultError)
 
     try:
         client = client_class(profile=profile)
