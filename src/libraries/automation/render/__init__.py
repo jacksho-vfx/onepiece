@@ -10,6 +10,7 @@ from .analytics import (
 )
 from .base import RenderSubmissionError, SubmissionResult
 from .chopper import ChopperRenderError, load_scene, render_scene
+from .geometry import GeometryOptimizationResult, optimize_geometry
 from .optimization import (
     CostBreakdown,
     CostModelInput,
@@ -37,4 +38,6 @@ __all__ = [
     "ChopperRenderError",
     "load_scene",
     "render_scene",
+    "GeometryOptimizationResult",
+    "optimize_geometry",
 ]
