@@ -18,6 +18,14 @@ from .helpers import (
     resolve_metrics,
     resolve_priority_and_chunk_size,
 )
+from .scripts import (
+    RenderScriptBundle,
+    build_render_script_bundle,
+    optimisation_preview,
+    run_render_submission,
+    sanity_check_submission,
+    write_render_script_bundle,
+)
 from ..jobs import RenderJobClient, RenderJobClientError
 from . import cancel_command as _cancel_command
 from . import status_command as _status_command
@@ -32,6 +40,7 @@ __all__ = [
     "app",
     "RenderJobClient",
     "RenderJobClientError",
+    "RenderScriptBundle",
     "coerce_text",
     "extract_history",
     "fetch_adapter_capabilities",
@@ -40,9 +49,14 @@ __all__ = [
     "log",
     "parse_frame_count",
     "presets_app",
+    "build_render_script_bundle",
+    "optimisation_preview",
+    "run_render_submission",
     "refresh_capabilities_cache",
+    "sanity_check_submission",
     "resolve_metrics",
     "resolve_priority_and_chunk_size",
+    "write_render_script_bundle",
 ]
 
 _refresh_capabilities_cache = refresh_capabilities_cache
