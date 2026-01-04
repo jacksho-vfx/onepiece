@@ -8,6 +8,7 @@ import pytest
 
 from libraries.creative.dcc.cinema4d.panel import (
     CommandPanel,
+    register_deadline_submitter_command,
     register_cleanup_command,
     register_scene_validator_publisher_command,
 )
@@ -290,3 +291,23 @@ def test_scene_validator_publisher_handles_exceptions() -> None:
 
     message = FakeGuiModule.messages[-1]
     assert "failed" in message.lower()
+
+
+def test_register_deadline_submitter_command() -> None:
+    panel = CommandPanel(module=FakeCinema4DModule)
+    launches: list[object] = []
+
+    def fake_launch(*, module: object | None = None) -> None:
+        launches.append(module)
+
+    register_deadline_submitter_command(
+        panel,
+        module=FakeCinema4DModule,
+        launcher=fake_launch,
+    )
+
+    dialog = panel.show()
+    button_id, *_ = dialog.buttons[-1]
+    dialog.Command(button_id, None)
+
+    assert launches == [FakeCinema4DModule]
