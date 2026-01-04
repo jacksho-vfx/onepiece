@@ -1521,16 +1521,17 @@ def test_animation_writer_creates_gif(tmp_path: Path) -> None:
     data = destination.read_bytes()
     assert data.startswith(b"GIF89a")
 
-    from PIL import Image
+    from PIL import Image as PILImage
 
-    with Image.open(destination) as image:
-        assert image.n_frames == len(frames)
+    with PILImage.open(destination) as opened:
+        image = cast(PILImage.Image, opened)
+        assert getattr(image, "n_frames") == len(frames)
         image.seek(0)
         first = image.convert("RGBA")
-        assert first.getpixel((0, 0))[2] == 255
+        assert cast(tuple[int, ...], first.getpixel((0, 0)))[2] == 255
         image.seek(1)
         second = image.convert("RGBA")
-        assert second.getpixel((0, 0))[0] == 20
+        assert cast(tuple[int, ...], second.getpixel((0, 0)))[0] == 20
 
 
 def test_animation_writer_streams_gif_frames(

@@ -125,3 +125,27 @@ def test_slack_notifier_requires_webhook(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert notifier.send("Subject", "Message", []) is False
     assert logger.events[0]["event"] == "notify.slack.no_webhook"
+
+
+def test_slack_notifier_uses_environment_webhook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logger = StubLogger()
+    monkeypatch.setattr(slack_module, "log", logger)
+    monkeypatch.setenv(
+        "ONEPIECE_SLACK_WEBHOOK", "  https://hooks.slack.test/from-env  "
+    )
+
+    sent: list[dict[str, object]] = []
+
+    def fake_post(url: str, json: dict[str, object], timeout: float) -> StubResponse:
+        sent.append({"url": url, "json": json, "timeout": timeout})
+        return StubResponse()
+
+    monkeypatch.setattr(slack_module.requests, "post", fake_post)
+
+    notifier = SlackNotifier(timeout=5.0)
+
+    assert notifier.send("Env", "Body", []) is True
+    assert sent[0]["url"] == "https://hooks.slack.test/from-env"
+    assert logger.events[-1]["event"] == "notify.slack.sent"
