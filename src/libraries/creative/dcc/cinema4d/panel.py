@@ -14,6 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - replaced by tests stubs
     c4d = None  # type: ignore
 
 from .cleanup import cleanup_scene
+from .deadline_submitter import launch_deadline_submitter
 from .script_library import default_script_directory, discover_cinema4d_scripts
 from .publish_pipeline import PipelineResult, build_pipeline
 
@@ -268,6 +269,32 @@ def register_cleanup_command(
     )
 
 
+def register_deadline_submitter_command(
+    panel: CommandPanel,
+    *,
+    module: object | None = None,
+    description: str | None = None,
+    launcher: Callable[..., Any] | None = None,
+) -> CommandDefinition:
+    """Register a Deadline submission command on the given panel."""
+
+    resolved_module = module or panel._module
+    command_description = (
+        description
+        or "Submit the current Cinema 4D scene to the Deadline render farm using pipeline defaults."
+    )
+
+    def _open_submitter() -> None:
+        launch = launcher or launch_deadline_submitter
+        launch(module=resolved_module)
+
+    return panel.register_command(
+        "Submit to Deadline",
+        _open_submitter,
+        description=command_description,
+    )
+
+
 def register_scene_validator_publisher_command(
     panel: CommandPanel,
     *,
@@ -379,6 +406,7 @@ def register_script_commands(
 __all__ = [
     "CommandDefinition",
     "CommandPanel",
+    "register_deadline_submitter_command",
     "register_cleanup_command",
     "register_script_commands",
     "register_scene_validator_publisher_command",

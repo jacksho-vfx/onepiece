@@ -343,11 +343,13 @@ def submit_job(
     priority: int,
     user: str,
     chunk_size: int | None,
+    *,
+    pool: str | None = None,
 ) -> SubmissionResult:
     """Submit a render job to Deadline and return its metadata."""
 
     client = _get_client()
-    pool_override = get_adapter_setting("deadline", "pool")
+    pool_override = pool or get_adapter_setting("deadline", "pool")
 
     bundle_metadata = _load_bundle_metadata(scene)
 
