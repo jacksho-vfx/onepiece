@@ -242,7 +242,7 @@ class PipelineOrchestrator:
             )
         self._worker_pool = worker_pool
         derived_max_workers = self._determine_max_workers(worker_pool)
-        if derived_max_workers is None and worker_pool is None:
+        if derived_max_workers is None:
             derived_max_workers = max_workers
         self._max_workers = derived_max_workers
         self._shutdown = False
