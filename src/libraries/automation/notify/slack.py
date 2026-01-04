@@ -26,7 +26,9 @@ class SlackNotifier(Notifier):
         backoff_base: float = 1.0,
         backoff_jitter: float = 0.5,
     ) -> None:
-        self.webhook_url = webhook_url or os.environ.get("ONEPIECE_SLACK_WEBHOOK", "")
+        webhook_from_env = os.environ.get("ONEPIECE_SLACK_WEBHOOK", "")
+        raw_webhook = webhook_url or webhook_from_env
+        self.webhook_url = raw_webhook.strip()
         self.timeout = timeout
         self.max_attempts = max(max_attempts, 1)
         self.backoff_base = max(backoff_base, 0.0)
