@@ -83,7 +83,7 @@ Once installed, the CLI exposes a number of subcommands:
 - `onepiece dcc import-unreal --package <dir> --project <Project> --asset <Name>` &mdash; Rehydrate Maya-authored packages inside Unreal, with `--dry-run` support for previewing the generated import tasks.
 - `onepiece aws sync-from` / `onepiece aws sync-to` &mdash; Entry points for synchronising media to and from AWS S3 buckets.
 - `onepiece aws ingest` &mdash; Validates vendor/client deliveries, registers Versions in ShotGrid, and uploads media with detailed progress feedback.
-- `onepiece validate reconcile ...` &mdash; Runs validation suites for ingest/publish workflows.
+- `onepiece validate reconcile ...` &mdash; Runs validation suites for ingest/publish workflows. Set `ONEPIECE_PROJECTS_ROOT` (note the plural) to override the default `/projects` base scanned by the reconciler.
 - `onepiece shotgrid package-playlist` &mdash; Bundles playlist media for client/vendor deliveries with MediaShuttle-ready folder structures.
 - `onepiece shotgrid show-setup` &mdash; Seeds a project hierarchy from a CSV manifest while tracking progress shot-by-shot.
 - `onepiece shotgrid deliver` &mdash; Builds MediaShuttle-ready ZIP archives from approved ShotGrid versions, writes manifests, and synchronises the package to S3.
@@ -112,7 +112,7 @@ Key environment variables recognised across the CLI surface:
 | `ONEPIECE_SHOTGRID_SCRIPT` / `ONEPIECE_SHOTGRID_KEY` | API script credentials used for automation. |
 | `AWS_PROFILE` | AWS profile applied when spawning `s5cmd` or other AWS-powered helpers. |
 | `TRAFALGAR_DASHBOARD_TOKEN` | Bearer token required to query the dashboard and render APIs. |
-| `ONEPIECE_PROJECT_ROOT` | Overrides the project root used when resolving `onepiece.toml` profiles. |
+| `ONEPIECE_PROJECT_ROOT` | Canonical override for the project root used when resolving `onepiece.toml` profiles. |
 | `ONEPIECE_MAYA_PLUGINS` / `ONEPIECE_GPU` | Optional hints consumed by the DCC environment report when PyMEL or vendor detection is unavailable. |
 
 Project and workspace defaults can be captured in `onepiece.toml` files. The
