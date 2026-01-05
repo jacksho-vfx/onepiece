@@ -279,12 +279,12 @@ def test_create_pipeline_allows_translated_synonyms(client: TestClient) -> None:
 
 def test_create_pipeline_rejects_unexpected_fields(client: TestClient) -> None:
     payload = _pipeline_submission()
-    payload.update({"summery": "typo", "stepp": []})
+    payload.update({"summary_extra": "typo", "step_extra": []})
 
     response = client.post("/pipelines", headers=_auth_headers(), json=payload)
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Unexpected fields: stepp, summery"
+    assert response.json()["detail"] == "Unexpected fields: step_extra, summary_extra"
 
 
 def test_update_pipeline_replaces_definition(client: TestClient) -> None:
