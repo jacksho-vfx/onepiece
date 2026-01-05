@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import getpass
 from pathlib import Path
-import sys
-from typing import Any
 
 import click
 import structlog
@@ -28,33 +26,15 @@ from libraries.automation.render.geometry import (
     optimize_geometry,
 )
 
-from .helpers import DCC_CHOICES, parse_frame_count
+from .helpers import (
+    DCC_CHOICES,
+    RenderCliModuleResolver,
+    parse_frame_count,
+    validate_scene_and_output,
+)
 
-_log = structlog.get_logger(__name__)
-log = _log
-
-
-def _get_logger() -> Any:
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "log"):
-        return getattr(module, "log")
-    return _log
-
-
-def _validate_scene(scene: Path, output: Path) -> None:
-    if not scene.exists():
-        raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
-    if not scene.is_file():
-        raise OnePieceValidationError(f"Scene path '{scene}' is not a file (--scene).")
-
-    if not output.exists():
-        raise OnePieceValidationError(
-            f"Output directory '{output}' does not exist (--output)."
-        )
-    if not output.is_dir():
-        raise OnePieceValidationError(
-            f"Output path '{output}' is not a directory (--output)."
-        )
+_resolver = RenderCliModuleResolver()
+log = _resolver.resolve_logger(structlog.get_logger(__name__))
 
 
 def _optimise_scene(scene: Path, workspace: Path | None) -> GeometryOptimizationResult:
@@ -63,8 +43,8 @@ def _optimise_scene(scene: Path, workspace: Path | None) -> GeometryOptimization
     except (FileNotFoundError, IsADirectoryError) as exc:
         raise OnePieceValidationError(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - defensive guard
-        log = _get_logger()
-        log.exception("render.deadline.optimize_failed", scene=str(scene))
+        logger = _resolver.resolve_logger(log)
+        logger.exception("render.deadline.optimize_failed", scene=str(scene))
         raise OnePieceRuntimeError("Geometry optimisation failed.") from exc
 
 
@@ -105,10 +85,10 @@ def optimize_and_submit_deadline(
 ) -> None:
     """Optimise geometry then submit a Deadline render job."""
 
-    logger = _get_logger()
+    logger = _resolver.resolve_logger(log)
     dcc = dcc.lower()
     resolved_user = user or getpass.getuser()
-    _validate_scene(scene, output)
+    validate_scene_and_output(scene, output)
 
     if parse_frame_count(frames) is None:
         raise OnePieceValidationError(f"Frame range '{frames}' is invalid (--frames).")

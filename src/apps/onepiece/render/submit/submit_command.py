@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import getpass
 from pathlib import Path
-import sys
-from typing import Any
 
 import click
 import structlog
@@ -14,7 +12,6 @@ import typer
 from apps.onepiece.utils.errors import (
     OnePieceExternalServiceError,
     OnePieceRuntimeError,
-    OnePieceValidationError,
 )
 from libraries.automation.render.base import (
     RenderAdapterNotImplementedError,
@@ -28,20 +25,16 @@ from .helpers import (
     FARM_CHOICES,
     get_adapter,
     parse_frame_count,
+    RenderCliModuleResolver,
     refresh_capabilities_cache,
     resolve_metrics,
     resolve_priority_and_chunk_size,
+    validate_scene_and_output,
 )
 
+_resolver = RenderCliModuleResolver()
 _default_log = structlog.get_logger(__name__)
-log = _default_log
-
-
-def _get_logger() -> Any:
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "log"):
-        return getattr(module, "log")
-    return _default_log
+log = _resolver.resolve_logger(_default_log)
 
 
 def submit(
@@ -111,26 +104,14 @@ def submit(
     """Submit a render job to the configured farm."""
 
     resolved_user = user or getpass.getuser()
-    logger = _get_logger()
+    logger = _resolver.resolve_logger(_default_log)
     farm = farm.lower()
     dcc = dcc.lower()
 
     if refresh_capabilities:
         refresh_capabilities_cache(farm=farm)
 
-    if not scene.exists():
-        raise OnePieceValidationError(f"Scene file '{scene}' does not exist (--scene).")
-    if not scene.is_file():
-        raise OnePieceValidationError(f"Scene path '{scene}' is not a file (--scene).")
-
-    if not output.exists():
-        raise OnePieceValidationError(
-            f"Output directory '{output}' does not exist (--output)."
-        )
-    if not output.is_dir():
-        raise OnePieceValidationError(
-            f"Output path '{output}' is not a directory (--output)."
-        )
+    validate_scene_and_output(scene, output)
 
     frame_count = parse_frame_count(frames)
     metrics, metric_sources = resolve_metrics(

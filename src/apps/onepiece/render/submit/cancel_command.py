@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING, Any, cast
-
 import structlog
 import typer
 
@@ -14,39 +11,11 @@ from apps.onepiece.utils.errors import (
     OnePieceValidationError,
 )
 
-from .helpers import coerce_text
-
-if TYPE_CHECKING:
-    from ..jobs import RenderJobClient, RenderJobClientError
-
-log = structlog.get_logger(__name__)
+from .helpers import RenderCliModuleResolver, coerce_text
 
 
-def _get_logger() -> Any:
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "log"):
-        return getattr(module, "log")
-    return log
-
-
-def _render_job_client_class() -> type["RenderJobClient"]:
-    from ..jobs import RenderJobClient as DefaultClient
-
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "RenderJobClient"):
-        return cast(type["RenderJobClient"], getattr(module, "RenderJobClient"))
-    return DefaultClient
-
-
-def _render_job_error_class() -> type["RenderJobClientError"]:
-    from ..jobs import RenderJobClientError as DefaultError
-
-    module = sys.modules.get("apps.onepiece.render.submit")
-    if module is not None and hasattr(module, "RenderJobClientError"):
-        return cast(
-            type["RenderJobClientError"], getattr(module, "RenderJobClientError")
-        )
-    return DefaultError
+_resolver = RenderCliModuleResolver()
+log = _resolver.resolve_logger(structlog.get_logger(__name__))
 
 
 def cancel_render_job(
@@ -64,8 +33,13 @@ def cancel_render_job(
 ) -> None:
     """Request cancellation of an in-flight render job via Trafalgar."""
 
-    logger = _get_logger()
-    error_class = _render_job_error_class()
+    logger = _resolver.resolve_logger(log)
+    from ..jobs import (
+        RenderJobClient as DefaultClient,
+        RenderJobClientError as DefaultError,
+    )
+
+    error_class = _resolver.resolve_attribute("RenderJobClientError", DefaultError)
 
     logger.info(
         "render.cancel.start",
@@ -75,7 +49,7 @@ def cancel_render_job(
     )
 
     try:
-        client_class = _render_job_client_class()
+        client_class = _resolver.resolve_attribute("RenderJobClient", DefaultClient)
         client = client_class(profile=profile)
     except OnePieceConfigError as exc:
         raise OnePieceValidationError(str(exc)) from exc
