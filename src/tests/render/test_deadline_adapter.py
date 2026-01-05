@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,6 +11,7 @@ import pytest
 from libraries.automation.render import config as render_config
 from libraries.automation.render import deadline
 from libraries.automation.render.base import (
+    AdapterCapabilities,
     RenderAdapterConfigurationError,
     RenderAdapterError,
     RenderAdapterJobRejectedError,
@@ -122,6 +124,43 @@ def test_submit_job_attaches_bundle_metadata(
     assert job_info.get("ExtraInfoKeyValue0") == "bundle_version=abcd1234"
     assert job_info.get("ExtraInfoKeyValue1") == f"bundle_manifest={manifest}"
     assert result["job_id"] == "abcd1234"
+
+
+def test_submit_job_without_chunk_size_uses_deadline_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeDeadlineClient()
+    _patch_client(monkeypatch, client)
+
+    deadline._CAPABILITIES_CACHE = (
+        time.monotonic(),
+        cast(
+            AdapterCapabilities,
+            {
+                "default_priority": 50,
+                "priority_min": 0,
+                "priority_max": 100,
+                "chunk_size_enabled": True,
+                "chunk_size_min": 1,
+                "chunk_size_max": 20,
+                "default_chunk_size": 7,
+                "cancellation_supported": False,
+            },
+        ),
+    )
+
+    deadline.submit_job(
+        scene="/path/to/scene.mb",
+        frames="1-10",
+        output="/tmp/output",
+        dcc="maya",
+        priority=70,
+        user="nami",
+        chunk_size=None,
+    )
+
+    job_info = cast(dict[str, object], client.payloads[0]["JobInfo"])
+    assert "ChunkSize" not in job_info or job_info["ChunkSize"] == 7
 
 
 def test_submit_job_raises_for_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
