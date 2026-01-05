@@ -308,15 +308,53 @@ class ShotGridClient:
     # ------------------------------------------------------------------ #
     @classmethod
     def from_env(cls) -> "ShotGridClient":
-        """
-        Convenience constructor reading credentials from environment variables:
-        SHOTGRID_URL, SHOTGRID_SCRIPT_NAME, SHOTGRID_API_KEY.
+        """Create a client using environment variables.
+
+        Preferred variables mirror the CLI configuration documented in the
+        README: ``ONEPIECE_SHOTGRID_URL``, ``ONEPIECE_SHOTGRID_SCRIPT``, and
+        ``ONEPIECE_SHOTGRID_KEY``. Legacy ``SHOTGRID_*`` names remain supported
+        for backwards compatibility but will emit a warning.
         """
         import os
 
-        url = os.environ.get("SHOTGRID_URL")
-        script = os.environ.get("SHOTGRID_SCRIPT_NAME")
-        key = os.environ.get("SHOTGRID_API_KEY")
+        def _get_env(
+            primary: tuple[str, ...], legacy: tuple[str, ...]
+        ) -> tuple[str | None, bool]:
+            for name in primary:
+                value = os.environ.get(name)
+                if value:
+                    return value, False
+            for name in legacy:
+                value = os.environ.get(name)
+                if value:
+                    return value, True
+            return None, False
+
+        url, url_legacy = _get_env(("ONEPIECE_SHOTGRID_URL",), ("SHOTGRID_URL",))
+        script, script_legacy = _get_env(
+            ("ONEPIECE_SHOTGRID_SCRIPT", "ONEPIECE_SHOTGRID_SCRIPT_NAME"),
+            ("SHOTGRID_SCRIPT", "SHOTGRID_SCRIPT_NAME"),
+        )
+        key, key_legacy = _get_env(
+            ("ONEPIECE_SHOTGRID_KEY", "ONEPIECE_SHOTGRID_API_KEY"),
+            ("SHOTGRID_KEY", "SHOTGRID_API_KEY"),
+        )
+
+        if any([url_legacy, script_legacy, key_legacy]):
+            legacy_vars = [
+                name
+                for name, legacy_used in [
+                    ("SHOTGRID_URL", url_legacy),
+                    ("SHOTGRID_SCRIPT", script_legacy),
+                    ("SHOTGRID_API_KEY", key_legacy),
+                ]
+                if legacy_used
+            ]
+            log.warning(
+                "Detected legacy ShotGrid env vars; please migrate to ONEPIECE_SHOTGRID_*",
+                legacy_vars=legacy_vars,
+                event_code="shotgrid.env.legacy",
+            )
 
         if not all([url, script, key]):
             raise RuntimeError("Missing ShotGrid env vars.")
