@@ -209,6 +209,41 @@ ASPECT_PRESETS: dict[str, float] = {
 }
 
 
+@app.command()
+def presets(
+    format: str = typer.Option(
+        "plain",
+        "--format",
+        "-f",
+        case_sensitive=False,
+        help="Output format: 'plain' for text or 'json' for structured output.",
+    ),
+) -> None:
+    """List available QC resolution presets."""
+
+    if not QC_RESOLUTION_PRESETS:
+        typer.echo("No QC resolution presets are defined.", err=True)
+        raise typer.Exit(code=1)
+
+    normalized_format = format.lower()
+    presets_list = sorted(QC_RESOLUTION_PRESETS.items())
+
+    if normalized_format == "json":
+        payload = [
+            {"name": name, "width": width, "height": height}
+            for name, (width, height) in presets_list
+        ]
+        typer.echo(json.dumps(payload, indent=2))
+    elif normalized_format == "plain":
+        for name, (width, height) in presets_list:
+            typer.echo(f"{name}: {width}x{height}")
+    else:
+        available_formats = "plain, json"
+        raise typer.BadParameter(
+            f"Unsupported format {format!r}. Choose from: {available_formats}."
+        )
+
+
 def _parse_resolution_value(value: str) -> tuple[int, int]:
     match = re.match(r"^(?P<width>\d+)[xX](?P<height>\d+)$", value)
     if not match:
@@ -950,6 +985,7 @@ def qc_render(
         help=(
             "QC resolution preset to use when building the scene. Presets: "
             + ", ".join(sorted(QC_RESOLUTION_PRESETS))
+            + ". Run 'chopper presets' to view details."
         ),
     ),
     resolution: str | None = typer.Option(
