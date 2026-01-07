@@ -7,7 +7,13 @@ import typer
 from .cancel_command import cancel_render_job
 from .helpers import FARM_ADAPTERS
 from .optimize_deadline_command import optimize_and_submit_deadline
-from .presets import list_presets, save_preset, use_preset
+from .presets import (
+    export_preset,
+    import_preset,
+    list_presets,
+    save_preset,
+    use_preset,
+)
 from .scripts_command import generate_scripts
 from .status_command import render_status
 from .submit_command import submit
@@ -24,6 +30,8 @@ app.command("scripts")(generate_scripts)
 presets_app.command("list")(list_presets)
 presets_app.command("save")(save_preset)
 presets_app.command("use")(use_preset)
+presets_app.command("export")(export_preset)
+presets_app.command("import")(import_preset)
 
 app.add_typer(presets_app, name="preset")
 
