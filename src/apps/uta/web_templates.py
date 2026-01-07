@@ -8,6 +8,7 @@ from .templates import (
     normalise_root_path as _normalise_root_path_impl,
     render_command as _render_command_impl,
     render_dashboard_page as _render_dashboard_page_impl,
+    render_hub_page as _render_hub_page_impl,
     render_page as _render_cli_page_impl,
     render_parameters as _render_parameters_impl,
     render_pipeline_page as _render_pipeline_page_impl,
@@ -21,6 +22,7 @@ _render_command = _render_command_impl
 _render_page = _render_cli_page_impl
 _render_pipeline_page = _render_pipeline_page_impl
 _render_dashboard_page = _render_dashboard_page_impl
+_render_hub_page = _render_hub_page_impl
 _normalise_root_path = _normalise_root_path_impl
 _with_root_path = _with_root_path_impl
 _slugify = _slugify_impl
@@ -46,29 +48,35 @@ def _render_index(
 
     selected_slug = active_slug
     pipeline_slug = "pipelines"
+    hub_slug = "hub"
     pipeline_active = False
     dashboard_active = False
+    hub_active = False
     cli_active_slug: str | None = None
 
     if not page_order:
         cli_active_slug = None
         if selected_slug == pipeline_slug:
             pipeline_active = True
+        elif selected_slug == hub_slug:
+            hub_active = True
         else:
             dashboard_active = selected_slug in (None, "dashboard")
-            if not dashboard_active and selected_slug != pipeline_slug:
+            if not dashboard_active and selected_slug not in (pipeline_slug, hub_slug):
                 dashboard_active = True
     else:
         if selected_slug == "dashboard":
             dashboard_active = True
         elif selected_slug == pipeline_slug:
             pipeline_active = True
+        elif selected_slug == hub_slug:
+            hub_active = True
         elif selected_slug and selected_slug in slug_lookup:
             cli_active_slug = selected_slug
         else:
             cli_active_slug = default_slug
 
-        if pipeline_active or dashboard_active:
+        if pipeline_active or dashboard_active or hub_active:
             cli_active_slug = None
         elif cli_active_slug is None:
             cli_active_slug = default_slug
@@ -91,6 +99,11 @@ def _render_index(
         f'<button type="button" class="tab-button {pipeline_class}" data-target="page-pipelines" data-tab="{pipeline_slug}" data-default-tab="false">Pipelines</button>'
     )
     content_sections.append(_render_pipeline_page(is_active=pipeline_active))
+    hub_class = "active" if hub_active else ""
+    nav_items.append(
+        f'<button type="button" class="tab-button {hub_class}" data-target="page-hub" data-tab="{hub_slug}" data-default-tab="false">Pipeline + Render</button>'
+    )
+    content_sections.append(_render_hub_page(is_active=hub_active))
     dashboard_class = "active" if dashboard_active else ""
     nav_items.append(
         f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">Dashboard</button>'
@@ -169,6 +182,7 @@ __all__ = [
     "_normalise_root_path",
     "_with_root_path",
     "_render_pipeline_page",
+    "_render_hub_page",
     "_render_dashboard_page",
     "_render_index",
 ]

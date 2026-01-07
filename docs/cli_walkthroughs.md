@@ -6,6 +6,7 @@
 
 - [Validate a workstation environment](#1-validate-a-workstation-environment) — Confirm credentials and environment variables before touching production systems.
 - [Dry-run an S3 ingest](#2-dry-run-an-s3-ingest) — Practise resumable vendor deliveries with analytics reports.
+- [Pipeline + render hub quickstart](pipeline_render_hub_quickstart.md) — Run a pipeline, submit a render preset, and check status from a guided flow.
 - [Package a DCC publish for QA](#4-package-a-dcc-publish-for-qa) — Rehearse the end-to-end publishing and validation workflow.
 - [Validate a Cinema 4D package](#6-validate-a-cinema-4d-package) — Confirm textures and presets resolve before hand-off.
 
