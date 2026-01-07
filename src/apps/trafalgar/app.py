@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, cast
 
 import json
 import os
@@ -13,12 +13,8 @@ import webbrowser
 
 import typer
 
-try:  # pragma: no cover - Python 3.11+ ships tomllib
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
-    import tomli as tomllib  # type: ignore[no-redef]
-
 from apps.onepiece.config import load_profile
+from apps.onepiece.pipeline.schema import PipelineSchemaError, load_pipeline_manifest
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     configure_orchestrator_from_profile,
@@ -220,27 +216,11 @@ def _extract_pipeline_definitions(
 
 
 def _load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
-    if not path.exists():
-        msg = f"Pipeline manifest '{path}' does not exist."
-        raise typer.BadParameter(msg)
-    suffix = path.suffix.lower()
-    text = path.read_text(encoding="utf-8")
-    if suffix == ".toml":
-        data = tomllib.loads(text)
-    elif suffix in {".yaml", ".yml"}:
-        try:
-            import yaml
-        except ImportError as exc:  # pragma: no cover - optional dependency
-            msg = "PyYAML is required to load YAML pipeline manifests."
-            raise typer.BadParameter(msg) from exc
-        data = yaml.safe_load(text) or {}
-    else:
-        msg = "Pipeline manifests must use TOML or YAML formats."
-        raise typer.BadParameter(msg)
-    if not isinstance(data, Mapping):
-        msg = "Pipeline manifests must contain a mapping at the top level."
-        raise typer.BadParameter(msg)
-    return dict(data)
+    try:
+        payload = load_pipeline_manifest(path)
+    except PipelineSchemaError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return cast(Mapping[str, Any], payload)
 
 
 def _build_pipeline_definition_from_manifest(
