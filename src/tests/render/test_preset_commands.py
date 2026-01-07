@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +80,10 @@ def test_render_preset_crud_flow(
             "mock",
             "--dcc",
             "nuke",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_dir),
             "--frames",
             "1-20",
         ],
@@ -132,6 +135,11 @@ def test_render_preset_save_handles_capability_failure(
         submit_module.FARM_CAPABILITY_PROVIDERS, "mock", failing_capabilities
     )
 
+    scene_file = tmp_path / "shot01.nk"
+    scene_file.write_text("print('render')\n")
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+
     result = runner.invoke(
         app,
         [
@@ -143,15 +151,12 @@ def test_render_preset_save_handles_capability_failure(
             "mock",
             "--dcc",
             "nuke",
+            "--scene",
+            str(scene_file),
+            "--output",
+            str(output_dir),
         ],
     )
 
-    assert result.exit_code == 0, result.stdout
-
-    preset_file = preset_dir / "offline_mock.json"
-    payload = json.loads(preset_file.read_text())
-
-    assert payload["farm"] == "mock"
-    assert payload.get("dcc") == "nuke"
-    assert "priority" not in payload
-    assert "chunk_size" not in payload
+    assert result.exit_code != 0
+    assert "capabilities" in result.stdout
