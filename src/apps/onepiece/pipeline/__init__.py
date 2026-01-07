@@ -21,9 +21,11 @@ from .io import (
     _load_pipeline_submission,
     _parse_pipeline_parameters,
     _resolve_manifest_format,
+    _resolve_parameters_with_schema,
     _serialised_definition_to_manifest,
     _write_manifest,
 )
+from .schema import PipelineParameterSchema, PipelineSchemaError
 from .output import (
     _coerce_display_text,
     _format_pipeline_definition,
@@ -75,6 +77,33 @@ def _resolve_output_format(raw: str) -> str:
             param_hint="--format",
         )
     return value
+
+
+def _build_parameter_schema_from_definition(
+    definition: Mapping[str, Any] | None, *, fallback_name: str
+) -> PipelineParameterSchema | None:
+    if not isinstance(definition, Mapping):
+        return None
+    pipeline_name = str(definition.get("name") or fallback_name)
+    try:
+        return PipelineParameterSchema.from_payload(
+            definition.get("parameters"),
+            source=f"pipeline '{pipeline_name}' definition",
+        )
+    except PipelineSchemaError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _load_definition_schema(
+    client: PipelineClient, pipeline_name: str
+) -> PipelineParameterSchema | None:
+    try:
+        definition = client.get_definition(pipeline_name)
+    except PipelineClientError:
+        raise
+    return _build_parameter_schema_from_definition(
+        definition, fallback_name=pipeline_name
+    )
 
 
 @app.command("list")
@@ -348,11 +377,34 @@ def run_pipeline(
             raise typer.BadParameter(exc.message, param_hint="--params-file") from exc
 
     try:
-        parsed_parameters = _parse_pipeline_parameters(parameters, base=file_parameters)
+        provided_parameters = _parse_pipeline_parameters(
+            parameters, base=file_parameters
+        )
     except PipelineClientError as exc:
         raise typer.BadParameter(exc.message) from exc
 
     with _using_client() as client:
+        parameter_schema: PipelineParameterSchema | None = None
+        try:
+            parameter_schema = _load_definition_schema(client, name)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+        if parameter_schema is not None:
+            try:
+                parsed_parameters = _resolve_parameters_with_schema(
+                    provided_parameters,
+                    schema=parameter_schema,
+                    interactive=True,
+                )
+            except PipelineClientError as exc:
+                raise typer.BadParameter(exc.message) from exc
+        else:
+            parsed_parameters = provided_parameters
+
         try:
             run = client.trigger_run(name, parsed_parameters)
         except PipelineClientError as exc:
@@ -450,14 +502,54 @@ def rerun_pipeline(
         except PipelineClientError as exc:
             raise typer.BadParameter(exc.message, param_hint="--params-file") from exc
 
-    try:
-        parsed_parameters = _parse_pipeline_parameters(parameters, base=file_parameters)
-    except PipelineClientError as exc:
-        raise typer.BadParameter(exc.message) from exc
-
-    overrides = parsed_parameters or {}
-
     with _using_client() as client:
+        parameter_schema: PipelineParameterSchema | None = None
+        base_parameters: dict[str, Any] = {}
+        try:
+            run_details = client.get_run(run_id)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+        if isinstance(run_details, Mapping):
+            base_parameters.update(run_details.get("parameters") or {})
+            definition_snapshot = run_details.get(
+                "definition_snapshot"
+            ) or run_details.get("definition")
+            try:
+                parameter_schema = _build_parameter_schema_from_definition(
+                    definition_snapshot,
+                    fallback_name=str(run_details.get("pipeline") or run_id),
+                )
+            except typer.BadParameter:
+                raise
+
+        if file_parameters:
+            base_parameters.update(file_parameters)
+
+        try:
+            provided_parameters = _parse_pipeline_parameters(
+                parameters, base=base_parameters
+            )
+        except PipelineClientError as exc:
+            raise typer.BadParameter(exc.message) from exc
+
+        if parameter_schema is not None:
+            try:
+                parsed_parameters = _resolve_parameters_with_schema(
+                    provided_parameters,
+                    schema=parameter_schema,
+                    interactive=True,
+                )
+            except PipelineClientError as exc:
+                raise typer.BadParameter(exc.message) from exc
+        else:
+            parsed_parameters = provided_parameters
+
+        overrides = parsed_parameters or {}
+
         try:
             run = client.rerun(run_id, overrides or None)
         except PipelineClientError as exc:
