@@ -24,6 +24,42 @@ def strip_ansi(text: str) -> str:
     return ANSI_ESCAPE_RE.sub("", text)
 
 
+def test_presets_lists_available_presets() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["presets"])
+
+    assert result.exit_code == 0
+    lines = set(result.stdout.splitlines())
+    expected_lines = {
+        f"{name}: {width}x{height}"
+        for name, (width, height) in sorted(
+            chopper_app_module.QC_RESOLUTION_PRESETS.items()
+        )
+    }
+    assert expected_lines.issubset(lines)
+
+
+def test_presets_supports_json_output() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["presets", "--format", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert {"name": "hd-1080", "width": 1920, "height": 1080} in payload
+
+
+def test_presets_exits_non_zero_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chopper_app_module, "QC_RESOLUTION_PRESETS", {})
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["presets"])
+
+    assert result.exit_code == 1
+    assert "No QC resolution presets are defined." in result.stderr
+
+
 def test_render_reports_invalid_scene_file(tmp_path: Path) -> None:
     scene_path = tmp_path / "scene.json"
     scene_path.write_text(
