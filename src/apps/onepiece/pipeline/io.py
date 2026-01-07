@@ -9,9 +9,8 @@ from typing import Any, Mapping, Sequence
 import typer
 import yaml
 
-from apps.trafalgar.app import _load_pipeline_manifest
-
 from .clients import PipelineClientError
+from .schema import PipelineParameterSchema, PipelineSchemaError, load_pipeline_manifest
 
 
 try:  # pragma: no cover - Python 3.11+ ships tomllib
@@ -21,22 +20,31 @@ except ModuleNotFoundError:  # pragma: no cover - python<3.11 compatibility
 
 
 def _parse_pipeline_parameters(
-    raw: list[str] | None, *, base: Mapping[str, Any] | None = None
+    raw: list[str] | None,
+    *,
+    base: Mapping[str, Any] | None = None,
+    schema: PipelineParameterSchema | None = None,
+    interactive: bool = False,
 ) -> dict[str, Any]:
     parameters: dict[str, Any] = dict(base or {})
-    if not raw:
+    if raw:
+        for item in raw:
+            if "=" not in item:
+                raise PipelineClientError(
+                    f"Invalid parameter '{item}'. Expected key=value pairs."
+                )
+            key, value = item.split("=", 1)
+            key = key.strip()
+            if not key:
+                raise PipelineClientError("Parameter keys cannot be empty.")
+            parameters[key] = value.strip()
+
+    if schema is None:
         return parameters
-    for item in raw:
-        if "=" not in item:
-            raise PipelineClientError(
-                f"Invalid parameter '{item}'. Expected key=value pairs."
-            )
-        key, value = item.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise PipelineClientError("Parameter keys cannot be empty.")
-        parameters[key] = value.strip()
-    return parameters
+
+    return _resolve_parameters_with_schema(
+        parameters, schema=schema, interactive=interactive
+    )
 
 
 def _load_pipeline_parameters_file(path: Path) -> Mapping[str, Any]:
@@ -74,8 +82,8 @@ def _load_pipeline_submission(
     manifest: Path, *, name: str | None = None
 ) -> dict[str, Any]:
     try:
-        payload = _load_pipeline_manifest(manifest)
-    except typer.BadParameter as exc:
+        payload = load_pipeline_manifest(manifest)
+    except PipelineSchemaError as exc:
         raise typer.BadParameter(str(exc), param_hint="manifest") from exc
 
     pipelines_section = payload.get("pipelines")
@@ -387,4 +395,85 @@ __all__ = [
     "_serialised_definition_to_manifest",
     "_serialised_step_to_manifest",
     "_write_manifest",
+    "_resolve_parameters_with_schema",
 ]
+
+
+def _resolve_parameters_with_schema(
+    provided: Mapping[str, Any],
+    *,
+    schema: PipelineParameterSchema,
+    interactive: bool,
+) -> dict[str, Any]:
+    parameters = dict(provided)
+
+    if not schema.parameters:
+        return parameters
+
+    try:
+        coerced_inputs = schema.coerce(parameters)
+    except PipelineSchemaError as exc:
+        raise PipelineClientError(str(exc)) from exc
+
+    resolved: dict[str, Any] = dict(coerced_inputs)
+
+    for name, definition in schema.parameters.items():
+        if name in resolved:
+            continue
+        if definition.has_default:
+            resolved[name] = definition.default
+            continue
+        if not definition.required:
+            if interactive:
+                prompted = _prompt_for_parameter(name, definition)
+                if prompted is not None:
+                    resolved[name] = prompted
+            continue
+        if not interactive:
+            msg = (
+                f"{schema.source} requires parameter '{name}'. Provide a value via"
+                " --param, --params-file, or interactively."
+            )
+            raise PipelineClientError(msg)
+
+        prompted = _prompt_for_parameter(name, definition)
+        if prompted is not None:
+            resolved[name] = prompted
+
+    return resolved
+
+
+def _prompt_for_parameter(name: str, definition: Any) -> Any:
+    description = getattr(definition, "description", None)
+    label = description or f"Value for '{name}'"
+    suffix_parts: list[str] = []
+    parameter_type = getattr(definition, "type", None)
+    choices = getattr(definition, "choices", None)
+    if parameter_type:
+        suffix_parts.append(str(parameter_type))
+    if choices:
+        suffix_parts.append("choices: " + ", ".join(map(str, choices)))
+
+    prompt_text = label
+    if suffix_parts:
+        prompt_text = f"{prompt_text} ({'; '.join(suffix_parts)})"
+
+    default_value = getattr(definition, "default", None)
+    has_default = getattr(definition, "has_default", False)
+    required = getattr(definition, "required", False)
+
+    while True:
+        value = typer.prompt(
+            prompt_text,
+            default=default_value if has_default else None,
+            show_default=has_default,
+        )
+        if value == "" and not required:
+            return None
+        if hasattr(definition, "coerce"):
+            try:
+                return definition.coerce(value)
+            except ValueError as exc:  # pragma: no cover - user interaction
+                typer.echo(f"Invalid value for '{name}': {exc}")
+                continue
+        return value

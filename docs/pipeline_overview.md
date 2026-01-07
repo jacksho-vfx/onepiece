@@ -103,3 +103,16 @@ diagnostics and retention.
 - **Event flows** – Stand up a lightweight event backbone (AWS EventBridge or Redis Streams) and forward CLI telemetry plus Trafalgar notifications into it. Uta can subscribe to these channels for live widgets, and you can extend the same bus to chat bots or analytics pipelines as your studio grows.
 
 Pair this overview with the focused guides linked above to dive deeper into specific services or workflows.
+
+## Schema-driven manifests and guided prompts
+
+- The shared schema helper at `apps/onepiece/pipeline/schema.py` exposes
+  validated parameter defaults, example templates, and a manifest loader that
+  both the CLI and Trafalgar use. You can pre-fill `--params-file` documents or
+  seed new manifests with `PipelineParameterSchema.example_template()` so
+  operators see type-aware examples before they edit anything.
+- `onepiece pipeline run` and `onepiece pipeline rerun` now resolve the
+  parameter schema from the orchestrator definition and prompt for any missing
+  values. Required fields block until a valid value is provided, while optional
+  fields surface defaults and allowed choices inline, eliminating the need to
+  memorise `--param key=value` pairs.

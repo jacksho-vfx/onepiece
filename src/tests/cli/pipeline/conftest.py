@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -20,12 +20,20 @@ class StubPipelineClient:
     """Simple stub implementing the pipeline client protocol for tests."""
 
     definitions: list[Mapping[str, Any]] | None = None
-    definition: Mapping[str, Any] | None = None
+    definition: Mapping[str, Any] | None = field(
+        default_factory=lambda: {"parameters": {}}
+    )
     run_payload: Mapping[str, Any] | None = None
     rerun_payload: Mapping[str, Any] | None = None
     runs: list[Mapping[str, Any]] | None = None
     runs_payload: Mapping[str, Any] | None = None
-    run_metadata: Mapping[str, Any] | None = None
+    run_metadata: Mapping[str, Any] | None = field(
+        default_factory=lambda: {
+            "pipeline": "stub",
+            "parameters": {},
+            "definition_snapshot": {"parameters": {}},
+        }
+    )
     run_events: list[Mapping[str, Any]] | None = None
     run_events_history: list[Mapping[str, Any]] | None = None
     list_error: PipelineClientError | None = None
