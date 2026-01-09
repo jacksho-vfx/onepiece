@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Iterable, cast
+from typing import Iterable, TypeVar, cast
 
 import structlog
 import typer
@@ -21,6 +21,17 @@ from libraries.integrations.shotgrid.client import ShotgridClient
 from libraries.platform.validations.filesystem import check_paths
 
 log = structlog.get_logger(__name__)
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.shotgrid import deliver as deliver_module
+
+    override = getattr(deliver_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
+
 
 _CONTEXT_CHOICES = ("vendor_out", "client_out")
 
@@ -133,7 +144,7 @@ def deliver(
             param_hint="--context",
         )
 
-    client = ShotgridClient()
+    client = _resolve_override("ShotgridClient", ShotgridClient)()
     log.info(
         "deliver.fetch_versions",
         project=project,
@@ -261,7 +272,7 @@ def deliver(
                 description = line if line else "Syncing files"
                 upload_progress.advance(description=description)
 
-            s5_sync(
+            _resolve_override("s5_sync", s5_sync)(
                 source=sync_dir,
                 destination=destination,
                 progress_callback=_on_progress,

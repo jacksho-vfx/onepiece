@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, TypeVar, cast
 
 import structlog
 import typer
@@ -20,6 +20,16 @@ from libraries.creative.dcc.maya.playblast_tool import (
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Animation focused DCC commands.")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.dcc import animation as animation_module
+
+    override = getattr(animation_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _load_metadata(path: Path | None) -> Mapping[str, Any]:
@@ -62,19 +72,22 @@ def run_debug_animation(
 ) -> None:
     """Run the Maya animation debugger and surface any issues."""
 
-    report = debug_animation(scene_name=scene_name)
+    logger = _resolve_override("log", log)
+    report = _resolve_override("debug_animation", debug_animation)(
+        scene_name=scene_name
+    )
     issues = [
         {"code": issue.code, "message": issue.message, "severity": issue.severity}
         for issue in getattr(report, "issues", ())
     ]
 
     if not issues:
-        log.info("dcc_animation_debug_clean", scene=scene_name)
+        logger.info("dcc_animation_debug_clean", scene=scene_name)
         typer.echo(f"No animation issues detected for {scene_name}.")
         return
 
     error_count = sum(1 for issue in issues if issue["severity"] == "error")
-    log.warning(
+    logger.warning(
         "dcc_animation_debug_issues",
         scene=scene_name,
         issues=issues,
@@ -127,14 +140,15 @@ def run_cleanup_scene(
     ):
         raise typer.BadParameter("At least one cleanup operation must be enabled")
 
-    stats = cleanup_scene(
+    logger = _resolve_override("log", log)
+    stats = _resolve_override("cleanup_scene", cleanup_scene)(
         remove_unused_references=remove_unused_references,
         clean_namespaces=clean_namespaces,
         optimize_layers=optimize_layers,
         prune_unknown_nodes=prune_unknown_nodes,
     )
 
-    log.info("dcc_animation_cleanup_summary", operations=stats)
+    logger.info("dcc_animation_cleanup_summary", operations=stats)
 
     if not stats:
         typer.echo("Cleanup completed; no changes were required.")
@@ -228,10 +242,11 @@ def trigger_playblast(
     except ValueError as exc:
         raise OnePieceValidationError(str(exc)) from exc
 
-    tool = _create_playblast_tool()
+    tool = _resolve_override("_create_playblast_tool", _create_playblast_tool)()
     result = tool.execute(request)
 
-    log.info(
+    logger = _resolve_override("log", log)
+    logger.info(
         "dcc_animation_playblast_complete",
         path=str(result.output_path),
         frame_start=result.frame_range[0],

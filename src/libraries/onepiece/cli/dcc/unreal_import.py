@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TypeVar, cast
 
 import structlog
 import typer
@@ -16,6 +17,17 @@ from libraries.creative.dcc.maya.unreal_importer import (
 
 
 log = structlog.get_logger(__name__)
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.dcc import unreal_import as unreal_import_module
+
+    override = getattr(unreal_import_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
+
 
 app = typer.Typer(help="Unreal Engine DCC integration commands.")
 
@@ -45,7 +57,7 @@ def import_unreal(
 ) -> None:
     """Import a Maya-authored package into an Unreal project."""
 
-    importer = UnrealPackageImporter()
+    importer = _resolve_override("UnrealPackageImporter", UnrealPackageImporter)()
 
     try:
         summaries = importer.import_package(

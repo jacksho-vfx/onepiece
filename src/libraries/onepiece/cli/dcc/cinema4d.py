@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import structlog
 import typer
@@ -28,6 +28,16 @@ from libraries.creative.dcc.cinema4d.validation import (
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(name="cinema4d", help="Cinema 4D integration commands")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.dcc import cinema4d as cinema4d_module
+
+    override = getattr(cinema4d_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _format_issues(issues: list[str]) -> str:
@@ -54,7 +64,7 @@ def validate(
     """Validate a packaged Cinema 4D scene directory."""
 
     log.info("cinema4d.validate.start", package=str(package_dir))
-    issues = list(validate_package(package_dir))
+    issues = list(_resolve_override("validate_package", validate_package)(package_dir))
 
     if not issues:
         message = f"Cinema 4D package at {package_dir} passed validation."
@@ -178,7 +188,7 @@ def run_cleanup_scene(
         raise typer.BadParameter("At least one cleanup operation must be enabled")
 
     log.info("cinema4d.cleanup_scene.start", operations=operations)
-    stats = cleanup_scene(**operations)
+    stats = _resolve_override("cleanup_scene", cleanup_scene)(**operations)
     summary = _format_cleanup_summary(stats)
     typer.echo(f"Cinema 4D cleanup complete. {summary}")
     log.info("cinema4d.cleanup_scene.summary", **stats)
@@ -218,7 +228,9 @@ def gather_assets(
         source=str(source_dir) if source_dir is not None else None,
     )
 
-    result = gather_references(package_dir, source_root=source_dir)
+    result = _resolve_override("gather_references", gather_references)(
+        package_dir, source_root=source_dir
+    )
 
     if result.copied:
         typer.secho(_format_asset_list("Copied assets", result.copied))

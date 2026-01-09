@@ -1,10 +1,22 @@
 from pathlib import Path
+from typing import TypeVar, cast
+
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
 from libraries.integrations.aws.s5_sync import s5_sync
 
 app = typer.Typer(help="AWS and S3 integration commands")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.aws import sync_to as sync_to_module
+
+    override = getattr(sync_to_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 @app.command("sync-to")
@@ -36,7 +48,7 @@ def sync_to(
     source = str(Path(local_path))  # normalize path safely
     destination = f"s3://{bucket}/{show_code}/{folder}"
 
-    with progress_tracker(
+    with _resolve_override("progress_tracker", progress_tracker)(
         "S3 Upload",
         total=1,
         task_description="Running s5cmd sync",
@@ -51,7 +63,7 @@ def sync_to(
             progress.advance(description=description)
 
         # ✅ send plain strings, not Paths
-        s5_sync(
+        _resolve_override("s5_sync", s5_sync)(
             source=source,
             destination=destination,
             dry_run=dry_run,

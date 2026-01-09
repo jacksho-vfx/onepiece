@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 from pathlib import Path
+from typing import TypeVar, cast
 
 import click
 import structlog
@@ -35,11 +36,23 @@ from .helpers import (
 
 _resolver = RenderCliModuleResolver()
 log = _resolver.resolve_logger(structlog.get_logger(__name__))
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.render.submit import optimize_deadline_command as command_module
+
+    override = getattr(command_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _optimise_scene(scene: Path, workspace: Path | None) -> GeometryOptimizationResult:
     try:
-        return optimize_geometry(scene, output_dir=workspace)
+        return _resolve_override("optimize_geometry", optimize_geometry)(
+            scene, output_dir=workspace
+        )
     except (FileNotFoundError, IsADirectoryError) as exc:
         raise OnePieceValidationError(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - defensive guard
@@ -110,7 +123,7 @@ def optimize_and_submit_deadline(
     typer.secho(summary, fg=typer.colors.CYAN)
 
     try:
-        result = submit_job(
+        result = _resolve_override("submit_job", submit_job)(
             scene=str(optimisation.optimized_scene),
             frames=frames,
             output=str(output),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, TypeVar, cast
 
 import structlog
 import typer
@@ -18,6 +18,16 @@ from libraries.platform.validations.dcc import (
 )
 
 log = structlog.get_logger(__name__)
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.validate import dcc_environment as dcc_module
+
+    override = getattr(dcc_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _format_plugins(plugins: PluginValidation) -> str:
@@ -70,7 +80,9 @@ def render_dcc_environment(
 
     targets: Iterable[SupportedDCC]
     if dcc:
-        targets = [validate_dcc(entry) for entry in dcc]
+        targets = [
+            _resolve_override("validate_dcc", validate_dcc)(entry) for entry in dcc
+        ]
     else:
         targets = list(SupportedDCC)
 
@@ -80,7 +92,9 @@ def render_dcc_environment(
 
     failures = False
     for entry in targets:
-        report = check_dcc_environment(entry)
+        report = _resolve_override("check_dcc_environment", check_dcc_environment)(
+            entry
+        )
         _render_report(report)
         typer.echo()
         log.info(

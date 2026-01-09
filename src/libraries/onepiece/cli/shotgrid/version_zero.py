@@ -1,6 +1,7 @@
 """CLI: Create a 'version zero' MOV proxy for each shot and upload to ShotGrid."""
 
 from pathlib import Path
+from typing import TypeVar, cast
 
 import structlog
 import typer
@@ -20,6 +21,16 @@ from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Shotgrid related commands.")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.shotgrid import version_zero as version_zero_module
+
+    override = getattr(version_zero_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 @app.command(name="version-zero", no_args_is_help=True)
@@ -36,8 +47,9 @@ def version_zero(
     shot_names = validate_shots_csv(csv_file)
     log.info("starting_version_zero", shots=len(shot_names), project=project_name)
 
-    handler = FilepathHandler()
-    sg = ShotGridClient.from_env()
+    handler = _resolve_override("FilepathHandler", FilepathHandler)()
+    sg_class = _resolve_override("ShotGridClient", ShotGridClient)
+    sg = sg_class.from_env()
 
     project_id = sg.get_project_id_by_name(project_name)
 
@@ -49,7 +61,7 @@ def version_zero(
     total_shots = len(shot_names)
     successes = 0
 
-    with progress_tracker(
+    with _resolve_override("progress_tracker", progress_tracker)(
         "Version Zero Generation",
         total=max(total_shots, 1),
         task_description="Processing shots",
@@ -74,7 +86,9 @@ def version_zero(
 
             proxy_path = exr_dir / f"{shot_name}_proxy.mov"
             try:
-                create_1080p_proxy_from_exrs(exr_dir, proxy_path, fps=fps)
+                _resolve_override(
+                    "create_1080p_proxy_from_exrs", create_1080p_proxy_from_exrs
+                )(exr_dir, proxy_path, fps=fps)
             except Exception as e:  # noqa: BLE001 - surfaced to log only.
                 status_message = "Proxy failed"
                 log.error("proxy_creation_failed", shot=shot_name, error=str(e))

@@ -1,7 +1,7 @@
 """CLI command to open a scene file in the appropriate DCC."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import structlog
 import typer
@@ -17,6 +17,16 @@ from libraries.platform.validations.dcc import (
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="DCC CLI commands.")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.dcc import open_shot as open_shot_module
+
+    override = getattr(open_shot_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _resolve_dcc(shot_path: Path, dcc: str | None) -> Any:
@@ -28,7 +38,9 @@ def _resolve_dcc(shot_path: Path, dcc: str | None) -> Any:
     """
 
     try:
-        return validate_dcc(dcc) if dcc else detect_dcc_from_file(shot_path)
+        if dcc:
+            return _resolve_override("validate_dcc", validate_dcc)(dcc)
+        return detect_dcc_from_file(shot_path)
     except ValueError as exc:  # pragma: no cover - exercised via the CLI.
         raise typer.BadParameter(str(exc)) from exc
 
@@ -87,7 +99,9 @@ def open_shot(
     dcc_enum = _resolve_dcc(shot_path, dcc)
 
     if not skip_validation:
-        report = check_dcc_environment(dcc_enum)
+        report = _resolve_override("check_dcc_environment", check_dcc_environment)(
+            dcc_enum
+        )
         issues = _format_validation_issues(report)
         if issues:
             log.error(
@@ -105,7 +119,7 @@ def open_shot(
             raise typer.Exit(code=error.exit_code)
 
     try:
-        open_scene(dcc_enum, shot_path)
+        _resolve_override("open_scene", open_scene)(dcc_enum, shot_path)
         typer.echo(f"Successfully opened {shot_path} in {dcc_enum.value}")
     except Exception as exc:  # pragma: no cover - surfaced to the CLI.
         log.error(
