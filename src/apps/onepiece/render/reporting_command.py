@@ -161,9 +161,7 @@ def _render_markdown_table(headers: list[str], rows: list[list[str]]) -> list[st
         return f"| {' | '.join(padded)} |"
 
     lines = [_format_row(headers)]
-    lines.append(
-        f"| {' | '.join('-' * width for width in widths)} |"
-    )
+    lines.append(f"| {' | '.join('-' * width for width in widths)} |")
     lines.extend(_format_row(row) for row in rows)
     return lines
 

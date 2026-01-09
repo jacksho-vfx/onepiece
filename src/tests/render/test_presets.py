@@ -19,7 +19,7 @@ def stub_capabilities() -> dict[str, int | bool]:
 
 
 def test_render_preset_rejects_capability_drift(
-    stub_capabilities: dict[str, int | bool]
+    stub_capabilities: dict[str, int | bool],
 ) -> None:
     with pytest.raises(OnePieceValidationError) as excinfo:
         RenderPreset.from_mapping(
