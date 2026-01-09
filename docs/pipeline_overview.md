@@ -9,7 +9,7 @@
 - [Entry points mapped to pipeline stages](#entry-points-mapped-to-pipeline-stages) — Align CLI-first workflows with optional orchestration surfaces.
 - [Integration protocols](#integration-protocols) — Review authentication, data contracts, and event flows for brownfield and greenfield rollouts.
 
-This overview ties together the major OnePiece surfaces so you can decide how to host services, extend pipelines with lightweight step factories, and stage a rollout that matches your studio's size and workflow maturity.
+This overview ties together the major OnePiece surfaces so you can decide how to host services, extend pipelines with lightweight step factories, and stage a rollout that matches your studio's size and workflow maturity. The recommended starting point is always local-first: run the CLI, keep manifests in version control, and only add services once you need shared run history or dashboards.
 
 Need a sandbox to explore the surfaces before wiring production services?
 `tester present` launches the demo applications with seeded pipeline manifests so
@@ -20,6 +20,7 @@ you can explore the orchestrator and dashboards together when you want them. 【
 | Topology | When to choose it | Hosting approach | Operational notes |
 | --- | --- | --- | --- |
 | **Local-first** | Small teams or pilots that want zero infrastructure beyond the CLI. | Install the CLI on artist workstations via `pip install onepiece`. Store manifests and profiles in Git or shared folders. | Start with `onepiece pipeline templates` and the built-in `shell`/`noop` steps to scaffold workflows without additional services. |
+| **Shared manifests + profiles** | Small studios that want a single source of truth without hosting APIs. | Share a repo (Git, Perforce, or SMB) that contains pipeline manifests and `onepiece.toml` profiles; artists run the CLI locally. | Keeps the pipeline modular while enabling consistent rollouts; add step factories via `pipeline.step_factories` without new infrastructure. |
 | **Shared orchestrator** | Studios ready to centralise run history and pipeline execution while keeping CLI usage local. | Deploy Trafalgar (FastAPI) behind studio ingress (NGINX/Traefik) on a VM or small Kubernetes cluster. Keep Uta optional for supervisors. | Trafalgar maintains cache TTLs and provider registry state; back it with SQLite or Postgres for modest run volumes. |
 | **Service-backed control plane** | Pipelines consolidating ingest, render orchestration, and review on a dedicated platform. | Host Trafalgar and Uta as autoscaled services (Kubernetes with horizontal pod autoscalers). Package the CLI inside container images for render farm nodes and automation runners. Integrate with studio SSO for web access. | Centralise configuration profiles in object storage (S3, GCS) and mount them read-only. Use structured logging to feed dashboards and observability stacks as the studio scales. |
 

@@ -2,7 +2,11 @@
 
 OnePiece is a modular pipeline toolkit for small VFX and archvis studios. The core CLI focuses on reusable pipeline manifests, simple configuration profiles, and a minimal set of step factories so teams can ship ingest, publish, render, and delivery workflows without standing up a large control plane on day one.
 
-Use the built-in pipeline templates and the `shell`/`noop` step factories to scaffold a working pipeline quickly, then replace each command with your studio-specific tooling as you grow. Optional services such as the Trafalgar API or Uta web UI remain available for teams that want centralised orchestration later, but the primary focus stays on easy local adoption and modular extensions.
+The repo is intentionally moving toward a local-first, modular pipeline experience:
+
+- **Local-first pipeline runs** — start with the CLI and manifests in version control, keeping setup lightweight for artists and pipeline TDs.
+- **Composable step factories** — swap in studio-specific commands as you grow without rewriting the manifest structure.
+- **Optional orchestration** — enable Trafalgar or Uta only when shared history, dashboards, or browser-triggered runs become necessary.
 
 ## Downloads / Releases
 
@@ -11,6 +15,8 @@ Use the built-in pipeline templates and the `shell`/`noop` step factories to sca
 
 ## Toolkit components
 
+Core pipeline capabilities live in the CLI and shared libraries, while the optional services stay off by default so small teams can adopt them on demand.
+
 - **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, validation, and pipeline helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
 - **Pipeline templates + step factories** – bundled templates (`onepiece pipeline templates`) and built-in step factories (`shell`, `noop`) make it easy to scaffold a pipeline and swap in studio-specific commands. Add your own templates by pointing `pipeline.template_paths` at TOML/YAML manifests, and register studio-specific step factories with `pipeline.step_factories` in `onepiece.toml` for quick reuse. The manifest format stays compatible with Trafalgar when you are ready to centralise orchestration. 【F:src/apps/onepiece/pipeline/__init__.py†L1-L220】【F:src/apps/onepiece/config.py†L1-L210】【F:src/libraries/pipeline/steps.py†L1-L140】
 - **Healthcheck quickstart** – run `onepiece healthcheck run --format json` to confirm ShotGrid credentials, AWS profiles, and configuration layers are wired correctly before invoking other commands. See [CLI examples](docs/cli_examples.md#core) for more options. 【F:src/apps/onepiece/healthcheck.py†L1-L165】
@@ -18,6 +24,8 @@ Use the built-in pipeline templates and the `shell`/`noop` step factories to sca
 - **Chopper utility** – a lightweight CLI for exercising the render pipeline without DCC dependencies. The `chopper` entry point renders deterministic sample scenes for QA and demonstrations. 【F:src/apps/chopper/app.py†L1-L120】
 
 ## Documentation map
+
+The docs now foreground the pipeline-first workflow while keeping the optional services grouped so smaller studios can skim past infrastructure-heavy sections.
 
 The `docs/` directory breaks down end-user and operator guidance by topic:
 
