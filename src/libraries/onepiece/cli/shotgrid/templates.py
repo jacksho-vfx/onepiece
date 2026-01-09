@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import structlog
 import typer
@@ -22,6 +22,17 @@ from libraries.integrations.shotgrid.client import (
 from ._inputs import load_structured_mapping
 
 log = structlog.get_logger(__name__)
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.shotgrid import templates as templates_module
+
+    override = getattr(templates_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
+
 
 app = typer.Typer(help="Shotgrid hierarchy template utilities.")
 
@@ -62,7 +73,7 @@ def save_template_command(
 ) -> None:
     """Validate and persist a hierarchy template definition."""
 
-    client = ShotgridClient()
+    client = _resolve_override("ShotgridClient", ShotgridClient)()
 
     try:
         template_payload = load_structured_mapping(input_path)
@@ -128,7 +139,7 @@ def load_template_command(
 ) -> None:
     """Load a hierarchy template and apply it to a ShotGrid project."""
 
-    client = ShotgridClient()
+    client = _resolve_override("ShotgridClient", ShotgridClient)()
 
     try:
         template = client.load_hierarchy_template(input_path)

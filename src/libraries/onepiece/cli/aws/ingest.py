@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, Literal, Mapping, cast
+from typing import Any, Dict, Iterable, Literal, Mapping, TypeVar, cast
 
 import typer
 
@@ -34,6 +34,16 @@ from libraries.automation.ingest import (
 from libraries.integrations.shotgrid.client import ShotgridClient
 
 app = typer.Typer(help="AWS and S3 integration commands")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.aws import ingest as ingest_module
+
+    override = getattr(ingest_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -417,11 +427,11 @@ def ingest(
                 f"Manifest '{manifest}' does not contain any deliveries. Provide at least one entry."
             )
 
-    shotgrid = ShotgridClient()
+    shotgrid = _resolve_override("ShotgridClient", ShotgridClient)()
     uploader = _DryRunUploader() if dry_run else Boto3Uploader()
     typed_uploader: UploaderProtocol = cast(UploaderProtocol, uploader)
 
-    service = MediaIngestService(
+    service = _resolve_override("MediaIngestService", MediaIngestService)(
         project_name=resolved.project,
         show_code=resolved.show_code,
         source=resolved.source,

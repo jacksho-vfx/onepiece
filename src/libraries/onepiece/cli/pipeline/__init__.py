@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, Callable, Mapping, cast
 
 import typer
 
@@ -52,6 +52,11 @@ from .schema import PipelineParameterSchema, PipelineSchemaError
 
 
 def _create_pipeline_client() -> PipelineClient:
+    from apps.onepiece import pipeline as pipeline_module
+
+    override = getattr(pipeline_module, "_create_pipeline_client", None)
+    if override is not None and override is not _create_pipeline_client:
+        return cast(Callable[[], PipelineClient], override)()
     return create_pipeline_client()
 
 

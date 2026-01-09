@@ -3,7 +3,7 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import structlog
 import typer
@@ -24,6 +24,17 @@ from libraries.integrations.shotgrid.playlist_delivery import (
 )
 
 log = structlog.get_logger(__name__)
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.shotgrid import package_playlist as package_module
+
+    override = getattr(package_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
+
 
 app = typer.Typer(help="Shotgrid related commands.")
 
@@ -111,7 +122,7 @@ def package_playlist_command(
     if normalized_recipient not in {"client", "vendor"}:
         raise OnePieceValidationError("Recipient must be either 'client' or 'vendor'.")
 
-    sg_client = ShotgridClient()
+    sg_client = _resolve_override("ShotgridClient", ShotgridClient)()
     package_destination = destination.expanduser()
 
     try:
@@ -177,7 +188,7 @@ def bulk_playlists_command(
 ) -> None:
     """Run bulk create/update/delete operations for ShotGrid playlists."""
 
-    sg_client = ShotgridClient()
+    sg_client = _resolve_override("ShotgridClient", ShotgridClient)()
     entity_label = "Playlist"
 
     if operation is BulkOperation.DELETE:
@@ -289,7 +300,7 @@ def bulk_versions_command(
 ) -> None:
     """Run bulk create/update/delete operations for ShotGrid versions."""
 
-    sg_client = ShotgridClient()
+    sg_client = _resolve_override("ShotgridClient", ShotgridClient)()
     entity_label = "Version"
 
     if operation is BulkOperation.DELETE:

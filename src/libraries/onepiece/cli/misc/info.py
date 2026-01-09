@@ -5,7 +5,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, TypeVar, cast
 
 from typing_extensions import Annotated
 
@@ -22,6 +22,16 @@ from libraries.platform.validations.dcc import SupportedDCC
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Display environment and configuration info")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.misc import info as info_module
+
+    override = getattr(info_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 def mask_sensitive_value(value: str, visible_chars: int = 4) -> str:
@@ -59,7 +69,7 @@ def _collect_environment_report() -> dict[str, Any]:
     sg_key = os.environ.get("ONEPIECE_SHOTGRID_KEY", "Not set")
     masked_sg_key = mask_sensitive_value(sg_key)
     aws_profile = os.environ.get("AWS_PROFILE", "default")
-    dccs = detect_installed_dccs()
+    dccs = _resolve_override("detect_installed_dccs", detect_installed_dccs)()
 
     report: dict[str, Any] = {
         "python_version": python_version,
@@ -110,7 +120,7 @@ def info(
 
     report = _collect_environment_report()
 
-    log.info(
+    _resolve_override("log", log).info(
         "info_report",
         python=report["python_version"],
         onepiece_version=report["onepiece_version"],

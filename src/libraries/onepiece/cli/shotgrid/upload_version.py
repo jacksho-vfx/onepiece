@@ -3,6 +3,7 @@ CLI command for uploading media to a new version in Shotgrid.
 """
 
 from pathlib import Path
+from typing import TypeVar, cast
 
 import structlog
 import typer
@@ -16,6 +17,16 @@ from libraries.integrations.shotgrid.models import VersionData
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Shotgrid related commands.")
+T = TypeVar("T")
+
+
+def _resolve_override(name: str, default: T) -> T:
+    from apps.onepiece.shotgrid import upload_version as upload_module
+
+    override = getattr(upload_module, name, None)
+    if override is not None and override is not default:
+        return cast(T, override)
+    return default
 
 
 @app.command("upload-version")
@@ -31,7 +42,7 @@ def upload(
     """
     Upload a file as a new Version to ShotGrid under a project/shot.
     """
-    sg_client = ShotGridClient()
+    sg_client = _resolve_override("ShotGridClient", ShotGridClient)()
 
     project = sg_client.get_project(project_name)
     if not project:

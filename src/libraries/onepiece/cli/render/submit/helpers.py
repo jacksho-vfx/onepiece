@@ -78,7 +78,7 @@ _ModuleAttr = TypeVar("_ModuleAttr")
 class RenderCliModuleResolver:
     """Resolve shared render CLI dependencies from a host module when present."""
 
-    module_name: str = "libraries.onepiece.cli.render.submit"
+    module_name: str = "apps.onepiece.render.submit"
 
     @property
     def module(self) -> Any | None:
