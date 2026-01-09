@@ -115,6 +115,8 @@ def test_configure_orchestrator_from_profile_uses_worker_limit() -> None:
         pipeline_executor_event_max_workers=None,
         pipeline_executor_step_timeout=None,
         pipeline_executor_run_timeout=None,
+        pipeline_step_factories=(),
+        pipeline_template_paths=(),
     )
 
     orchestrator = configure_orchestrator_from_profile(profile)
