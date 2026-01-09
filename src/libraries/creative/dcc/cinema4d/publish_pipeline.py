@@ -12,8 +12,11 @@ from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, S
 
 import structlog
 
+from libraries.metrics.usd import USDMetricClient
+
 
 log = structlog.get_logger(__name__)
+_metrics = USDMetricClient()
 
 ValidatorOptions = Mapping[str, Any]
 
@@ -694,21 +697,28 @@ class ScenePublishPipeline:
                     validator=name,
                 )
                 continue
-            try:
-                issues.extend(validator.validate(context, options))
-            except Exception as exc:  # pragma: no cover - defensive guard
-                log.error(
-                    "cinema4d_scene_validator.validator_error",
-                    validator=name,
-                    error=str(exc),
-                )
-                issues.append(
-                    ValidationIssue(
-                        name,
-                        f"Validator '{name}' failed: {exc}",
-                        severity="ERROR",
+            with _metrics.time_block(
+                dcc="c4d",
+                stage=f"validate.{name}",
+                sequence=context.show,
+                asset=context.asset or context.shot,
+                metadata={"version": context.version},
+            ):
+                try:
+                    issues.extend(validator.validate(context, options))
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    log.error(
+                        "cinema4d_scene_validator.validator_error",
+                        validator=name,
+                        error=str(exc),
                     )
-                )
+                    issues.append(
+                        ValidationIssue(
+                            name,
+                            f"Validator '{name}' failed: {exc}",
+                            severity="ERROR",
+                        )
+                    )
         return ValidationReport(tuple(issues))
 
     def _run_exports(
@@ -763,7 +773,16 @@ class ScenePublishPipeline:
         exports: tuple[ExportSummary, ...] = ()
         metadata_path: Path | None = None
         if report.is_valid:
-            exports, metadata_path = self._run_exports(context, config, version=version)
+            with _metrics.time_block(
+                dcc="c4d",
+                stage="exports",
+                sequence=context.show,
+                asset=context.asset or context.shot,
+                metadata={"version": version},
+            ):
+                exports, metadata_path = self._run_exports(
+                    context, config, version=version
+                )
         else:
             log.info(
                 "cinema4d_scene_validator.validation_failed",
