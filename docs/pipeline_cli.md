@@ -1,9 +1,10 @@
 # Pipeline CLI Workflow
 
-The `onepiece pipeline` command group provides tools for managing Trafalgar
-pipeline definitions from the command line. The new manifest-aware commands are
-ideal for synchronising local configuration files with either the in-process
-orchestrator or a remote Trafalgar deployment.
+The `onepiece pipeline` command group provides tools for managing pipeline
+definitions from the command line. The manifest-aware commands are designed for
+local-first workflows, syncing configuration files with the in-process
+orchestrator by default and only targeting a remote Trafalgar deployment when
+you opt in.
 
 ## Command overview
 
