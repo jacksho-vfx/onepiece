@@ -2,6 +2,7 @@ import typer
 
 from apps.onepiece.cli_registry import (
     CATEGORY_ORDER,
+    CommandGroup,
     default_command_groups,
     resolve_command_groups,
 )
@@ -46,7 +47,9 @@ def list_commands(
 
     visible_groups = list(default_command_groups()) if show_all else list(groups)
 
-    categories = {category: [] for category in CATEGORY_ORDER}
+    categories: dict[str, list[CommandGroup]] = {
+        category: [] for category in CATEGORY_ORDER
+    }
     for group in visible_groups:
         categories.setdefault(group.category, []).append(group)
 
