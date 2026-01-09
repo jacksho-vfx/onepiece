@@ -8,6 +8,7 @@
 - [Required services and dependencies](#required-services-and-dependencies) — Confirm which upstream systems you actually need for each stage.
 - [Entry points mapped to pipeline stages](#entry-points-mapped-to-pipeline-stages) — Align CLI-first workflows with optional orchestration surfaces.
 - [Integration protocols](#integration-protocols) — Review authentication, data contracts, and event flows for brownfield and greenfield rollouts.
+- [Modular CLI surface area](#modular-cli-surface-area) — Trim the command set to match the tools your team is ready to run.
 
 This overview ties together the major OnePiece surfaces so you can decide how to host services, extend pipelines with lightweight step factories, and stage a rollout that matches your studio's size and workflow maturity. The recommended starting point is always local-first: run the CLI, keep manifests in version control, and only add services once you need shared run history or dashboards.
 
@@ -87,6 +88,24 @@ npm run pipeline:cli -- <subcommand> [flags]
 
 Each invocation forwards stdout/stderr directly to the calling process while also recording the run inside the task manager for
 diagnostics and retention.
+
+## Modular CLI surface area
+
+Small studios rarely need every integration on day one. Use the
+`[profiles.<name>.cli]` settings inside `onepiece.toml` to whitelist the command
+groups your artists and TDs should see. This keeps onboarding simple while
+still letting you add ShotGrid, render farm, or notification tooling when your
+pipeline grows.
+
+```toml
+[profiles.mystudio.cli]
+enabled_groups = ["info", "pipeline", "healthcheck"]
+```
+
+To keep most tooling but hide the heaviest integrations, replace
+`enabled_groups` with `disabled_groups`. See
+[`docs/configuration_profiles.md`](configuration_profiles.md#profilesnamecli)
+for the full list of available groups.
 
 ## Integration protocols
 

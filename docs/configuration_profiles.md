@@ -194,6 +194,28 @@ max_runs = 500
 max_runs = 50
 ```
 
+### `[profiles.<name>.cli]`
+
+Use this section to keep the OnePiece CLI focused on the pipeline workflows your
+studio actually needs. You can either whitelist command groups or blacklist the
+extras you are not ready to deploy yet.
+
+| Key | Description |
+| --- | --- |
+| `enabled_groups` | Explicit list of command groups to load (e.g. `["info", "pipeline", "healthcheck"]`). When set, only these groups appear in the CLI. |
+| `disabled_groups` | List of command groups to hide when you want almost everything but a few large integrations (for example, `["shotgrid", "render"]`). |
+
+Supported command group names map to the top-level CLI namespaces: `info`,
+`pipeline`, `healthcheck`, `aws`, `ingest`, `dcc`, `render`, `notify`,
+`shotgrid`, `validate`, `hub`, `review`, and `chopper`.
+
+Example configuration that limits the CLI to pipeline-first commands:
+
+```toml
+[profiles.mystudio.cli]
+enabled_groups = ["info", "pipeline", "healthcheck"]
+```
+
 ### `[profiles.<name>.render]`
 
 | Key | Description |

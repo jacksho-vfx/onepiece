@@ -1,34 +1,27 @@
 import typer
 
-from apps.onepiece.aws import app as aws
-from apps.onepiece.dcc import app as dcc
-from apps.onepiece.misc.info import app as info
-from apps.onepiece.notify import app as notify
-from apps.onepiece.healthcheck import app as healthcheck
-from apps.onepiece.ingest import app as ingest
-from apps.onepiece.hub import app as hub
-from apps.onepiece.pipeline import app as pipeline
-from apps.onepiece.render import app as render
-from apps.onepiece.shotgrid import app as shotgrid
-from apps.onepiece.validate import app as validate
-from apps.chopper.app import app as chopper
-from libraries.automation.review import app as review
-
+from apps.onepiece.cli_registry import default_command_groups, resolve_command_groups
+from apps.onepiece.config import ProfileContext, load_profile
+from apps.onepiece.utils.errors import OnePieceError
 
 app = typer.Typer(help="OnePiece pipeline command line interface")
 
-app.add_typer(info)
+_profile_or_error: ProfileContext | OnePieceError
+try:
+    _profile_or_error = load_profile()
+except OnePieceError as exc:
+    _profile_or_error = exc
 
-app.add_typer(aws)
-app.add_typer(dcc)
-app.add_typer(review)
-app.add_typer(chopper)
-app.add_typer(hub)
-app.add_typer(render)
-app.add_typer(notify)
-app.add_typer(healthcheck)
-app.add_typer(ingest)
+if isinstance(_profile_or_error, OnePieceError):
+    groups = default_command_groups()
+else:
+    groups = resolve_command_groups(_profile_or_error)
 
-app.add_typer(shotgrid)
-app.add_typer(validate)
-app.add_typer(pipeline)
+for group in groups:
+    app.add_typer(group.loader())
+
+
+@app.callback()
+def _ensure_profile_loaded() -> None:
+    if isinstance(_profile_or_error, OnePieceError):
+        raise _profile_or_error

@@ -55,6 +55,12 @@ class ProfileContext:
         Tuple of module paths that export additional pipeline step factories.
     pipeline_template_paths:
         Tuple of file or directory paths that contain custom pipeline templates.
+    cli_enabled_groups:
+        Optional tuple of CLI command group names to load. When provided, only
+        these groups are registered with the main CLI.
+    cli_disabled_groups:
+        Tuple of CLI command group names that should be excluded from the main
+        CLI when ``cli_enabled_groups`` is not provided.
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
@@ -71,6 +77,8 @@ class ProfileContext:
     pipeline_executor_run_timeout: float | None
     pipeline_step_factories: tuple[str, ...]
     pipeline_template_paths: tuple[Path, ...]
+    cli_enabled_groups: tuple[str, ...] | None
+    cli_disabled_groups: tuple[str, ...]
 
 
 def load_profile(
@@ -150,6 +158,9 @@ def load_profile(
     pipeline_template_paths = _extract_pipeline_template_paths(
         selected_profile, profile_data
     )
+    cli_enabled_groups, cli_disabled_groups = _extract_cli_command_groups(
+        selected_profile, profile_data
+    )
 
     return ProfileContext(
         name=selected_profile,
@@ -163,6 +174,8 @@ def load_profile(
         pipeline_executor_run_timeout=pipeline_executor_run_timeout,
         pipeline_step_factories=pipeline_step_factories,
         pipeline_template_paths=pipeline_template_paths,
+        cli_enabled_groups=cli_enabled_groups,
+        cli_disabled_groups=cli_disabled_groups,
     )
 
 
@@ -458,6 +471,37 @@ def _extract_pipeline_template_paths(
             candidate = Path.cwd() / candidate
         paths.append(candidate)
     return tuple(paths)
+
+
+def _extract_cli_command_groups(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> tuple[tuple[str, ...] | None, tuple[str, ...]]:
+    cli_config = profile_data.get("cli")
+    if cli_config is None:
+        return (None, ())
+    if not isinstance(cli_config, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' cli section must be a mapping"
+        )
+
+    enabled_raw = cli_config.get("enabled_groups")
+    disabled_raw = cli_config.get("disabled_groups")
+    if enabled_raw is not None and disabled_raw is not None:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' cli must not define both enabled_groups and disabled_groups"
+        )
+
+    enabled = (
+        _coerce_string_list(profile_name, enabled_raw, field="cli.enabled_groups")
+        if enabled_raw is not None
+        else None
+    )
+    disabled = (
+        _coerce_string_list(profile_name, disabled_raw, field="cli.disabled_groups")
+        if disabled_raw is not None
+        else ()
+    )
+    return (enabled, disabled)
 
 
 def _coerce_string_list(
