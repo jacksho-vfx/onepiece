@@ -117,6 +117,21 @@ Project and workspace defaults can be captured in `onepiece.toml` files. The
 [configuration profile guide](docs/configuration_profiles.md) includes merging
 rules, advanced examples, and a full key reference.
 
+### Keep the CLI focused on pipeline work
+
+OnePiece can be trimmed down to just the command groups your studio needs.
+Define `[profiles.<name>.cli]` in `onepiece.toml` to whitelist or hide command
+groups, keeping the pipeline toolkit lightweight for small teams while still
+allowing power users to opt into the larger integrations later.
+
+```toml
+[profiles.mystudio.cli]
+enabled_groups = ["info", "pipeline", "healthcheck"]
+```
+
+This example limits the CLI to pipeline-first tooling. To keep most command
+groups but remove heavier integrations, use `disabled_groups` instead.
+
 ### Typical workflows
 
 The CLI is designed to string together a handful of repeatable workflows. The
