@@ -1,3 +1,8 @@
 """Thin wrapper for OnePiece CLI commands."""
 
-from libraries.onepiece.cli.aws.sync_to import *  # noqa: F401,F403
+import sys as _sys
+from importlib import import_module as _import_module
+
+_sync_to = _import_module("libraries.onepiece.cli.aws.sync_to")
+
+_sys.modules[__name__] = _sync_to

@@ -14,5 +14,7 @@ requests>=2.32.0
 rich>=13.7.0
 structlog>=23.3.0
 typer>=0.19.2
+types-PyYAML>=6.0.0
+types-requests>=2.31.0
 universal-pathlib>=0.2.2
 uvicorn>=0.30.0

@@ -1,3 +1,8 @@
 """Thin wrapper for OnePiece CLI commands."""
 
-from libraries.onepiece.cli.misc.info import *  # noqa: F401,F403
+import sys as _sys
+from importlib import import_module as _import_module
+
+_info = _import_module("libraries.onepiece.cli.misc.info")
+
+_sys.modules[__name__] = _info
