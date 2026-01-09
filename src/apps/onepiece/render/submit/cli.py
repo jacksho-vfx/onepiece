@@ -7,6 +7,7 @@ import typer
 from .cancel_command import cancel_render_job
 from .helpers import FARM_ADAPTERS
 from .optimize_deadline_command import optimize_and_submit_deadline
+from .reporting_command import generate_weekly_report
 from .presets import (
     export_preset,
     import_preset,
@@ -26,6 +27,7 @@ app.command("optimize-deadline")(optimize_and_submit_deadline)
 app.command("status")(render_status)
 app.command("cancel")(cancel_render_job)
 app.command("scripts")(generate_scripts)
+app.command("report-weekly")(generate_weekly_report)
 
 presets_app.command("list")(list_presets)
 presets_app.command("save")(save_preset)
