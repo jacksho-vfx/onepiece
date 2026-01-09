@@ -939,6 +939,7 @@ def prune_history(
 
 
 @app.command("run-status")
+@app.command("status")
 def run_status(
     run_id: str = typer.Argument(..., help="Run identifier."),
     format: str = typer.Option(
@@ -967,6 +968,7 @@ def run_status(
 
 
 @app.command("run-events")
+@app.command("events")
 def run_events(
     run_id: str = typer.Argument(..., help="Run identifier."),
     format: str = typer.Option(
