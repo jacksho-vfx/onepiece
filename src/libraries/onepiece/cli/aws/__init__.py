@@ -1,0 +1,111 @@
+"""Top-level Typer application exposing AWS utilities."""
+
+from typing import List, Optional
+
+import typer
+
+from . import ingest as _ingest_module
+from .sync_from import sync_from as sync_from_command
+from .sync_to import sync_to as sync_to_command
+
+app = typer.Typer(name="aws", help="AWS and S3 integration commands")
+ingest = _ingest_module
+app.add_typer(ingest.app)
+
+
+@app.command("sync-from")
+def sync_from(
+    bucket: str,
+    show_code: str,
+    folder: str,
+    local_path: str,
+    dry_run: bool = False,
+    include: Optional[List[str]] = typer.Option(None, "--include"),
+    exclude: Optional[List[str]] = typer.Option(None, "--exclude"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help=(
+            "Name of the AWS credential profile to use when running s5cmd "
+            "(sets AWS_PROFILE for the sync)."
+        ),
+    ),
+    concurrency: Optional[int] = typer.Option(
+        None,
+        "--concurrency",
+        min=1,
+        help="Override the s5cmd --concurrency value for the transfer.",
+    ),
+    part_size: Optional[str] = typer.Option(
+        None,
+        "--part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
+) -> None:
+    """Sync data from S3 into a local folder."""
+
+    sync_from_command(
+        bucket=bucket,
+        show_code=show_code,
+        folder=folder,
+        local_path=local_path,
+        dry_run=dry_run,
+        include=include,
+        exclude=exclude,
+        profile=profile,
+        concurrency=concurrency,
+        part_size=part_size,
+    )
+
+
+@app.command("sync-to")
+def sync_to(
+    bucket: str,
+    show_code: str,
+    folder: str,
+    local_path: str,
+    dry_run: bool = False,
+    include: Optional[List[str]] = typer.Option(None, "--include"),
+    exclude: Optional[List[str]] = typer.Option(None, "--exclude"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help=(
+            "Name of the AWS credential profile to use when running s5cmd "
+            "(sets AWS_PROFILE for the sync)."
+        ),
+    ),
+    concurrency: Optional[int] = typer.Option(
+        None,
+        "--concurrency",
+        min=1,
+        help="Override the s5cmd --concurrency value for the transfer.",
+    ),
+    part_size: Optional[str] = typer.Option(
+        None,
+        "--part-size",
+        help="Override the s5cmd --part-size value (for example '64MB').",
+    ),
+) -> None:
+    """Sync data from a local folder up to S3."""
+
+    sync_to_command(
+        bucket=bucket,
+        show_code=show_code,
+        folder=folder,
+        local_path=local_path,
+        dry_run=dry_run,
+        include=include,
+        exclude=exclude,
+        profile=profile,
+        concurrency=concurrency,
+        part_size=part_size,
+    )
+
+
+__all__ = [
+    "app",
+    "ingest",
+    "sync_from",
+    "sync_to",
+]
