@@ -51,6 +51,10 @@ class ProfileContext:
     pipeline_executor_run_timeout:
         Optional maximum number of seconds a pipeline run may take before it
         is aborted.
+    pipeline_step_factories:
+        Tuple of module paths that export additional pipeline step factories.
+    pipeline_template_paths:
+        Tuple of file or directory paths that contain custom pipeline templates.
     sources:
         Ordered tuple of configuration files that contributed to the final
         profile.
@@ -65,6 +69,8 @@ class ProfileContext:
     pipeline_executor_event_max_workers: int | None
     pipeline_executor_step_timeout: float | None
     pipeline_executor_run_timeout: float | None
+    pipeline_step_factories: tuple[str, ...]
+    pipeline_template_paths: tuple[Path, ...]
 
 
 def load_profile(
@@ -138,6 +144,12 @@ def load_profile(
         pipeline_executor_step_timeout,
         pipeline_executor_run_timeout,
     ) = _extract_pipeline_executor_timeouts(selected_profile, profile_data)
+    pipeline_step_factories = _extract_pipeline_step_factories(
+        selected_profile, profile_data
+    )
+    pipeline_template_paths = _extract_pipeline_template_paths(
+        selected_profile, profile_data
+    )
 
     return ProfileContext(
         name=selected_profile,
@@ -149,6 +161,8 @@ def load_profile(
         pipeline_executor_event_max_workers=pipeline_executor_event_max_workers,
         pipeline_executor_step_timeout=pipeline_executor_step_timeout,
         pipeline_executor_run_timeout=pipeline_executor_run_timeout,
+        pipeline_step_factories=pipeline_step_factories,
+        pipeline_template_paths=pipeline_template_paths,
     )
 
 
@@ -396,6 +410,88 @@ def _extract_pipeline_executor_timeouts(
     )
     run_timeout = _coerce_executor_timeout(profile_name, executor_config, "run_timeout")
     return step_timeout, run_timeout
+
+
+def _extract_pipeline_step_factories(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> tuple[str, ...]:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
+    raw_value = pipeline_config.get("step_factories")
+    if raw_value is None:
+        raw_value = pipeline_config.get("step_factory_modules")
+    return _coerce_string_list(profile_name, raw_value, field="pipeline.step_factories")
+
+
+def _extract_pipeline_template_paths(
+    profile_name: str, profile_data: Mapping[str, Any]
+) -> tuple[Path, ...]:
+    pipeline_config = _extract_pipeline_config(profile_name, profile_data)
+    raw_value = pipeline_config.get("template_paths")
+    if raw_value is None:
+        raw_value = pipeline_config.get("templates")
+    if raw_value is None:
+        return ()
+    if isinstance(raw_value, (str, Path)):
+        raw_items = [raw_value]
+    elif isinstance(raw_value, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.template_paths must be a list of paths"
+        )
+    elif isinstance(raw_value, Iterable):
+        raw_items = list(raw_value)
+    else:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' pipeline.template_paths must be a list of paths"
+        )
+
+    paths: list[Path] = []
+    for item in raw_items:
+        if isinstance(item, bool):
+            raise OnePieceConfigError(
+                f"Profile '{profile_name}' pipeline.template_paths must be a list of paths"
+            )
+        text = str(item).strip()
+        if not text:
+            continue
+        candidate = Path(text).expanduser()
+        if not candidate.is_absolute():
+            candidate = Path.cwd() / candidate
+        paths.append(candidate)
+    return tuple(paths)
+
+
+def _coerce_string_list(
+    profile_name: str, raw_value: Any, *, field: str
+) -> tuple[str, ...]:
+    if raw_value is None:
+        return ()
+    if isinstance(raw_value, bool):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' {field} must be a list of strings"
+        )
+    if isinstance(raw_value, str):
+        items = [raw_value]
+    elif isinstance(raw_value, Mapping):
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' {field} must be a list of strings"
+        )
+    elif isinstance(raw_value, Iterable):
+        items = list(raw_value)
+    else:
+        raise OnePieceConfigError(
+            f"Profile '{profile_name}' {field} must be a list of strings"
+        )
+
+    values: list[str] = []
+    for item in items:
+        if isinstance(item, bool):
+            raise OnePieceConfigError(
+                f"Profile '{profile_name}' {field} must be a list of strings"
+            )
+        text = str(item).strip()
+        if text:
+            values.append(text)
+    return tuple(values)
 
 
 def _coerce_executor_timeout(

@@ -5,9 +5,17 @@ from __future__ import annotations
 import json
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 import typer
+
+from apps.onepiece.config import load_profile
+from apps.onepiece.utils.errors import OnePieceConfigError
+from libraries.pipeline.registry import (
+    PipelineTemplateLoadError,
+    collect_pipeline_templates,
+)
+from libraries.pipeline.templates import PipelineTemplate
 
 from .clients import (
     LocalPipelineClient,
@@ -25,7 +33,6 @@ from .io import (
     _serialised_definition_to_manifest,
     _write_manifest,
 )
-from .schema import PipelineParameterSchema, PipelineSchemaError
 from .output import (
     _coerce_display_text,
     _format_pipeline_definition,
@@ -38,10 +45,7 @@ from .output import (
     _normalise_roles,
     _render_pipeline_details,
 )
-from libraries.pipeline.templates import (
-    get_pipeline_template,
-    list_pipeline_templates,
-)
+from .schema import PipelineParameterSchema, PipelineSchemaError
 
 
 def _create_pipeline_client() -> PipelineClient:
@@ -150,7 +154,7 @@ def list_templates(
     """List bundled pipeline templates for quick scaffolding."""
 
     output_format = _resolve_output_format(format)
-    templates = list_pipeline_templates()
+    templates = _resolve_pipeline_templates()
 
     if output_format == "json":
         payload = [
@@ -191,7 +195,7 @@ def scaffold_template(
 ) -> None:
     """Write a bundled pipeline template to a manifest file."""
 
-    resolved_template = get_pipeline_template(template)
+    resolved_template = _resolve_pipeline_template(template)
     if output.exists() and not force:
         raise typer.BadParameter(
             f"Output file '{output}' already exists; pass --force to overwrite.",
@@ -201,6 +205,36 @@ def scaffold_template(
     manifest_format = _resolve_manifest_format(output, format)
     _write_manifest(output, resolved_template.manifest, format=manifest_format)
     typer.echo(f"Template '{resolved_template.name}' written to {output.resolve()}.")
+
+
+def _resolve_pipeline_templates() -> tuple[PipelineTemplate, ...]:
+    try:
+        profile = load_profile()
+    except OnePieceConfigError as exc:
+        typer.echo(f"Failed to load profile configuration: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        return cast(
+            tuple[PipelineTemplate, ...],
+            collect_pipeline_templates(template_paths=profile.pipeline_template_paths),
+        )
+    except PipelineTemplateLoadError as exc:
+        typer.echo(f"Pipeline template discovery failed: {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _resolve_pipeline_template(name: str) -> PipelineTemplate:
+    templates = _resolve_pipeline_templates()
+    normalized = name.strip().lower()
+    for template in templates:
+        if template.name.lower() == normalized:
+            return template
+    available = ", ".join(sorted(template.name for template in templates))
+    raise typer.BadParameter(
+        f"Unknown pipeline template '{name}'. Available: {available}.",
+        param_hint="template",
+    )
 
 
 @app.command("describe")

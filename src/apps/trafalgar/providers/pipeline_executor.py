@@ -20,9 +20,9 @@ from itertools import count
 from threading import Lock
 from typing import Any, Callable, Deque, Iterable, Literal, Mapping, Protocol
 
-from libraries.pipeline import plugins
 from libraries.pipeline.factories import resolve_provider
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
+from libraries.pipeline.registry import build_pipeline_step_factories
 from libraries.pipeline.steps import builtin_pipeline_step_factories
 
 PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
@@ -181,17 +181,9 @@ class PipelineExecutor:
         run_timeout: float | int | None = None,
     ) -> None:
         if step_factories is None:
-            builtin_factories = builtin_pipeline_step_factories()
-            loader = plugins.discover_pipeline_step_factories
-            signature = inspect.signature(loader)
-            supports_builtin = any(
-                param.kind is inspect.Parameter.VAR_KEYWORD or param.name == "builtin"
-                for param in signature.parameters.values()
+            step_factories = build_pipeline_step_factories(
+                builtin=builtin_pipeline_step_factories()
             )
-            if supports_builtin:
-                step_factories = loader(builtin=builtin_factories)
-            else:
-                step_factories = {**loader(), **builtin_factories}
         self._step_factories: dict[str, Callable[[Mapping[str, Any]], Any]] = dict(
             step_factories
         )
