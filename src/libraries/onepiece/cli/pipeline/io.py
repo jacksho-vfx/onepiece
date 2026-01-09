@@ -263,6 +263,20 @@ def _write_manifest(path: Path, manifest: Mapping[str, Any], *, format: str) -> 
     path.write_text(text, encoding="utf-8")
 
 
+def _write_parameter_template(
+    path: Path, template: Mapping[str, Any], *, format: str
+) -> None:
+    format_normalised = format.lower()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if format_normalised == "json":
+        text = json.dumps(template, indent=2)
+    elif format_normalised == "toml":
+        text = _render_parameter_template_toml(template)
+    else:  # pragma: no cover - guarded by caller
+        raise ValueError(f"Unsupported parameter template format: {format}")
+    path.write_text(text, encoding="utf-8")
+
+
 def _resolve_manifest_format(output: Path, requested: str | None) -> str:
     if requested:
         candidate = requested.lower()
@@ -279,6 +293,51 @@ def _resolve_manifest_format(output: Path, requested: str | None) -> str:
     if suffix in {".yaml", ".yml"}:
         return "yaml"
     return "toml"
+
+
+def _resolve_parameter_template_format(
+    output: Path | None, requested: str | None
+) -> str:
+    if requested:
+        candidate = requested.lower()
+        if candidate not in {"json", "toml"}:
+            raise typer.BadParameter(
+                "Format must be either 'json' or 'toml'.",
+                param_hint="--format",
+            )
+        return candidate
+
+    if output is None:
+        return "json"
+
+    suffix = output.suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix == ".toml":
+        return "toml"
+    return "json"
+
+
+def _render_parameter_template(template: Mapping[str, Any], *, format: str) -> str:
+    format_normalised = format.lower()
+    if format_normalised == "json":
+        return json.dumps(template, indent=2)
+    if format_normalised == "toml":
+        return _render_parameter_template_toml(template)
+    raise ValueError(f"Unsupported parameter template format: {format}")
+
+
+def _render_parameter_template_toml(template: Mapping[str, Any]) -> str:
+    lines: list[str] = []
+    for name, value in template.items():
+        if not isinstance(value, Mapping):
+            lines.append(f"{name} = {_format_toml_scalar(value)}")
+            continue
+        if lines:
+            lines.append("")
+        lines.append(f"[{name}]")
+        _render_table_body(name, value, lines)
+    return "\n".join(lines) + "\n"
 
 
 def _render_manifest_toml(manifest: Mapping[str, Any]) -> str:
@@ -389,12 +448,16 @@ __all__ = [
     "_normalise_dependencies",
     "_normalise_manifest_value",
     "_parse_pipeline_parameters",
+    "_render_parameter_template",
+    "_render_parameter_template_toml",
     "_render_manifest_toml",
     "_render_table_body",
     "_resolve_manifest_format",
+    "_resolve_parameter_template_format",
     "_serialised_definition_to_manifest",
     "_serialised_step_to_manifest",
     "_write_manifest",
+    "_write_parameter_template",
     "_resolve_parameters_with_schema",
 ]
 

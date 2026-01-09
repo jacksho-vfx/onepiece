@@ -28,9 +28,12 @@ from .io import (
     _load_pipeline_parameters_file,
     _load_pipeline_submission,
     _parse_pipeline_parameters,
+    _render_parameter_template,
+    _resolve_parameter_template_format,
     _resolve_manifest_format,
     _resolve_parameters_with_schema,
     _serialised_definition_to_manifest,
+    _write_parameter_template,
     _write_manifest,
 )
 from .output import (
@@ -182,6 +185,53 @@ def list_templates(
             }
         ):
             typer.echo(line)
+
+
+@app.command("params-template")
+def parameter_template(
+    name: str = typer.Argument(..., help="Pipeline identifier."),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Write the template to a file instead of stdout.",
+    ),
+    format: str | None = typer.Option(
+        None,
+        "--format",
+        help="Output format: 'json' (default) or 'toml'.",
+    ),
+) -> None:
+    """Generate a parameter template for a pipeline."""
+
+    output_format = _resolve_parameter_template_format(output, format)
+
+    with _using_client() as client:
+        try:
+            definition = client.get_definition(name)
+        except PipelineClientError as exc:
+            if exc.status_code == 404:
+                raise typer.BadParameter(exc.message) from exc
+            typer.echo(f"Pipeline request failed: {exc.message}")
+            raise typer.Exit(code=1) from exc
+
+    schema = _build_parameter_schema_from_definition(definition, fallback_name=name)
+    template: Mapping[str, Any] = {}
+    if schema is not None:
+        template = schema.example_template()
+
+    if output is not None:
+        try:
+            _write_parameter_template(output, template, format=output_format)
+        except OSError as exc:  # pragma: no cover - depends on filesystem errors
+            typer.echo(f"Failed to write parameter template: {exc}")
+            raise typer.Exit(code=1) from exc
+        typer.echo(
+            f"Parameter template for '{definition.get('name', name)}' written to {output.resolve()}."
+        )
+        return
+
+    typer.echo(_render_parameter_template(template, format=output_format))
 
 
 @app.command("scaffold")
