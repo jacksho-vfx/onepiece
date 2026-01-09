@@ -1,8 +1,26 @@
 .PHONY: setup format lint typecheck test precommit install-precommit check fixtures-pipelines tester-present install-dev check-format smoke-onepiece
 
-VENV := .venv\Scripts
-PYTHON ?= $(VENV)\python.exe
-PIP ?= $(VENV)\pip.exe
+ifeq ($(OS),Windows_NT)
+VENV_BIN := .venv\Scripts
+PYTHON ?= $(VENV_BIN)\python.exe
+PIP ?= $(VENV_BIN)\pip.exe
+RM_VENV := if exist .venv rmdir /s /q .venv
+FIXTURES_DIR := .fixtures\pipelines
+FIXTURES_MKDIR := if not exist $(FIXTURES_DIR) mkdir $(FIXTURES_DIR)
+FIXTURES_COPY := xcopy /E /I /Y docs\examples\pipelines\* $(FIXTURES_DIR)\
+TESTER_PRESENT := where tester >nul 2>nul && (tester present $(TESTER_ARGS)) || ($(PYTHON) -m apps.tester present $(TESTER_ARGS))
+TESTER_SMOKE := where tester >nul 2>nul && (tester --smoke $(TESTER_ARGS)) || ($(PYTHON) -m apps.tester --smoke $(TESTER_ARGS))
+else
+VENV_BIN := .venv/bin
+PYTHON ?= $(VENV_BIN)/python
+PIP ?= $(VENV_BIN)/pip
+RM_VENV := rm -rf .venv
+FIXTURES_DIR := .fixtures/pipelines
+FIXTURES_MKDIR := mkdir -p $(FIXTURES_DIR)
+FIXTURES_COPY := cp -R docs/examples/pipelines/. $(FIXTURES_DIR)
+TESTER_PRESENT := command -v tester >/dev/null 2>&1 && tester present $(TESTER_ARGS) || $(PYTHON) -m apps.tester present $(TESTER_ARGS)
+TESTER_SMOKE := command -v tester >/dev/null 2>&1 && tester --smoke $(TESTER_ARGS) || $(PYTHON) -m apps.tester --smoke $(TESTER_ARGS)
+endif
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 PRE_COMMIT_CONFIG ?= .pre-commit-config.yaml
 TESTER_ARGS ?=
@@ -15,22 +33,22 @@ setup: $(PYTHON)
 	$(PYTHON) -m pip install -r requirements.txt
 
 check-format:
-	$(VENV)\black --check src
+	$(PYTHON) -m black --check src
 
 format:
-	$(VENV)\black src
+	$(PYTHON) -m black src
 
 lint:
-	$(VENV)\ruff check src
+	$(PYTHON) -m ruff check src
 
 typecheck:
-	$(VENV)\mypy
+	$(PYTHON) -m mypy
 
 test:
-	$(VENV)\pytest --maxfail=1 --disable-warnings -q
+	$(PYTHON) -m pytest --maxfail=1 --disable-warnings -q
 
 install-dev:
-	if exist .venv rmdir /s /q .venv
+	$(RM_VENV)
 	python -m venv .venv
 	$(PIP) install -U pip
 	$(PIP) install -e .[dev]
@@ -44,12 +62,12 @@ install-precommit:
 check: precommit test
 
 fixtures-pipelines:
-	if not exist .fixtures\pipelines mkdir .fixtures\pipelines
-	xcopy /E /I /Y docs\examples\pipelines\* .fixtures\pipelines\
+	$(FIXTURES_MKDIR)
+	$(FIXTURES_COPY)
 	@echo Copied docs\examples\pipelines into .fixtures\pipelines for local experimentation.
 
 tester-present:
-	where tester >nul 2>nul && (tester present $(TESTER_ARGS)) || ($(PYTHON) -m apps.tester present $(TESTER_ARGS))
+	$(TESTER_PRESENT)
 
 smoke-onepiece:
-	where tester >nul 2>nul && (tester --smoke $(TESTER_ARGS)) || ($(PYTHON) -m apps.tester --smoke $(TESTER_ARGS))
+	$(TESTER_SMOKE)
