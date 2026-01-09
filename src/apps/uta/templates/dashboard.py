@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+from .app_flags import render_app_flag
 from .cli import with_root_path
 
 
 def render_dashboard_page(*, is_active: bool, root_path: str) -> str:
     active_class = "active" if is_active else ""
     dashboard_root = with_root_path(root_path, "/dashboard/")
+    flag_html = render_app_flag("Dashboard", size="md")
     return f"""
     <section id=\"page-dashboard\" class=\"page {active_class}\" data-dashboard-root=\"{dashboard_root}\">
       <div class=\"page-header\">
-        <h2>Trafalgar Dashboard</h2>
-        <p class=\"page-help\">Live Trafalgar analytics rendered alongside the OnePiece command surface.</p>
+        <div class=\"page-header-text\">
+          {flag_html}
+          <div class=\"page-header-copy\">
+            <h2>Trafalgar Dashboard</h2>
+            <p class=\"page-help\">Live Trafalgar analytics rendered alongside the OnePiece command surface.</p>
+          </div>
+        </div>
       </div>
       <article class=\"dashboard-auth-card\" data-dashboard-auth>
         <div class=\"dashboard-auth-header\">

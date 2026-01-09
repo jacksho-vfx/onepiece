@@ -5,6 +5,7 @@ from html import escape
 from typing import TypedDict
 
 from apps.uta.web_cli import CommandSpec, PageSpec
+from .app_flags import render_app_flag
 
 
 def slugify(name: str) -> str:
@@ -294,12 +295,16 @@ def render_page(page: PageSpec, *, is_active: bool) -> str:
     help_text = escape(page.help_text or "")
     page_id = f"page-{slugify(page.name)}"
     active_class = "active" if is_active else ""
+    flag_html = render_app_flag(page.name, size="md")
     return f"""
     <section id=\"{page_id}\" class=\"page {active_class}\">
       <div class=\"page-header\">
         <div class=\"page-header-text\">
-          <h2>{escape(page.name.title())}</h2>
-          <p class=\"page-help\">{help_text}</p>
+          {flag_html}
+          <div class=\"page-header-copy\">
+            <h2>{escape(page.name.title())}</h2>
+            <p class=\"page-help\">{help_text}</p>
+          </div>
         </div>
         <div class=\"page-actions\" aria-label=\"Page filters\">
           <button type=\"button\" class=\"filter-pill favourites-pill\" data-favourites-pill aria-pressed=\"false\" aria-label=\"Show favourite commands only\">
