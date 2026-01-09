@@ -16,6 +16,12 @@ from .plugins import (
     PipelineStepFactory,
     discover_pipeline_step_factories,
 )
+from .steps import (
+    PipelineStepConfigError,
+    builtin_pipeline_step_factories,
+    noop_step_factory,
+    shell_step_factory,
+)
 
 __all__ = [
     "Pipeline",
@@ -32,4 +38,8 @@ __all__ = [
     "InvalidPipelineStepFactoryError",
     "PipelineStepFactory",
     "discover_pipeline_step_factories",
+    "PipelineStepConfigError",
+    "builtin_pipeline_step_factories",
+    "noop_step_factory",
+    "shell_step_factory",
 ]

@@ -32,10 +32,15 @@ from .output import (
     _format_pipeline_prune_summary,
     _format_pipeline_run,
     _format_pipeline_statistics,
+    _format_pipeline_template,
     _format_run_event,
     _format_worker_metrics,
     _normalise_roles,
     _render_pipeline_details,
+)
+from libraries.pipeline.templates import (
+    get_pipeline_template,
+    list_pipeline_templates,
 )
 
 
@@ -134,6 +139,68 @@ def list_pipelines(
     for definition in definitions:
         for line in _format_pipeline_definition(definition):
             typer.echo(line)
+
+
+@app.command("templates")
+def list_templates(
+    format: str = typer.Option(
+        "text", "--format", help="Output format: 'text' (default) or 'json'."
+    ),
+) -> None:
+    """List bundled pipeline templates for quick scaffolding."""
+
+    output_format = _resolve_output_format(format)
+    templates = list_pipeline_templates()
+
+    if output_format == "json":
+        payload = [
+            {
+                "name": template.name,
+                "summary": template.summary,
+                "description": template.description,
+            }
+            for template in templates
+        ]
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    if not templates:
+        typer.echo("No pipeline templates are currently bundled.")
+        return
+
+    typer.echo("Available pipeline templates:")
+    for template in templates:
+        for line in _format_pipeline_template(
+            {
+                "name": template.name,
+                "summary": template.summary,
+                "description": template.description,
+            }
+        ):
+            typer.echo(line)
+
+
+@app.command("scaffold")
+def scaffold_template(
+    template: str = typer.Argument(..., help="Name of the template to scaffold."),
+    output: Path = typer.Argument(..., help="Path to write the manifest file."),
+    format: str | None = typer.Option(
+        None, "--format", help="Manifest format: 'toml' or 'yaml'."
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
+) -> None:
+    """Write a bundled pipeline template to a manifest file."""
+
+    resolved_template = get_pipeline_template(template)
+    if output.exists() and not force:
+        raise typer.BadParameter(
+            f"Output file '{output}' already exists; pass --force to overwrite.",
+            param_hint="output",
+        )
+
+    manifest_format = _resolve_manifest_format(output, format)
+    _write_manifest(output, resolved_template.manifest, format=manifest_format)
+    typer.echo(f"Template '{resolved_template.name}' written to {output.resolve()}.")
 
 
 @app.command("describe")

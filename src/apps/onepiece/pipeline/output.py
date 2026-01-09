@@ -374,6 +374,19 @@ def _format_pipeline_prune_summary(result: Mapping[str, Any]) -> Iterable[str]:
     return lines
 
 
+def _format_pipeline_template(template: Mapping[str, Any]) -> Iterable[str]:
+    name = str(template.get("name") or "")
+    summary = str(template.get("summary") or "")
+    description = str(template.get("description") or "")
+
+    lines = [f"- {name}"]
+    if summary:
+        lines.append(f"  Summary: {summary}")
+    if description:
+        lines.append(f"  Details: {description}")
+    return lines
+
+
 __all__ = [
     "_coerce_display_text",
     "_coerce_int",
@@ -384,6 +397,7 @@ __all__ = [
     "_format_pipeline_prune_summary",
     "_format_pipeline_run",
     "_format_pipeline_statistics",
+    "_format_pipeline_template",
     "_format_run_event",
     "_format_worker_metrics",
     "_normalise_parameter_definition",
