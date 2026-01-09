@@ -150,3 +150,36 @@ description = "Workspace Only"
     assert context.pipelines["render"]["description"] == "Workspace Render"
     assert context.pipelines["publish"]["description"] == "Project Publish"
     assert context.pipelines["new_pipeline"]["description"] == "Workspace Only"
+
+
+def test_load_profile_pipeline_customisation_paths(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    user_config = home / ".config" / "onepiece" / "onepiece.toml"
+    _write(
+        user_config,
+        """
+default_profile = "studio"
+
+[profiles.studio.pipeline]
+step_factories = ["studio.pipeline.steps", "custom.steps"]
+template_paths = ["~/pipeline/templates", "pipelines/templates"]
+""".strip()
+        + "\n",
+    )
+
+    context = load_profile()
+
+    assert context.pipeline_step_factories == (
+        "studio.pipeline.steps",
+        "custom.steps",
+    )
+    assert context.pipeline_template_paths == (
+        home / "pipeline" / "templates",
+        tmp_path / "pipelines" / "templates",
+    )

@@ -109,6 +109,10 @@ Pair this overview with the focused guides linked above to dive deeper into spec
   `onepiece pipeline scaffold <template> <output>` to write one to disk. The
   templates use the built-in `shell` and `noop` step factories so you can keep
   the manifest structure while swapping in studio-specific commands.
+- Keep studio templates close to your pipeline repo by listing their folders in
+  `pipeline.template_paths` inside `onepiece.toml`. Add Python module paths to
+  `pipeline.step_factories` to register reusable step factories without
+  repackaging the CLI.
 - The shared schema helper at `apps/onepiece/pipeline/schema.py` exposes
   validated parameter defaults, example templates, and a manifest loader that
   both the CLI and Trafalgar use. You can pre-fill `--params-file` documents or

@@ -39,6 +39,12 @@ onepiece pipeline scaffold starter.ingest_review manifests/ingest_review.toml
 The scaffolds use the built-in `shell` and `noop` step factories so you can keep
 the manifest structure while swapping in your own commands or Python providers.
 
+To surface studio-specific templates in the same listing, add
+`pipeline.template_paths` to your `onepiece.toml` profile. The CLI will scan
+the configured files or directories and list them alongside the bundled
+templates, making it easy to scaffold a custom pipeline without memorising file
+paths.
+
 ## Triggering pipeline runs
 
 Trigger executions with `onepiece pipeline run <pipeline-name>`. Supply

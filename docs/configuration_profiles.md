@@ -128,6 +128,19 @@ sections consumed by first-party commands.
 | `upload_chunk_size` | Multipart chunk size (bytes) used when resuming transfers. |
 | `use_asyncio` | Toggle asyncio orchestration for I/O-bound workloads. |
 
+### `[profiles.<name>.pipeline]`
+
+| Key | Description |
+| --- | --- |
+| `step_factories` | List of Python module paths that expose additional pipeline step factories for the orchestrator (via `pipeline_step_factories()` or `PIPELINE_STEP_FACTORIES`). |
+| `template_paths` | List of TOML/YAML manifest files or directories scanned for custom pipeline templates. Relative paths resolve from the current working directory. |
+| `workers.max` | Maximum number of concurrent pipelines executed by the embedded orchestrator. |
+| `executor.event_max_workers` | Upper bound on concurrent event-driven step executions (defaults to the sequential worker pool when omitted). |
+| `executor.step_timeout` | Maximum runtime (seconds) for a single pipeline step. |
+| `executor.run_timeout` | Maximum runtime (seconds) for an entire pipeline run. |
+
+Use this section to let each studio drop in custom step factories without shipping a new package and to make bespoke templates appear in `onepiece pipeline templates` alongside the bundled starters.
+
 ### `[profiles.<name>.pipeline.storage]`
 
 | Key | Description |

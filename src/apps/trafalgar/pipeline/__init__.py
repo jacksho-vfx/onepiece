@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Mapping, cast
-import uuid
 
 from apps.onepiece.config import ProfileContext
 from apps.trafalgar.providers import pipeline_executor
 from libraries.pipeline.factories import pipeline_from_config
 from libraries.pipeline.models import Pipeline, PipelineStep
+from libraries.pipeline.registry import build_pipeline_step_factories
 
 from .parameters import ParameterDefinition, _parse_parameter_definitions
 from .storage import (
@@ -994,6 +995,9 @@ def configure_orchestrator_from_profile(
         max_workers = max(1, profile.pipeline_workers_max)
 
     executor = pipeline_executor.PipelineExecutor(
+        step_factories=build_pipeline_step_factories(
+            module_paths=profile.pipeline_step_factories
+        ),
         event_max_workers=profile.pipeline_executor_event_max_workers,
         step_timeout=profile.pipeline_executor_step_timeout,
         run_timeout=profile.pipeline_executor_run_timeout,
