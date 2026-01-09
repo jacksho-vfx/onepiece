@@ -6,6 +6,7 @@ import typer
 
 from .cancel_command import cancel_render_job
 from .helpers import FARM_ADAPTERS
+from .deadline_report_command import deadline_report
 from .optimize_deadline_command import optimize_and_submit_deadline
 from ..reporting_command import generate_weekly_report
 from .presets import (
@@ -24,6 +25,7 @@ presets_app = typer.Typer(name="preset", help="Manage render submission presets.
 
 app.command("submit")(submit)
 app.command("optimize-deadline")(optimize_and_submit_deadline)
+app.command("deadline-report")(deadline_report)
 app.command("status")(render_status)
 app.command("cancel")(cancel_render_job)
 app.command("scripts")(generate_scripts)

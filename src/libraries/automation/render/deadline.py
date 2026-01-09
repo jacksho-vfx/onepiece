@@ -216,6 +216,41 @@ class DeadlineClient:
         except json.JSONDecodeError as exc:
             raise DeadlineResponseError("Deadline returned invalid JSON") from exc
 
+    def get_report(self, endpoint: str) -> Any:
+        """Return a Deadline reporting payload from the provided endpoint."""
+
+        path = endpoint.lstrip("/")
+        url = f"{self.base_url.rstrip('/')}/{path}"
+        auth = None
+        if self.username and self.password:
+            auth = (self.username, self.password)
+
+        try:
+            response = self.session.get(url, timeout=REQUEST_TIMEOUT, auth=auth)
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            raise DeadlineUnavailableError("Unable to reach Deadline API") from exc
+
+        if response.status_code in {401, 403}:
+            raise DeadlineAuthenticationError(
+                _response_message(response) or "Deadline authentication failed"
+            )
+        if response.status_code == 404:
+            raise DeadlineResponseError(
+                _response_message(response) or "Deadline report not found"
+            )
+        if response.status_code >= 500:
+            raise DeadlineUnavailableError(
+                _response_message(response) or "Deadline encountered an error"
+            )
+
+        if not response.content:
+            raise DeadlineResponseError("Deadline returned an empty response")
+
+        try:
+            return response.json()
+        except json.JSONDecodeError as exc:
+            raise DeadlineResponseError("Deadline returned invalid JSON") from exc
+
 
 def _response_message(response: requests.Response) -> str | None:
     """Extract a helpful error message from a Deadline HTTP response."""
@@ -605,11 +640,19 @@ def get_capabilities() -> AdapterCapabilities:
     return capabilities
 
 
+def get_report(endpoint: str) -> Mapping[str, Any]:
+    """Return a report payload from the Deadline API."""
+
+    client = _get_client()
+    return client.get_report(endpoint)
+
+
 __all__ = [
     "submit_job",
     "get_job_status",
     "cancel_job",
     "get_capabilities",
+    "get_report",
     "DeadlineClient",
     "DeadlineError",
     "DeadlineAuthenticationError",
