@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterator, Mapping, cast
 
 import click
 import typer
@@ -11,6 +11,7 @@ import typer
 from apps.onepiece.pipeline import (
     PipelineClient,
     PipelineClientError,
+    _build_parameter_schema_from_definition,
     create_pipeline_client,
 )
 from apps.onepiece.pipeline.io import _resolve_parameters_with_schema
@@ -19,7 +20,6 @@ from apps.onepiece.pipeline.output import (
     _format_pipeline_run,
     _format_run_event,
 )
-from apps.onepiece.pipeline import _build_parameter_schema_from_definition
 from apps.onepiece.render.presets import RenderPreset, RenderPresetStore
 from apps.onepiece.render.submit.scripts import run_render_submission
 from apps.onepiece.render.submit.status_command import render_status
@@ -37,7 +37,7 @@ app = typer.Typer(
 
 
 @contextmanager
-def _using_pipeline_client() -> Iterable[PipelineClient]:
+def _using_pipeline_client() -> Iterator[PipelineClient]:
     client = create_pipeline_client()
     try:
         yield client
@@ -51,16 +51,22 @@ def _prompt_choice(
     if not choices:
         raise typer.Exit(code=1)
     prompt_default = default or choices[0]
-    return typer.prompt(
-        label,
-        default=prompt_default,
-        type=click.Choice(choices, case_sensitive=False),
-        show_default=True,
+    return cast(
+        str,
+        typer.prompt(
+            label,
+            default=prompt_default,
+            type=click.Choice(choices, case_sensitive=False),
+            show_default=True,
+        ),
     )
 
 
 def _prompt_optional(label: str, *, default: str | None = None) -> str | None:
-    value = typer.prompt(label, default=default, show_default=default is not None)
+    value = cast(
+        str | None,
+        typer.prompt(label, default=default, show_default=default is not None),
+    )
     if isinstance(value, str):
         trimmed = value.strip()
         return trimmed or None
@@ -131,7 +137,10 @@ def _collect_pipeline_parameters(definition: Mapping[str, Any]) -> dict[str, Any
         fg=typer.colors.BLUE,
     )
     try:
-        return _resolve_parameters_with_schema({}, schema=schema, interactive=True)
+        return cast(
+            dict[str, Any],
+            _resolve_parameters_with_schema({}, schema=schema, interactive=True),
+        )
     except PipelineClientError as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
         return {}
@@ -141,7 +150,7 @@ def _trigger_pipeline_run(
     client: PipelineClient, name: str, parameters: Mapping[str, Any]
 ) -> Mapping[str, Any] | None:
     try:
-        run = client.trigger_run(name, parameters)
+        run = cast(Mapping[str, Any], client.trigger_run(name, parameters))
     except PipelineClientError as exc:
         if exc.status_code == 404:
             typer.secho(f"Unknown pipeline '{name}'.", fg=typer.colors.RED)
@@ -262,7 +271,7 @@ def _submit_render(preset: RenderPreset) -> dict[str, Any] | None:
         typer.secho(str(exc), fg=typer.colors.RED)
         return None
 
-    payload = result.get("result", {})
+    payload = cast(dict[str, Any], result.get("result", {}))
     job_id = payload.get("job_id", "<unknown>")
     status = payload.get("status", "unknown")
     farm_type = payload.get("farm_type", preset.farm)
