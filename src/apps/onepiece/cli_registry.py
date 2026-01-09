@@ -17,6 +17,8 @@ class CommandGroup:
 
     name: str
     loader: Callable[[], typer.Typer]
+    summary: str
+    category: str
 
 
 def _load_info() -> typer.Typer:
@@ -98,20 +100,94 @@ def _load_pipeline() -> typer.Typer:
 
 
 COMMAND_GROUPS: dict[str, CommandGroup] = {
-    "info": CommandGroup("info", _load_info),
-    "aws": CommandGroup("aws", _load_aws),
-    "dcc": CommandGroup("dcc", _load_dcc),
-    "review": CommandGroup("review", _load_review),
-    "chopper": CommandGroup("chopper", _load_chopper),
-    "hub": CommandGroup("hub", _load_hub),
-    "render": CommandGroup("render", _load_render),
-    "notify": CommandGroup("notify", _load_notify),
-    "healthcheck": CommandGroup("healthcheck", _load_healthcheck),
-    "ingest": CommandGroup("ingest", _load_ingest),
-    "shotgrid": CommandGroup("shotgrid", _load_shotgrid),
-    "validate": CommandGroup("validate", _load_validate),
-    "pipeline": CommandGroup("pipeline", _load_pipeline),
+    "pipeline": CommandGroup(
+        "pipeline",
+        _load_pipeline,
+        "Define, run, and monitor modular pipelines.",
+        "Core pipeline",
+    ),
+    "ingest": CommandGroup(
+        "ingest",
+        _load_ingest,
+        "Bring vendor or client deliveries into your workspace.",
+        "Core pipeline",
+    ),
+    "render": CommandGroup(
+        "render",
+        _load_render,
+        "Submit and manage render farm jobs.",
+        "Rendering",
+    ),
+    "review": CommandGroup(
+        "review",
+        _load_review,
+        "Compile review dailies and editorial outputs.",
+        "Review & delivery",
+    ),
+    "shotgrid": CommandGroup(
+        "shotgrid",
+        _load_shotgrid,
+        "ShotGrid integration utilities.",
+        "Production tracking",
+    ),
+    "aws": CommandGroup(
+        "aws",
+        _load_aws,
+        "AWS and S3 sync helpers.",
+        "Studio operations",
+    ),
+    "dcc": CommandGroup(
+        "dcc",
+        _load_dcc,
+        "DCC publishing, validation, and deployment.",
+        "Studio operations",
+    ),
+    "notify": CommandGroup(
+        "notify",
+        _load_notify,
+        "Send notifications to Slack, email, and webhooks.",
+        "Studio operations",
+    ),
+    "validate": CommandGroup(
+        "validate",
+        _load_validate,
+        "Validate naming, paths, and file consistency.",
+        "Studio operations",
+    ),
+    "healthcheck": CommandGroup(
+        "healthcheck",
+        _load_healthcheck,
+        "Verify environment health and configuration.",
+        "Utilities",
+    ),
+    "info": CommandGroup(
+        "info",
+        _load_info,
+        "Inspect OnePiece configuration and environment details.",
+        "Utilities",
+    ),
+    "hub": CommandGroup(
+        "hub",
+        _load_hub,
+        "Run the OnePiece integration hub.",
+        "Utilities",
+    ),
+    "chopper": CommandGroup(
+        "chopper",
+        _load_chopper,
+        "Render quick QC frames and scene previews.",
+        "Utilities",
+    ),
 }
+
+CATEGORY_ORDER = (
+    "Core pipeline",
+    "Rendering",
+    "Review & delivery",
+    "Production tracking",
+    "Studio operations",
+    "Utilities",
+)
 
 DEFAULT_COMMAND_ORDER = tuple(COMMAND_GROUPS.keys())
 
