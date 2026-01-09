@@ -25,7 +25,10 @@ from apps.onepiece.render.jobs import (
 )
 from apps.onepiece.render.presets import RenderPreset, RenderPresetStore
 from apps.onepiece.render.submit.scripts import run_render_submission
-from apps.onepiece.utils.errors import OnePieceExternalServiceError, OnePieceValidationError
+from apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 from apps.trafalgar.web.dashboard import app as dashboard_app
 from apps.trafalgar.web.render import app as render_app
 
@@ -376,7 +379,9 @@ async def get_render_job(job_id: str, request: Request) -> RenderJobPayload:
         render_client = RenderJobClient(client=client)
         job = render_client.get_job(job_id)
     except RenderJobClientError as exc:
-        raise HTTPException(status_code=exc.status_code or 500, detail=exc.message) from exc
+        raise HTTPException(
+            status_code=exc.status_code or 500, detail=exc.message
+        ) from exc
     finally:
         client.close()
 

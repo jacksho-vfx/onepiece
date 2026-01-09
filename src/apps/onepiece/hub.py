@@ -8,7 +8,11 @@ from typing import Any, Iterable, Mapping
 import click
 import typer
 
-from apps.onepiece.pipeline import PipelineClient, PipelineClientError, create_pipeline_client
+from apps.onepiece.pipeline import (
+    PipelineClient,
+    PipelineClientError,
+    create_pipeline_client,
+)
 from apps.onepiece.pipeline.io import _resolve_parameters_with_schema
 from apps.onepiece.pipeline.output import (
     _format_pipeline_definition,
@@ -19,7 +23,10 @@ from apps.onepiece.pipeline import _build_parameter_schema_from_definition
 from apps.onepiece.render.presets import RenderPreset, RenderPresetStore
 from apps.onepiece.render.submit.scripts import run_render_submission
 from apps.onepiece.render.submit.status_command import render_status
-from apps.onepiece.utils.errors import OnePieceExternalServiceError, OnePieceValidationError
+from apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 
 app = typer.Typer(
     name="hub",
@@ -156,7 +163,9 @@ def _stream_pipeline_run(client: PipelineClient, run_id: str) -> None:
                 typer.echo(line)
             status = str(event.get("status", "")).lower()
             if status in {"succeeded", "failed"}:
-                typer.secho(f"Run completed with status: {status}.", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"Run completed with status: {status}.", fg=typer.colors.GREEN
+                )
                 return
     except PipelineClientError as exc:
         typer.secho(f"Pipeline request failed: {exc.message}", fg=typer.colors.RED)
@@ -343,9 +352,7 @@ def hub(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
 
-    typer.secho(
-        "Pipeline & Render Hub", fg=typer.colors.CYAN, bold=True
-    )
+    typer.secho("Pipeline & Render Hub", fg=typer.colors.CYAN, bold=True)
     typer.echo(
         "Follow the prompts to trigger a pipeline run, submit a render preset, "
         "or check current statuses without memorising flags."
