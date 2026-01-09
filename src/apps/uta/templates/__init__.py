@@ -9,6 +9,7 @@ from .cli import (
     with_root_path,
 )
 from .dashboard import render_dashboard_page
+from .hub import render_hub_page
 from .pipelines import render_pipeline_page
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "render_parameters",
     "render_command",
     "render_page",
+    "render_hub_page",
     "render_pipeline_page",
     "render_dashboard_page",
     "normalise_root_path",

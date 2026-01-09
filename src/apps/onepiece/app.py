@@ -6,6 +6,7 @@ from apps.onepiece.misc.info import app as info
 from apps.onepiece.notify import app as notify
 from apps.onepiece.healthcheck import app as healthcheck
 from apps.onepiece.ingest import app as ingest
+from apps.onepiece.hub import app as hub
 from apps.onepiece.pipeline import app as pipeline
 from apps.onepiece.render import app as render
 from apps.onepiece.shotgrid import app as shotgrid
@@ -22,6 +23,7 @@ app.add_typer(aws)
 app.add_typer(dcc)
 app.add_typer(review)
 app.add_typer(chopper)
+app.add_typer(hub)
 app.add_typer(render)
 app.add_typer(notify)
 app.add_typer(healthcheck)

@@ -172,6 +172,9 @@ const toArray = (collection) => {
     if (targetId === 'page-pipelines' && typeof window.triggerPipelineRefresh === 'function') {
       window.triggerPipelineRefresh();
     }
+    if (targetId === 'page-hub' && typeof window.triggerHubRefresh === 'function') {
+      window.triggerHubRefresh();
+    }
     }
 
     const activateTab = (targetId, { pushHistory = false, syncHistory = true } = {}) => {
@@ -1786,6 +1789,465 @@ const toArray = (collection) => {
       }
     });
     observer.observe(pipelinePage, { attributes: true, attributeFilter: ['class'] });
+    })();
+
+    (function setupPipelineRenderHub() {
+    const hubPage = document.querySelector('[data-hub-page]');
+    if (!hubPage) {
+      return;
+    }
+    const statusElement = hubPage.querySelector('[data-hub-status]');
+    const pipelineSelect = hubPage.querySelector('[data-hub-pipeline-select]');
+    const pipelineDescription = hubPage.querySelector('[data-hub-pipeline-description]');
+    const pipelineParameters = hubPage.querySelector('[data-hub-pipeline-parameters]');
+    const pipelineForm = hubPage.querySelector('[data-hub-pipeline-form]');
+    const pipelineResult = hubPage.querySelector('[data-hub-pipeline-result]');
+    const pipelineRefresh = hubPage.querySelector('[data-hub-pipeline-refresh]');
+    const runIdInput = hubPage.querySelector('[data-hub-run-id]');
+    const runCheckButton = hubPage.querySelector('[data-hub-run-check]');
+    const runStatus = hubPage.querySelector('[data-hub-run-status]');
+
+    const renderSelect = hubPage.querySelector('[data-hub-render-select]');
+    const renderSummary = hubPage.querySelector('[data-hub-render-summary]');
+    const renderForm = hubPage.querySelector('[data-hub-render-form]');
+    const renderScene = hubPage.querySelector('[data-hub-render-scene]');
+    const renderFrames = hubPage.querySelector('[data-hub-render-frames]');
+    const renderOutput = hubPage.querySelector('[data-hub-render-output]');
+    const renderUser = hubPage.querySelector('[data-hub-render-user]');
+    const renderResult = hubPage.querySelector('[data-hub-render-result]');
+    const renderRefresh = hubPage.querySelector('[data-hub-render-refresh]');
+    const jobIdInput = hubPage.querySelector('[data-hub-job-id]');
+    const jobCheckButton = hubPage.querySelector('[data-hub-job-check]');
+    const jobStatus = hubPage.querySelector('[data-hub-job-status]');
+
+    let pipelineCache = [];
+    let presetCache = [];
+    let loading = false;
+
+    const setStatus = (message, state) => {
+      if (!statusElement) {
+        return;
+      }
+      statusElement.textContent = message || '';
+      if (state) {
+        statusElement.dataset.state = state;
+      } else {
+        delete statusElement.dataset.state;
+      }
+    };
+
+    const setResult = (element, message, state) => {
+      if (!element) {
+        return;
+      }
+      element.textContent = message || '';
+      if (state) {
+        element.dataset.state = state;
+      } else {
+        delete element.dataset.state;
+      }
+    };
+
+    const requestJson = async (path, { method = 'GET', body, needsAuth = false } = {}) => {
+      const options = { method, credentials: 'same-origin', headers: {} };
+      if (needsAuth) {
+        if (typeof resolveDashboardHeaders !== 'function') {
+          const error = new Error('Pipeline credentials are required.');
+          error.code = 'no-credentials';
+          throw error;
+        }
+        const headers = resolveDashboardHeaders();
+        if (!headers) {
+          const error = new Error('Pipeline credentials are required.');
+          error.code = 'no-credentials';
+          throw error;
+        }
+        options.headers = Object.assign({}, headers);
+      }
+      if (method !== 'GET' && method !== 'HEAD') {
+        options.headers['Content-Type'] = 'application/json';
+      }
+      if (body !== undefined) {
+        options.body = body;
+      }
+      const response = await fetch(joinWithRoot(path), options);
+      if ([401, 403].includes(response.status)) {
+        throw new Error('Authentication failed. Update Trafalgar credentials and retry.');
+      }
+      if (!response.ok) {
+        let detail = `Request failed (${response.status})`;
+        try {
+          const payload = await response.json();
+          if (payload && typeof payload.detail === 'string') {
+            detail = payload.detail;
+          }
+        } catch (error) {
+          // ignore JSON parsing issues
+        }
+        throw new Error(detail);
+      }
+      if (response.status === 204) {
+        return null;
+      }
+      return response.json();
+    };
+
+    const renderPipelineParameters = (definition, container) => {
+      if (!container) {
+        return [];
+      }
+      container.innerHTML = '';
+      const parameters = definition && typeof definition.parameters === 'object' && !Array.isArray(definition.parameters)
+        ? definition.parameters
+        : {};
+      const names = Object.keys(parameters || {})
+        .filter((name) => typeof name === 'string' && name.length > 0)
+        .sort();
+      if (!names.length) {
+        const placeholder = document.createElement('p');
+        placeholder.className = 'hub-muted';
+        placeholder.textContent = 'No parameters required.';
+        container.appendChild(placeholder);
+        return [];
+      }
+      names.forEach((name) => {
+        const field = document.createElement('div');
+        field.className = 'hub-field';
+        const label = document.createElement('label');
+        label.setAttribute('for', `hub-pipeline-${name}`);
+        label.textContent = name;
+        const input = document.createElement('input');
+        input.id = `hub-pipeline-${name}`;
+        input.name = name;
+        input.type = 'text';
+        const schema = parameters[name];
+        const schemaIsObject = Boolean(
+          schema && typeof schema === 'object' && Array.isArray(schema) === false,
+        );
+        const defaultValue = schemaIsObject && Object.prototype.hasOwnProperty.call(schema, 'default')
+          ? schema.default
+          : schema;
+        const required = schemaIsObject && Boolean(schema.required);
+        const description = schemaIsObject && typeof schema.description === 'string'
+          ? schema.description
+          : '';
+        let defaultDisplay = '';
+        if (typeof defaultValue === 'string') {
+          defaultDisplay = defaultValue;
+        } else if (defaultValue !== undefined && defaultValue !== null) {
+          try {
+            defaultDisplay = JSON.stringify(defaultValue);
+          } catch (error) {
+            defaultDisplay = String(defaultValue);
+          }
+        }
+        if (defaultDisplay) {
+          input.placeholder = defaultDisplay;
+        } else if (required) {
+          input.placeholder = 'Required parameter';
+        } else {
+          input.placeholder = 'Optional parameter';
+        }
+        input.required = required;
+        field.appendChild(label);
+        field.appendChild(input);
+        if (description) {
+          const help = document.createElement('span');
+          help.className = 'hub-muted';
+          help.textContent = description;
+          field.appendChild(help);
+        }
+        container.appendChild(field);
+      });
+      return names;
+    };
+
+    const updatePipelineSelection = () => {
+      if (!pipelineSelect) {
+        return;
+      }
+      const selectedName = pipelineSelect.value;
+      const definition = pipelineCache.find((item) => item && item.name === selectedName) || null;
+      if (pipelineDescription) {
+        const description = definition && typeof definition.description === 'string'
+          ? definition.description.trim()
+          : '';
+        pipelineDescription.textContent = description || 'Choose a pipeline to see its parameters.';
+      }
+      renderPipelineParameters(definition, pipelineParameters);
+    };
+
+    const updatePresetSelection = () => {
+      if (!renderSelect) {
+        return;
+      }
+      const selected = renderSelect.value;
+      const preset = presetCache.find((item) => item && item.name === selected) || null;
+      if (renderSummary) {
+        if (preset) {
+          const summary = `Farm: ${preset.farm}, DCC: ${preset.dcc}, Frames: ${preset.frames}`;
+          renderSummary.textContent = summary;
+        } else {
+          renderSummary.textContent = 'Choose a preset to see defaults.';
+        }
+      }
+      if (preset) {
+        if (renderScene) {
+          renderScene.placeholder = preset.scene;
+        }
+        if (renderFrames) {
+          renderFrames.placeholder = preset.frames;
+        }
+        if (renderOutput) {
+          renderOutput.placeholder = preset.output;
+        }
+        if (renderUser) {
+          renderUser.placeholder = preset.user || 'Use the preset or your login';
+        }
+      }
+    };
+
+    const loadPipelines = async () => {
+      if (loading) {
+        return;
+      }
+      loading = true;
+      setStatus('Loading pipelines and presets…', 'running');
+      try {
+        const pipelines = await requestJson('/api/pipelines', { needsAuth: true });
+        pipelineCache = Array.isArray(pipelines) ? pipelines : [];
+        if (pipelineSelect) {
+          pipelineSelect.innerHTML = '';
+          pipelineCache.forEach((definition) => {
+            const option = document.createElement('option');
+            option.value = definition.name;
+            option.textContent = definition.display_name || definition.name;
+            pipelineSelect.appendChild(option);
+          });
+        }
+        updatePipelineSelection();
+        setStatus('Pipelines loaded.', 'success');
+      } catch (error) {
+        if (error && error.code === 'no-credentials') {
+          setStatus('Add Trafalgar credentials to load pipelines.', 'info');
+        } else {
+          setStatus(error && error.message ? error.message : 'Unable to load pipelines.', 'error');
+        }
+      } finally {
+        loading = false;
+      }
+    };
+
+    const loadPresets = async () => {
+      try {
+        const presets = await requestJson('/api/render/presets');
+        presetCache = Array.isArray(presets) ? presets : [];
+        if (renderSelect) {
+          renderSelect.innerHTML = '';
+          presetCache.forEach((preset) => {
+            const option = document.createElement('option');
+            option.value = preset.name;
+            option.textContent = preset.name;
+            renderSelect.appendChild(option);
+          });
+        }
+        updatePresetSelection();
+      } catch (error) {
+        setStatus(error && error.message ? error.message : 'Unable to load render presets.', 'error');
+      }
+    };
+
+    const handlePipelineRun = async (event) => {
+      event.preventDefault();
+      if (!pipelineSelect || !pipelineForm) {
+        return;
+      }
+      const definition = pipelineCache.find((item) => item && item.name === pipelineSelect.value) || null;
+      if (!definition) {
+        setResult(pipelineResult, 'Choose a pipeline to run.', 'error');
+        return;
+      }
+      setResult(pipelineResult, 'Triggering pipeline…', 'running');
+      const formData = new FormData(pipelineForm);
+      const parameters = {};
+      Array.from(formData.entries()).forEach(([key, value]) => {
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (trimmed) {
+            parameters[key] = trimmed;
+          }
+        }
+      });
+      try {
+        const run = await requestJson(`/api/pipelines/${encodeURIComponent(definition.name)}/runs`, {
+          method: 'POST',
+          needsAuth: true,
+          body: JSON.stringify({ parameters }),
+        });
+        const runId = run && run.id ? String(run.id) : '';
+        const status = run && run.status ? run.status : 'queued';
+        if (runId) {
+          setResult(pipelineResult, `Triggered run ${runId} (status: ${status}).`, 'success');
+          if (runIdInput) {
+            runIdInput.value = runId;
+          }
+          if (runStatus) {
+            runStatus.textContent = `Latest status: ${status}`;
+          }
+        } else {
+          setResult(pipelineResult, 'Pipeline triggered.', 'success');
+        }
+      } catch (error) {
+        setResult(pipelineResult, error && error.message ? error.message : 'Unable to trigger pipeline.', 'error');
+      }
+    };
+
+    const handleRenderSubmit = async (event) => {
+      event.preventDefault();
+      if (!renderSelect) {
+        return;
+      }
+      const name = renderSelect.value;
+      if (!name) {
+        setResult(renderResult, 'Choose a render preset first.', 'error');
+        return;
+      }
+      setResult(renderResult, 'Submitting render…', 'running');
+      const overrides = {};
+      if (renderScene && renderScene.value.trim()) {
+        overrides.scene = renderScene.value.trim();
+      }
+      if (renderFrames && renderFrames.value.trim()) {
+        overrides.frames = renderFrames.value.trim();
+      }
+      if (renderOutput && renderOutput.value.trim()) {
+        overrides.output = renderOutput.value.trim();
+      }
+      if (renderUser && renderUser.value.trim()) {
+        overrides.user = renderUser.value.trim();
+      }
+      try {
+        const submission = await requestJson(`/api/render/presets/${encodeURIComponent(name)}/submit`, {
+          method: 'POST',
+          body: JSON.stringify(overrides),
+        });
+        const job = submission && submission.job ? submission.job : {};
+        const jobId = job.job_id || '';
+        const status = job.status || 'submitted';
+        setResult(renderResult, `Render submitted as ${jobId || 'new job'} (status: ${status}).`, 'success');
+        if (jobIdInput && jobId) {
+          jobIdInput.value = jobId;
+        }
+        if (jobStatus) {
+          jobStatus.textContent = `Latest status: ${status}`;
+        }
+      } catch (error) {
+        setResult(renderResult, error && error.message ? error.message : 'Unable to submit render.', 'error');
+      }
+    };
+
+    const checkPipelineStatus = async (runId) => {
+      if (!runId) {
+        setResult(runStatus, 'Enter a pipeline run ID.', 'error');
+        return;
+      }
+      setResult(runStatus, 'Checking pipeline status…', 'running');
+      try {
+        const run = await requestJson(`/api/pipelines/runs/${encodeURIComponent(runId)}`, { needsAuth: true });
+        const status = run && run.status ? run.status : 'unknown';
+        const updated = run && run.updated_at ? run.updated_at : '';
+        const message = updated ? `Status: ${status} (updated ${updated}).` : `Status: ${status}.`;
+        setResult(runStatus, message, 'success');
+      } catch (error) {
+        setResult(runStatus, error && error.message ? error.message : 'Unable to load run status.', 'error');
+      }
+    };
+
+    const checkRenderStatus = async (jobId) => {
+      if (!jobId) {
+        setResult(jobStatus, 'Enter a render job ID.', 'error');
+        return;
+      }
+      setResult(jobStatus, 'Checking render status…', 'running');
+      try {
+        const job = await requestJson(`/api/render/jobs/${encodeURIComponent(jobId)}`, { needsAuth: true });
+        const status = job && job.status ? job.status : 'unknown';
+        const farm = job && job.farm_type ? ` (${job.farm_type})` : '';
+        setResult(jobStatus, `Status: ${status}${farm}.`, 'success');
+      } catch (error) {
+        setResult(jobStatus, error && error.message ? error.message : 'Unable to load render status.', 'error');
+      }
+    };
+
+    if (pipelineSelect) {
+      pipelineSelect.addEventListener('change', updatePipelineSelection);
+    }
+    if (renderSelect) {
+      renderSelect.addEventListener('change', updatePresetSelection);
+    }
+    if (pipelineForm) {
+      pipelineForm.addEventListener('submit', handlePipelineRun);
+    }
+    if (renderForm) {
+      renderForm.addEventListener('submit', handleRenderSubmit);
+    }
+    if (pipelineRefresh) {
+      pipelineRefresh.addEventListener('click', (event) => {
+        event.preventDefault();
+        loadPipelines().catch((error) => {
+          console.error('hub.pipeline.refresh.failed', error);
+        });
+      });
+    }
+    if (renderRefresh) {
+      renderRefresh.addEventListener('click', (event) => {
+        event.preventDefault();
+        loadPresets().catch((error) => {
+          console.error('hub.render.refresh.failed', error);
+        });
+      });
+    }
+    if (runCheckButton) {
+      runCheckButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        const runId = runIdInput ? runIdInput.value.trim() : '';
+        checkPipelineStatus(runId).catch((error) => {
+          console.error('hub.pipeline.status.failed', error);
+        });
+      });
+    }
+    if (jobCheckButton) {
+      jobCheckButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        const jobId = jobIdInput ? jobIdInput.value.trim() : '';
+        checkRenderStatus(jobId).catch((error) => {
+          console.error('hub.render.status.failed', error);
+        });
+      });
+    }
+
+    window.triggerHubRefresh = () => {
+      loadPipelines().catch((error) => {
+        console.error('hub.pipeline.load.failed', error);
+      });
+      loadPresets().catch((error) => {
+        console.error('hub.render.load.failed', error);
+      });
+    };
+
+    loadPipelines().catch((error) => {
+      console.error('hub.pipeline.load.failed', error);
+    });
+    loadPresets().catch((error) => {
+      console.error('hub.render.load.failed', error);
+    });
+
+    const observer = new MutationObserver(() => {
+      if (hubPage.classList.contains('active')) {
+        window.triggerHubRefresh();
+      }
+    });
+    observer.observe(hubPage, { attributes: true, attributeFilter: ['class'] });
     })();
 
     (function setupDashboardCharts() {

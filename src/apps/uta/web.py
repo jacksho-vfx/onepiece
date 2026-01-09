@@ -8,6 +8,7 @@ import shlex
 from pathlib import Path
 from typing import Any, Sequence
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -16,6 +17,18 @@ from typer.testing import CliRunner
 
 from apps.web_theme import get_theme_static_directory
 from apps.onepiece.app import app as cli_app
+from apps.onepiece.render.jobs import (
+    RenderJobClient,
+    RenderJobClientError,
+    resolve_render_api_timeout,
+    resolve_render_base_url,
+)
+from apps.onepiece.render.presets import RenderPreset, RenderPresetStore
+from apps.onepiece.render.submit.scripts import run_render_submission
+from apps.onepiece.utils.errors import (
+    OnePieceExternalServiceError,
+    OnePieceValidationError,
+)
 from apps.trafalgar.web.dashboard import app as dashboard_app
 from apps.trafalgar.web.render import app as render_app
 
@@ -111,6 +124,41 @@ class PipelineEventPayload(BaseModel):
 
 class TriggerPipelineRunRequest(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class RenderPresetPayload(BaseModel):
+    name: str
+    farm: str
+    dcc: str
+    scene: str
+    frames: str
+    output: str
+    priority: int
+    chunk_size: int | None = Field(None, alias="chunk_size")
+    user: str | None = None
+
+
+class RenderPresetOverrideRequest(BaseModel):
+    scene: str | None = None
+    frames: str | None = None
+    output: str | None = None
+    user: str | None = None
+
+
+class RenderSubmissionResponse(BaseModel):
+    job: dict[str, Any]
+    decision: dict[str, Any] | None = None
+    capabilities: dict[str, Any] | None = None
+    metrics_source: list[str] | None = None
+
+
+class RenderJobPayload(BaseModel):
+    job_id: str
+    farm: str | None = None
+    farm_type: str | None = None
+    status: str
+    message: str | None = None
+    history: list[str] | None = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -241,6 +289,110 @@ async def get_pipeline_events(
         return await client.get_run_events(run_id)
     except PipelineApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.get("/api/render/presets", response_model=list[RenderPresetPayload])
+async def list_render_presets() -> list[RenderPresetPayload]:
+    store = RenderPresetStore()
+    presets: list[RenderPresetPayload] = []
+    for record in store.list():
+        preset = record.preset
+        presets.append(
+            RenderPresetPayload(
+                name=record.name,
+                farm=preset.farm,
+                dcc=preset.dcc,
+                scene=str(preset.scene),
+                frames=preset.frames,
+                output=str(preset.output),
+                priority=preset.priority,
+                chunk_size=preset.chunk_size,
+                user=preset.user,
+            )
+        )
+    return presets
+
+
+@app.post(
+    "/api/render/presets/{name}/submit",
+    response_model=RenderSubmissionResponse,
+)
+async def submit_render_preset(
+    name: str,
+    overrides: RenderPresetOverrideRequest,
+) -> RenderSubmissionResponse:
+    store = RenderPresetStore()
+    try:
+        record = store.load(name)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    merged = record.preset.serialise()
+    if overrides.scene:
+        merged["scene"] = overrides.scene
+    if overrides.frames:
+        merged["frames"] = overrides.frames
+    if overrides.output:
+        merged["output"] = overrides.output
+    if overrides.user:
+        merged["user"] = overrides.user
+
+    try:
+        resolved = RenderPreset.from_mapping(
+            record.name,
+            merged,
+            capability_provider=store.capability_provider,
+        )
+    except OnePieceValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        submission = run_render_submission(
+            dcc=resolved.dcc,
+            farm=resolved.farm,
+            scene=resolved.scene,
+            frames=resolved.frames,
+            output=resolved.output,
+            user=resolved.user,
+            optimize=False,
+        )
+    except (OnePieceValidationError, OnePieceExternalServiceError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RenderSubmissionResponse(
+        job=submission.get("result", {}),
+        decision=submission.get("decision"),
+        capabilities=submission.get("capabilities"),
+        metrics_source=list(submission.get("metrics_source", [])),
+    )
+
+
+@app.get("/api/render/jobs/{job_id}", response_model=RenderJobPayload)
+async def get_render_job(job_id: str, request: Request) -> RenderJobPayload:
+    headers = web_pipeline._extract_pipeline_headers(request)
+    client = httpx.Client(
+        base_url=resolve_render_base_url(),
+        timeout=resolve_render_api_timeout(),
+        headers=headers,
+    )
+    try:
+        render_client = RenderJobClient(client=client)
+        job = render_client.get_job(job_id)
+    except RenderJobClientError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 500, detail=exc.message
+        ) from exc
+    finally:
+        client.close()
+
+    return RenderJobPayload(
+        job_id=str(job.get("job_id", job_id)),
+        farm=job.get("farm"),
+        farm_type=job.get("farm_type"),
+        status=str(job.get("status", "unknown")),
+        message=job.get("message"),
+        history=job.get("history"),
+    )
 
 
 __all__ = [
