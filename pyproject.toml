@@ -90,6 +90,9 @@ line-length = 88
 [tool.ruff]
 target-version = "py312"
 
+[tool.isort]
+profile = "black"
+
 [tool.mypy]
 python_version = "3.12"
 files = ["src/apps", "src/libraries", "src/tests"]
