@@ -1,14 +1,8 @@
 # OnePiece
 
-OnePiece is a Typer-powered command line toolkit designed for ingesting, packaging, and publishing media assets across digital content creation (DCC) tools and production tracking systems. It bundles high-level pipeline commands—such as AWS S3 synchronisation, ShotGrid setup utilities, and DCC publishing helpers—into a single CLI that can be embedded inside a studio workflow.
+OnePiece is a modular pipeline toolkit for small VFX and archvis studios. The core CLI focuses on reusable pipeline manifests, simple configuration profiles, and a minimal set of step factories so teams can ship ingest, publish, render, and delivery workflows without standing up a large control plane on day one.
 
-> **Documentation refresh (November 2025):** Every guide now opens with an "At a glance" summary, cross-links to the configuration profile reference, and highlights the environment variables that routinely trip up new operators. Use the new quick-reference callouts to jump directly to workflow examples or troubleshooting sections without skimming entire pages. Recent commits layered in pipeline orchestration coverage, Trafalgar API endpoints, Wrangler runbooks, and a clearer desktop release checklist so those callouts now point at the expanded surface area too.
->
-> **Platform release v1.0.0** aligns the OnePiece CLI, Trafalgar services, and the new Uta Control Center. The CLI now honours layered configuration profiles, adds resumable ingest controls, and validates render submissions against adapter capabilities. Trafalgar keeps the dashboard responsive with project discovery caches, admin-tunable TTLs, and render job management APIs. Uta introspects the CLI surface, renders it as an interactive web UI, and embeds the Trafalgar dashboard so supervisors can orchestrate pipelines from a browser.
->
-> **Recent merges** introduced an in-memory pipeline orchestrator with CLI and FastAPI front doors, configuration loaders that surface named pipelines alongside profile data, and a plugin discovery layer for third-party pipeline steps. Wrangler operators gained cost-driver explainers, deadline escalations, cache stability checks, telemetry freshness reporting, and render volatility spotlights so the Perona dashboard can triage production risk in minutes. The new `tester` CLI bundles those surfaces into a one-command demo harness that spins up the Trafalgar, Perona, and Uta apps with seeded data for onboarding or documentation reviews. Desktop packaging now compiles the TypeScript renderer and main bundles as part of `npm run release:prep` so installers fail fast if types drift. 【F:src/apps/trafalgar/pipeline.py†L1-L194】【F:src/apps/onepiece/config.py†L1-L120】【F:src/libraries/pipeline/plugins.py†L1-L120】【F:src/apps/perona/web/wrangler/scripts/cost.py†L17-L216】【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】【F:src/apps/tester/app.py†L1-L220】【F:src/apps/ulti/package.json†L1-L64】
->
-> **Onboarding tip:** Run `make tester-present` to launch the fully-seeded Trafalgar, Perona, and Uta demo stack without memorising CLI flags; append `TESTER_ARGS="--no-browser"` (or similar) to forward optional flags to the underlying command.
+Use the built-in pipeline templates and the `shell`/`noop` step factories to scaffold a working pipeline quickly, then replace each command with your studio-specific tooling as you grow. Optional services such as the Trafalgar API or Uta web UI remain available for teams that want centralised orchestration later, but the primary focus stays on easy local adoption and modular extensions.
 
 ## Downloads / Releases
 
@@ -17,15 +11,11 @@ OnePiece is a Typer-powered command line toolkit designed for ingesting, packagi
 
 ## Toolkit components
 
-- **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, and validation helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
+- **OnePiece CLI** – the primary console application that exposes ingest, DCC, render, review, notification, ShotGrid, validation, and pipeline helpers. All commands live under the `onepiece` entry point which wires together the Typer applications in `src/apps/onepiece/`. 【F:src/apps/onepiece/app.py†L3-L24】
+- **Pipeline templates + step factories** – bundled templates (`onepiece pipeline templates`) and built-in step factories (`shell`, `noop`) make it easy to scaffold a pipeline and swap in studio-specific commands. The manifest format stays compatible with Trafalgar when you are ready to centralise orchestration. 【F:src/apps/onepiece/pipeline/__init__.py†L1-L220】【F:src/libraries/pipeline/steps.py†L1-L140】
 - **Healthcheck quickstart** – run `onepiece healthcheck run --format json` to confirm ShotGrid credentials, AWS profiles, and configuration layers are wired correctly before invoking other commands. See [CLI examples](docs/cli_examples.md#core) for more options. 【F:src/apps/onepiece/healthcheck.py†L1-L165】
-- **Trafalgar services** – FastAPI applications and CLI commands for the production dashboard, ingest run history, and render API. The `trafalgar` entry point launches these servers and includes utilities for generating demo dashboards and authentication tokens. 【F:src/apps/trafalgar/app.py†L1-L120】
-- **Perona dashboard** – a dedicated CLI and FastAPI service for render cost analytics and configuration inspection. Use the `perona` console script to operate the service or query settings. 【F:src/apps/perona/app.py†L1-L160】
-- **Wrangler automation** – targeted remediation scripts exposed through the Perona dashboard and API. Operators can surface failing shots, escalating deadlines, cache instability, telemetry gaps, and render volatility without leaving the browser. 【F:src/apps/perona/web/wrangler/scripts/production.py†L65-L420】【F:src/apps/perona/web/wrangler/scripts/telemetry.py†L191-L335】
+- **Optional services** – Trafalgar (FastAPI pipeline API), Uta (browser UI), and Perona (dashboard analytics) are available when you need centralised coordination, but the CLI does not require them to get started. 【F:src/apps/trafalgar/app.py†L1-L120】【F:src/apps/uta/app.py†L1-L140】【F:src/apps/perona/app.py†L1-L160】
 - **Chopper utility** – a lightweight CLI for exercising the render pipeline without DCC dependencies. The `chopper` entry point renders deterministic sample scenes for QA and demonstrations. 【F:src/apps/chopper/app.py†L1-L120】
-- **Uta Control Center** – a FastAPI surface that mirrors the OnePiece command tree in a browser, embedding the Trafalgar dashboard for supervisors. Launch it via `python -m apps.uta` or by importing `apps.uta.app`. 【F:src/apps/uta/app.py†L1-L140】
-- **Pipeline orchestrator** – a Trafalgar-hosted control plane that lists registered pipelines, triggers runs, and streams run events. Reach it from the `trafalgar pipeline` CLI or the `/pipeline` FastAPI application. 【F:src/apps/trafalgar/app.py†L1-L120】【F:src/apps/trafalgar/web/pipeline.py†L1-L120】
-- **Tester demo runner** – a helper CLI that launches the bundled Trafalgar, Perona, and Uta demo applications together, pre-populating their datasets and opening the relevant browser tabs. Use it when you need a guided tour of the platform or want to capture screenshots without wiring real services. 【F:src/apps/tester/app.py†L1-L220】【F:src/apps/tester/presentation.py†L1-L220】
 
 ## Documentation map
 
@@ -48,11 +38,11 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 
 Sample manifests, OTIO timelines, and telemetry payloads live under [`docs/examples/`](docs/examples) for repeatable demos.
 
-## Documentation refresh highlights
+## Documentation focus areas
 
-- **Quick navigation callouts** – Each guide begins with an "At a glance" list that links to core tasks so operators and developers can scan the page in seconds. 【F:docs/developer_guide.md†L5-L19】【F:docs/cli_walkthroughs.md†L5-L19】
-- **Configuration cross-links** – Environment-sensitive guides now point back to the configuration profile reference and the shared environment variable tables to reduce guesswork when reproducing examples. 【F:docs/configuration_profiles.md†L5-L22】
-- **Troubleshooting emphasis** – Operational docs surface the log streams, health checks, and recovery tips teams ask about most often, consolidating scattered notes into predictable sections. 【F:docs/dashboard_api.md†L5-L23】【F:docs/render_api.md†L5-L23】
+- **Pipeline-first onboarding** – Start with the pipeline overview and CLI guides to learn how manifests, profiles, and step factories work together. 【F:docs/pipeline_overview.md†L1-L40】【F:docs/pipeline_cli.md†L1-L40】
+- **Configuration cross-links** – Environment-sensitive guides point back to the configuration profile reference and shared environment variable tables to reduce setup guesswork. 【F:docs/configuration_profiles.md†L5-L22】
+- **Troubleshooting emphasis** – Operational docs surface log streams, health checks, and recovery tips teams ask about most often. 【F:docs/dashboard_api.md†L5-L23】【F:docs/render_api.md†L5-L23】
 
 ## Quick start
 
@@ -68,8 +58,7 @@ pip install -e .
 
 # Explore the available commands
 onepiece --help
-perona --help
-tester --help
+onepiece pipeline templates
 ```
 
 `requirements.txt` mirrors the base dependency list from `pyproject.toml` so workstations that prefer `pip install -r requirements.txt` stay aligned with the packaged distribution. Install optional extras—such as the chopper demo image helpers or animation dependencies—via `pip install .[chopper-images]`, `pip install .[chopper-anim]`, or the other extras defined in `pyproject.toml`. 【F:pyproject.toml†L12-L46】【F:requirements.txt†L1-L17】

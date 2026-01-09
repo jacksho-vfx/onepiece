@@ -23,6 +23,7 @@ from typing import Any, Callable, Deque, Iterable, Mapping, Protocol, Literal
 from libraries.pipeline.factories import resolve_provider
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 from libraries.pipeline import plugins
+from libraries.pipeline.steps import builtin_pipeline_step_factories
 
 PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
 
@@ -180,7 +181,9 @@ class PipelineExecutor:
         run_timeout: float | int | None = None,
     ) -> None:
         if step_factories is None:
-            step_factories = plugins.discover_pipeline_step_factories()
+            step_factories = plugins.discover_pipeline_step_factories(
+                builtin=builtin_pipeline_step_factories()
+            )
         self._step_factories: dict[str, Callable[[Mapping[str, Any]], Any]] = dict(
             step_factories
         )

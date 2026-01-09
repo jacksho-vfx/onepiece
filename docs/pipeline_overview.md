@@ -1,28 +1,27 @@
 # Pipeline overview
 
-> **Who should read this?** Pipeline architects and technical producers planning how the OnePiece CLI, Trafalgar services, and Uta Control Center plug into new or existing studio infrastructure. Start here to align deployment topologies, service dependencies, and integration protocols before diving into individual guides.
+> **Who should read this?** Pipeline leads and technical artists at small VFX or archvis studios who want a modular, easy-to-deploy pipeline toolkit. Start here to align manifest-driven workflows, configuration profiles, and the optional orchestration services before diving into individual guides.
 
 ## At a glance
 
-- [Recommended deployment topologies](#recommended-deployment-topologies) — Compare workstation-centric, hybrid, and fully managed layouts.
-- [Required services and dependencies](#required-services-and-dependencies) — Confirm which upstream systems must be provisioned for each entry point.
-- [Entry points mapped to pipeline stages](#entry-points-mapped-to-pipeline-stages) — Align CLI, Trafalgar, and Uta responsibilities with traditional and modern production flows.
+- [Recommended deployment topologies](#recommended-deployment-topologies) — Compare local-first, shared orchestrator, and service-backed layouts.
+- [Required services and dependencies](#required-services-and-dependencies) — Confirm which upstream systems you actually need for each stage.
+- [Entry points mapped to pipeline stages](#entry-points-mapped-to-pipeline-stages) — Align CLI-first workflows with optional orchestration surfaces.
 - [Integration protocols](#integration-protocols) — Review authentication, data contracts, and event flows for brownfield and greenfield rollouts.
 
-This overview ties together the major OnePiece surfaces so you can decide how to host the services, harden integrations, and stage a rollout that complements your studio's workflow maturity.
+This overview ties together the major OnePiece surfaces so you can decide how to host services, extend pipelines with lightweight step factories, and stage a rollout that matches your studio's size and workflow maturity.
 
 Need a sandbox to explore the surfaces before wiring production services?
-`tester present` launches the Trafalgar, Perona, and Uta demo applications with
-seeded pipeline manifests so architects can explore the orchestrator, dashboards,
-and browser control centre together. 【F:src/apps/tester/app.py†L1-L220】
+`tester present` launches the demo applications with seeded pipeline manifests so
+you can explore the orchestrator and dashboards together when you want them. 【F:src/apps/tester/app.py†L1-L220】
 
 ## Recommended deployment topologies
 
 | Topology | When to choose it | Hosting approach | Operational notes |
 | --- | --- | --- | --- |
-| **Workstation-first** | Small teams or pilots where artists launch the CLI locally and rely on existing studio dashboards. | Install the CLI on artist workstations via `pip install onepiece` or an internal package mirror. Trafalgar and Uta run on demand using `trafalgar dashboard web` or `python -m apps.uta` from a shared VM. | Keep ShotGrid, AWS, and render credentials scoped to user profiles. Use the CLI's resumable ingest and dry-run flags to minimise impact on production systems during evaluation. |
-| **Hybrid services** | Studios with centralised review dashboards but distributed ingest/publish tooling. | Deploy Trafalgar (FastAPI) behind studio ingress (NGINX/Traefik) on Kubernetes or EC2. Expose Uta only to supervisors while distributing the CLI as a signed binary or managed virtual environment. | Trafalgar maintains cache TTLs and provider registry state; back it with Redis or DynamoDB if you expect large ingest volumes. Configure CI to run `trafalgar providers sync` whenever integrations are added. |
-| **Fully managed control plane** | Pipelines consolidating ingest, render orchestration, and review on a dedicated platform. | Host Trafalgar and Uta as autoscaled services (Kubernetes with horizontal pod autoscalers). Package the CLI inside container images for render farm nodes and automation runners. Integrate with studio SSO for web access. | Centralise configuration profiles in object storage (S3, GCS) and mount them read-only. Use the CLI's telemetry exporters to feed Trafalgar dashboards and pipe structured logs into your observability stack. |
+| **Local-first** | Small teams or pilots that want zero infrastructure beyond the CLI. | Install the CLI on artist workstations via `pip install onepiece`. Store manifests and profiles in Git or shared folders. | Start with `onepiece pipeline templates` and the built-in `shell`/`noop` steps to scaffold workflows without additional services. |
+| **Shared orchestrator** | Studios ready to centralise run history and pipeline execution while keeping CLI usage local. | Deploy Trafalgar (FastAPI) behind studio ingress (NGINX/Traefik) on a VM or small Kubernetes cluster. Keep Uta optional for supervisors. | Trafalgar maintains cache TTLs and provider registry state; back it with SQLite or Postgres for modest run volumes. |
+| **Service-backed control plane** | Pipelines consolidating ingest, render orchestration, and review on a dedicated platform. | Host Trafalgar and Uta as autoscaled services (Kubernetes with horizontal pod autoscalers). Package the CLI inside container images for render farm nodes and automation runners. Integrate with studio SSO for web access. | Centralise configuration profiles in object storage (S3, GCS) and mount them read-only. Use structured logging to feed dashboards and observability stacks as the studio scales. |
 
 ## Required services and dependencies
 
@@ -30,11 +29,11 @@ The table below highlights the core systems each OnePiece surface expects. Provi
 
 | Capability | OnePiece CLI | Trafalgar services | Uta Control Center |
 | --- | --- | --- | --- |
-| **Identity & auth** | ShotGrid script user, AWS profile, optional render farm credentials. | Trafalgar bearer tokens (see [`docs/trafalgar-authentication.md`](trafalgar-authentication.md)), service-to-service secret store (Vault, AWS Secrets Manager), optional SSO provider (OIDC) for dashboards. | Re-uses Trafalgar auth; integrate with studio SSO via reverse proxy or embed OIDC callbacks. |
-| **Storage** | Access to package storage (S3, SMB, NFS) and temp scratch space per workstation. | Persistent cache for ingest history (PostgreSQL or SQLite) and optional Redis for event fan-out. | Shares Trafalgar data sources and stores session state in Redis or stateless cookies. |
-| **Production tracking** | ShotGrid REST API and event stream for status updates. | Same ShotGrid credentials plus webhook endpoint for delivery reconciliations. | Mirrors Trafalgar's ShotGrid integration for dashboard widgets. |
-| **Render orchestration** | Farm adapter credentials (Deadline REST, Qube!, Tractor, etc.) configured via CLI profiles. | Render job registry backing store (PostgreSQL/DynamoDB) for farm status polling. | Uses Trafalgar's render APIs to schedule and monitor work. |
-| **Messaging & telemetry** | Optional: publish ingest/render events to Kafka, AWS SNS/SQS via CLI hooks. | Required for real-time dashboards; configure webhook or message bus subscriptions for ingest and render events. | Subscribes to the same message bus to display live statuses. |
+| **Identity & auth** | ShotGrid script user, AWS profile, optional render farm credentials. | Trafalgar bearer tokens (see [`docs/trafalgar-authentication.md`](trafalgar-authentication.md)), secret store (Vault, AWS Secrets Manager), optional SSO provider (OIDC) for dashboards. | Re-uses Trafalgar auth; integrate with studio SSO via reverse proxy or embed OIDC callbacks. |
+| **Storage** | Access to package storage (S3, SMB, NFS) and temp scratch space per workstation. | Persistent cache for ingest history (SQLite/PostgreSQL) and optional Redis for event fan-out. | Shares Trafalgar data sources and stores session state in Redis or stateless cookies. |
+| **Production tracking** | ShotGrid REST API and event stream for status updates (optional for archvis-only workflows). | Same ShotGrid credentials plus webhook endpoint for delivery reconciliations. | Mirrors Trafalgar's ShotGrid integration for dashboard widgets. |
+| **Render orchestration** | Farm adapter credentials (Deadline REST, Qube!, Tractor, etc.) configured via CLI profiles. | Render job registry backing store (SQLite/PostgreSQL) for farm status polling. | Uses Trafalgar's render APIs to schedule and monitor work. |
+| **Messaging & telemetry** | Optional: publish ingest/render events to Slack, webhooks, or a message bus via CLI hooks. | Optional for small teams; configure webhook or message bus subscriptions for ingest and render events when you need real-time dashboards. | Subscribes to the same message bus to display live statuses. |
 
 Pipeline operators planning to persist run history on shared infrastructure
 should review the profile storage guidance in
@@ -106,6 +105,10 @@ Pair this overview with the focused guides linked above to dive deeper into spec
 
 ## Schema-driven manifests and guided prompts
 
+- Use `onepiece pipeline templates` to browse the bundled starter manifests, and
+  `onepiece pipeline scaffold <template> <output>` to write one to disk. The
+  templates use the built-in `shell` and `noop` step factories so you can keep
+  the manifest structure while swapping in studio-specific commands.
 - The shared schema helper at `apps/onepiece/pipeline/schema.py` exposes
   validated parameter defaults, example templates, and a manifest loader that
   both the CLI and Trafalgar use. You can pre-fill `--params-file` documents or

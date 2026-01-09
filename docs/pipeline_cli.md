@@ -11,6 +11,8 @@ orchestrator or a remote Trafalgar deployment.
 | --- | --- | --- |
 | `list` | Show registered pipeline definitions. | `text` (default), `json` via `--format`. |
 | `describe` | Display a single pipeline definition. | `text`, `json` |
+| `templates` | List bundled starter templates. | `text`, `json` |
+| `scaffold` | Write a template manifest to disk. | `text` |
 | `enable` | Re-enable a disabled pipeline. | `text`, `json` |
 | `disable` | Prevent a pipeline from running. | `text`, `json` |
 | `runs` | List recorded pipeline runs. | `text`, `json` |
@@ -24,6 +26,18 @@ orchestrator or a remote Trafalgar deployment.
 Pass `--format json` to any of these commands to emit prettified JSON payloads,
 which is useful when scripting against the CLI. The default `text` format
 retains the human-readable summaries shown throughout this guide.
+
+## Scaffolding a pipeline from a template
+
+Start with a bundled template and tweak the commands to match your studio:
+
+```bash
+onepiece pipeline templates
+onepiece pipeline scaffold starter.ingest_review manifests/ingest_review.toml
+```
+
+The scaffolds use the built-in `shell` and `noop` step factories so you can keep
+the manifest structure while swapping in your own commands or Python providers.
 
 ## Triggering pipeline runs
 
@@ -78,7 +92,8 @@ credentials, ensuring audit trails reflect who initiated the new execution.
 
 Create a TOML or YAML manifest that matches the format consumed by the
 Trafalgar tools. The manifest must declare the pipeline name and at least one
-step. For example:
+step. For example, you can reference built-in `shell` or `noop` steps while
+you iterate locally. For example:
 
 ```toml
 name = "daily-render"
