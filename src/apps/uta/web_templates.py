@@ -15,6 +15,7 @@ from .templates import (
     slugify as _slugify_impl,
     with_root_path as _with_root_path_impl,
 )
+from .templates.app_flags import render_app_flag
 from .web_cli import CLI_PAGES
 
 _render_parameters = _render_parameters_impl
@@ -90,23 +91,27 @@ def _render_index(
             is_active = slug == cli_active_slug
         active_class = "active" if is_active else ""
         default_flag = "true" if index == 0 else "false"
+        flag_html = render_app_flag(name, size="sm")
         nav_items.append(
-            f'<button type="button" class="tab-button {active_class}" data-target="{page_id}" data-tab="{slug}" data-default-tab="{default_flag}">{escape(name.title())}</button>'
+            f'<button type="button" class="tab-button {active_class}" data-target="{page_id}" data-tab="{slug}" data-default-tab="{default_flag}">{flag_html}<span class="tab-label">{escape(name.title())}</span></button>'
         )
         content_sections.append(_render_page(page, is_active=is_active))
     pipeline_class = "active" if pipeline_active else ""
+    pipeline_flag = render_app_flag("Pipelines", size="sm")
     nav_items.append(
-        f'<button type="button" class="tab-button {pipeline_class}" data-target="page-pipelines" data-tab="{pipeline_slug}" data-default-tab="false">Pipelines</button>'
+        f'<button type="button" class="tab-button {pipeline_class}" data-target="page-pipelines" data-tab="{pipeline_slug}" data-default-tab="false">{pipeline_flag}<span class="tab-label">Pipelines</span></button>'
     )
     content_sections.append(_render_pipeline_page(is_active=pipeline_active))
     hub_class = "active" if hub_active else ""
+    hub_flag = render_app_flag("Pipeline + Render", size="sm")
     nav_items.append(
-        f'<button type="button" class="tab-button {hub_class}" data-target="page-hub" data-tab="{hub_slug}" data-default-tab="false">Pipeline + Render</button>'
+        f'<button type="button" class="tab-button {hub_class}" data-target="page-hub" data-tab="{hub_slug}" data-default-tab="false">{hub_flag}<span class="tab-label">Pipeline + Render</span></button>'
     )
     content_sections.append(_render_hub_page(is_active=hub_active))
     dashboard_class = "active" if dashboard_active else ""
+    dashboard_flag = render_app_flag("Dashboard", size="sm")
     nav_items.append(
-        f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">Dashboard</button>'
+        f'<button type="button" class="tab-button {dashboard_class}" data-target="page-dashboard" data-tab="dashboard" data-default-tab="false">{dashboard_flag}<span class="tab-label">Dashboard</span></button>'
     )
     content_sections.append(
         _render_dashboard_page(is_active=dashboard_active, root_path=root_path)
@@ -133,6 +138,7 @@ def _render_index(
                 f' data-dashboard-default-credentials="{escape(credentials_json)}"'
             )
 
+    header_flag = render_app_flag("Uta Control Center", size="lg")
     return f"""
     <!DOCTYPE html>
     <html lang=\"en\">
@@ -146,7 +152,7 @@ def _render_index(
       </head>
       <body data-root-path=\"{escape(root_path)}\" data-default-tab=\"{escape(default_slug or '')}\"{credentials_attr}>
         <header class=\"app-header\">
-          <h1>Uta Control Center</h1>
+          <h1 class=\"app-title\">{header_flag}<span class=\"app-title-text\">Uta Control Center</span></h1>
           <p>Trigger OnePiece CLI operations through a streamlined interface and explore the Trafalgar dashboard without leaving your browser.</p>
         </header>
         <section class=\"utility-bar\" aria-label=\"Command filters\">

@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+from .app_flags import render_app_flag
+
 
 def render_pipeline_page(*, is_active: bool) -> str:
     active_class = "active" if is_active else ""
+    flag_html = render_app_flag("Pipelines", size="md")
     return f"""
     <section id=\"page-pipelines\" class=\"page {active_class}\" data-pipeline-page>
       <div class=\"page-header\">
-        <h2>Pipeline orchestrator</h2>
-        <p class=\"page-help\">Discover Trafalgar pipeline definitions, run orchestrated jobs, and inspect recent events.</p>
+        <div class=\"page-header-text\">
+          {flag_html}
+          <div class=\"page-header-copy\">
+            <h2>Pipeline orchestrator</h2>
+            <p class=\"page-help\">Discover Trafalgar pipeline definitions, run orchestrated jobs, and inspect recent events.</p>
+          </div>
+        </div>
       </div>
       <div class=\"pipeline-toolbar\">
         <button type=\"button\" class=\"pipeline-refresh\" data-pipeline-refresh>Refresh pipelines</button>

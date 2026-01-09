@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+from .app_flags import render_app_flag
+
 
 def render_hub_page(*, is_active: bool) -> str:
     active_class = "active" if is_active else ""
+    flag_html = render_app_flag("Pipeline + Render", size="md")
     return f"""
     <section id=\"page-hub\" class=\"page {active_class}\" data-hub-page>
       <div class=\"page-header\">
-        <h2>Pipeline + Render Hub</h2>
-        <p class=\"page-help\">A guided flow for triggering pipelines, submitting render presets, and checking current status without memorising CLI flags.</p>
+        <div class=\"page-header-text\">
+          {flag_html}
+          <div class=\"page-header-copy\">
+            <h2>Pipeline + Render Hub</h2>
+            <p class=\"page-help\">A guided flow for triggering pipelines, submitting render presets, and checking current status without memorising CLI flags.</p>
+          </div>
+        </div>
       </div>
       <p class=\"hub-status\" data-hub-status role=\"status\" aria-live=\"polite\"></p>
       <div class=\"hub-grid\">
