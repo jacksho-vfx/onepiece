@@ -20,12 +20,15 @@ from itertools import count
 from threading import Lock
 from typing import Any, Callable, Deque, Iterable, Literal, Mapping, Protocol
 
+import libraries.pipeline.plugins as plugins
 from libraries.pipeline.factories import resolve_provider
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 from libraries.pipeline.registry import build_pipeline_step_factories
 from libraries.pipeline.steps import builtin_pipeline_step_factories
 
 PROVIDER_REFERENCE_METADATA_KEY = "__provider_reference__"
+
+__all__ = ["plugins"]
 
 
 @dataclass(slots=True)
