@@ -62,7 +62,7 @@ source .venv/bin/activate  # On Windows use: .venv\\Scripts\\activate
 # Install the CLI and its core dependencies
 pip install -e .
 # Or install the published wheel and runtime dependencies
-# pip install onepiece && pip install -r requirements.txt
+# pip install onepiece-pipeline && pip install -r requirements.txt
 
 # Explore the available commands
 onepiece --help
@@ -372,10 +372,10 @@ PNG and animation outputs rely on optional encoders. Install them when needed:
 
 ```bash
 # Enable PNG helpers
-pip install 'onepiece[chopper-images]'
+pip install 'onepiece-pipeline[chopper-images]'
 
 # Enable GIF/MP4 helpers (requires an ffmpeg binary on PATH for MP4)
-pip install 'onepiece[chopper-anim]'
+pip install 'onepiece-pipeline[chopper-anim]'
 ```
 
 When encoding animations you can tweak `--fps` to match the desired playback
@@ -474,8 +474,10 @@ If you just need the CLI, install it directly from PyPI into an isolated environ
 ```bash
 python -m venv ~/.venvs/onepiece
 source ~/.venvs/onepiece/bin/activate
-pip install onepiece
+pip install onepiece-pipeline
 ```
+
+> **Important:** The `onepiece` name on PyPI is owned by another project. Install `onepiece-pipeline` to get this toolkit, then run `onepiece` as the CLI entry point.
 
 ### From source (for development or custom builds)
 
@@ -490,6 +492,15 @@ pip install -e .[dev]
 ```
 
 To keep dependencies fresh, re-run `pip install -e .[dev]` after changing branches or updating `pyproject.toml`.
+
+## Publishing
+
+If you publish this toolkit to PyPI, upload it under the `onepiece-pipeline` distribution name so users avoid the unrelated `onepiece` package. The installed console entry point remains `onepiece` as defined in `pyproject.toml`, so `onepiece --help` should still work after install.
+
+```bash
+python -m build
+python -m twine upload dist/*
+```
 
 ## Configuring integrations
 
