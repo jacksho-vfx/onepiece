@@ -11,7 +11,7 @@ The repo is intentionally moving toward a local-first, modular pipeline experien
 ## Downloads / Releases
 
 - Download desktop installers from the GitHub [Releases](../../releases) page.
-- Preparing a new desktop build? Use the simplified checklist in [RELEASE.md](./RELEASE.md): bump `src/apps/ulti/package.json`, tag the version, and run `npm ci && npm run release:prep` to produce `.exe`, `.dmg`, and `.AppImage` artifacts under `src/apps/ulti/release/`.
+- Preparing a new desktop build? Use the checklist in [RELEASE.md](./RELEASE.md): bump `src/apps/ulti/package.json`, update `CHANGELOG.md`, then push a `v*` tag. The `release-desktop` workflow builds the `.exe`, `.dmg`, and `.AppImage` installers and publishes a GitHub Release with notes derived from the changelog.
 
 ## Toolkit components
 
