@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -29,6 +30,8 @@ def reset_deadline_state(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.delenv("RENDER_DEADLINE_PASSWORD", raising=False)
     monkeypatch.delenv("RENDER_DEADLINE_URL", raising=False)
     monkeypatch.delenv("RENDER_DEADLINE_HOST", raising=False)
+    monkeypatch.delenv("RENDER_DEADLINE_COMMAND", raising=False)
+    monkeypatch.delenv("RENDER_DEADLINE_USE_COMMAND", raising=False)
     monkeypatch.setattr(deadline, "_CAPABILITIES_CACHE", None)
     yield
     render_config.get_adapter_settings.cache_clear()
@@ -84,6 +87,62 @@ def test_submit_job_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     assert client.payloads[0]["JobInfo"]["Pool"] == "farm-a"  # type: ignore[index]
     assert client.payloads[0]["JobInfo"]["ChunkSize"] == 5  # type: ignore[index]
+
+
+def test_command_client_submit_job_returns_job_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured_args: list[list[str]] = []
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = list(args[0])
+        captured_args.append(command)
+        return subprocess.CompletedProcess(
+            command, returncode=0, stdout="JobID=dead123\nStatus=Queued", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    client = deadline.DeadlineCommandClient(command="deadlinecommand")
+
+    result = client.submit_job(
+        {
+            "JobInfo": {"Name": "maya render", "Priority": 50},
+            "PluginInfo": {"SceneFile": "/tmp/scene.mb"},
+        }
+    )
+
+    assert result["jobId"] == "dead123"
+    assert result["status"] == "submitted"
+    assert captured_args
+
+
+def test_command_client_get_job_parses_key_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            list(args[0]),
+            returncode=0,
+            stdout="JobID=dead123\nStatus=Rendering",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    client = deadline.DeadlineCommandClient(command="deadlinecommand")
+
+    payload = client.get_job("dead123")
+
+    assert payload["JobID"] == "dead123"
+    assert payload["Status"] == "Rendering"
+
+
+def test_get_client_prefers_deadline_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RENDER_DEADLINE_COMMAND", "deadlinecommand")
+    render_config.get_adapter_settings.cache_clear()
+
+    client = deadline._get_client()
+
+    assert isinstance(client, deadline.DeadlineCommandClient)
 
 
 def test_submit_job_attaches_bundle_metadata(
