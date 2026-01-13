@@ -106,13 +106,13 @@ def _load_invalid(entries: Iterable[Iterable[Any]]) -> list[tuple[Path, str]]:
 
 def _load_report(payload: Mapping[str, Any]) -> IngestReport:
     processed_payload = payload.get("processed", [])
-    if not isinstance(processed_payload, Iterable):
+    if not isinstance(processed_payload, list):
         processed_payload = []
     invalid_payload = payload.get("invalid", [])
-    if not isinstance(invalid_payload, Iterable):
+    if not isinstance(invalid_payload, list):
         invalid_payload = []
     warnings_payload = payload.get("warnings", [])
-    if not isinstance(warnings_payload, Iterable):
+    if not isinstance(warnings_payload, list):
         warnings_payload = []
     processed = _load_processed(cast(List[Mapping[str, Any]], processed_payload))
     invalid = _load_invalid(cast(List[Iterable[Any]], invalid_payload))

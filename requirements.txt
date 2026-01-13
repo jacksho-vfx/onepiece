@@ -14,5 +14,6 @@ requests>=2.32.0
 rich>=13.7.0
 structlog>=23.3.0
 typer>=0.19.2
+tomli>=2.0.1; python_version < "3.11"
 universal-pathlib>=0.2.2
 uvicorn>=0.30.0

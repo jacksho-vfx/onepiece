@@ -1708,7 +1708,9 @@ def test_scene_object_rejects_invalid_animation(
         Scene.from_dict(payload)
 
 
-def _write_matrix_ocio_config(tmp_path: Path, srgb_to_acescg: np.ndarray) -> Path:
+def _write_matrix_ocio_config(
+    tmp_path: Path, srgb_to_acescg: np.ndarray[Any, Any]
+) -> Path:
     acescg_to_srgb = np.linalg.inv(srgb_to_acescg)
     identity = np.identity(3)
     config = {

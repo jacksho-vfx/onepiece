@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
+import importlib.util
 import inspect
 import sys
 import types
 from typing import Any
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -51,17 +52,39 @@ def _ensure_pytest_mock_stub() -> None:
     module = types.ModuleType("pytest_mock")
 
     class MockerFixture:
-        def __init__(self) -> None:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
             self._patches: list[Any] = []
 
-        def patch(self, target: str) -> object:
-            patcher = mock.patch(target, new=MagicMock())
+        def patch(self, target: str, **kwargs: Any) -> object:
+            patcher = None
+            if "." in target:
+                parts = target.split(".")
+                for index in range(len(parts) - 1, 0, -1):
+                    module_path = ".".join(parts[:index])
+                    try:
+                        spec = importlib.util.find_spec(module_path)
+                    except ModuleNotFoundError:
+                        continue
+                    if spec is None:
+                        continue
+                    module = importlib.import_module(module_path)
+                    remainder = parts[index:]
+                    if not remainder:
+                        continue
+                    owner: object = module
+                    for attribute in remainder[:-1]:
+                        owner = getattr(owner, attribute)
+                    patcher = mock.patch.object(owner, remainder[-1], **kwargs)
+                    break
+            if patcher is None:
+                patcher = mock.patch(target, **kwargs)
             patched = patcher.start()
             self._patches.append(patcher)
             return patched
 
-        def patch_object(self, target: object, attribute: str) -> object:
-            patcher = mock.patch.object(target, attribute, new=MagicMock())
+        def patch_object(self, target: object, attribute: str, **kwargs: Any) -> object:
+            patcher = mock.patch.object(target, attribute, **kwargs)
             patched = patcher.start()
             self._patches.append(patcher)
             return patched
