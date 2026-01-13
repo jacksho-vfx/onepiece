@@ -5,11 +5,15 @@ from __future__ import annotations
 import logging
 import math
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from .models import CostModelInput, DEFAULT_CURRENCY
 

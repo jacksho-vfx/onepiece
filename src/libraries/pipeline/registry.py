@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
@@ -10,6 +11,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence, cast
 
 import yaml
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from . import plugins
 from .plugins import PipelineStepFactory
@@ -200,8 +206,6 @@ def _load_template_manifest(path: Path) -> Mapping[str, Any]:
     suffix = path.suffix.lower()
     try:
         if suffix == ".toml":
-            import tomllib
-
             data = tomllib.loads(text)
         else:
             data = yaml.safe_load(text) or {}

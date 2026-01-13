@@ -100,6 +100,32 @@ def test_registry_serves_cached_records_when_reload_fails(
     assert registry.get("run-1") is record
 
 
+def test_registry_ignores_invalid_report_collections(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    _write_registry(
+        registry_path,
+        [
+            {
+                "id": "run-invalid",
+                "started_at": "2024-02-01T12:00:00Z",
+                "report": {
+                    "processed": {"path": "file.mov"},
+                    "invalid": {"path": "file.mov", "reason": "bad"},
+                    "warnings": "not-a-list",
+                },
+            }
+        ],
+    )
+
+    registry = IngestRunRegistry(path=registry_path)
+    record = registry.get("run-invalid")
+
+    assert record is not None
+    assert record.report.processed == []
+    assert record.report.invalid == []
+    assert record.report.warnings == []
+
+
 def test_ingest_api_caches_repeated_missing_requests(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:

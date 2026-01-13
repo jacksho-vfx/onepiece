@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Mapping, NotRequired, Sequence, TypedDict
+from typing import Mapping, Sequence, TypedDict
+
+from typing_extensions import NotRequired
 
 from libraries.analytics.perona.engine.models import get_currency_symbol
 from libraries.analytics.perona.engine.settings import (

@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
-    NotRequired,
     cast,
     Mapping,
     Optional,
@@ -22,6 +21,8 @@ from typing import (
     TypedDict,
     TypeVar,
 )
+
+from typing_extensions import NotRequired
 
 log = logging.getLogger(__name__)
 
