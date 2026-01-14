@@ -43,6 +43,7 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 | [`docs/ftrack.md`](docs/ftrack.md) | Overview of the experimental Ftrack REST client package. |
 | [`docs/pipeline_cli.md`](docs/pipeline_cli.md) | Pipeline orchestrator CLI, configuration schema, and plugin extension hooks. |
 | [`docs/pipeline_render_hub_quickstart.md`](docs/pipeline_render_hub_quickstart.md) | Quickstart for the unified pipeline + render hub in the CLI and Uta Control Center. |
+| [`docs/ingest_pipeline.md`](docs/ingest_pipeline.md) | Tag-driven pipeline ingest workflow, metadata schema, link rules, and hook/Deadline configuration. |
 
 Sample manifests, OTIO timelines, and telemetry payloads live under [`docs/examples/`](docs/examples) for repeatable demos.
 
