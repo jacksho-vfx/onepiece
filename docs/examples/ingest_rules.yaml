@@ -1,0 +1,22 @@
+schema_version: 1
+rules:
+  - name: plates
+    priority: 10
+    match:
+      any_tags: [plates, dept:plates]
+      file_types: [image, video]
+      path_contains: ["/plates/"]
+    outputs:
+      - target: assets/plates
+        name_template: "{basename}"
+    actions:
+      hooks: [s5_aws_sync]
+  - name: assets
+    priority: 20
+    match:
+      any_tags: [assets]
+    outputs:
+      - target: assets/library
+        name_template: "{basename}"
+    actions:
+      deadline: [convert_to_usd]

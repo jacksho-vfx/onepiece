@@ -56,7 +56,9 @@ def test_ingest_metadata_generation(tmp_path: Path) -> None:
     assert metadata["source_uri"].endswith("plate.exr")
     assert metadata["files"][0]["sha256"]
     assert metadata["tags"]["freeform"] == ["plates"]
-    assert metadata["schema_version"] == "1.0"
+    assert metadata["schema_version"] == "1.1"
+    assert metadata["payload_hash"]
+    assert metadata["payload_size_bytes"] > 0
 
 
 def test_link_resolution_and_conflict(tmp_path: Path) -> None:
