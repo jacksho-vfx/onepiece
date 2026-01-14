@@ -1,0 +1,19 @@
+schema_version: 1
+rules:
+  - name: plates
+    target: assets/plates
+    name_template: "{basename}"
+    match:
+      any_tags: [plates, plate]
+      file_types: [image, video]
+  - name: geo
+    target: assets/geo
+    name_template: "{asset_id}_{basename}"
+    match:
+      any_tags: [geo, model, 3d]
+      file_types: [3d_model]
+  - name: misc
+    target: assets/misc
+    name_template: "{asset_id}_{basename}"
+    match:
+      any_tags: [misc]

@@ -1,0 +1,40 @@
+schema_version: 1
+link_rules:
+  - name: plates
+    target: assets/plates
+    name_template: "{basename}"
+    match:
+      any_tags: [plates, plate]
+      file_types: [image, video]
+  - name: geo
+    target: assets/geo
+    name_template: "{asset_id}_{basename}"
+    match:
+      any_tags: [geo, model, 3d]
+      file_types: [3d_model]
+
+hooks:
+  - name: s5_aws_sync
+    enabled: false
+    config:
+      source: "{asset_dir}"
+      destination: "s3://studio-ingest-backups/"
+      aws_profile: "studio"
+
+deadline:
+  optimize_model:
+    enabled: false
+    pool: "3d"
+    group: "pipeline"
+    priority: 50
+    plugin: "OptimizeModel"
+    extra_info:
+      Comment: "Auto-optimise on ingest"
+  convert_to_usd:
+    enabled: false
+    pool: "3d"
+    group: "pipeline"
+    priority: 60
+    plugin: "USDConversion"
+    extra_info:
+      Comment: "Convert to USD on ingest"
