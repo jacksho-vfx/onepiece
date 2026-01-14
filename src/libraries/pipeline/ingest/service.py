@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-
-import hashlib
-import mimetypes
 import os
 import platform
 import shutil
@@ -22,12 +19,12 @@ from libraries.pipeline.ingest.hooks import (
 )
 from libraries.pipeline.ingest.linking import IngestLink, resolve_links
 from libraries.pipeline.ingest.metadata import (
-    IngestFileRecord,
     IngestMetadata,
     IngestMetadataFile,
     SCHEMA_VERSION,
     now_timestamp,
 )
+from libraries.pipeline.ingest.payload import PayloadManifest, build_payload_manifest
 
 
 @dataclass(frozen=True)
@@ -36,39 +33,6 @@ class IngestResult:
     asset_dir: Path
     metadata_path: Path
     links: tuple[IngestLink, ...]
-
-
-_FILE_TYPE_MAP: dict[str, str] = {
-    ".fbx": "3d_model",
-    ".obj": "3d_model",
-    ".usd": "3d_model",
-    ".usda": "3d_model",
-    ".usdc": "3d_model",
-    ".abc": "3d_model",
-    ".gltf": "3d_model",
-    ".glb": "3d_model",
-    ".exr": "image",
-    ".png": "image",
-    ".jpg": "image",
-    ".jpeg": "image",
-    ".mov": "video",
-    ".mp4": "video",
-}
-
-
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _classify_file_type(path: Path) -> tuple[str, str]:
-    ext = path.suffix.lower()
-    file_type = _FILE_TYPE_MAP.get(ext, "unknown")
-    mime_type, _ = mimetypes.guess_type(path.as_posix())
-    return file_type, mime_type or "application/octet-stream"
 
 
 def _copy_payload(source: Path, destination: Path) -> Path:
@@ -81,46 +45,25 @@ def _copy_payload(source: Path, destination: Path) -> Path:
     return target
 
 
-def _collect_files(root: Path) -> list[Path]:
-    if root.is_file():
-        return [root]
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if path.is_file():
-            files.append(path)
-    return files
-
-
 def _build_metadata(
     *,
     asset_id: str,
     source_uri: str,
-    payload_root: Path,
+    payload_manifest: PayloadManifest,
     tags: dict[str, list[str]],
     relationships: list[dict[str, str]],
 ) -> IngestMetadata:
-    files: list[IngestFileRecord] = []
-    file_types: set[str] = set()
-    for file_path in _collect_files(payload_root):
-        file_type, mime_type = _classify_file_type(file_path)
-        file_types.add(file_type)
-        files.append(
-            IngestFileRecord(
-                path=str(file_path.relative_to(payload_root)),
-                size_bytes=file_path.stat().st_size,
-                sha256=_hash_file(file_path),
-                mime_type=mime_type,
-                file_type=file_type,
-            )
-        )
     return IngestMetadata(
         schema_version=SCHEMA_VERSION,
         asset_id=asset_id,
         source_uri=source_uri,
         ingest_timestamp=now_timestamp(),
-        files=tuple(files),
+        payload_name=payload_manifest.payload_name,
+        payload_hash=payload_manifest.payload_hash,
+        payload_size_bytes=payload_manifest.payload_size_bytes,
+        files=payload_manifest.files,
         tags=tags,
-        file_types=tuple(sorted(file_types)),
+        file_types=payload_manifest.file_types,
         user={"name": os.getenv("USER") or os.getenv("USERNAME") or "unknown"},
         machine={"hostname": platform.node(), "platform": platform.platform()},
         relationships=relationships,
@@ -224,11 +167,12 @@ def ingest_asset(
     asset_dir = ingest_root / asset_id
     asset_dir.mkdir(parents=True, exist_ok=True)
     payload_root = _copy_payload(source, asset_dir)
+    payload_manifest = build_payload_manifest(payload_root)
 
     metadata = _build_metadata(
         asset_id=asset_id,
         source_uri=source.as_posix(),
-        payload_root=payload_root,
+        payload_manifest=payload_manifest,
         tags={
             "freeform": sorted(set(tags or [])),
             "controlled": sorted(set(controlled_tags or [])),
@@ -238,7 +182,7 @@ def ingest_asset(
     metadata_file = IngestMetadataFile(asset_dir / "metadata.json")
     metadata_file.write(metadata)
 
-    payload_extensions = {path.suffix.lower() for path in _collect_files(payload_root)}
+    payload_extensions = payload_manifest.extensions
     links = resolve_links(
         rules=config.link_rules,
         metadata=metadata,

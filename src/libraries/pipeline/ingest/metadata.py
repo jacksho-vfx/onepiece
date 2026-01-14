@@ -23,6 +23,9 @@ class IngestMetadata:
     asset_id: str
     source_uri: str
     ingest_timestamp: str
+    payload_name: str
+    payload_hash: str
+    payload_size_bytes: int
     files: tuple[IngestFileRecord, ...]
     tags: dict[str, list[str]]
     file_types: tuple[str, ...]
@@ -36,6 +39,9 @@ class IngestMetadata:
             "asset_id": self.asset_id,
             "source_uri": self.source_uri,
             "ingest_timestamp": self.ingest_timestamp,
+            "payload_name": self.payload_name,
+            "payload_hash": self.payload_hash,
+            "payload_size_bytes": self.payload_size_bytes,
             "files": [
                 {
                     "path": file.path,
@@ -53,6 +59,47 @@ class IngestMetadata:
             "relationships": self.relationships,
         }
 
+    @staticmethod
+    def from_dict(payload: dict[str, Any]) -> "IngestMetadata":
+        files = tuple(
+            IngestFileRecord(
+                path=str(item.get("path", "")),
+                size_bytes=int(item.get("size_bytes", 0)),
+                sha256=str(item.get("sha256", "")),
+                mime_type=str(item.get("mime_type", "")),
+                file_type=str(item.get("file_type", "")),
+            )
+            for item in payload.get("files", [])
+            if isinstance(item, dict)
+        )
+        return IngestMetadata(
+            schema_version=str(payload.get("schema_version", "1.0")),
+            asset_id=str(payload.get("asset_id", "")),
+            source_uri=str(payload.get("source_uri", "")),
+            ingest_timestamp=str(payload.get("ingest_timestamp", "")),
+            payload_name=str(payload.get("payload_name", "")),
+            payload_hash=str(payload.get("payload_hash", "")),
+            payload_size_bytes=int(payload.get("payload_size_bytes", 0)),
+            files=files,
+            tags=(
+                dict(payload.get("tags", {}))
+                if isinstance(payload.get("tags"), dict)
+                else {}
+            ),
+            file_types=tuple(payload.get("file_types", []) or ()),
+            user=(
+                dict(payload.get("user", {}))
+                if isinstance(payload.get("user"), dict)
+                else {}
+            ),
+            machine=(
+                dict(payload.get("machine", {}))
+                if isinstance(payload.get("machine"), dict)
+                else {}
+            ),
+            relationships=list(payload.get("relationships", []) or []),
+        )
+
 
 @dataclass(frozen=True)
 class IngestMetadataFile:
@@ -61,8 +108,16 @@ class IngestMetadataFile:
     def write(self, metadata: IngestMetadata) -> None:
         self.path.write_text(_format_json(metadata.to_dict()))
 
+    def read(self) -> IngestMetadata:
+        import json
 
-SCHEMA_VERSION = "1.0"
+        payload = json.loads(self.path.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError("Metadata payload must be a JSON object")
+        return IngestMetadata.from_dict(payload)
+
+
+SCHEMA_VERSION = "1.1"
 
 
 def now_timestamp() -> str:

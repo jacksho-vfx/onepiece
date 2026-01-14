@@ -1,0 +1,11 @@
+schema_version: 1
+allowed:
+  - plates
+  - assets
+namespaces:
+  dept:
+    allowed: [plates, comp]
+  asset_type:
+    allowed: [char, env, prop]
+required:
+  - dept

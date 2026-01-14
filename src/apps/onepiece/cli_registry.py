@@ -99,6 +99,12 @@ def _load_pipeline() -> typer.Typer:
     return cast(typer.Typer, pipeline)
 
 
+def _load_inventory() -> typer.Typer:
+    from apps.onepiece.inventory import app as inventory
+
+    return cast(typer.Typer, inventory)
+
+
 COMMAND_GROUPS: dict[str, CommandGroup] = {
     "pipeline": CommandGroup(
         "pipeline",
@@ -110,6 +116,12 @@ COMMAND_GROUPS: dict[str, CommandGroup] = {
         "ingest",
         _load_ingest,
         "Bring vendor or client deliveries into your workspace.",
+        "Core pipeline",
+    ),
+    "inventory": CommandGroup(
+        "inventory",
+        _load_inventory,
+        "Search the pipeline ingest inventory.",
         "Core pipeline",
     ),
     "render": CommandGroup(
