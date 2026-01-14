@@ -30,7 +30,7 @@ Each ingest writes a `metadata.json` file with the following structure:
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "asset_id": "<unique-id>",
   "source_uri": "<original-path-or-uri>",
   "ingest_timestamp": "<UTC timestamp>",
@@ -50,7 +50,14 @@ Each ingest writes a `metadata.json` file with the following structure:
     "freeform": ["plates"],
     "controlled": ["dept:plates"]
   },
-  "file_types": ["image"],
+  "file_types": ["texture", "image"],
+  "capabilities": {
+    "texture": {
+      "can_optimize": true,
+      "can_validate": true,
+      "can_convert": true
+    }
+  },
   "user": {
     "name": "<user>"
   },
@@ -60,7 +67,17 @@ Each ingest writes a `metadata.json` file with the following structure:
   },
   "relationships": [
     {"type": "version_of", "target": "asset-123"}
-  ]
+  ],
+  "derived_variants": [
+    {
+      "variant": "optimized",
+      "path": "/projects/show/.pipeline/derived/<asset_id>/optimized",
+      "report_path": "/projects/show/.pipeline/derived/<asset_id>/optimized/opt_report.json",
+      "status": "success",
+      "timestamp": "<UTC timestamp>"
+    }
+  ],
+  "preferred_variant": "optimized"
 }
 ```
 
@@ -77,13 +94,16 @@ rules:
     priority: 10
     match:
       any_tags: [plates, dept:plates]
-      file_types: [image, video]
+      file_types: [image, texture, video]
       path_contains: [\"/plates/\"]
     outputs:
       - target: assets/plates
         name_template: \"{basename}\"
     actions:
       hooks: [s5_aws_sync]
+      optimize:
+        - variant: proxy
+          mode: local
   - name: assets
     priority: 20
     match:
@@ -93,20 +113,23 @@ rules:
         name_template: \"{basename}\"
     actions:
       deadline: [convert_to_usd]
+      optimize:
+        - variant: usd
+          mode: deadline
 ```
 
 Supported match keys:
 
 - `any_tags`: at least one tag must match.
 - `all_tags`: all tags must match.
-- `file_types`: matches any computed file type (for example `3d_model`, `image`, `video`).
+- `file_types`: matches any computed file type (for example `3d_model`, `texture`, `image`, `video`).
 - `extensions`: matches file extensions (for example `.exr`, `.usd`).
 - `path_contains`: substring matches in the source path.
 - `min_size_bytes` / `max_size_bytes`: match by payload size.
 
 The `name_template` field accepts `{basename}`, `{asset_id}`, `{source_uri}`, and `{payload_name}` placeholders.
 
-## Hooks and Deadline actions
+## Hooks, Deadline, and optimization actions
 
 Hooks run after successful ingest and are tracked in `.pipeline/ingest/<asset_id>/hooks.json` so they are safe to re-run. Configure hooks in the ingest config file:
 
@@ -143,6 +166,10 @@ deadline:
 
 Deadline jobs are only submitted for assets classified as `3d_model`.
 
+Optimization actions allow rules to trigger local or Deadline optimization runs
+for specific variants. Use `mode: local` to run immediately on the ingest host
+or `mode: deadline` to submit the variant as a farm job.
+
 ## Configuration files
 
 Reference examples are provided in:
@@ -153,7 +180,7 @@ Reference examples are provided in:
 
 ## Sessions, queue, and resumability
 
-Use `onepiece ingest add` to create a session and queue multiple items. Queue state is persisted in `.pipeline/queue/` so runs can resume after a crash. Each item writes progress markers (COPY, META, LINK, HOOKS, DEADLINE, INDEX) to `.pipeline/ingest/<asset_id>/progress.json`.
+Use `onepiece ingest add` to create a session and queue multiple items. Queue state is persisted in `.pipeline/queue/` so runs can resume after a crash. Each item writes progress markers (COPY, META, LINK, HOOKS, DEADLINE, OPTIMIZE, INDEX) to `.pipeline/ingest/<asset_id>/progress.json`.
 
 ```bash
 onepiece ingest add /path/to/plates /path/to/assets --rules config/ingest_rules.yaml

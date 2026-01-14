@@ -21,6 +21,7 @@ from libraries.pipeline.ingest.inventory import AssetIndexRecord, write_asset_re
 from libraries.pipeline.ingest.metadata import (
     IngestMetadata,
     IngestMetadataFile,
+    SCHEMA_VERSION,
     now_timestamp,
 )
 from libraries.pipeline.ingest.payload import build_payload_manifest
@@ -28,11 +29,21 @@ from libraries.pipeline.ingest.queue import IngestQueueItem
 from libraries.pipeline.ingest.rules import (
     IngestRuleSet,
     PlannedLink,
+    OptimizationAction,
     build_link_destination,
     load_ingest_rules,
     plan_ingest,
 )
 from libraries.pipeline.ingest.tagging import infer_tags
+from libraries.pipeline.optimize.config import load_optimize_config
+from libraries.pipeline.optimize.deadline import (
+    build_deadline_job as build_optimize_job,
+)
+from libraries.pipeline.optimize.deadline import (
+    submit_deadline_job as submit_optimize_job,
+)
+from libraries.pipeline.optimize.service import load_metadata as load_optimize_metadata
+from libraries.pipeline.optimize.service import run_variant as run_optimize_variant
 
 
 @dataclass(frozen=True)
@@ -43,6 +54,7 @@ class IngestExecutionResult:
     links: tuple[PlannedLink, ...]
     hooks: tuple[str, ...]
     deadline_actions: tuple[str, ...]
+    optimize_actions: tuple[OptimizationAction, ...]
 
 
 PROGRESS_COPY = "COPY_DONE"
@@ -50,6 +62,7 @@ PROGRESS_META = "META_DONE"
 PROGRESS_LINK = "LINK_DONE"
 PROGRESS_HOOKS = "HOOKS_DONE"
 PROGRESS_DEADLINE = "DEADLINE_DONE"
+PROGRESS_OPTIMIZE = "OPTIMIZE_DONE"
 PROGRESS_INDEX = "INDEX_DONE"
 
 
@@ -142,9 +155,12 @@ def _merge_metadata(
         files=existing.files,
         tags=updated.tags,
         file_types=existing.file_types,
+        capabilities=existing.capabilities or updated.capabilities,
         user=existing.user,
         machine=existing.machine,
         relationships=updated.relationships,
+        derived_variants=existing.derived_variants,
+        preferred_variant=existing.preferred_variant,
     )
 
 
@@ -211,6 +227,51 @@ def _execute_deadline_actions(
         save_hook_state(state_path, state)
 
 
+def _execute_optimize_actions(
+    *,
+    project_root: Path,
+    asset_id: str,
+    asset_dir: Path,
+    payload_root: Path,
+    actions: tuple[OptimizationAction, ...],
+) -> None:
+    if not actions:
+        return
+    state_path = asset_dir / "optimize.json"
+    state = load_hook_state(state_path)
+    config = load_optimize_config(project_root=project_root)
+    metadata, _, _ = load_optimize_metadata(project_root, asset_id)
+    metadata_path = asset_dir / "metadata.json"
+    for action in actions:
+        key = f"{action.variant}:{action.mode}"
+        if key in state:
+            continue
+        if action.mode == "deadline":
+            job = build_optimize_job(
+                asset_id=asset_id,
+                asset_dir=asset_dir,
+                variant=action.variant,
+                project_root=project_root,
+                config=config.deadline,
+            )
+            submission_output = submit_optimize_job(job)
+            state[key] = submission_output or "submitted"
+        else:
+            variant_config = config.variants.get(action.variant)
+            if variant_config is None:
+                continue
+            run_optimize_variant(
+                metadata=metadata,
+                metadata_path=metadata_path,
+                payload_root=payload_root,
+                project_root=project_root,
+                variant=variant_config,
+                dry_run=False,
+            )
+            state[key] = "completed"
+        save_hook_state(state_path, state)
+
+
 def execute_queue_item(
     *,
     item: IngestQueueItem,
@@ -272,7 +333,9 @@ def execute_queue_item(
     metadata_file = IngestMetadataFile(asset_dir / "metadata.json")
     existing_metadata = metadata_file.read() if metadata_file.path.exists() else None
     updated_metadata = IngestMetadata(
-        schema_version=existing_metadata.schema_version if existing_metadata else "1.1",
+        schema_version=(
+            existing_metadata.schema_version if existing_metadata else SCHEMA_VERSION
+        ),
         asset_id=asset_id,
         source_uri=source.as_posix(),
         ingest_timestamp=(
@@ -284,6 +347,7 @@ def execute_queue_item(
         files=payload_manifest.files,
         tags=tags,
         file_types=payload_manifest.file_types,
+        capabilities=payload_manifest.capabilities,
         user=(
             existing_metadata.user
             if existing_metadata
@@ -291,6 +355,12 @@ def execute_queue_item(
         ),
         machine=existing_metadata.machine if existing_metadata else {},
         relationships=existing_metadata.relationships if existing_metadata else [],
+        derived_variants=(
+            existing_metadata.derived_variants if existing_metadata else []
+        ),
+        preferred_variant=(
+            existing_metadata.preferred_variant if existing_metadata else None
+        ),
     )
     if not (resume and PROGRESS_META in progress) or force:
         merged = _merge_metadata(
@@ -381,6 +451,17 @@ def execute_queue_item(
         progress[PROGRESS_DEADLINE] = "done"
         save_progress(asset_dir, progress)
 
+    if not (resume and PROGRESS_OPTIMIZE in progress) or force:
+        _execute_optimize_actions(
+            project_root=project_root,
+            asset_id=asset_id,
+            asset_dir=asset_dir,
+            payload_root=payload_target,
+            actions=plan.optimize_actions,
+        )
+        progress[PROGRESS_OPTIMIZE] = "done"
+        save_progress(asset_dir, progress)
+
     if not (resume and PROGRESS_INDEX in progress) or force:
         record = AssetIndexRecord(
             asset_id=asset_id,
@@ -403,4 +484,5 @@ def execute_queue_item(
         links=plan.links,
         hooks=plan.hooks,
         deadline_actions=plan.deadline_actions,
+        optimize_actions=plan.optimize_actions,
     )

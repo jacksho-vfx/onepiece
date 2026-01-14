@@ -5,7 +5,7 @@ link_rules:
     name_template: "{basename}"
     match:
       any_tags: [plates, plate]
-      file_types: [image, video]
+      file_types: [image, texture, video]
   - name: geo
     target: assets/geo
     name_template: "{asset_id}_{basename}"

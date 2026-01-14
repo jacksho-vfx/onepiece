@@ -64,9 +64,12 @@ def _build_metadata(
         files=payload_manifest.files,
         tags=tags,
         file_types=payload_manifest.file_types,
+        capabilities=payload_manifest.capabilities,
         user={"name": os.getenv("USER") or os.getenv("USERNAME") or "unknown"},
         machine={"hostname": platform.node(), "platform": platform.platform()},
         relationships=relationships,
+        derived_variants=[],
+        preferred_variant=None,
     )
 
 

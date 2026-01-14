@@ -39,6 +39,7 @@ The `docs/` directory breaks down end-user and operator guidance by topic:
 | [`docs/dashboard_api.md`](docs/dashboard_api.md) & [`docs/trafalgar-authentication.md`](docs/trafalgar-authentication.md) | Trafalgar dashboard API contracts and authentication flows. |
 | [`docs/render_api.md`](docs/render_api.md) | Render API capabilities and adapter registration guidance. |
 | [`docs/perona_dashboard.md`](docs/perona_dashboard.md) | Operating the Perona CLI, configuration layering, and API usage. |
+| [`docs/optimization_pipeline.md`](docs/optimization_pipeline.md) | Asset optimization variants, handlers, and automation rules. |
 | [`docs/maya_character_selector.md`](docs/maya_character_selector.md) | Maya utility panel for discovering and selecting rigs. |
 | [`docs/ftrack.md`](docs/ftrack.md) | Overview of the experimental Ftrack REST client package. |
 | [`docs/pipeline_cli.md`](docs/pipeline_cli.md) | Pipeline orchestrator CLI, configuration schema, and plugin extension hooks. |

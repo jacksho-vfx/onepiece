@@ -30,6 +30,13 @@ class RuleOutput:
 class RuleActions:
     hooks: tuple[str, ...] = ()
     deadline: tuple[str, ...] = ()
+    optimize: tuple["OptimizationAction", ...] = ()
+
+
+@dataclass(frozen=True)
+class OptimizationAction:
+    variant: str
+    mode: str = "local"
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,7 @@ class IngestPlan:
     links: tuple["PlannedLink", ...]
     hooks: tuple[str, ...]
     deadline_actions: tuple[str, ...]
+    optimize_actions: tuple[OptimizationAction, ...]
 
 
 @dataclass(frozen=True)
@@ -108,9 +116,24 @@ def _load_outputs(raw: dict[str, Any]) -> tuple[RuleOutput, ...]:
 
 def _load_actions(raw: dict[str, Any]) -> RuleActions:
     actions = raw.get("actions", {}) if isinstance(raw.get("actions"), dict) else {}
+    optimize_actions: list[OptimizationAction] = []
+    for entry in _coerce_list(actions.get("optimize")):
+        if isinstance(entry, dict):
+            variant = str(entry.get("variant", "optimized"))
+            mode = str(entry.get("mode", "local"))
+        else:
+            value = str(entry)
+            if ":" in value:
+                variant, mode = value.split(":", 1)
+            elif "@" in value:
+                variant, mode = value.split("@", 1)
+            else:
+                variant, mode = value, "local"
+        optimize_actions.append(OptimizationAction(variant=variant, mode=mode))
     return RuleActions(
         hooks=tuple(str(name) for name in _coerce_list(actions.get("hooks"))),
         deadline=tuple(str(name) for name in _coerce_list(actions.get("deadline"))),
+        optimize=tuple(optimize_actions),
     )
 
 
@@ -179,6 +202,7 @@ def plan_ingest(
     link_outputs: list[PlannedLink] = []
     hook_actions: list[str] = []
     deadline_actions: list[str] = []
+    optimize_actions: list[OptimizationAction] = []
     for rule in rules.rules:
         if not _rule_matches(
             rule,
@@ -197,10 +221,14 @@ def plan_ingest(
         for deadline_name in rule.actions.deadline:
             if deadline_name not in deadline_actions:
                 deadline_actions.append(deadline_name)
+        for optimize_action in rule.actions.optimize:
+            if optimize_action not in optimize_actions:
+                optimize_actions.append(optimize_action)
     return IngestPlan(
         links=tuple(link_outputs),
         hooks=tuple(hook_actions),
         deadline_actions=tuple(deadline_actions),
+        optimize_actions=tuple(optimize_actions),
     )
 
 
