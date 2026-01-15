@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import time
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, cast
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
 
 from .base import (

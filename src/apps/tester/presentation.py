@@ -7,17 +7,16 @@ import logging
 import os
 import shutil
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
-from dataclasses import replace
-
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from apps.trafalgar.pipeline import (
+    PipelineDefinition,
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
-    PipelineDefinition,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.providers.pipeline_executor import (

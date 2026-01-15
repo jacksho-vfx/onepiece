@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import requests
 import pytest
+import requests  # type: ignore[import-untyped]
 
 import libraries.automation.notify.slack as slack_module
 from libraries.automation.notify.slack import SlackNotifier

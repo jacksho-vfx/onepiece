@@ -7,11 +7,10 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import typer
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .clients import PipelineClientError
 from .schema import PipelineParameterSchema, PipelineSchemaError, load_pipeline_manifest
-
 
 try:  # pragma: no cover - Python 3.11+ ships tomllib
     import tomllib

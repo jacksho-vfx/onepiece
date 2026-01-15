@@ -6,12 +6,11 @@ listing and retrieving common entities such as projects, shots, and tasks.
 
 from __future__ import annotations
 
-import structlog
-
 from typing import Any, Sequence
 from urllib.parse import urljoin
 
-import requests
+import requests  # type: ignore[import-untyped]
+import structlog
 from requests import Session
 
 from .auth import FtrackCredentials

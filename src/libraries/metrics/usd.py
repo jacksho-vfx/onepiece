@@ -9,16 +9,15 @@ the central collector is unavailable.
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import os
 from time import perf_counter
 from typing import Any, Mapping
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
-
 
 log = structlog.get_logger(__name__)
 

@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import yaml  # type: ignore[import-untyped]
 from typer.testing import CliRunner
 
-from importlib import import_module
-import yaml
-from libraries.integrations.shotgrid.client import HierarchyTemplate, ShotgridClient
-
-
-from libraries.integrations.shotgrid.client import EntityPayload
+from libraries.integrations.shotgrid.client import (
+    EntityPayload,
+    HierarchyTemplate,
+    ShotgridClient,
+)
 
 shotgrid_cli = import_module("apps.onepiece.shotgrid.package_playlist")
 templates_cli = import_module("apps.onepiece.shotgrid.templates")
