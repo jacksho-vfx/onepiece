@@ -7,21 +7,21 @@ while keeping tests fast and deterministic.
 import json
 import logging
 import time
-import yaml
 from collections import defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
-    cast,
     Mapping,
     Optional,
     Sequence,
     TypedDict,
     TypeVar,
+    cast,
 )
 
+import yaml  # type: ignore[import-untyped]
 from typing_extensions import NotRequired
 
 log = logging.getLogger(__name__)

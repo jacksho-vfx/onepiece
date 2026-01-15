@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Sequence
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
 
 from libraries.integrations.mudstack.config import load_config

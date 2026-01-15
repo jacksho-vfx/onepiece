@@ -12,7 +12,6 @@ from apps.trafalgar.pipeline.parameters import (
     _parse_parameter_definitions,
 )
 
-
 try:  # pragma: no cover - Python 3.11+ ships tomllib
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - python<3.11 compatibility
@@ -42,7 +41,7 @@ def load_pipeline_manifest(path: Path) -> Mapping[str, Any]:
             data = tomllib.loads(text)
         elif suffix in {".yaml", ".yml"}:
             try:
-                import yaml
+                import yaml  # type: ignore[import-untyped]
             except ImportError as exc:  # pragma: no cover - optional dependency
                 msg = "PyYAML is required to load YAML pipeline manifests."
                 raise PipelineSchemaError(msg) from exc

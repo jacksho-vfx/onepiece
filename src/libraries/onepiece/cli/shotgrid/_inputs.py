@@ -13,7 +13,7 @@ from apps.onepiece.utils.errors import OnePieceIOError, OnePieceValidationError
 log = structlog.get_logger(__name__)
 
 try:  # pragma: no cover - exercised indirectly when YAML is available
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 except Exception:  # noqa: BLE001 - fall back to JSON-only mode
     yaml = None  # type: ignore[assignment]
 

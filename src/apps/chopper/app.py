@@ -5,22 +5,20 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import tempfile
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
-import numpy as np
-
+import boto3
 import click
+import numpy as np
+import typer
+from botocore.exceptions import ClientError
 from click.core import ParameterSource
 from PIL import Image
-import typer
-
-import boto3
-from botocore.exceptions import ClientError
 
 from apps.chopper.renderer import (
     Color,
@@ -30,14 +28,13 @@ from apps.chopper.renderer import (
     SceneError,
     parse_color,
 )
+from libraries.automation.ingest.uploaders import S3ClientProtocol
+from libraries.automation.render import chopper as chopper_render
 from libraries.automation.render.chopper import (
     ChopperRenderError,
     load_scene,
     render_scene,
 )
-from libraries.automation.ingest.uploaders import S3ClientProtocol
-from libraries.automation.render import chopper as chopper_render
-
 
 app = typer.Typer(help="Render self-contained scene descriptions using Chopper.")
 
@@ -1775,7 +1772,7 @@ def _load_qc_batch_manifest(path: Path) -> list[Mapping[str, Any]]:
     payload: Any
     if suffix in {".yaml", ".yml"}:
         try:
-            import yaml
+            import yaml  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise typer.BadParameter(
                 "PyYAML is required to load YAML batch manifests."

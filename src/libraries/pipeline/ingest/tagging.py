@@ -21,7 +21,7 @@ def load_tag_vocabulary(project_root: Path) -> TagVocabulary:
         return TagVocabulary(
             allowed_tags=set(), namespaces={}, required_namespaces=set()
         )
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 
     payload = yaml.safe_load(config_path.read_text()) or {}
     if not isinstance(payload, dict):

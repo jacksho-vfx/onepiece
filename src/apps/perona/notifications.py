@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Iterable, Mapping, Sequence
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 DEFAULT_WEBHOOK_TIMEOUT = 5.0
 WEBHOOK_TIMEOUT_ENV = "PERONA_WEBHOOK_TIMEOUT"

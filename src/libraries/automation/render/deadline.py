@@ -17,8 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence, cast
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
+
+from tools.usd_bundler import BundleManifest
 
 from .base import (
     AdapterCapabilities,
@@ -29,7 +31,6 @@ from .base import (
     SubmissionResult,
 )
 from .config import get_adapter_setting
-from tools.usd_bundler import BundleManifest
 
 log = structlog.get_logger(__name__)
 

@@ -7,19 +7,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import urljoin
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
 
 from libraries.integrations.shotgrid.config import load_config
 from libraries.integrations.shotgrid.models import (
     EpisodeData,
+    PipelineStep,
     PlaylistData,
     SceneData,
     ShotData,
+    TaskCode,
+    TaskData,
     VersionData,
 )
-
-from libraries.integrations.shotgrid.models import PipelineStep, TaskCode, TaskData
 
 log = structlog.get_logger(__name__)
 

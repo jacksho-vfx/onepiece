@@ -6,7 +6,7 @@ import time
 from html import escape
 from typing import Sequence
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
 
 from .base import Notifier

@@ -10,7 +10,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence, cast
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 if sys.version_info >= (3, 11):
     import tomllib
