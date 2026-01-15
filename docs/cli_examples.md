@@ -20,6 +20,9 @@ The root Typer app wires the `info`, `aws`, `dcc`, `review`, `render`, `notify`,
 ### Core
 - `python -m apps.onepiece info` — print environment and configuration details for the pipeline client. Append `--format json` to emit a machine-readable report for automation or dashboards.
 - `python -m apps.onepiece healthcheck run [--format text|json] [--aws-profile <profile>] [--profile <config_profile>]` — verify ShotGrid settings, AWS credentials, and OnePiece configuration layers. The command exits non-zero when any probe fails so CI and deployment hooks can gate on environment readiness. 【F:src/apps/onepiece/healthcheck.py†L1-L165】
+- `python -m apps.onepiece optimize plan <asset_id|path> [--json]` — preview which optimization variants and steps would run for an ingested asset or local path.
+- `python -m apps.onepiece optimize run <asset_id> --variant optimized|usd|proxy [--dry-run]` — run a deterministic optimization pipeline without touching the canonical ingest payload.
+- `python -m apps.onepiece optimize submit <asset_id> --variant usd` — submit an optimization variant to Deadline using the project’s optimize config.
 
 ### AWS utilities
 - `python -m apps.onepiece aws ingest <delivery_folder> --project <shotgrid_project> --show-code <show_code> [--source vendor|client --vendor-bucket <bucket> --client-bucket <bucket> --dry-run --report-format <json|csv> --report-path <file>]` — validate deliveries, upload to S3, and register ShotGrid Versions. The analytics flags capture dry-run results as JSON or CSV so you can review invalid files and planned uploads before executing a real ingest.
@@ -163,4 +166,3 @@ The tester entry point orchestrates the bundled demo surfaces so you can tour th
 - `python -m apps.tester close` — terminate lingering demo processes and reclaim the reserved ports. 【F:src/apps/tester/app.py†L221-L420】
 
 When the helper detects that `uvicorn` is missing it exits with an actionable hint (`pip install onepiece[uvicorn]`) so you can install the optional server dependency before retrying. On platforms without `psutil` it falls back to `lsof`/`netstat` lookups to cleanly reclaim demo ports, keeping the command reliable on bare workstations and CI runners alike. Pipeline demo manifests are staged from `docs/examples/pipelines/` and restored automatically once the demos shut down so repeated walkthroughs remain deterministic. 【F:src/apps/tester/app.py†L1-L420】【F:src/apps/tester/presentation.py†L1-L220】
-

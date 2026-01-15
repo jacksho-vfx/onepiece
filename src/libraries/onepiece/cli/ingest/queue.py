@@ -227,6 +227,14 @@ def ingest_plan(
     typer.echo(
         f"deadline={', '.join(plan.deadline_actions) if plan.deadline_actions else 'none'}"
     )
+    optimize_actions = (
+        [f"{action.variant}:{action.mode}" for action in plan.optimize_actions]
+        if plan.optimize_actions
+        else []
+    )
+    typer.echo(
+        f"optimize={', '.join(optimize_actions) if optimize_actions else 'none'}"
+    )
 
 
 @app.command("validate")

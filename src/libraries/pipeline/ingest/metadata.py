@@ -29,9 +29,12 @@ class IngestMetadata:
     files: tuple[IngestFileRecord, ...]
     tags: dict[str, list[str]]
     file_types: tuple[str, ...]
+    capabilities: dict[str, dict[str, bool]]
     user: dict[str, str]
     machine: dict[str, str]
     relationships: list[dict[str, str]]
+    derived_variants: list[dict[str, Any]]
+    preferred_variant: str | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -54,9 +57,12 @@ class IngestMetadata:
             ],
             "tags": self.tags,
             "file_types": list(self.file_types),
+            "capabilities": self.capabilities,
             "user": self.user,
             "machine": self.machine,
             "relationships": self.relationships,
+            "derived_variants": self.derived_variants,
+            "preferred_variant": self.preferred_variant,
         }
 
     @staticmethod
@@ -87,6 +93,11 @@ class IngestMetadata:
                 else {}
             ),
             file_types=tuple(payload.get("file_types", []) or ()),
+            capabilities=(
+                dict(payload.get("capabilities", {}))
+                if isinstance(payload.get("capabilities"), dict)
+                else {}
+            ),
             user=(
                 dict(payload.get("user", {}))
                 if isinstance(payload.get("user"), dict)
@@ -98,6 +109,12 @@ class IngestMetadata:
                 else {}
             ),
             relationships=list(payload.get("relationships", []) or []),
+            derived_variants=list(payload.get("derived_variants", []) or []),
+            preferred_variant=(
+                str(payload.get("preferred_variant"))
+                if payload.get("preferred_variant") is not None
+                else None
+            ),
         )
 
 
@@ -117,7 +134,7 @@ class IngestMetadataFile:
         return IngestMetadata.from_dict(payload)
 
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 
 def now_timestamp() -> str:

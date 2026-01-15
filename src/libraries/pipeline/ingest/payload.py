@@ -8,25 +8,13 @@ from pathlib import Path
 import hashlib
 import mimetypes
 
+from libraries.pipeline.ingest.detection import (
+    build_capability_map,
+    collect_asset_types,
+    normalize_extension,
+    primary_asset_type,
+)
 from libraries.pipeline.ingest.metadata import IngestFileRecord
-
-
-_FILE_TYPE_MAP: dict[str, str] = {
-    ".fbx": "3d_model",
-    ".obj": "3d_model",
-    ".usd": "3d_model",
-    ".usda": "3d_model",
-    ".usdc": "3d_model",
-    ".abc": "3d_model",
-    ".gltf": "3d_model",
-    ".glb": "3d_model",
-    ".exr": "image",
-    ".png": "image",
-    ".jpg": "image",
-    ".jpeg": "image",
-    ".mov": "video",
-    ".mp4": "video",
-}
 
 
 @dataclass(frozen=True)
@@ -37,6 +25,7 @@ class PayloadManifest:
     files: tuple[IngestFileRecord, ...]
     file_types: tuple[str, ...]
     extensions: set[str]
+    capabilities: dict[str, dict[str, bool]]
 
 
 def _hash_file(path: Path) -> str:
@@ -48,8 +37,8 @@ def _hash_file(path: Path) -> str:
 
 
 def _classify_file_type(path: Path) -> tuple[str, str]:
-    ext = path.suffix.lower()
-    file_type = _FILE_TYPE_MAP.get(ext, "unknown")
+    ext = normalize_extension(path)
+    file_type = primary_asset_type(ext)
     mime_type, _ = mimetypes.guess_type(path.as_posix())
     return file_type, mime_type or "application/octet-stream"
 
@@ -82,7 +71,9 @@ def build_payload_manifest(source: Path) -> PayloadManifest:
     for file_path in _collect_files(source):
         file_type, mime_type = _classify_file_type(file_path)
         file_types.add(file_type)
-        extensions.add(file_path.suffix.lower())
+        extension = normalize_extension(file_path)
+        if extension:
+            extensions.add(extension)
         size_bytes = file_path.stat().st_size
         total_size += size_bytes
         files.append(
@@ -95,11 +86,13 @@ def build_payload_manifest(source: Path) -> PayloadManifest:
             )
         )
     payload_hash = _build_payload_hash(files)
+    asset_types = collect_asset_types(extensions)
     return PayloadManifest(
         payload_name=source.name,
         payload_hash=payload_hash,
         payload_size_bytes=total_size,
         files=tuple(files),
-        file_types=tuple(sorted(file_types)),
+        file_types=tuple(sorted(asset_types)),
         extensions=extensions,
+        capabilities=build_capability_map(asset_types),
     )

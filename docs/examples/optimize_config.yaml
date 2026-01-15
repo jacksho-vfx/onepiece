@@ -1,0 +1,44 @@
+schema_version: 1
+variants:
+  optimized:
+    enabled: true
+    handlers:
+      3d:
+        clean_geometry: true
+        merge_materials: true
+        fix_normals: true
+        strip_junk_nodes: true
+        generate_lods: false
+        decimate: false
+        normalize_scene: true
+        copy_textures: true
+      texture:
+        resize_max: null
+        generate_mips: false
+      cache:
+        proxy: false
+        validate_frames: true
+  usd:
+    enabled: true
+    handlers:
+      3d:
+        convert_to_usd: true
+        usd_format: usdc
+        package_mode: flatten
+        copy_textures: true
+        preview_proxy: false
+  proxy:
+    enabled: true
+    handlers:
+      texture:
+        resize_max: 1024
+        format: png
+        generate_mips: true
+        mip_levels: 2
+      cache:
+        proxy: true
+        validate_frames: true
+deadline:
+  pool: 3d
+  group: pipeline
+  priority: 50

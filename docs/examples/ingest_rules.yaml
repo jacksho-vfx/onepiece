@@ -4,13 +4,16 @@ rules:
     priority: 10
     match:
       any_tags: [plates, dept:plates]
-      file_types: [image, video]
+      file_types: [image, texture, video]
       path_contains: ["/plates/"]
     outputs:
       - target: assets/plates
         name_template: "{basename}"
     actions:
       hooks: [s5_aws_sync]
+      optimize:
+        - variant: proxy
+          mode: local
   - name: assets
     priority: 20
     match:
@@ -20,3 +23,6 @@ rules:
         name_template: "{basename}"
     actions:
       deadline: [convert_to_usd]
+      optimize:
+        - variant: usd
+          mode: deadline
