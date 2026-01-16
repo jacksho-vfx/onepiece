@@ -11,7 +11,6 @@ from typer.testing import CliRunner
 
 from apps.onepiece.pipeline.clients import PipelineClientError
 
-
 runner = CliRunner()
 
 

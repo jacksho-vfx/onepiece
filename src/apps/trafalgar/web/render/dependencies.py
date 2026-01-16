@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
 from apps.trafalgar.web.job_store import JobStore
+
 from .schemas import RenderJobRequest
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
@@ -26,8 +27,8 @@ JOB_STORE_PERSIST_THROTTLE_ENV = "TRAFALGAR_RENDER_STORE_PERSIST_INTERVAL"
 
 
 def _initialise_render_service() -> "RenderSubmissionService":
-    from .services import RenderSubmissionService, logger
     from .constants import JOB_EVENTS
+    from .services import RenderSubmissionService, logger
 
     store_path = os.environ.get(JOB_STORE_PATH_ENV)
     history_limit_value = os.environ.get(JOB_HISTORY_LIMIT_ENV)

@@ -11,8 +11,8 @@ from _pytest.logging import LogCaptureFixture
 
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import (
-    CostModelInput,
     DEFAULT_CURRENCY,
+    CostModelInput,
     OptimizationScenario,
 )
 from libraries.analytics.perona.engine.settings import (

@@ -13,16 +13,15 @@ from threading import Lock
 from typing import Any, Mapping, NamedTuple, Sequence, TypeVar
 
 from fastapi import HTTPException, Query, Security, status
-from starlette.websockets import WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from apps.perona.web import wrangler
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
-from libraries.analytics.perona.models import RenderMetric, SettingsSummary
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
-
+from libraries.analytics.perona.models import RenderMetric, SettingsSummary
 
 _metrics_token_env = "PERONA_METRICS_TOKEN"
 _metrics_max_batch_env = "PERONA_METRICS_MAX_BATCH"

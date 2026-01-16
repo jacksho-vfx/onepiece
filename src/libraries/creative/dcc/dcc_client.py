@@ -7,6 +7,7 @@ about.
 """
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -15,33 +16,31 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import logging
-
-from libraries.integrations.aws.s5_sync import s5_sync
-from libraries.creative.dcc.maya.unreal_export_checker import (
-    UnrealExportReport,
-    validate_unreal_export,
+from libraries.creative.dcc.cinema4d.validation import (
+    validate_package as validate_cinema4d_package,
 )
 from libraries.creative.dcc.houdini.validation import (
     validate_package as validate_houdini_package,
 )
-from libraries.creative.dcc.cinema4d.validation import (
-    validate_package as validate_cinema4d_package,
+from libraries.creative.dcc.maya.unreal_export_checker import (
+    UnrealExportReport,
+    validate_unreal_export,
 )
+from libraries.integrations.aws.s5_sync import s5_sync
 
+from . import packaging as _packaging
 from .models import (
-    JSONValue,
-    LinkStrategy,
-    SupportedDCC,
     DCC_ASSET_REQUIREMENTS,
+    DCC_GPU_REQUIREMENTS,
+    DCC_PLUGIN_REQUIREMENTS,
+    DCCAssetStatus,
     DCCDependencyReport,
     DCCGPUStatus,
     DCCPluginStatus,
-    DCCAssetStatus,
-    DCC_GPU_REQUIREMENTS,
-    DCC_PLUGIN_REQUIREMENTS,
+    JSONValue,
+    LinkStrategy,
+    SupportedDCC,
 )
-from . import packaging as _packaging
 from .packaging import _prepare_package_contents, _write_package_manifest
 from .validation import (
     _format_unreal_export_error,

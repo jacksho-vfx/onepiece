@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 
 import pytest
 

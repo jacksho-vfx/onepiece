@@ -12,13 +12,13 @@ import structlog
 import typer
 
 from libraries.automation.dailies.manifest import write_manifest
+from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError
 from libraries.platform.media.ffmpeg.wrapper import (
     BurnInMetadata,
     BurnInOptions,
     create_concat_file,
     run_ffmpeg_concat,
 )
-from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError
 
 log = structlog.get_logger(__name__)
 

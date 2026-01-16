@@ -7,7 +7,6 @@ from libraries.creative.dcc.material_harmonizer import (
     UsdShadeParseError,
 )
 
-
 SAMPLE_USD = """#usda 1.0
 (
     defaultPrim = "HeroMaterial"

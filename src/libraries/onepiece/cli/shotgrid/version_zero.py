@@ -7,8 +7,7 @@ import structlog
 import typer
 
 from apps.onepiece.utils.errors import OnePieceValidationError
-from libraries.platform.handlers.filepath_handler import FilepathHandler
-from libraries.platform.media.transformations import create_1080p_proxy_from_exrs
+from apps.onepiece.utils.progress import progress_tracker
 from libraries.integrations.shotgrid.api import ShotGridClient
 from libraries.integrations.shotgrid.models import (
     PipelineStep,
@@ -16,8 +15,9 @@ from libraries.integrations.shotgrid.models import (
     TaskData,
     VersionData,
 )
+from libraries.platform.handlers.filepath_handler import FilepathHandler
+from libraries.platform.media.transformations import create_1080p_proxy_from_exrs
 from libraries.platform.validations.csv_validations import validate_shots_csv
-from apps.onepiece.utils.progress import progress_tracker
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Shotgrid related commands.")

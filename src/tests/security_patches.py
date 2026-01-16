@@ -10,7 +10,6 @@ from fastapi.security.http import HTTPAuthorizationCredentials
 
 import apps.trafalgar.web.security as security
 
-
 PrincipalProvider = Callable[[], security.AuthenticatedPrincipal]
 
 

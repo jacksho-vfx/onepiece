@@ -4,12 +4,12 @@ import sys
 
 import typer
 
+from . import reconcile as reconcile_module
 from .asset_consistency import asset_consistency
 from .dcc_environment import render_dcc_environment
 from .names import validate_names
 from .names_batch import names_batch
 from .paths import validate_paths
-from . import reconcile as reconcile_module
 
 app = typer.Typer(name="validate", help="Validation commands")
 

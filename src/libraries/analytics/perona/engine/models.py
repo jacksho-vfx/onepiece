@@ -8,7 +8,6 @@ from typing import Final
 
 from libraries.automation.render import optimization as render_optimization
 
-
 SUPPORTED_CURRENCIES: Final[tuple[str, ...]] = ("GBP", "USD")
 _CURRENCY_SYMBOLS: Final[dict[str, str]] = {"GBP": "£", "USD": "$"}
 DEFAULT_CURRENCY: Final[str] = "GBP"

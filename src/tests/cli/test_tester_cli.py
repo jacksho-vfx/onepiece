@@ -10,9 +10,9 @@ from typing import Any, Mapping
 import pytest
 from typer.testing import CliRunner
 
-from apps.tester import app as tester_app
 import apps.tester.presentation as tester_presentation
 from apps.onepiece.config import load_profile
+from apps.tester import app as tester_app
 from apps.trafalgar.pipeline import (
     configure_orchestrator_from_profile,
     set_pipeline_orchestrator,

@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Mapping
 from fastapi import Request
 
 from apps.trafalgar.web.events import resolve_keepalive_interval
-from .dependencies import get_render_service
 from apps.trafalgar.web.render.constants import JOB_EVENTS
+
+from .dependencies import get_render_service
 
 if TYPE_CHECKING:  # pragma: no cover - import for static analysis only
     from . import RenderSubmissionService

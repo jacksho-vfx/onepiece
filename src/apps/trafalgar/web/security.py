@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import hmac
 import json
 import os
 from functools import lru_cache
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-import copy
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer

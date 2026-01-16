@@ -4,24 +4,33 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Iterable
-
 from pathlib import Path
+from typing import Any, Iterable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import (
+    DEFAULT_CURRENCY,
+    SUPPORTED_CURRENCIES,
     CostBreakdown,
     CostModelInput,
-    DEFAULT_CURRENCY,
+)
+from libraries.analytics.perona.engine.models import (
     OptimizationResult as EngineOptimizationResult,
+)
+from libraries.analytics.perona.engine.models import (
     OptimizationScenario,
-    PnLBreakdown as EnginePnLBreakdown,
+)
+from libraries.analytics.perona.engine.models import PnLBreakdown as EnginePnLBreakdown
+from libraries.analytics.perona.engine.models import (
     PnLContribution as EnginePnLContribution,
-    RenderMetric as EngineRenderMetric,
+)
+from libraries.analytics.perona.engine.models import RenderMetric as EngineRenderMetric
+from libraries.analytics.perona.engine.models import (
     RiskIndicator as EngineRiskIndicator,
-    SUPPORTED_CURRENCIES,
+)
+from libraries.analytics.perona.engine.models import (
     ShotLifecycle,
     ShotLifecycleStage,
 )

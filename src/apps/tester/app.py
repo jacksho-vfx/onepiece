@@ -12,27 +12,26 @@ import time
 import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from importlib import import_module
 from importlib.util import find_spec
 from multiprocessing import Process
+from pathlib import Path
 from typing import Iterable, Mapping
 
 import typer
 
 from apps.perona.cli.web import DEFAULT_DEMO_PORT as PERONA_DEMO_PORT
 from apps.perona.web.dummy_dashboard import prepare_demo_state
-from apps.trafalgar.app import (
-    DEFAULT_PORT as TRAFALGAR_DEFAULT_PORT,
-    DEMO_DASHBOARD_TOKEN,
-)
-from apps.trafalgar.web.demo import prepare_demo_state as prepare_trafalgar_demo_state
-from apps.uta.app import DEFAULT_PORT as UTA_DEFAULT_PORT
-
 from apps.tester.presentation import (
     prepare_pipeline_demos,
     restore_pipeline_demo_environment,
 )
+from apps.trafalgar.app import DEFAULT_PORT as TRAFALGAR_DEFAULT_PORT
+from apps.trafalgar.app import (
+    DEMO_DASHBOARD_TOKEN,
+)
+from apps.trafalgar.web.demo import prepare_demo_state as prepare_trafalgar_demo_state
+from apps.uta.app import DEFAULT_PORT as UTA_DEFAULT_PORT
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_LOG_LEVEL = "info"

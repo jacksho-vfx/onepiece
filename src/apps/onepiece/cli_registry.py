@@ -7,8 +7,8 @@ from typing import Callable, cast
 
 import typer
 
-from apps.onepiece.utils.errors import OnePieceConfigError
 from apps.onepiece.config import ProfileContext
+from apps.onepiece.utils.errors import OnePieceConfigError
 
 
 @dataclass(frozen=True)

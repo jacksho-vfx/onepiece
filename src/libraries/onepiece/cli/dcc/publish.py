@@ -2,21 +2,20 @@
 
 import json
 from pathlib import Path
-from typing import Literal, cast, Any
+from typing import Any, Literal, cast
 
 import structlog
 import typer
 
 from libraries.creative.dcc.dcc_client import LinkStrategy, publish_scene
+from libraries.creative.dcc.maya.unreal_export_checker import UnrealExportReport
 from libraries.creative.dcc.models import (
     DCCAssetStatus,
     DCCDependencyReport,
     DCCPluginStatus,
     JSONValue,
 )
-from libraries.creative.dcc.maya.unreal_export_checker import UnrealExportReport
 from libraries.platform.validations.dcc import validate_dcc
-
 
 log = structlog.get_logger(__name__)
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import smtplib
 from contextlib import contextmanager
 from email.message import EmailMessage
 from types import TracebackType
-import smtplib
 from typing import Iterator
 
 import pytest

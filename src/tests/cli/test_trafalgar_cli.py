@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+import textwrap
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
@@ -9,10 +10,7 @@ from unittest.mock import Mock, call
 import pytest_mock
 from typer.testing import CliRunner
 
-import textwrap
-
 from apps.trafalgar import app as trafalgar_app
-
 
 runner = CliRunner()
 

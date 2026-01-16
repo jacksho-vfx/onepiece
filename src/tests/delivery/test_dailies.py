@@ -14,7 +14,6 @@ from apps.onepiece import app as onepiece_app
 from libraries.automation.review import dailies
 from libraries.automation.review.dailies import DailiesClip, _extract_duration
 
-
 runner = CliRunner()
 
 

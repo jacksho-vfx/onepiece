@@ -5,6 +5,7 @@ from html import escape
 from typing import TypedDict
 
 from apps.uta.web_cli import CommandSpec, PageSpec
+
 from .app_flags import render_app_flag
 
 

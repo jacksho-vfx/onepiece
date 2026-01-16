@@ -7,20 +7,20 @@ from typing import Any
 import structlog
 import typer
 
-from .animation import app as animation
-from .cinema4d import app as cinema4d
-from .maya_panel import app as maya
-from .max import app as max_app
-from .nuke import app as nuke
-from .open_shot import app as open_shot
-from .publish import app as publish
-from .unreal_import import app as unreal_import
-from .unreal_panel import app as unreal_panel
 from libraries.creative.dcc import max as max_deploy
 from libraries.creative.dcc import maya as maya_deploy
 from libraries.creative.dcc import nuke as nuke_deploy
 from libraries.creative.dcc import unreal as unreal_deploy
 
+from .animation import app as animation
+from .cinema4d import app as cinema4d
+from .max import app as max_app
+from .maya_panel import app as maya
+from .nuke import app as nuke
+from .open_shot import app as open_shot
+from .publish import app as publish
+from .unreal_import import app as unreal_import
+from .unreal_panel import app as unreal_panel
 
 log = structlog.get_logger(__name__)
 

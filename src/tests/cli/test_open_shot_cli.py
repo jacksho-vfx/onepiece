@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-
-from importlib import import_module
 
 from _pytest.monkeypatch import MonkeyPatch
 from typer.testing import CliRunner

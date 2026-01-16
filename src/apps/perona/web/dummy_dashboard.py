@@ -25,12 +25,19 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from apps.perona.web import dashboard as live_dashboard
-from apps.perona.web import wrangler as wrangler_module
 from apps.perona.notifications import (
     NotificationDispatchError,
     dispatch_render_volatility_alert,
 )
+from apps.perona.version import PERONA_VERSION
+from apps.perona.web import dashboard as live_dashboard
+from apps.perona.web import wrangler as wrangler_module
+from apps.perona.web.dashboard import reports as live_reports
+from apps.perona.web.dashboard.routes import analytics as live_analytics
+from apps.perona.web.dashboard.routes import metrics as live_metrics
+from apps.perona.web.dashboard.routes import reports as live_report_routes
+from apps.perona.web.dashboard.routes import shots as live_shots
+from apps.perona.web.dashboard.templates import dashboard_index_html
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.models import (
     CostEstimate,
@@ -40,20 +47,12 @@ from libraries.analytics.perona.models import (
     PnLBreakdown,
     RenderMetric,
     RiskIndicator,
+)
+from libraries.analytics.perona.models import Sequence as PeronaSequence
+from libraries.analytics.perona.models import (
     SettingsSummary,
     Shot,
-    Sequence as PeronaSequence,
 )
-from apps.perona.version import PERONA_VERSION
-from apps.perona.web.dashboard import reports as live_reports
-from apps.perona.web.dashboard.routes import (
-    analytics as live_analytics,
-    metrics as live_metrics,
-    reports as live_report_routes,
-    shots as live_shots,
-)
-from apps.perona.web.dashboard.templates import dashboard_index_html
-
 
 app = FastAPI(
     title="Perona (Demo)",

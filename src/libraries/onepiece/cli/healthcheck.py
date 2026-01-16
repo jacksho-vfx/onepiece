@@ -7,16 +7,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+import structlog
+import typer
 from boto3 import Session
 from botocore.exceptions import BotoCoreError, NoCredentialsError, ProfileNotFound
 from pydantic import ValidationError
-import structlog
-import typer
 
 from apps.onepiece.config import ProfileContext, load_profile
-from .misc.info import mask_sensitive_value
 from apps.onepiece.utils.errors import OnePieceConfigError
 from libraries.integrations.shotgrid.config import load_config as load_shotgrid_config
+
+from .misc.info import mask_sensitive_value
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(name="healthcheck", help="Validate environment prerequisites")

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
-from typing import Any
 
 from apps.onepiece.pipeline import _serialised_definition_to_manifest
 from apps.trafalgar.app import _extract_pipeline_definition
@@ -14,7 +14,6 @@ from apps.trafalgar.pipeline import (
     pipeline_definition_from_profile_entry,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
-
 
 yaml = pytest.importorskip("yaml")
 

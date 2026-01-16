@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Any
+from typing import Any, Sequence
 
 __all__ = [
     "BurnInMetadata",

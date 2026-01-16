@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator, Any
+from typing import Any, Iterator
 
 from _pytest.monkeypatch import MonkeyPatch
 

@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.perona.web import dashboard as dashboard_module
+from libraries.analytics.perona.engine.models import RenderMetric as EngineRenderMetric
 from libraries.analytics.perona.engine.models import (
-    RenderMetric as EngineRenderMetric,
     ShotTelemetry,
 )
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from ..auth import _parse_datetime
 from typing import Any, Hashable, Mapping, Sequence
 
 from apps.trafalgar.providers.providers import (
@@ -12,6 +11,8 @@ from apps.trafalgar.providers.providers import (
     initialize_providers,
 )
 from libraries.automation.delivery.manifest import get_manifest_data
+
+from ..auth import _parse_datetime
 
 __all__ = ["DeliveryService"]
 

@@ -16,6 +16,7 @@ from libraries.integrations.shotgrid.client import (
     ShotgridOperationError,
     Version,
 )
+
 from .checkpoint import (
     ObjectInspectorProtocol,
     ResumableUploaderProtocol,
@@ -31,20 +32,18 @@ from .exceptions import (
 )
 from .filenames import parse_media_filename
 from .logging_utils import get_logger
-from .models import IngestReport, IngestedMedia, MediaInfo
-
 from .manifest import (
     Delivery,
     _build_manifest_index,
     load_delivery_manifest,
 )
+from .models import IngestedMedia, IngestReport, MediaInfo
 from .uploaders import (
-    Boto3Uploader,
     DEFAULT_UPLOAD_CHUNK_SIZE,
     DEFAULT_UPLOAD_CONCURRENCY,
+    Boto3Uploader,
 )
 from .workers import apply_worker_tuning, execute_uploads
-
 
 AUTO_WORKER_BYTES_TARGET = 512 * 1024 * 1024
 """Approximate payload size (in bytes) each worker should handle when auto-tuning."""

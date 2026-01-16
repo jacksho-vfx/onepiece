@@ -6,8 +6,8 @@ import pytest
 
 from pipelines.anima_export import (
     AnimaActor,
-    AnimaUsdExporter,
     AnimationClip,
+    AnimaUsdExporter,
     PoseSample,
     SkeletonJoint,
     load_export,

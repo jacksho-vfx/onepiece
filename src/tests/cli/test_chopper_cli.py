@@ -6,10 +6,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from botocore.exceptions import ClientError
 import pytest
-from typer.testing import CliRunner
 import typer
+from botocore.exceptions import ClientError
+from typer.testing import CliRunner
 
 from apps.chopper.app import app
 from apps.chopper.renderer import Scene

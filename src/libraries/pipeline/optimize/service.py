@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import platform
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, cast
 
 from libraries.pipeline.ingest.metadata import (
@@ -17,16 +17,16 @@ from libraries.pipeline.optimize.config import OptimizationConfig, VariantConfig
 from libraries.pipeline.optimize.handlers.base import HandlerContext, HandlerResult
 from libraries.pipeline.optimize.handlers.caches import (
     optimize_caches,
-    supports as caches_support,
 )
+from libraries.pipeline.optimize.handlers.caches import supports as caches_support
 from libraries.pipeline.optimize.handlers.textures import (
     optimize_textures,
-    supports as textures_support,
 )
+from libraries.pipeline.optimize.handlers.textures import supports as textures_support
 from libraries.pipeline.optimize.handlers.three_d import (
     optimize_model,
-    supports as model_support,
 )
+from libraries.pipeline.optimize.handlers.three_d import supports as model_support
 from libraries.pipeline.optimize.report import OptimizationReport, OptimizationStep
 
 

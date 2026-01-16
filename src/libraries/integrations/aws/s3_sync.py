@@ -1,10 +1,9 @@
 """Helpers for mirroring folders with :command:`aws s3 sync`."""
 
-from pathlib import Path
-from typing import Literal
-
 import logging
 import subprocess
+from pathlib import Path
+from typing import Literal
 
 log = logging.getLogger(__name__)
 

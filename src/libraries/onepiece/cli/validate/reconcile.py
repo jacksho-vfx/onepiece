@@ -11,13 +11,13 @@ import structlog
 import typer
 
 from apps.onepiece.utils.progress import progress_tracker
-from libraries.integrations.aws.scanner import scan_s3_context
-from libraries.platform.filesystem.scanner import scan_project_files
 from libraries.automation.reconcile.comparator import (
     collect_shots,
     compare_datasets,
 )
+from libraries.integrations.aws.scanner import scan_s3_context
 from libraries.integrations.shotgrid.api import ShotGridClient, ShotGridError
+from libraries.platform.filesystem.scanner import scan_project_files
 
 log = structlog.get_logger(__name__)
 

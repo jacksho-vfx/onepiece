@@ -13,8 +13,8 @@ from libraries.creative.dcc.dcc_client import (
 )
 from libraries.creative.dcc.models import (
     DCC_ASSET_REQUIREMENTS,
-    DCCDependencyReport,
     DCCAssetStatus,
+    DCCDependencyReport,
     DCCGPUStatus,
     DCCPluginStatus,
     SupportedDCC,

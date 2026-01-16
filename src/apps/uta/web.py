@@ -10,12 +10,11 @@ from typing import Any, Sequence
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typer.testing import CliRunner
 
-from apps.web_theme import get_theme_static_directory
 from apps.onepiece.app import app as cli_app
 from apps.onepiece.render.jobs import (
     RenderJobClient,
@@ -31,10 +30,9 @@ from apps.onepiece.utils.errors import (
 )
 from apps.trafalgar.web.dashboard import app as dashboard_app
 from apps.trafalgar.web.render import app as render_app
+from apps.web_theme import get_theme_static_directory
 
-from . import web_cli
-from . import web_pipeline
-from . import web_templates
+from . import web_cli, web_pipeline, web_templates
 
 CLI_PAGES = web_cli.CLI_PAGES
 COMMAND_LOOKUP = web_cli.COMMAND_LOOKUP

@@ -6,7 +6,6 @@ from typing import List
 
 from libraries.platform.validations import naming
 
-
 _SEQ_SHOT_PATTERN = re.compile(r"^seq\d{3}_sh\d{3}$", re.IGNORECASE)
 _SEQ_ASSET_PATTERN = re.compile(
     r"^seq\d{3}_sh\d{3}_[a-z0-9]+(?:_[a-z0-9]+)*_v\d{3}$", re.IGNORECASE

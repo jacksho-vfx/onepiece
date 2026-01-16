@@ -1,15 +1,14 @@
 """Typer CLI entry points for the Trafalgar dashboard services."""
 
+import json
+import os
+import secrets
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from multiprocessing import Process
 from pathlib import Path
 from typing import Any, Mapping, Optional, cast
-
-import json
-import os
-import secrets
-import webbrowser
 
 import typer
 
@@ -17,11 +16,11 @@ from apps.onepiece.config import load_profile
 from apps.onepiece.pipeline.schema import PipelineSchemaError, load_pipeline_manifest
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
+    PipelineRun,
+    WorkerPoolMetrics,
     configure_orchestrator_from_profile,
     get_pipeline_orchestrator,
     pipeline_definition_from_profile_entry,
-    PipelineRun,
-    WorkerPoolMetrics,
 )
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 

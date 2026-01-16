@@ -9,7 +9,6 @@ from pytest import MonkeyPatch
 
 from apps.onepiece.app import app as onepiece_app
 from apps.onepiece.pipeline.clients import PipelineClientError
-
 from tests.cli.pipeline.conftest import (
     StubPipelineClient,
     install_stub_pipeline_client,

@@ -1,5 +1,5 @@
-from typing import Protocol
 from collections.abc import Callable
+from typing import Protocol
 
 from libraries.automation.render.base import AdapterCapabilities, SubmissionResult
 

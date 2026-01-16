@@ -11,9 +11,8 @@ from fastapi import APIRouter, Depends, Query
 from apps.perona.web.dashboard import dependencies
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import ShotLifecycle
-from libraries.analytics.perona.models import Shot
 from libraries.analytics.perona.models import Sequence as PeronaSequence
-from libraries.analytics.perona.models import sequences_from_lifecycles
+from libraries.analytics.perona.models import Shot, sequences_from_lifecycles
 
 router = APIRouter(prefix="/shots", tags=["shots"])
 

@@ -9,7 +9,6 @@ from .templates import app as templates
 from .upload_version import app as upload_version
 from .version_zero import app as version_zero
 
-
 app = typer.Typer(name="shotgrid", help="Shotgrid related commands.")
 
 app.add_typer(deliver)

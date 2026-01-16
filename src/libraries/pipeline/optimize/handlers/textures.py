@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import importlib.util
-from pathlib import Path
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
 
 from libraries.pipeline.ingest.detection import ASSET_TYPE_IMAGE, ASSET_TYPE_TEXTURE
 from libraries.pipeline.optimize.handlers.base import HandlerContext, HandlerResult
 from libraries.pipeline.optimize.report import OptimizationStep
-
 
 SUPPORTED_EXTENSIONS = {".exr", ".tif", ".tiff", ".png", ".jpg", ".jpeg", ".tx"}
 

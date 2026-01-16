@@ -16,7 +16,9 @@ from . import dependencies
 from .routes import (
     analytics,
     metrics,
-    reports as report_routes,
+)
+from .routes import reports as report_routes
+from .routes import (
     shots,
     system,
     wrangler,

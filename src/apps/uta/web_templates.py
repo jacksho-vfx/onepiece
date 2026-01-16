@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-from html import escape
 import json
+from html import escape
 from typing import Mapping
 
-from .templates import (
-    normalise_root_path as _normalise_root_path_impl,
-    render_command as _render_command_impl,
-    render_dashboard_page as _render_dashboard_page_impl,
-    render_hub_page as _render_hub_page_impl,
-    render_page as _render_cli_page_impl,
-    render_parameters as _render_parameters_impl,
-    render_pipeline_page as _render_pipeline_page_impl,
-    slugify as _slugify_impl,
-    with_root_path as _with_root_path_impl,
-)
+from .templates import normalise_root_path as _normalise_root_path_impl
+from .templates import render_command as _render_command_impl
+from .templates import render_dashboard_page as _render_dashboard_page_impl
+from .templates import render_hub_page as _render_hub_page_impl
+from .templates import render_page as _render_cli_page_impl
+from .templates import render_parameters as _render_parameters_impl
+from .templates import render_pipeline_page as _render_pipeline_page_impl
+from .templates import slugify as _slugify_impl
+from .templates import with_root_path as _with_root_path_impl
 from .templates.app_flags import render_app_flag
 from .web_cli import CLI_PAGES
 

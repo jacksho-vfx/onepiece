@@ -5,7 +5,7 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Generator, Any
+from typing import Any, Generator
 
 import pytest
 

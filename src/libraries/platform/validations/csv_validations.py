@@ -2,6 +2,7 @@ import csv
 import re
 from pathlib import Path
 from typing import List
+
 import structlog
 
 log = structlog.get_logger(__name__)

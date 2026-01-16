@@ -4,11 +4,11 @@ from .registry import (
     AwaitableResult,
     WranglerScriptMetadata,
     WranglerScriptResult,
+    _reset_registry,
     execute_script,
     get_registered_script,
     iter_registered_scripts,
     register_script,
-    _reset_registry,
 )
 
 __all__ = [

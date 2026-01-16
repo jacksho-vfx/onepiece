@@ -25,7 +25,6 @@ from libraries.creative.dcc.cinema4d.validation import (
     validate_package,
 )
 
-
 log = structlog.get_logger(__name__)
 app = typer.Typer(name="cinema4d", help="Cinema 4D integration commands")
 T = TypeVar("T")

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 import importlib
+import json
 from pathlib import Path
 
 import pytest
 import pytest_mock
 from typer.testing import CliRunner
 
+from apps.perona.app import app as perona_app
 from libraries.analytics.perona.engine.models import (
     CostBreakdown,
     CostModelInput,
@@ -15,9 +16,7 @@ from libraries.analytics.perona.engine.models import (
 )
 from libraries.analytics.perona.engine.settings import SettingsLoadResult
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
-from apps.perona.app import app as perona_app
 from libraries.analytics.perona.models import BaselineCostInput, SettingsSummary
-
 
 runner = CliRunner()
 

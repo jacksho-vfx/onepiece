@@ -5,7 +5,6 @@ import pytest
 from plugins.variant_switcher import maya
 from plugins.variant_switcher.core import StageVariants
 
-
 USD_STAGE = """#usda 1.0
 (
     defaultPrim = "Root"

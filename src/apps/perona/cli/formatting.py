@@ -17,8 +17,8 @@ from libraries.analytics.perona.engine.settings import (
 from libraries.analytics.perona.ml_foundations import FeatureStatistics
 from libraries.analytics.perona.models import (
     CostEstimate,
-    RiskIndicator as RiskIndicatorModel,
 )
+from libraries.analytics.perona.models import RiskIndicator as RiskIndicatorModel
 
 
 class DifferenceEntry(TypedDict):

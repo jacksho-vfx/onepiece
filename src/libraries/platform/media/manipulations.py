@@ -2,12 +2,12 @@
 Manipulations: audio conversion and sequence renumbering using PyAV.
 """
 
-from pathlib import Path
-import uuid
-
-import structlog
-import av
 import shutil
+import uuid
+from pathlib import Path
+
+import av
+import structlog
 
 log = structlog.get_logger(__name__)
 

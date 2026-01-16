@@ -9,8 +9,8 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 from libraries.analytics.perona.engine.datasets import (
-    group_frame_times,
     build_cost_training_dataset,
+    group_frame_times,
 )
 from libraries.analytics.perona.engine.engine import PeronaEngine
 from libraries.analytics.perona.engine.models import (

@@ -15,9 +15,8 @@ except ModuleNotFoundError:  # pragma: no cover - replaced by tests stubs
 
 from .cleanup import cleanup_scene
 from .deadline_submitter import launch_deadline_submitter
-from .script_library import default_script_directory, discover_cinema4d_scripts
 from .publish_pipeline import PipelineResult, build_pipeline
-
+from .script_library import default_script_directory, discover_cinema4d_scripts
 
 log = structlog.get_logger(__name__)
 

@@ -15,7 +15,6 @@ from libraries.creative.dcc.maya.unreal_importer import (
     UnrealPackageImporter,
 )
 
-
 log = structlog.get_logger(__name__)
 T = TypeVar("T")
 

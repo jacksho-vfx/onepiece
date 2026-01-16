@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import enum
+import itertools
+import json
+import math
+import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
-import enum
-import itertools
-import math
-import json
 from pathlib import Path
-import re
 from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 try:  # pragma: no cover - dependency optional for basic functionality
@@ -20,9 +20,9 @@ except ImportError:  # pragma: no cover - handled lazily when export attempted
 
 if TYPE_CHECKING:
     import imageio.v3 as iio
+    import Imath as _Imath
     import numpy as np
     import OpenEXR as _OpenEXR
-    import Imath as _Imath
 else:
     try:
         import imageio.v3 as iio
@@ -35,8 +35,8 @@ else:
         np = None  # type: ignore[assignment]
 
     try:
-        import OpenEXR as _OpenEXR
         import Imath as _Imath
+        import OpenEXR as _OpenEXR
     except ImportError:  # pragma: no cover - handled lazily when export attempted
         _OpenEXR = None  # type: ignore[assignment]
         _Imath = None  # type: ignore[assignment]

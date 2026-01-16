@@ -17,7 +17,6 @@ from libraries.creative.dcc.maya.playblast_tool import (
     PlayblastRequest,
 )
 
-
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="Animation focused DCC commands.")
 T = TypeVar("T")

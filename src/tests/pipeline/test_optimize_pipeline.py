@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-import json
-
 from libraries.pipeline.ingest.metadata import (
+    SCHEMA_VERSION,
     IngestMetadata,
     IngestMetadataFile,
-    SCHEMA_VERSION,
 )
 from libraries.pipeline.ingest.payload import build_payload_manifest
 from libraries.pipeline.ingest.rules import load_ingest_rules, plan_ingest

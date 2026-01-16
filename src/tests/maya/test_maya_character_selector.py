@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, List
-
 import sys
 import types
+from dataclasses import dataclass
+from typing import Any, List
 
 sys.modules.setdefault("requests", types.ModuleType("requests"))
 try:

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
 import os
 import shlex
 import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 

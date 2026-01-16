@@ -6,10 +6,10 @@ import asyncio
 import json
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import Any, Annotated, AsyncIterator, Mapping, Sequence
+from typing import Annotated, Any, AsyncIterator, Mapping, Sequence
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
-from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.onepiece.config import load_profile
@@ -22,11 +22,12 @@ from apps.trafalgar.pipeline import (
 from apps.trafalgar.pipeline_manifest import translate_pipeline_manifest
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from apps.trafalgar.web.dashboard.auth import require_dashboard_auth
+
 from .security import (
-    AuthenticatedPrincipal,
+    ROLE_PIPELINE_MANAGE,
     ROLE_PIPELINE_READ,
     ROLE_PIPELINE_RUN,
-    ROLE_PIPELINE_MANAGE,
+    AuthenticatedPrincipal,
     create_protected_router,
     require_roles,
 )

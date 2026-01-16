@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from apps.onepiece.render.submit import FARM_ADAPTERS
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from libraries.automation.render.base import RenderSubmissionError
 
+from ..security import (
+    ROLE_RENDER_MANAGE,
+    ROLE_RENDER_READ,
+    ROLE_RENDER_SUBMIT,
+    AuthenticatedPrincipal,
+)
 from . import routes
 from .api import log_requests, render_submission_error_handler
 from .constants import JOB_EVENTS
@@ -45,14 +52,7 @@ from .services import (
     RenderSubmissionService,
     logger,
 )
-from ..security import (
-    AuthenticatedPrincipal,
-    ROLE_RENDER_MANAGE,
-    ROLE_RENDER_READ,
-    ROLE_RENDER_SUBMIT,
-)
 from .streaming import RENDER_SSE_KEEPALIVE_INTERVAL_ENV
-from apps.onepiece.render.submit import FARM_ADAPTERS
 
 app = FastAPI(title="OnePiece Render Service", version=TRAFALGAR_VERSION)
 

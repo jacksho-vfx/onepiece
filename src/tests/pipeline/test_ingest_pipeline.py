@@ -10,6 +10,7 @@ from libraries.pipeline.ingest import (
     register_hook,
 )
 from libraries.pipeline.ingest.hooks import IngestContext, run_hooks
+from libraries.pipeline.ingest.metadata import SCHEMA_VERSION
 
 
 class RecordingHook:
@@ -56,7 +57,7 @@ def test_ingest_metadata_generation(tmp_path: Path) -> None:
     assert metadata["source_uri"].endswith("plate.exr")
     assert metadata["files"][0]["sha256"]
     assert metadata["tags"]["freeform"] == ["plates"]
-    assert metadata["schema_version"] == "1.1"
+    assert metadata["schema_version"] == SCHEMA_VERSION
     assert metadata["payload_hash"]
     assert metadata["payload_size_bytes"] > 0
 

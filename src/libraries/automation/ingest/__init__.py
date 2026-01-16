@@ -8,7 +8,7 @@ from .exceptions import (
 )
 from .filenames import parse_media_filename
 from .manifest import Delivery, DeliveryManifestError, load_delivery_manifest
-from .models import IngestReport, IngestedMedia, MediaInfo
+from .models import IngestedMedia, IngestReport, MediaInfo
 from .service import MediaIngestService
 from .uploaders import Boto3Uploader
 

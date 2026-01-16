@@ -14,7 +14,6 @@ from apps.onepiece.utils.errors import (
 
 from .helpers import RenderCliModuleResolver, extract_history
 
-
 _resolver = RenderCliModuleResolver()
 
 
@@ -38,10 +37,8 @@ def render_status(
 ) -> None:
     """Fetch render job metadata from the Trafalgar render API."""
 
-    from ..jobs import (
-        RenderJobClient as DefaultClient,
-        RenderJobClientError as DefaultError,
-    )
+    from ..jobs import RenderJobClient as DefaultClient
+    from ..jobs import RenderJobClientError as DefaultError
 
     client_class = _resolver.resolve_attribute("RenderJobClient", DefaultClient)
     error_class = _resolver.resolve_attribute("RenderJobClientError", DefaultError)

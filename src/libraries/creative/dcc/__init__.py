@@ -3,8 +3,8 @@
 from libraries.creative.dcc.client import (
     BaseDCCClient,
     BlenderClient,
-    HoudiniClient,
     Cinema4DClient,
+    HoudiniClient,
     MaxClient,
     MayaClient,
     NukeClient,

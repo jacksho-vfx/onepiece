@@ -7,11 +7,11 @@ import pytest
 
 from apps.trafalgar.providers.providers import (
     DeliveryProvider,
-    ProviderMetadata,
-    ReconcileDataProvider,
-    ProviderRegistry,
-    ProviderNotFoundError,
     ProviderConfigurationError,
+    ProviderMetadata,
+    ProviderNotFoundError,
+    ProviderRegistry,
+    ReconcileDataProvider,
 )
 
 

@@ -36,7 +36,8 @@ class _MissingTyperCallable:
 
 def _load_typer_apps() -> tuple[Any, Any]:
     try:
-        from apps.trafalgar.app import app as typer_app, web_app as typer_web_app
+        from apps.trafalgar.app import app as typer_app
+        from apps.trafalgar.app import web_app as typer_web_app
     except (
         ModuleNotFoundError
     ) as exc:  # pragma: no cover - exercised when typer missing

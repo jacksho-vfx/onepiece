@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from apps.onepiece.render.submit.cli import app as render_app
 import apps.onepiece.render.submit.optimize_deadline_command as optimize_command
+from apps.onepiece.render.submit.cli import app as render_app
 from libraries.automation.render.geometry import GeometryOptimizationResult
 
 runner = CliRunner()

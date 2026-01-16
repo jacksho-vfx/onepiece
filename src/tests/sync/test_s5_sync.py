@@ -1,6 +1,6 @@
 import io
 from pathlib import Path
-from typing import Sequence, Generator
+from typing import Generator, Sequence
 
 from _pytest.capture import CaptureFixture
 from _pytest.monkeypatch import MonkeyPatch

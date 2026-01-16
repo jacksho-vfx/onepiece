@@ -1,7 +1,7 @@
 """Helpers to enumerate S3 objects for reconciliation."""
 
 import os
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import structlog
 

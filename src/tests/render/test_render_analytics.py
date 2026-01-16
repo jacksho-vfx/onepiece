@@ -5,11 +5,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from libraries.automation.render.analytics import cost_per_frame
 from apps.trafalgar.web.render import services as services_module
 from apps.trafalgar.web.render.models import _JobRecord
 from apps.trafalgar.web.render.schemas import RenderJobRequest
 from apps.trafalgar.web.render.services import RenderSubmissionService
+from libraries.automation.render.analytics import cost_per_frame
 
 
 def _request() -> RenderJobRequest:

@@ -9,11 +9,10 @@ import typer
 from apps.onepiece.utils.errors import OnePieceValidationError
 from libraries.creative.dcc.dcc_client import open_scene
 from libraries.platform.validations.dcc import (
+    check_dcc_environment,
     detect_dcc_from_file,
     validate_dcc,
-    check_dcc_environment,
 )
-
 
 log = structlog.get_logger(__name__)
 app = typer.Typer(help="DCC CLI commands.")

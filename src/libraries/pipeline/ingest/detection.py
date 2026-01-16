@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-
 ASSET_TYPE_UNKNOWN = "unknown"
 ASSET_TYPE_MODEL = "3d_model"
 ASSET_TYPE_TEXTURE = "texture"

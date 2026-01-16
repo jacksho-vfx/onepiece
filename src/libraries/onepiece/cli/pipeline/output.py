@@ -7,7 +7,6 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import typer
 
-
 _MISSING = object()
 
 

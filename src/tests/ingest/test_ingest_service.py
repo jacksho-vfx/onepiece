@@ -2,15 +2,15 @@ import asyncio
 import inspect
 import logging
 from pathlib import Path
+from typing import Awaitable, cast
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
-from typing import Awaitable, cast
 
-from libraries.automation.ingest.models import IngestReport, IngestedMedia
+from libraries.automation.ingest.models import IngestedMedia, IngestReport
 from libraries.automation.ingest.service import (
-    Delivery,
     MAX_DIRECTORY_DEPTH,
+    Delivery,
     MediaIngestService,
     ShotgridAuthenticationError,
     ShotgridConnectivityError,

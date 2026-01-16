@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
 from threading import Event
 from typing import Mapping
-import time
 
 import pytest
 
+from apps.onepiece.config import ProfileContext
 from apps.trafalgar.pipeline import (
     PipelineDefinition,
     PipelineOrchestrator,
     configure_orchestrator_from_profile,
     set_pipeline_orchestrator,
 )
-from apps.onepiece.config import ProfileContext
 from libraries.pipeline.models import Pipeline, PipelineStep
 
 
