@@ -8,6 +8,7 @@ from typing import Any, Callable
 import structlog
 
 from libraries.creative.dcc.ui_core import BaseMenu, BasePanel, MenuAction
+
 from .deploy import get_script_library_path
 from .script_launcher import (
     configure_script_launcher_defaults,

@@ -3,7 +3,6 @@
 from importlib.resources import files
 from pathlib import Path
 
-
 __all__ = ["get_theme_static_directory"]
 
 

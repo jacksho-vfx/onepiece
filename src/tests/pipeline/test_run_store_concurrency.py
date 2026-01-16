@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
 import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from apps.trafalgar.pipeline import PipelineRun, PipelineRunEvent, PipelineRunStore
 

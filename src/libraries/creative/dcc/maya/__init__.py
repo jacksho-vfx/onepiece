@@ -36,27 +36,13 @@ except ModuleNotFoundError:
     ):
         setattr(core_module, name, _missing_pymel_callable)
 
-# --------------------------------------------------------------------------- #
-# Import public submodules (these can now import safely)
-# --------------------------------------------------------------------------- #
-from .batch_exporter import (  # noqa: F401
-    DEFAULT_EXPORT_SETTINGS,
-    BatchExportItem,
-    BatchExportResult,
-    BatchExporter,
-    ExportFormat,
-    ExportRecord,
-)
-from .character_selector import (  # noqa: F401
-    CharacterSelectorPanel,
-    RigDescriptor,
-    discover_rigs,
-)
-from .batch_retargeting import (  # noqa: F401
-    BatchRetargetingTool,
-    RetargetError,
-    RetargetMapping,
-    RetargetResult,
+from .animation_debugger import (  # noqa: F401
+    AnimationDebuggerIssue,
+    AnimationDebuggerReport,
+    CacheLinkInfo,
+    ConstraintInfo,
+    FrameRangeInfo,
+    debug_animation,
 )
 from .auto_rig_validator import (  # noqa: F401
     DEFAULT_CONTROL_PREFIXES,
@@ -67,20 +53,35 @@ from .auto_rig_validator import (  # noqa: F401
     RigValidationReport,
     validate_rig_import,
 )
+
+# --------------------------------------------------------------------------- #
+# Import public submodules (these can now import safely)
+# --------------------------------------------------------------------------- #
+from .batch_exporter import (  # noqa: F401
+    DEFAULT_EXPORT_SETTINGS,
+    BatchExporter,
+    BatchExportItem,
+    BatchExportResult,
+    ExportFormat,
+    ExportRecord,
+)
+from .batch_retargeting import (  # noqa: F401
+    BatchRetargetingTool,
+    RetargetError,
+    RetargetMapping,
+    RetargetResult,
+)
+from .character_selector import (  # noqa: F401
+    CharacterSelectorPanel,
+    RigDescriptor,
+    discover_rigs,
+)
 from .playblast_tool import (  # noqa: F401
     PlayblastAutomationTool,
     PlayblastRequest,
     PlayblastResult,
     ReviewUploader,
     build_playblast_filename,
-)
-from .animation_debugger import (  # noqa: F401
-    AnimationDebuggerIssue,
-    AnimationDebuggerReport,
-    CacheLinkInfo,
-    ConstraintInfo,
-    FrameRangeInfo,
-    debug_animation,
 )
 from .unreal_export_checker import (  # noqa: F401
     DEFAULT_ALLOWED_PREFIXES,

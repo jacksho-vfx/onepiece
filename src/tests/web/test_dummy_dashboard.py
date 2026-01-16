@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.perona.web import dummy_dashboard

@@ -8,8 +8,8 @@ from fastapi.responses import JSONResponse
 
 from apps.trafalgar.version import TRAFALGAR_VERSION
 from apps.trafalgar.web.security import (
-    AuthenticatedPrincipal,
     ROLE_REVIEW_READ,
+    AuthenticatedPrincipal,
     create_protected_router,
     require_roles,
 )

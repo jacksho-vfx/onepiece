@@ -13,7 +13,6 @@ from apps.trafalgar.providers.providers import (
 )
 from apps.trafalgar.web import dashboard
 
-
 initialize_providers()
 
 

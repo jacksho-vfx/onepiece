@@ -14,7 +14,6 @@ from libraries.pipeline.ingest.inventory import (
     search_by_tag,
 )
 
-
 app = typer.Typer(name="inventory", help="Search the pipeline ingest inventory.")
 
 

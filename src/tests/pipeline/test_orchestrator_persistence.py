@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import textwrap
+import time
 from collections.abc import Callable
 from pathlib import Path
-import time
 
-import textwrap
 import pytest
+from fastapi.testclient import TestClient
 
 from apps.onepiece.config import load_profile
 from apps.trafalgar.pipeline import (
@@ -25,7 +26,6 @@ from apps.trafalgar.web.security import (
     DEFAULT_API_KEY_HEADER,
     DEFAULT_API_SECRET_HEADER,
 )
-from fastapi.testclient import TestClient
 from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 

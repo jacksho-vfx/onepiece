@@ -3,21 +3,22 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import fastapi.security
+import fastapi.security.api_key
 from _pytest.monkeypatch import MonkeyPatch
+from fastapi.security.http import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 
+import apps.trafalgar.web.security as security
+from apps.trafalgar.web import ingest, render
 from apps.trafalgar.web.ingest import (
     IngestRunProvider,
     IngestRunService,
+    app,
+    get_ingest_run_service,
 )
+from libraries.automation.ingest.models import IngestedMedia, IngestReport, MediaInfo
 from libraries.automation.ingest.registry import IngestRunRecord
-from libraries.automation.ingest.models import IngestReport, IngestedMedia, MediaInfo
-import fastapi.security
-import fastapi.security.api_key
-import apps.trafalgar.web.security as security
-from fastapi.security.http import HTTPAuthorizationCredentials
-from apps.trafalgar.web.ingest import app, get_ingest_run_service
-from apps.trafalgar.web import render, ingest
 
 
 class DummyIngestProvider(IngestRunProvider):  # type: ignore[misc]

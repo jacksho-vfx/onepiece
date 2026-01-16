@@ -1,5 +1,6 @@
 """Tests covering the ingest CLI's ShotGrid failure handling."""
 
+import importlib
 import json
 from pathlib import Path
 
@@ -8,15 +9,13 @@ from click.testing import Result
 from typer.testing import CliRunner
 
 from apps.onepiece.app import app
-import importlib
-
 from apps.onepiece.utils.errors import (
     ExitCode,
     OnePieceConfigError,
     OnePieceExternalServiceError,
     OnePieceValidationError,
 )
-from libraries.automation.ingest.models import IngestReport, IngestedMedia, MediaInfo
+from libraries.automation.ingest.models import IngestedMedia, IngestReport, MediaInfo
 from libraries.automation.ingest.service import (
     ShotgridAuthenticationError,
     ShotgridConnectivityError,

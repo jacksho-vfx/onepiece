@@ -9,16 +9,15 @@ from typing import Any
 import pytest
 
 from libraries.creative.dcc import (
+    DCC,
     BaseDCCClient,
     BlenderClient,
-    DCC,
     Cinema4DClient,
     MaxClient,
     MayaClient,
     NukeClient,
     VrayClient,
 )
-
 
 CLIENT_CLASSES = {
     DCC.MAYA: MayaClient,

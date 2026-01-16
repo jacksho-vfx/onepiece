@@ -13,7 +13,6 @@ from apps.onepiece.utils.errors import (
 
 from .helpers import RenderCliModuleResolver, coerce_text
 
-
 _resolver = RenderCliModuleResolver()
 log = _resolver.resolve_logger(structlog.get_logger(__name__))
 
@@ -34,10 +33,8 @@ def cancel_render_job(
     """Request cancellation of an in-flight render job via Trafalgar."""
 
     logger = _resolver.resolve_logger(log)
-    from ..jobs import (
-        RenderJobClient as DefaultClient,
-        RenderJobClientError as DefaultError,
-    )
+    from ..jobs import RenderJobClient as DefaultClient
+    from ..jobs import RenderJobClientError as DefaultError
 
     error_class = _resolver.resolve_attribute("RenderJobClientError", DefaultError)
 

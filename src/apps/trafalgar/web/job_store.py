@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 import structlog
 
@@ -151,9 +151,9 @@ class JobStore:
     def load(self) -> list[_JobRecord]:
         """Load job records from disk."""
 
-        from .render.models import (
+        from .render.models import (  # Local import to avoid circular dependency
             _JobRecord,
-        )  # Local import to avoid circular dependency
+        )
 
         self._stats.last_load_at = _utcnow()
         if not self._path.exists():

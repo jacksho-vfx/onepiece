@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import os
 import platform
 import shutil
 import uuid
+from dataclasses import dataclass
+from pathlib import Path
 
 from libraries.pipeline.ingest.config import IngestConfig
 from libraries.pipeline.ingest.deadline import build_deadline_job, submit_deadline_job
@@ -19,9 +19,9 @@ from libraries.pipeline.ingest.hooks import (
 )
 from libraries.pipeline.ingest.linking import IngestLink, resolve_links
 from libraries.pipeline.ingest.metadata import (
+    SCHEMA_VERSION,
     IngestMetadata,
     IngestMetadataFile,
-    SCHEMA_VERSION,
     now_timestamp,
 )
 from libraries.pipeline.ingest.payload import PayloadManifest, build_payload_manifest

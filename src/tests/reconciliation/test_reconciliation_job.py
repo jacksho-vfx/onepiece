@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from libraries.automation.reconcile.job import ReconciliationJob
 from libraries.automation.reconcile.rules import (

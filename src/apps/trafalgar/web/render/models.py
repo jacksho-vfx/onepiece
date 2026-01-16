@@ -9,7 +9,6 @@ from typing import Any, Collection, Mapping
 
 from .schemas import RenderJobMetadata, RenderJobRequest
 
-
 TERMINAL_STATUSES: set[str] = {
     "completed",
     "failed",

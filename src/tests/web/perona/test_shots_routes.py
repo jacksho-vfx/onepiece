@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from apps.perona.web.dashboard import app
+
 from . import KNOWN_SEQUENCES
 
 client = TestClient(app)

@@ -23,9 +23,9 @@ from libraries.automation.render.optimization import SubmissionOptimizationDecis
 from .helpers import (
     DCC_CHOICES,
     FARM_CHOICES,
+    RenderCliModuleResolver,
     get_adapter,
     parse_frame_count,
-    RenderCliModuleResolver,
     refresh_capabilities_cache,
     resolve_metrics,
     resolve_priority_and_chunk_size,

@@ -12,7 +12,6 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 import typer
-
 from pydantic import ValidationError
 
 from apps.perona.cli.formatting import (
@@ -35,6 +34,7 @@ from apps.perona.notifications import (
     NotificationDispatchError,
     dispatch_render_volatility_alert,
 )
+from apps.perona.version import PERONA_VERSION
 from apps.perona.web.dashboard import dependencies as dashboard_dependencies
 from apps.perona.web.wrangler.scripts.production import _build_render_volatility_report
 from libraries.analytics.perona.engine.engine import PeronaEngine
@@ -43,10 +43,11 @@ from libraries.analytics.perona.engine.settings import DEFAULT_SETTINGS_PATH
 from libraries.analytics.perona.models import (
     CostEstimate,
     CostEstimateRequest,
-    RiskIndicator as RiskIndicatorModel,
+)
+from libraries.analytics.perona.models import RiskIndicator as RiskIndicatorModel
+from libraries.analytics.perona.models import (
     SettingsSummary,
 )
-from apps.perona.version import PERONA_VERSION
 
 OutputFormat = Literal["table", "json"]
 

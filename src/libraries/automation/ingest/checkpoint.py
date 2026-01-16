@@ -11,7 +11,6 @@ from typing import Any, Callable, Mapping, Protocol, runtime_checkable
 
 from .logging_utils import get_logger
 
-
 log = get_logger(__name__)
 
 

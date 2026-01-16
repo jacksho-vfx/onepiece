@@ -9,7 +9,6 @@ from typer.testing import CliRunner
 
 from libraries.creative.dcc.maya.playblast_tool import PlayblastRequest
 
-
 dcc_animation = import_module("apps.onepiece.dcc.animation")
 
 

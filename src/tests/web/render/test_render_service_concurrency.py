@@ -1,6 +1,6 @@
 import asyncio
-from itertools import cycle
 import threading
+from itertools import cycle
 
 import pytest
 

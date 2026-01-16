@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 from typing import Iterable
 
 import structlog
-
 
 log = structlog.get_logger(__name__)
 

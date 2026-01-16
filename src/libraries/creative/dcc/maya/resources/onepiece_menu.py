@@ -7,9 +7,9 @@ item or panel button is selected.
 
 from __future__ import annotations
 
+import traceback
 from functools import partial
 from pathlib import Path
-import traceback
 from typing import Callable
 
 import maya.cmds as cmds  # type: ignore

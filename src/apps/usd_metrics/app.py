@@ -12,7 +12,6 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, field_validator
 
-
 _db_env = "USD_METRICS_DB_PATH"
 
 

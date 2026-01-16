@@ -13,7 +13,6 @@ from apps.onepiece.utils.errors import (
     OnePieceIOError,
     OnePieceValidationError,
 )
-from ._inputs import load_structured_array
 from libraries.integrations.shotgrid.client import (
     ShotgridClient,
     ShotgridOperationError,
@@ -22,6 +21,8 @@ from libraries.integrations.shotgrid.playlist_delivery import (
     Recipient,
     package_playlist_for_mediashuttle,
 )
+
+from ._inputs import load_structured_array
 
 log = structlog.get_logger(__name__)
 T = TypeVar("T")

@@ -6,7 +6,8 @@ from typing import Callable, Sequence
 from libraries.creative.dcc.models import SupportedDCC
 
 from .core import VariantActivation, VariantSet
-from .plugin import list_variants as _list_variants, switch_variant as _switch_variant
+from .plugin import list_variants as _list_variants
+from .plugin import switch_variant as _switch_variant
 
 DCC = SupportedDCC.HOUDINI
 

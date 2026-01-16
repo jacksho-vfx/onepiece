@@ -14,9 +14,10 @@ from libraries.analytics.perona.models import (  # noqa: F401
     Sequence,
     Shot,
     ShotStage,
-    shots_from_lifecycles,
     sequences_from_lifecycles,
+    shots_from_lifecycles,
 )
+
 from .version import PERONA_VERSION, __version__  # noqa: F401
 
 __all__ = [

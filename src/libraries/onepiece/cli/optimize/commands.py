@@ -9,9 +9,9 @@ import typer
 
 from apps.onepiece.config import load_profile
 from libraries.pipeline.ingest.metadata import (
+    SCHEMA_VERSION,
     IngestMetadata,
     IngestMetadataFile,
-    SCHEMA_VERSION,
     now_timestamp,
 )
 from libraries.pipeline.ingest.payload import build_payload_manifest

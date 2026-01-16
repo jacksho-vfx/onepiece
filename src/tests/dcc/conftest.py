@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-
 PublishInputs = tuple[Path, Path, Path, dict[str, Any], Path]
 
 

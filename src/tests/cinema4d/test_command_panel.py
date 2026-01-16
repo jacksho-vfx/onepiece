@@ -8,8 +8,8 @@ import pytest
 
 from libraries.creative.dcc.cinema4d.panel import (
     CommandPanel,
-    register_deadline_submitter_command,
     register_cleanup_command,
+    register_deadline_submitter_command,
     register_scene_validator_publisher_command,
 )
 from libraries.creative.dcc.cinema4d.publish_pipeline import (

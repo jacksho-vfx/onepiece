@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable, Tuple
 
-import re
 import structlog
 
 from libraries.integrations.shotgrid.api import ShotGridClient
 from libraries.integrations.shotgrid.models import EpisodeData, SceneData, ShotData
-
 
 log = structlog.get_logger(__name__)
 

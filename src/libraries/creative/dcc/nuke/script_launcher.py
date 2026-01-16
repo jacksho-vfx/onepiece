@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import ast
+import importlib
+import importlib.util
+import runpy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
-import importlib
-import importlib.util
-import runpy
-
 import structlog
-
 
 log = structlog.get_logger(__name__)
 

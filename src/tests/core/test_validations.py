@@ -7,21 +7,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from pytest import MonkeyPatch
-
 from typer.testing import CliRunner
 
 from apps.onepiece.validate import app as validate_app
 from libraries.creative.dcc.dcc_client import SupportedDCC
+from libraries.platform.validations import asset_consistency
 from libraries.platform.validations import dcc as dcc_validations
 from libraries.platform.validations import filesystem, naming
-from libraries.platform.validations import asset_consistency
 from libraries.platform.validations.dcc import (
     DCCEnvironmentReport,
     GPUValidation,
     PluginValidation,
 )
 from libraries.platform.validations.naming_batch import validate_names_in_csv
-
 
 # ---------- Filesystem ----------
 

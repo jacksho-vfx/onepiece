@@ -6,11 +6,10 @@ Requires Maya's Python environment (pymel.core).
 
 from __future__ import annotations
 
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, cast
-
-import types
 
 import structlog
 

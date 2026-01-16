@@ -7,7 +7,6 @@ import sys
 import pytest
 
 from apps.trafalgar.pipeline import PipelineDefinition
-
 from libraries.pipeline import (
     Pipeline,
     pipeline_from_config,

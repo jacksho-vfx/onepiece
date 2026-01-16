@@ -7,14 +7,13 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-
 import fastapi.security
 import fastapi.security.api_key
-import apps.trafalgar.web.security as security
+import pytest
 from fastapi.security.http import HTTPAuthorizationCredentials
+from httpx import ASGITransport, AsyncClient
 
+import apps.trafalgar.web.security as security
 from apps.trafalgar.web import render
 from apps.trafalgar.web.job_store import JobStore, JobStoreStats
 from apps.trafalgar.web.render.models import _JobRecord

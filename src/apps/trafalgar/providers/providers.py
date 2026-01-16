@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import PurePosixPath
 from typing import Any, ClassVar, Iterable, Mapping, Sequence, TypeVar
-
-import logging
-from datetime import datetime, timezone
 
 
 @dataclass(frozen=True, slots=True)

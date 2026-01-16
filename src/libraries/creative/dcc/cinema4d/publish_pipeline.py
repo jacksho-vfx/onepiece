@@ -14,7 +14,6 @@ import structlog
 
 from libraries.metrics.usd import USDMetricClient
 
-
 log = structlog.get_logger(__name__)
 _metrics = USDMetricClient()
 

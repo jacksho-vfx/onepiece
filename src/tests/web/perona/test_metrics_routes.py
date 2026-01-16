@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import Any
-from types import SimpleNamespace
-
 from datetime import datetime, timedelta
+from pathlib import Path
 from time import perf_counter
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import status

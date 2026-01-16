@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from libraries.pipeline.ingest.detection import ASSET_TYPE_CACHE, normalize_extension
 from libraries.pipeline.optimize.handlers.base import HandlerContext, HandlerResult
 from libraries.pipeline.optimize.report import OptimizationStep
-
 
 SUPPORTED_EXTENSIONS = {".abc", ".vdb", ".bgeo", ".bgeo.sc", ".usd", ".usda", ".usdc"}
 

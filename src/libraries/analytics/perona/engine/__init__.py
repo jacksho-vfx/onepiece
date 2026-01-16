@@ -2,9 +2,10 @@
 
 from .engine import PeronaEngine
 from .models import (
+    DEFAULT_CURRENCY,
+    SUPPORTED_CURRENCIES,
     CostBreakdown,
     CostModelInput,
-    DEFAULT_CURRENCY,
     OptimizationResult,
     OptimizationScenario,
     PnLBreakdown,
@@ -14,7 +15,6 @@ from .models import (
     ShotLifecycle,
     ShotLifecycleStage,
     ShotTelemetry,
-    SUPPORTED_CURRENCIES,
     get_currency_symbol,
 )
 from .settings import (

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 import webbrowser
+from importlib import import_module
 from typing import Any
 
 import typer

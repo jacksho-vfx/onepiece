@@ -16,8 +16,8 @@ from libraries.integrations.shotgrid.api import (
 )
 from libraries.integrations.shotgrid.models import (
     EpisodeData,
-    PlaylistData,
     PipelineStep,
+    PlaylistData,
     SceneData,
     ShotData,
     TaskCode,

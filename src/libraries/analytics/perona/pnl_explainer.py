@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from decimal import Decimal, ROUND_HALF_UP
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable, Sequence, Tuple
 
 

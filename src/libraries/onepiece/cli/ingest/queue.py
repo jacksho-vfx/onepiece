@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import platform
 from pathlib import Path
 from typing import Optional
 
-import os
-import platform
 import typer
 
 from libraries.pipeline.ingest.executor import execute_queue_item, load_progress
@@ -30,7 +30,6 @@ from libraries.pipeline.ingest.tagging import (
     load_tag_vocabulary,
     validate_tags,
 )
-
 
 app = typer.Typer(help="Queue and manage pipeline ingest sessions.")
 

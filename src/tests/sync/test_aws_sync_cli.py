@@ -54,6 +54,7 @@ def test_sync_from_cli_forwards_profile(
 ) -> None:
     import importlib
     from contextlib import contextmanager
+
     from apps.onepiece.app import app
 
     sync_from_mod = importlib.import_module("apps.onepiece.aws.sync_from")
@@ -154,6 +155,7 @@ def test_sync_to_cli_forwards_profile(
 ) -> None:
     import importlib
     from contextlib import contextmanager
+
     from apps.onepiece.app import app
 
     sync_to_mod = importlib.import_module("apps.onepiece.aws.sync_to")

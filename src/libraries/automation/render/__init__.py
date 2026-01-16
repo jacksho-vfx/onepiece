@@ -1,9 +1,9 @@
 """Render farm submission adapters and analytics utilities."""
 
 from .analytics import (
-    cost_per_frame,
     average_frame_time_by_sequence,
     average_frame_time_by_shot,
+    cost_per_frame,
     rolling_mean,
     total_cost_per_sequence,
     total_cost_per_shot,

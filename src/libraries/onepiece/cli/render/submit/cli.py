@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import typer
 
+from ..reporting_command import generate_weekly_report
 from .cancel_command import cancel_render_job
 from .helpers import FARM_ADAPTERS
 from .optimize_deadline_command import optimize_and_submit_deadline
-from ..reporting_command import generate_weekly_report
 from .presets import (
     export_preset,
     import_preset,

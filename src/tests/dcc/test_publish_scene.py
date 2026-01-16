@@ -17,16 +17,16 @@ from libraries.creative.dcc.dcc_client import (
     _write_metadata_and_thumbnails,
     publish_scene,
 )
-from libraries.creative.dcc.models import (
-    DCCDependencyReport,
-    DCCAssetStatus,
-    DCCGPUStatus,
-    DCCPluginStatus,
-    SupportedDCC,
-)
 from libraries.creative.dcc.maya.unreal_export_checker import (
     UnrealExportIssue,
     UnrealExportReport,
+)
+from libraries.creative.dcc.models import (
+    DCCAssetStatus,
+    DCCDependencyReport,
+    DCCGPUStatus,
+    DCCPluginStatus,
+    SupportedDCC,
 )
 
 PublishInputs = tuple[Path, Path, Path, dict[str, Any], Path]

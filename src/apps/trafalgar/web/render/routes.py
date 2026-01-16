@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.websockets import WebSocketDisconnect
 
 from apps.trafalgar.web.security import (
-    AuthenticatedPrincipal,
     ROLE_RENDER_MANAGE,
     ROLE_RENDER_READ,
     ROLE_RENDER_SUBMIT,
+    AuthenticatedPrincipal,
     create_protected_router,
     require_roles,
 )
@@ -20,7 +20,6 @@ from libraries.automation.render.base import RenderSubmissionError
 
 from .api import render_submission_error_handler
 from .constants import JOB_EVENTS
-from .services import RenderSubmissionService, logger
 from .dependencies import get_render_service, parse_render_job_request
 from .schemas import (
     FarmsResponse,
@@ -30,6 +29,7 @@ from .schemas import (
     RenderJobRequest,
     RenderJobResponse,
 )
+from .services import RenderSubmissionService, logger
 from .streaming import _job_event_stream, _render_jobs_snapshot
 
 router = create_protected_router()

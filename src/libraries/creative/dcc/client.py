@@ -11,17 +11,17 @@ that communicate the absence of a real implementation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
 import getpass
 import json
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
 import structlog
 
-from libraries.creative.dcc.enums import DCC
 from libraries.creative.dcc.cinema4d.metadata import load_cinema4d_summary
+from libraries.creative.dcc.enums import DCC
 from libraries.platform.validations import naming
 
 __all__ = [

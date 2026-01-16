@@ -12,6 +12,7 @@ from libraries.creative.dcc.ui_core import (
     MenuAction,
     require_qt_modules,
 )
+
 from .script_library import (
     build_menu_actions_from_scripts,
     default_script_directory,

@@ -4,7 +4,6 @@ import json
 from importlib import import_module
 from pathlib import Path
 
-
 cinema4d_gather = import_module("libraries.creative.dcc.cinema4d.gather")
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence, Tuple, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, Tuple, cast
 
 import structlog
 

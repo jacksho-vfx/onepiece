@@ -15,7 +15,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from .models import CostModelInput, DEFAULT_CURRENCY
+from .models import DEFAULT_CURRENCY, CostModelInput
 
 if TYPE_CHECKING:
     from .engine import PeronaEngine

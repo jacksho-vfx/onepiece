@@ -11,7 +11,6 @@ from typing import Any, Mapping
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-
 STATUS_CANONICAL_PREFIXES: OrderedDict[str, str] = OrderedDict(
     {
         "apr": "approved",

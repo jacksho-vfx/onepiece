@@ -14,7 +14,6 @@ from libraries.creative.camera_io import (
 )
 from libraries.metrics.usd import USDMetricClient
 
-
 _metrics = USDMetricClient()
 
 

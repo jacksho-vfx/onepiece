@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 from apps.trafalgar.pipeline import PipelineDefinition
+from libraries.pipeline.models import Pipeline, PipelineStep, TriggerPolicy
 
 
 @pytest.fixture

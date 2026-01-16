@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from queue import Queue
 from threading import Barrier, BrokenBarrierError, Event
-import time
 from typing import Any
 
 import pytest

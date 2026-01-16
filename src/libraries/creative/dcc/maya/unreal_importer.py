@@ -8,8 +8,8 @@ artists do locally.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping, MutableMapping, Sequence
@@ -17,7 +17,6 @@ from typing import Any, Mapping, MutableMapping, Sequence
 import structlog
 
 from libraries.metrics.usd import USDMetricClient
-
 
 log = structlog.get_logger(__name__)
 _metrics = USDMetricClient()
