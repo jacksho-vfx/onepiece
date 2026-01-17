@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
-from typing import Iterable
 
 import structlog
+
+from ..deploy_utils import (
+    copy_scripts_to as _copy_scripts_to,
+    deploy_resources,
+    list_script_files,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -29,10 +33,11 @@ def get_script_library_path() -> Path:
 def available_script_files(script_directory: Path | None = None) -> list[Path]:
     """List bundled script files sorted for predictable menus."""
 
-    directory = (script_directory or get_script_library_path()).resolve()
-    if not directory.exists() or not directory.is_dir():
-        return []
-    return sorted(path for path in directory.iterdir() if path.suffix == ".py")
+    return list_script_files(
+        script_directory,
+        default_directory=get_script_library_path(),
+        predicate=lambda path: path.suffix == ".py",
+    )
 
 
 def deploy_nuke_resources(
@@ -44,29 +49,23 @@ def deploy_nuke_resources(
     ``overwrite`` is False, a :class:`FileExistsError` is raised.
     """
 
-    destination = Path(target).expanduser().resolve()
-    source = get_resource_root()
-
-    if destination.exists():
-        if not overwrite:
-            raise FileExistsError(
-                f"Destination '{destination}' already exists; pass --overwrite to replace it."
-            )
-        shutil.rmtree(destination)
-
-    log.info("nuke.deploy.start", source=str(source), destination=str(destination))
-    shutil.copytree(source, destination)
-    log.info("nuke.deploy.completed", destination=str(destination))
-    return destination
+    return deploy_resources(
+        resource_root=get_resource_root(),
+        target=target,
+        overwrite=overwrite,
+        log=log,
+        start_event="nuke.deploy.start",
+        complete_event="nuke.deploy.completed",
+    )
 
 
-def copy_scripts_to(target: Path, scripts: Iterable[Path]) -> list[Path]:
-    """Copy specific script files into *target* and return the new paths."""
+copy_scripts_to = _copy_scripts_to
 
-    target.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for script in scripts:
-        destination = target / script.name
-        destination.write_bytes(script.read_bytes())
-        written.append(destination)
-    return written
+__all__ = [
+    "available_script_files",
+    "copy_scripts_to",
+    "DEFAULT_DEPLOY_PATH",
+    "deploy_nuke_resources",
+    "get_resource_root",
+    "get_script_library_path",
+]
