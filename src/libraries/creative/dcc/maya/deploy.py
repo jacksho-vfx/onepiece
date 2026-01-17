@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
-from typing import Iterable
 
 import structlog
+
+from ..deploy_utils import (
+    copy_scripts_to,
+    deploy_resources,
+    list_script_files,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -30,14 +34,10 @@ def get_script_library_path() -> Path:
 def available_script_files(script_directory: Path | None = None) -> list[Path]:
     """List bundled script files sorted for predictable menus."""
 
-    directory = (script_directory or get_script_library_path()).resolve()
-    if not directory.exists() or not directory.is_dir():
-        return []
-
-    return sorted(
-        path
-        for path in directory.iterdir()
-        if path.is_file() and path.suffix in _SCRIPT_EXTENSIONS
+    return list_script_files(
+        script_directory,
+        default_directory=get_script_library_path(),
+        predicate=lambda path: path.is_file() and path.suffix in _SCRIPT_EXTENSIONS,
     )
 
 
@@ -50,34 +50,15 @@ def deploy_maya_resources(
     ``overwrite`` is False, a :class:`FileExistsError` is raised.
     """
 
-    destination = Path(target).expanduser().resolve()
-    source = get_resource_root()
-
-    if destination.exists():
-        if not overwrite:
-            raise FileExistsError(
-                f"Destination '{destination}' already exists; pass --overwrite to replace it."
-            )
-        shutil.rmtree(destination)
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    log.info("maya.deploy.start", source=str(source), destination=str(destination))
-    shutil.copytree(source, destination)
-    log.info("maya.deploy.completed", destination=str(destination))
-    return destination
-
-
-def copy_scripts_to(target: Path, scripts: Iterable[Path]) -> list[Path]:
-    """Copy specific script files into *target* and return the new paths."""
-
-    target.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for script in scripts:
-        destination = target / script.name
-        destination.write_bytes(script.read_bytes())
-        written.append(destination)
-    return written
+    return deploy_resources(
+        resource_root=get_resource_root(),
+        target=target,
+        overwrite=overwrite,
+        log=log,
+        start_event="maya.deploy.start",
+        complete_event="maya.deploy.completed",
+        ensure_parent=True,
+    )
 
 
 __all__ = [
