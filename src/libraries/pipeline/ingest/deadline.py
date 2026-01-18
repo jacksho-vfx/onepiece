@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from libraries.pipeline.ingest.config import DeadlineActionConfig
 
@@ -14,6 +14,8 @@ class DeadlineJob:
     action: str
     job_info_path: Path
     plugin_info_path: Path
+    job_info: dict[str, Any]
+    plugin_info: dict[str, Any]
 
 
 def _write_job_info(path: Path, job_info: dict[str, Any]) -> None:
@@ -61,16 +63,13 @@ def build_deadline_job(
         action=action,
         job_info_path=job_info_path,
         plugin_info_path=plugin_info_path,
+        job_info=job_info,
+        plugin_info=plugin_info,
     )
 
 
 def submit_deadline_job(job: DeadlineJob) -> str:
-    import subprocess
+    from libraries.pipeline.deadline_submit import submit_deadline_payload
 
-    result = subprocess.run(
-        ["deadlinecommand", str(job.job_info_path), str(job.plugin_info_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    payload = {"JobInfo": job.job_info, "PluginInfo": job.plugin_info}
+    return cast(str, submit_deadline_payload(payload))
