@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 import requests  # type: ignore[import-untyped]
 
+from .deadline_jobs import DeadlineJobKind, build_command_job_payload
 from .deadline_errors import (
     DeadlineAuthenticationError,
     DeadlineResponseError,
@@ -76,6 +77,96 @@ class DeadlineClient:
             raise DeadlineResponseError("Deadline returned invalid JSON") from exc
 
         return data
+
+    def submit_command_job(
+        self,
+        *,
+        name: str,
+        executable: str,
+        job_kind: DeadlineJobKind = "job",
+        arguments: Sequence[str] | str | None = None,
+        user: str | None = None,
+        priority: int | None = None,
+        pool: str | None = None,
+        group: str | None = None,
+        department: str | None = None,
+        comment: str | None = None,
+        environment: Mapping[str, str] | None = None,
+        extra_job_info: Mapping[str, Any] | None = None,
+        extra_plugin_info: Mapping[str, Any] | None = None,
+    ) -> Any:
+        """Submit a CommandLine job for common Deadline task types."""
+
+        payload = build_command_job_payload(
+            name=name,
+            executable=executable,
+            job_kind=job_kind,
+            arguments=arguments,
+            user=user,
+            priority=priority,
+            pool=pool,
+            group=group,
+            department=department,
+            comment=comment,
+            environment=environment,
+            extra_job_info=extra_job_info,
+            extra_plugin_info=extra_plugin_info,
+        )
+        return self.submit_job(payload)
+
+    def submit_test_job(
+        self,
+        *,
+        name: str,
+        executable: str,
+        arguments: Sequence[str] | str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Submit a test job for validation or diagnostics."""
+
+        return self.submit_command_job(
+            name=name,
+            executable=executable,
+            arguments=arguments,
+            job_kind="test",
+            **kwargs,
+        )
+
+    def submit_preset_job(
+        self,
+        *,
+        name: str,
+        executable: str,
+        arguments: Sequence[str] | str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Submit a job based on a stored preset or template."""
+
+        return self.submit_command_job(
+            name=name,
+            executable=executable,
+            arguments=arguments,
+            job_kind="preset",
+            **kwargs,
+        )
+
+    def submit_rnd_task(
+        self,
+        *,
+        name: str,
+        executable: str,
+        arguments: Sequence[str] | str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Submit a research-and-development (RND) task job."""
+
+        return self.submit_command_job(
+            name=name,
+            executable=executable,
+            arguments=arguments,
+            job_kind="rnd",
+            **kwargs,
+        )
 
     def get_job(self, job_id: str) -> Any:
         """Return metadata for the Deadline job identified by ``job_id``."""
