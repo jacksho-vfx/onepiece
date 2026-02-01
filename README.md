@@ -110,6 +110,8 @@ Key environment variables recognised across the CLI surface:
 | --- | --- |
 | `ONEPIECE_SHOTGRID_URL` | Base URL of the ShotGrid site the ingest helpers should target. |
 | `ONEPIECE_SHOTGRID_SCRIPT` / `ONEPIECE_SHOTGRID_KEY` | API script credentials used for automation. |
+| `ONEPIECE_FRAMEIO_URL` | Base URL for Frame.io API calls (defaults to `https://api.frame.io`). |
+| `ONEPIECE_FRAMEIO_TOKEN` / `ONEPIECE_FRAMEIO_TEAM` | Frame.io automation token and optional team identifier for production uploads. |
 | `AWS_PROFILE` | AWS profile applied when spawning `s5cmd` or other AWS-powered helpers. |
 | `TRAFALGAR_DASHBOARD_TOKEN` | Bearer token required to query the dashboard and render APIs. |
 | `ONEPIECE_PROJECT_ROOT` | Canonical override for the project root used when resolving `onepiece.toml` profiles. |
